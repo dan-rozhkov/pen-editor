@@ -1,8 +1,9 @@
 import { create } from "zustand";
+import { deriveChatTitle } from "@/lib/chatTitle";
 import type { AttachedImage, ChatLaunchPayload, QueuedChatMessage } from "@/types/chat";
 
 /** Stable empty reference so the per-session selector never returns a fresh
- * array for tabs without attachments (which would re-render on every store
+ * array for chats without attachments (which would re-render on every store
  * change). Never mutated — the store always writes fresh arrays. */
 export const NO_ATTACHED_IMAGES: AttachedImage[] = [];
 
@@ -14,15 +15,33 @@ export const NO_DISMISSED_SELECTION: ReadonlySet<string> = new Set<string>();
  * reason as NO_ATTACHED_IMAGES. Never mutated. */
 export const NO_QUEUED_MESSAGES: QueuedChatMessage[] = [];
 
-export interface ChatTab {
+export interface ChatSummary {
   id: string;
   title: string;
   parallelCount: ParallelCount;
+  /**
+   * True while `title` is still the default "Chat N" placeholder and hasn't
+   * been set explicitly. `applyAutoTitle` may still overwrite the title while
+   * this is true (once, from the first user message); `setChatTitle` always
+   * clears it, so a later auto-title attempt is a no-op.
+   */
+  titleIsAuto: boolean;
+  /** True when this chat has activity the user hasn't looked at yet — set by
+   * markChatUnread, cleared by openChat/markChatRead. Never set for the chat
+   * that is currently active. */
+  unread: boolean;
+  /** True when the agent is waiting on the user (e.g. an ask_user form). */
+  needsAnswer: boolean;
+  /** True while a turn is in flight for this chat. */
+  isBusy: boolean;
+  /** Last time this chat's list-relevant state changed, for sorting the chat
+   * list by recency. */
+  updatedAt: number;
 }
 
 export type ParallelCount = 1 | 2 | 3;
 
-/** Actions published by a mounted chat session so the tab bar can drive it. */
+/** Actions published by a mounted chat session so the chat list can drive it. */
 export interface ChatSessionActions {
   hasMessages: boolean;
   exportChat: () => void;
@@ -33,30 +52,32 @@ interface ChatState {
   isOpen: boolean;
   isExpanded: boolean;
   parallelCount: ParallelCount;
-  tabs: ChatTab[];
-  activeTabId: string;
-  /** AbortControllers keyed by tab id — managed outside React */
+  chats: ChatSummary[];
+  /** The chat currently shown in the panel, or null to show the chat list
+   * with no chat open. */
+  activeChatId: string | null;
+  /** AbortControllers keyed by chat id — managed outside React */
   abortControllers: Record<string, AbortController>;
   launchQueue: Record<string, ChatLaunchPayload | undefined>;
   /**
    * Messages the user submitted while the agent was busy (chat status
-   * "submitted"/"streaming"), keyed by tab id, in FIFO send order. Distinct
+   * "submitted"/"streaming"), keyed by chat id, in FIFO send order. Distinct
    * from `launchQueue` (a one-shot payload used to fan a single send out to
-   * extra parallel tabs) — this is a genuine per-tab queue that can hold
+   * extra parallel chats) — this is a genuine per-chat queue that can hold
    * several pending messages, drained one at a time as the session returns
    * to "ready".
    */
   messageQueue: Record<string, QueuedChatMessage[]>;
-  /** Export/clear handlers published by each mounted session, keyed by tab id */
+  /** Export/clear handlers published by each mounted session, keyed by chat id */
   sessionActions: Record<string, ChatSessionActions>;
   /**
-   * Composer image attachments keyed by tab id. Lifted out of ChatInput so a
-   * partially-composed message survives the input unmounting when its tab goes
-   * inactive (inactive ChatSessions render null for performance).
+   * Composer image attachments keyed by chat id. Lifted out of ChatInput so a
+   * partially-composed message survives the input unmounting when its chat
+   * goes inactive (inactive ChatSessions render null for performance).
    */
   attachedImages: Record<string, AttachedImage[]>;
   /**
-   * Per-message-dismissed canvas-selection previews, keyed by tab id. Lifted
+   * Per-message-dismissed canvas-selection previews, keyed by chat id. Lifted
    * out of ChatInput for the same reason as attachedImages, so the user's
    * "remove from context" choices survive the input unmounting.
    */
@@ -67,30 +88,47 @@ interface ChatState {
   toggleExpanded: () => void;
   setParallelCount: (count: ParallelCount) => void;
 
-  createTab: () => string;
-  closeTab: (tabId: string) => void;
-  setActiveTab: (tabId: string) => void;
-  setTabTitle: (tabId: string, title: string) => void;
-  queueLaunchPayload: (tabId: string, payload: ChatLaunchPayload) => void;
-  consumeLaunchPayload: (tabId: string) => ChatLaunchPayload | undefined;
+  createChat: (opts?: { activate?: boolean; parallelCount?: ParallelCount }) => string;
+  closeChat: (chatId: string) => void;
+  /** Makes a chat active, restores its parallelCount, and clears unread. */
+  openChat: (chatId: string) => void;
+  /** Returns to the chat list — no chat is active. */
+  showChatList: () => void;
+  setChatTitle: (chatId: string, title: string) => void;
+  /**
+   * Derives a title from the chat's first user message and applies it, but
+   * only while the chat still carries the default auto title — a no-op once
+   * `titleIsAuto` is false (either a previous auto-title already landed, or
+   * the user set one explicitly), and a no-op when no title can be derived.
+   */
+  applyAutoTitle: (chatId: string, text: string) => void;
+  /** Flags a chat as having unseen activity, unless it is the active chat. */
+  markChatUnread: (chatId: string) => void;
+  markChatRead: (chatId: string) => void;
+  setChatActivity: (
+    chatId: string,
+    patch: { needsAnswer?: boolean; isBusy?: boolean },
+  ) => void;
+  queueLaunchPayload: (chatId: string, payload: ChatLaunchPayload) => void;
+  consumeLaunchPayload: (chatId: string) => ChatLaunchPayload | undefined;
 
-  enqueueMessage: (tabId: string, payload: ChatLaunchPayload) => void;
-  peekNextMessage: (tabId: string) => QueuedChatMessage | undefined;
-  removeQueuedMessage: (tabId: string, id: string) => void;
-  clearMessageQueue: (tabId: string) => void;
+  enqueueMessage: (chatId: string, payload: ChatLaunchPayload) => void;
+  peekNextMessage: (chatId: string) => QueuedChatMessage | undefined;
+  removeQueuedMessage: (chatId: string, id: string) => void;
+  clearMessageQueue: (chatId: string) => void;
 
-  registerAbortController: (tabId: string, controller: AbortController) => void;
-  unregisterAbortController: (tabId: string) => void;
+  registerAbortController: (chatId: string, controller: AbortController) => void;
+  unregisterAbortController: (chatId: string) => void;
 
-  registerSessionActions: (tabId: string, actions: ChatSessionActions) => void;
-  unregisterSessionActions: (tabId: string) => void;
+  registerSessionActions: (chatId: string, actions: ChatSessionActions) => void;
+  unregisterSessionActions: (chatId: string) => void;
 
   setAttachedImages: (
-    tabId: string,
+    chatId: string,
     update: AttachedImage[] | ((prev: AttachedImage[]) => AttachedImage[]),
   ) => void;
   setDismissedSelection: (
-    tabId: string,
+    chatId: string,
     update: Set<string> | ((prev: Set<string>) => Set<string>),
   ) => void;
 
@@ -99,7 +137,7 @@ interface ChatState {
 const DEFAULT_PARALLEL_COUNT: ParallelCount = 1;
 
 // The design agent runs on one model chosen by the backend, so there is no
-// per-tab or per-user model any more. Drop the key every previous build wrote:
+// per-chat or per-user model any more. Drop the key every previous build wrote:
 // a stale selection must not survive as a value anything could read back, and
 // the request no longer carries a model id at all.
 localStorage.removeItem("chat-model");
@@ -110,10 +148,10 @@ function normalizeParallelCount(count: string | null): ParallelCount {
   return DEFAULT_PARALLEL_COUNT;
 }
 
-let nextTabCounter = 1;
+let nextChatCounter = 1;
 
-function generateTabId(): string {
-  return `tab-${Date.now()}-${nextTabCounter++}`;
+function generateChatId(): string {
+  return `tab-${Date.now()}-${nextChatCounter++}`;
 }
 
 let nextMessageIdCounter = 1;
@@ -122,18 +160,33 @@ function generateQueuedMessageId(): string {
   return `qmsg-${Date.now()}-${nextMessageIdCounter++}`;
 }
 
-const initialTabId = generateTabId();
+function makeChat(id: string, title: string, parallelCount: ParallelCount): ChatSummary {
+  return {
+    id,
+    title,
+    parallelCount,
+    titleIsAuto: true,
+    unread: false,
+    needsAnswer: false,
+    isBusy: false,
+    updatedAt: Date.now(),
+  };
+}
+
+const initialChatId = generateChatId();
 
 export const useChatStore = create<ChatState>((set, get) => ({
   isOpen: false,
   isExpanded: localStorage.getItem("chat-expanded") === "true",
   parallelCount: normalizeParallelCount(localStorage.getItem("chat-parallel-count")),
-  tabs: [{
-    id: initialTabId,
-    title: "Chat 1",
-    parallelCount: normalizeParallelCount(localStorage.getItem("chat-parallel-count")),
-  }],
-  activeTabId: initialTabId,
+  chats: [
+    makeChat(
+      initialChatId,
+      "Chat 1",
+      normalizeParallelCount(localStorage.getItem("chat-parallel-count")),
+    ),
+  ],
+  activeChatId: initialChatId,
   abortControllers: {},
   launchQueue: {},
   messageQueue: {},
@@ -151,30 +204,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
   setParallelCount: (parallelCount) => {
     localStorage.setItem("chat-parallel-count", String(parallelCount));
-    const { activeTabId } = get();
+    const { activeChatId } = get();
     set((s) => ({
       parallelCount,
-      tabs: s.tabs.map((t) => t.id === activeTabId ? { ...t, parallelCount } : t),
+      chats: s.chats.map((c) => c.id === activeChatId ? { ...c, parallelCount } : c),
     }));
   },
 
-  createTab: () => {
-    const id = generateTabId();
-    const { tabs } = get();
-    const title = `Chat ${tabs.length + 1}`;
-    const parallelCount = normalizeParallelCount(localStorage.getItem("chat-parallel-count"));
+  createChat: (opts) => {
+    const activate = opts?.activate ?? true;
+    const { chats } = get();
+    const id = generateChatId();
+    const title = `Chat ${chats.length + 1}`;
+    // A caller fanning a single send out to extra parallel chats passes an
+    // explicit parallelCount (always 1) instead of restoring localStorage's
+    // last choice — those chats are twins created *because of* an x2/x3 send,
+    // and stamping them with that same count would silently re-fan-out the
+    // next message sent from one of them.
+    const parallelCount =
+      opts?.parallelCount ?? normalizeParallelCount(localStorage.getItem("chat-parallel-count"));
     set({
-      tabs: [...tabs, { id, title, parallelCount }],
-      activeTabId: id,
-      parallelCount,
+      chats: [...chats, makeChat(id, title, parallelCount)],
+      ...(activate ? { activeChatId: id, parallelCount } : {}),
     });
     return id;
   },
 
-  closeTab: (tabId: string) => {
+  closeChat: (chatId: string) => {
     const {
-      tabs,
-      activeTabId,
+      chats,
+      activeChatId,
       abortControllers,
       launchQueue,
       messageQueue,
@@ -182,29 +241,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
       dismissedSelection,
     } = get();
 
-    // Abort any ongoing request for this tab
-    const controller = abortControllers[tabId];
+    // Abort any ongoing request for this chat
+    const controller = abortControllers[chatId];
     if (controller) {
       controller.abort();
     }
 
-    // If only one tab remains, replace it with a new empty tab
-    if (tabs.length <= 1) {
-      const newId = generateTabId();
+    // If only one chat remains, replace it with a new empty chat
+    if (chats.length <= 1) {
+      const newId = generateChatId();
       const newControllers = { ...abortControllers };
-      delete newControllers[tabId];
+      delete newControllers[chatId];
       const parallelCount = normalizeParallelCount(localStorage.getItem("chat-parallel-count"));
       const newLaunchQueue = { ...launchQueue };
-      delete newLaunchQueue[tabId];
+      delete newLaunchQueue[chatId];
       const newMessageQueue = { ...messageQueue };
-      delete newMessageQueue[tabId];
+      delete newMessageQueue[chatId];
       const newAttachedImages = { ...attachedImages };
-      delete newAttachedImages[tabId];
+      delete newAttachedImages[chatId];
       const newDismissedSelection = { ...dismissedSelection };
-      delete newDismissedSelection[tabId];
+      delete newDismissedSelection[chatId];
       set({
-        tabs: [{ id: newId, title: "Chat 1", parallelCount }],
-        activeTabId: newId,
+        chats: [makeChat(newId, "Chat 1", parallelCount)],
+        // Only jump into the replacement chat if the user was already looking
+        // at one — deleting the last chat from the *list* view must leave
+        // them on the list, not yank them into a new empty chat.
+        activeChatId: activeChatId === null ? null : newId,
         parallelCount,
         abortControllers: newControllers,
         launchQueue: newLaunchQueue,
@@ -215,31 +277,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
-    const newTabs = tabs.filter((t) => t.id !== tabId);
+    const newChats = chats.filter((c) => c.id !== chatId);
     const newControllers = { ...abortControllers };
     const newLaunchQueue = { ...launchQueue };
     const newMessageQueue = { ...messageQueue };
     const newAttachedImages = { ...attachedImages };
     const newDismissedSelection = { ...dismissedSelection };
-    delete newControllers[tabId];
-    delete newLaunchQueue[tabId];
-    delete newMessageQueue[tabId];
-    delete newAttachedImages[tabId];
-    delete newDismissedSelection[tabId];
+    delete newControllers[chatId];
+    delete newLaunchQueue[chatId];
+    delete newMessageQueue[chatId];
+    delete newAttachedImages[chatId];
+    delete newDismissedSelection[chatId];
 
-    let newActiveTabId = activeTabId;
-    if (activeTabId === tabId) {
-      // Switch to the tab that was next to the closed one
-      const closedIndex = tabs.findIndex((t) => t.id === tabId);
-      const newIndex = Math.min(closedIndex, newTabs.length - 1);
-      newActiveTabId = newTabs[newIndex].id;
-    }
+    // Closing the open chat returns to the chat list rather than jumping to a
+    // sibling chat.
+    const newActiveChatId = activeChatId === chatId ? null : activeChatId;
 
-    const switchToTab = newTabs.find((t) => t.id === newActiveTabId);
     set({
-      tabs: newTabs,
-      activeTabId: newActiveTabId,
-      parallelCount: switchToTab?.parallelCount ?? get().parallelCount,
+      chats: newChats,
+      activeChatId: newActiveChatId,
       abortControllers: newControllers,
       launchQueue: newLaunchQueue,
       messageQueue: newMessageQueue,
@@ -248,137 +304,205 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  setActiveTab: (tabId: string) => {
-    const tab = get().tabs.find((t) => t.id === tabId);
-    if (tab) {
-      set({
-        activeTabId: tabId,
-        parallelCount: tab.parallelCount,
-      });
-    }
-  },
-
-  setTabTitle: (tabId: string, title: string) => {
+  openChat: (chatId: string) => {
+    const chat = get().chats.find((c) => c.id === chatId);
+    if (!chat) return;
     set((s) => ({
-      tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, title } : t)),
+      activeChatId: chatId,
+      parallelCount: chat.parallelCount,
+      chats: chat.unread
+        ? s.chats.map((c) => (c.id === chatId ? { ...c, unread: false } : c))
+        : s.chats,
     }));
   },
 
-  queueLaunchPayload: (tabId, payload) => {
+  showChatList: () => set({ activeChatId: null }),
+
+  setChatTitle: (chatId: string, title: string) => {
+    set((s) => ({
+      chats: s.chats.map((c) =>
+        c.id === chatId ? { ...c, title, titleIsAuto: false } : c,
+      ),
+    }));
+  },
+
+  applyAutoTitle: (chatId, text) => {
+    set((s) => {
+      const chat = s.chats.find((c) => c.id === chatId);
+      if (!chat || !chat.titleIsAuto) return s;
+      const title = deriveChatTitle(text);
+      if (title === null) return s;
+      return {
+        chats: s.chats.map((c) =>
+          c.id === chatId ? { ...c, title, titleIsAuto: false } : c,
+        ),
+      };
+    });
+  },
+
+  markChatUnread: (chatId) => {
+    set((s) => {
+      if (chatId === s.activeChatId) {
+        // Still bump updatedAt so recency ordering reflects the activity, but
+        // never mark the open chat unread.
+        return {
+          chats: s.chats.map((c) =>
+            c.id === chatId ? { ...c, updatedAt: Date.now() } : c,
+          ),
+        };
+      }
+      return {
+        chats: s.chats.map((c) =>
+          c.id === chatId ? { ...c, unread: true, updatedAt: Date.now() } : c,
+        ),
+      };
+    });
+  },
+
+  markChatRead: (chatId) => {
+    set((s) => {
+      const chat = s.chats.find((c) => c.id === chatId);
+      if (!chat || !chat.unread) return s;
+      return {
+        chats: s.chats.map((c) => (c.id === chatId ? { ...c, unread: false } : c)),
+      };
+    });
+  },
+
+  setChatActivity: (chatId, patch) => {
+    set((s) => {
+      const chat = s.chats.find((c) => c.id === chatId);
+      if (!chat) return s;
+      const nextNeedsAnswer = patch.needsAnswer ?? chat.needsAnswer;
+      const nextIsBusy = patch.isBusy ?? chat.isBusy;
+      if (nextNeedsAnswer === chat.needsAnswer && nextIsBusy === chat.isBusy) {
+        return s;
+      }
+      return {
+        chats: s.chats.map((c) =>
+          c.id === chatId
+            ? { ...c, needsAnswer: nextNeedsAnswer, isBusy: nextIsBusy }
+            : c,
+        ),
+      };
+    });
+  },
+
+  queueLaunchPayload: (chatId, payload) => {
     set((s) => ({
       launchQueue: {
         ...s.launchQueue,
-        [tabId]: payload,
+        [chatId]: payload,
       },
     }));
   },
 
-  consumeLaunchPayload: (tabId) => {
-    const payload = get().launchQueue[tabId];
+  consumeLaunchPayload: (chatId) => {
+    const payload = get().launchQueue[chatId];
     if (!payload) {
       return undefined;
     }
     set((s) => {
       const nextQueue = { ...s.launchQueue };
-      delete nextQueue[tabId];
+      delete nextQueue[chatId];
       return { launchQueue: nextQueue };
     });
     return payload;
   },
 
-  enqueueMessage: (tabId, payload) => {
+  enqueueMessage: (chatId, payload) => {
     const queued: QueuedChatMessage = { id: generateQueuedMessageId(), payload };
     set((s) => ({
       messageQueue: {
         ...s.messageQueue,
-        [tabId]: [...(s.messageQueue[tabId] ?? []), queued],
+        [chatId]: [...(s.messageQueue[chatId] ?? []), queued],
       },
     }));
   },
 
-  peekNextMessage: (tabId) => {
-    const queue = get().messageQueue[tabId];
+  peekNextMessage: (chatId) => {
+    const queue = get().messageQueue[chatId];
     return queue && queue.length > 0 ? queue[0] : undefined;
   },
 
-  removeQueuedMessage: (tabId, id) => {
+  removeQueuedMessage: (chatId, id) => {
     set((s) => {
-      const queue = s.messageQueue[tabId];
+      const queue = s.messageQueue[chatId];
       if (!queue) return s;
       const next = queue.filter((m) => m.id !== id);
       if (next.length === queue.length) return s;
       const nextQueue = { ...s.messageQueue };
       if (next.length === 0) {
-        delete nextQueue[tabId];
+        delete nextQueue[chatId];
       } else {
-        nextQueue[tabId] = next;
+        nextQueue[chatId] = next;
       }
       return { messageQueue: nextQueue };
     });
   },
 
-  clearMessageQueue: (tabId) => {
+  clearMessageQueue: (chatId) => {
     set((s) => {
-      if (!s.messageQueue[tabId]) return s;
+      if (!s.messageQueue[chatId]) return s;
       const nextQueue = { ...s.messageQueue };
-      delete nextQueue[tabId];
+      delete nextQueue[chatId];
       return { messageQueue: nextQueue };
     });
   },
 
-  registerAbortController: (tabId: string, controller: AbortController) => {
+  registerAbortController: (chatId: string, controller: AbortController) => {
     set((s) => ({
-      abortControllers: { ...s.abortControllers, [tabId]: controller },
+      abortControllers: { ...s.abortControllers, [chatId]: controller },
     }));
   },
 
-  unregisterAbortController: (tabId: string) => {
+  unregisterAbortController: (chatId: string) => {
     set((s) => {
       const newControllers = { ...s.abortControllers };
-      delete newControllers[tabId];
+      delete newControllers[chatId];
       return { abortControllers: newControllers };
     });
   },
 
-  registerSessionActions: (tabId: string, actions: ChatSessionActions) => {
+  registerSessionActions: (chatId: string, actions: ChatSessionActions) => {
     set((s) => ({
-      sessionActions: { ...s.sessionActions, [tabId]: actions },
+      sessionActions: { ...s.sessionActions, [chatId]: actions },
     }));
   },
 
-  unregisterSessionActions: (tabId: string) => {
+  unregisterSessionActions: (chatId: string) => {
     set((s) => {
       const newActions = { ...s.sessionActions };
-      delete newActions[tabId];
+      delete newActions[chatId];
       return { sessionActions: newActions };
     });
   },
 
-  setAttachedImages: (tabId, update) => {
+  setAttachedImages: (chatId, update) => {
     set((s) => {
-      const prev = s.attachedImages[tabId] ?? [];
+      const prev = s.attachedImages[chatId] ?? [];
       const next = typeof update === "function" ? update(prev) : update;
       if (next === prev) return s;
       const nextMap = { ...s.attachedImages };
       if (next.length === 0) {
-        delete nextMap[tabId];
+        delete nextMap[chatId];
       } else {
-        nextMap[tabId] = next;
+        nextMap[chatId] = next;
       }
       return { attachedImages: nextMap };
     });
   },
 
-  setDismissedSelection: (tabId, update) => {
+  setDismissedSelection: (chatId, update) => {
     set((s) => {
-      const prev = s.dismissedSelection[tabId] ?? new Set<string>();
+      const prev = s.dismissedSelection[chatId] ?? new Set<string>();
       const next = typeof update === "function" ? update(prev) : update;
       if (next === prev) return s;
       const nextMap = { ...s.dismissedSelection };
       if (next.size === 0) {
-        delete nextMap[tabId];
+        delete nextMap[chatId];
       } else {
-        nextMap[tabId] = next;
+        nextMap[chatId] = next;
       }
       return { dismissedSelection: nextMap };
     });

@@ -6,8 +6,17 @@ import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 
 beforeEach(() => {
   useChatStore.setState({
-    tabs: [{ id: "tab-0", title: "Chat 1", model: "m", parallelCount: 1 }],
-    activeTabId: "tab-0",
+    chats: [{
+      id: "tab-0",
+      title: "Chat 1",
+      parallelCount: 1,
+      titleIsAuto: true,
+      unread: false,
+      needsAnswer: false,
+      isBusy: false,
+      updatedAt: 0,
+    }],
+    activeChatId: "tab-0",
     launchQueue: {},
   } as never);
   useLeftSidebarStore.setState({ activeSection: "pages", isPanelOpen: false });
@@ -30,9 +39,9 @@ describe("sendCommentToAgent", () => {
     const ok = sendCommentToAgent("t1");
     expect(ok).toBe(true);
 
-    const { tabs, activeTabId, launchQueue } = useChatStore.getState();
-    expect(tabs.length).toBe(2);
-    expect(launchQueue[activeTabId]?.text).toContain("#3");
+    const { chats, activeChatId, launchQueue } = useChatStore.getState();
+    expect(chats.length).toBe(2);
+    expect(launchQueue[activeChatId!]?.text).toContain("#3");
 
     expect(useLeftSidebarStore.getState().activeSection).toBe("agents");
     expect(useLeftSidebarStore.getState().isPanelOpen).toBe(true);
@@ -41,6 +50,6 @@ describe("sendCommentToAgent", () => {
   it("is a no-op for an unknown thread id", () => {
     const ok = sendCommentToAgent("missing");
     expect(ok).toBe(false);
-    expect(useChatStore.getState().tabs.length).toBe(1);
+    expect(useChatStore.getState().chats.length).toBe(1);
   });
 });

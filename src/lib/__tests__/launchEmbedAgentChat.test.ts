@@ -15,8 +15,17 @@ beforeEach(() => {
   mockCapture.mockReset();
   mockCapture.mockResolvedValue("data:image/png;base64,SHOT");
   useChatStore.setState({
-    tabs: [{ id: "tab-0", title: "Chat 1", parallelCount: 1 }],
-    activeTabId: "tab-0",
+    chats: [{
+      id: "tab-0",
+      title: "Chat 1",
+      parallelCount: 1,
+      titleIsAuto: true,
+      unread: false,
+      needsAnswer: false,
+      isBusy: false,
+      updatedAt: 0,
+    }],
+    activeChatId: "tab-0",
     launchQueue: {},
   });
   useSceneStore.setState({
@@ -30,14 +39,14 @@ describe("launchEmbedAgentChat", () => {
     const ok = await launchEmbedAgentChat(EMBED_ID, "  improve it  ");
     expect(ok).toBe(true);
     expect(mockCapture).not.toHaveBeenCalled();
-    const { activeTabId, launchQueue } = useChatStore.getState();
-    expect(launchQueue[activeTabId]?.text).toBe("improve it");
-    expect(launchQueue[activeTabId]?.images).toBeUndefined();
+    const { activeChatId, launchQueue } = useChatStore.getState();
+    expect(launchQueue[activeChatId!]?.text).toBe("improve it");
+    expect(launchQueue[activeChatId!]?.images).toBeUndefined();
   });
 
   it("is a no-op for empty text", async () => {
     const ok = await launchEmbedAgentChat(EMBED_ID, "   ");
     expect(ok).toBe(false);
-    expect(useChatStore.getState().tabs.length).toBe(1);
+    expect(useChatStore.getState().chats.length).toBe(1);
   });
 });

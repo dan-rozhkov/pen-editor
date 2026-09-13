@@ -6,8 +6,8 @@ export function launchShowcaseAgentChat(): boolean {
   const text = consumeShowcaseAgentPrompt();
   if (!text) return false;
 
-  const tabId = useChatStore.getState().createTab();
-  useChatStore.getState().queueLaunchPayload(tabId, { text });
+  const chatId = useChatStore.getState().createChat();
+  useChatStore.getState().queueLaunchPayload(chatId, { text });
   useLeftSidebarStore.getState().setActiveSection("agents");
   useLeftSidebarStore.getState().setPanelOpen(true);
   return true;

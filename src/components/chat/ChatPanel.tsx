@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  XIcon,
   PlusIcon,
   LightningIcon,
   ArrowUpIcon,
+  ArrowLeftIcon,
   StopIcon,
   CaretDownIcon,
   ImageIcon,
@@ -14,16 +14,16 @@ import {
 import { useChatStore } from "@/store/chatStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import { useUserSkillStore } from "@/store/userSkillStore";
-import type { ChatTab, ParallelCount } from "@/store/chatStore";
+import type { ChatSummary, ParallelCount } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
 import { useAgentActivityToast } from "@/hooks/useAgentActivityToast";
 import { getUserId } from "@/lib/userId";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
+import { ChatList } from "./ChatList";
 import { QueuedMessagePanel } from "./QueuedMessagePanel";
 import { SkillsPanel } from "./SkillsPanel";
 import { hasPendingAskUser } from "./pendingAskUser";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { IconButton } from "@/components/ui/IconButton";
 import { Button } from "@/components/ui/button";
@@ -69,94 +69,72 @@ interface ComposerControlsProps {
 
 type ComposerControlsRenderer = (props: ComposerControlsProps) => ReactNode;
 
-function TabBar() {
-  const tabs = useChatStore((s) => s.tabs);
-  const activeTabId = useChatStore((s) => s.activeTabId);
-  const setActiveTab = useChatStore((s) => s.setActiveTab);
-  const closeTab = useChatStore((s) => s.closeTab);
-  const createTab = useChatStore((s) => s.createTab);
-  const activeActions = useChatStore((s) => s.sessionActions[s.activeTabId]);
+/** Compact header shown above the transcript once a chat is open — replaces
+ * the old tab bar now that a chat is opened from (and returned to) the list. */
+function OpenChatHeader({ chatId }: { chatId: string }) {
+  const chatTitle = useChatStore(
+    (s) => s.chats.find((c) => c.id === chatId)?.title ?? "",
+  );
+  const showChatList = useChatStore((s) => s.showChatList);
+  const createChat = useChatStore((s) => s.createChat);
+  const activeActions = useChatStore((s) => s.sessionActions[chatId]);
 
   return (
-    <Tabs
-      value={activeTabId}
-      onValueChange={(value) => setActiveTab(value as string)}
-      className="shrink-0 gap-0"
-    >
-      <div className="px-1 pt-1 pb-1 flex items-center overflow-x-auto layers-scrollbar">
-        <TabsList variant="pill" className="shrink-0 [&>*]:min-w-[80px]">
-          {tabs.map((tab: ChatTab) => (
-            <TabsTrigger
-              key={tab.id}
-              value={tab.id}
-              data-testid={`chat-tab-${tab.id}`}
-              className="group/tab relative w-full pr-5"
-            >
-              <span className="truncate max-w-[80px]">{tab.title}</span>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      data-testid={`close-tab-${tab.id}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        closeTab(tab.id);
-                      }}
-                      className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-secondary text-text-muted transition-opacity"
-                      aria-label="Close tab"
-                    >
-                      <XIcon size={10} />
-                    </button>
-                  }
-                />
-                <TooltipContent>Close tab</TooltipContent>
-              </Tooltip>
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        <IconButton
-          data-testid="create-tab-button"
-          variant="ghost"
-          size="icon"
-          onClick={() => createTab()}
-          tooltip="New chat"
-        >
-          <PlusIcon className="size-4" weight="light" />
-        </IconButton>
-        {activeActions?.hasMessages && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <IconButton
-                  data-testid="chat-menu-trigger"
-                  variant="ghost"
-                  size="icon"
-                  tooltip="Chat options"
-                >
-                  <DotsThreeVerticalIcon size={16} weight="bold" />
-                </IconButton>
-              }
-            />
+    <div className="flex shrink-0 items-center gap-1 border-b border-border-default px-1 py-1.5">
+      <IconButton
+        data-testid="back-to-chat-list"
+        variant="ghost"
+        size="icon"
+        onClick={() => showChatList()}
+        tooltip="All chats"
+      >
+        <ArrowLeftIcon className="size-4" weight="light" />
+      </IconButton>
+      <span className="min-w-0 flex-1 truncate px-1 text-sm font-medium text-text-primary">
+        {chatTitle}
+      </span>
+      <IconButton
+        data-testid="create-tab-button"
+        variant="ghost"
+        size="icon"
+        onClick={() => createChat()}
+        tooltip="New chat"
+      >
+        <PlusIcon className="size-4" weight="light" />
+      </IconButton>
+      {activeActions?.hasMessages && (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <IconButton
+                data-testid="chat-menu-trigger"
+                variant="ghost"
+                size="icon"
+                tooltip="Chat options"
+              >
+                <DotsThreeVerticalIcon size={16} weight="bold" />
+              </IconButton>
+            }
+          />
 
-            <DropdownMenuContent align="end" sideOffset={4} className="min-w-44">
-              <DropdownMenuItem
-                data-testid="chat-menu-download"
-                onClick={() => activeActions?.exportChat()}
-              >
-                Download chat
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                data-testid="chat-menu-clear"
-                onClick={() => activeActions?.clearChat()}
-              >
-                Clear chat
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
-    </Tabs>
+          <DropdownMenuContent align="end" sideOffset={4} className="min-w-44">
+            <DropdownMenuItem
+              data-testid="chat-menu-download"
+              onClick={() => activeActions?.exportChat()}
+            >
+              Download chat
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              data-testid="chat-menu-clear"
+              onClick={() => activeActions?.clearChat()}
+            >
+              Clear chat
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </div>
   );
 }
 
@@ -200,23 +178,83 @@ function ChatSession({
 
   const parallelCount = useChatStore((s) => s.parallelCount);
   const setParallelCount = useChatStore((s) => s.setParallelCount);
-  const createTab = useChatStore((s) => s.createTab);
+  const createChat = useChatStore((s) => s.createChat);
   const queueLaunchPayload = useChatStore((s) => s.queueLaunchPayload);
   const registerSessionActions = useChatStore((s) => s.registerSessionActions);
   const unregisterSessionActions = useChatStore(
     (s) => s.unregisterSessionActions,
   );
-  const tabTitle = useChatStore(
-    (s) => s.tabs.find((t) => t.id === sessionId)?.title,
+  const applyAutoTitle = useChatStore((s) => s.applyAutoTitle);
+  const markChatUnread = useChatStore((s) => s.markChatUnread);
+  const markChatRead = useChatStore((s) => s.markChatRead);
+  const setChatActivity = useChatStore((s) => s.setChatActivity);
+  const chatTitle = useChatStore(
+    (s) => s.chats.find((c) => c.id === sessionId)?.title,
   );
   const hasQueuedMessages = queuedMessages.length > 0;
 
-  // Publish export/clear handlers so the tab bar dropdown can drive this
-  // session. A ref keeps the handlers reading the latest messages without
-  // re-registering (and re-rendering the tab bar) on every streamed token.
-  const sessionDataRef = useRef({ messages, tabTitle, setMessages });
+  // Derives the chat's title from its first user message, once. `applyAutoTitle`
+  // itself is a no-op once the chat's `titleIsAuto` flag is cleared, but the ref
+  // still saves a redundant store dispatch on every one of the many re-renders
+  // a streaming turn causes after that first message lands.
+  const autoTitleAppliedRef = useRef(false);
   useEffect(() => {
-    sessionDataRef.current = { messages, tabTitle, setMessages };
+    if (autoTitleAppliedRef.current) return;
+    const firstUserMessage = messages.find((m) => m.role === "user");
+    if (!firstUserMessage) return;
+    const text = firstUserMessage.parts
+      .filter((p): p is { type: "text"; text: string } => p.type === "text")
+      .map((p) => p.text)
+      .join("");
+    if (!text) return;
+    autoTitleAppliedRef.current = true;
+    applyAutoTitle(sessionId, text);
+  }, [messages, sessionId, applyAutoTitle]);
+
+  // Keeps the chat-list status ("Working…" / "Needs your answer") in sync.
+  // `setChatActivity` no-ops when neither flag actually changed, so this is
+  // safe to run on every render without flooding the store with updates.
+  useEffect(() => {
+    setChatActivity(sessionId, { needsAnswer: awaitingAnswer, isBusy: isLoading });
+  }, [sessionId, awaitingAnswer, isLoading, setChatActivity]);
+
+  // Reports new activity — a new assistant reply, or the agent starting to
+  // wait on the user — to the store on every such event, active chat or not.
+  // `markChatUnread` itself decides what that means: the active chat only
+  // gets its `updatedAt` bumped (so recency ordering reflects the activity
+  // without an unread badge on a chat the user is looking at), a background
+  // chat gets both. Refs track the previous values so this fires once per
+  // event rather than on every streamed token (assistant message count grows
+  // once per reply, not once per delta — deltas mutate an existing message
+  // rather than adding one).
+  const prevAssistantCountRef = useRef(0);
+  const prevAwaitingAnswerRef = useRef(false);
+  useEffect(() => {
+    const assistantCount = messages.filter((m) => m.role === "assistant").length;
+    const assistantGrew = assistantCount > prevAssistantCountRef.current;
+    prevAssistantCountRef.current = assistantCount;
+    const awaitingAnswerStarted = awaitingAnswer && !prevAwaitingAnswerRef.current;
+    prevAwaitingAnswerRef.current = awaitingAnswer;
+    if (assistantGrew || awaitingAnswerStarted) {
+      markChatUnread(sessionId);
+    }
+  }, [messages, awaitingAnswer, sessionId, markChatUnread]);
+
+  // openChat() already clears unread when the user picks a chat from the
+  // list, but a chat can also become active another way (e.g. createChat()
+  // opens its new chat directly) — cover that path here too.
+  useEffect(() => {
+    if (isActive) {
+      markChatRead(sessionId);
+    }
+  }, [isActive, sessionId, markChatRead]);
+
+  // Publish export/clear handlers so the chat header's menu can drive this
+  // session. A ref keeps the handlers reading the latest messages without
+  // re-registering (and re-rendering the chat header) on every streamed token.
+  const sessionDataRef = useRef({ messages, chatTitle, setMessages });
+  useEffect(() => {
+    sessionDataRef.current = { messages, chatTitle, setMessages };
   });
   const hasMessages = messages.length > 0;
 
@@ -224,8 +262,8 @@ function ChatSession({
     registerSessionActions(sessionId, {
       hasMessages,
       exportChat: () => {
-        const { messages, tabTitle } = sessionDataRef.current;
-        downloadMarkdown(chatToMarkdown(messages, tabTitle), chatFilename(tabTitle));
+        const { messages, chatTitle } = sessionDataRef.current;
+        downloadMarkdown(chatToMarkdown(messages, chatTitle), chatFilename(chatTitle));
       },
       clearChat: () => {
         sessionDataRef.current.setMessages([]);
@@ -254,9 +292,14 @@ function ChatSession({
 
     setInput("");
 
+    // Fan-out chats are created inactive with parallelCount pinned to 1 —
+    // createChat()'s default (activate: true) would otherwise leave the user
+    // in the last empty fan-out chat instead of the one they just wrote in,
+    // and restoring a stale x3 from this chat would re-trigger the fan-out
+    // the next time the user sends a message in one of the twins.
     for (let i = 1; i < parallelCount; i += 1) {
-      const tabId = createTab();
-      queueLaunchPayload(tabId, cloneLaunchPayload(launchPayload));
+      const chatId = createChat({ activate: false, parallelCount: 1 });
+      queueLaunchPayload(chatId, cloneLaunchPayload(launchPayload));
     }
 
     setParallelCount(1);
@@ -355,8 +398,8 @@ export function ChatPanelContent() {
   const toggleExpanded = useChatStore((s) => s.toggleExpanded);
   const parallelCount = useChatStore((s) => s.parallelCount);
   const setParallelCount = useChatStore((s) => s.setParallelCount);
-  const tabs = useChatStore((s) => s.tabs);
-  const activeTabId = useChatStore((s) => s.activeTabId);
+  const chats = useChatStore((s) => s.chats);
+  const activeChatId = useChatStore((s) => s.activeChatId);
   const isAgentsSectionActive = useLeftSidebarStore((s) => s.activeSection === "agents");
   const [isSkillsPanelOpen, setSkillsPanelOpen] = useState(false);
   const ensureSkillsHydrated = useUserSkillStore((s) => s.ensureHydrated);
@@ -505,21 +548,26 @@ export function ChatPanelContent() {
         </Tooltip>
       </div>
 
-      {/* Tab bar */}
-      <TabBar />
+      {activeChatId === null ? (
+        <ChatList />
+      ) : (
+        <OpenChatHeader chatId={activeChatId} />
+      )}
 
-      {/* Keep all sessions mounted so tab switch doesn't reset chat state */}
-      {tabs.map((tab: ChatTab) => (
+      {/* Keep all sessions mounted so switching chats doesn't reset chat state.
+          While the chat list is shown (activeChatId === null) every session is
+          hidden — there is no active one. */}
+      {chats.map((chat: ChatSummary) => (
         <div
-          key={tab.id}
-          data-testid={`chat-session-${tab.id}`}
+          key={chat.id}
+          data-testid={`chat-session-${chat.id}`}
           className={
-            tab.id === activeTabId ? "flex-1 min-h-0 flex flex-col" : "hidden"
+            chat.id === activeChatId ? "flex-1 min-h-0 flex flex-col" : "hidden"
           }
         >
           <ChatSession
-            sessionId={tab.id}
-            isActive={tab.id === activeTabId}
+            sessionId={chat.id}
+            isActive={chat.id === activeChatId}
             shouldFocus={isAgentsSectionActive}
             composerControls={composerControls}
             onManageSkills={() => setSkillsPanelOpen(true)}

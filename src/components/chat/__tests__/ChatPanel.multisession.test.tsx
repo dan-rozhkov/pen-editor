@@ -60,11 +60,29 @@ describe("ChatPanel streaming across two sessions", () => {
     useChatStore.setState({
       isExpanded: false,
       parallelCount: 1,
-      tabs: [
-        { id: "tab-1", title: "Chat 1", parallelCount: 1 },
-        { id: "tab-2", title: "Chat 2", parallelCount: 1 },
+      chats: [
+        {
+          id: "tab-1",
+          title: "Chat 1",
+          parallelCount: 1,
+          titleIsAuto: true,
+          unread: false,
+          needsAnswer: false,
+          isBusy: false,
+          updatedAt: 0,
+        },
+        {
+          id: "tab-2",
+          title: "Chat 2",
+          parallelCount: 1,
+          titleIsAuto: true,
+          unread: false,
+          needsAnswer: false,
+          isBusy: false,
+          updatedAt: 0,
+        },
       ],
-      activeTabId: "tab-1",
+      activeChatId: "tab-1",
       abortControllers: {},
       launchQueue: {},
       sessionActions: {},
@@ -114,7 +132,7 @@ describe("ChatPanel streaming across two sessions", () => {
 
     // Switch to tab 2, send and stream "BBB".
     act(() => {
-      useChatStore.getState().setActiveTab("tab-2");
+      useChatStore.getState().openChat("tab-2");
     });
     await submitIn("chat-session-tab-2", "second message");
     await waitFor(() => expect(streams.length).toBe(2));
@@ -140,7 +158,7 @@ describe("ChatPanel streaming across two sessions", () => {
 
     // Switching back renders the response accumulated by the mounted hook.
     act(() => {
-      useChatStore.getState().setActiveTab("tab-1");
+      useChatStore.getState().openChat("tab-1");
     });
     expect(within(tab1).queryByText(/AAA-from-chat-1/)).toBeTruthy();
     expect(within(tab1).queryByText(/BBB-from-chat-2/)).toBeNull();
@@ -148,12 +166,21 @@ describe("ChatPanel streaming across two sessions", () => {
   });
 
   it("keeps tab-1's stream when a NEW tab is created mid-stream", async () => {
-    // Start with a single tab — the new tab is created while tab-1 streams.
+    // Start with a single chat — the new chat is created while tab-1 streams.
     useChatStore.setState({
-      tabs: [
-        { id: "tab-1", title: "Chat 1", parallelCount: 1 },
+      chats: [
+        {
+          id: "tab-1",
+          title: "Chat 1",
+          parallelCount: 1,
+          titleIsAuto: true,
+          unread: false,
+          needsAnswer: false,
+          isBusy: false,
+          updatedAt: 0,
+        },
       ],
-      activeTabId: "tab-1",
+      activeChatId: "tab-1",
     });
 
     render(<ChatPanelContent />);
@@ -173,7 +200,7 @@ describe("ChatPanel streaming across two sessions", () => {
     // Create a new tab WHILE tab-1 is mid-stream (the "+" button / parallel).
     let newTabId = "";
     act(() => {
-      newTabId = useChatStore.getState().createTab();
+      newTabId = useChatStore.getState().createChat();
     });
 
     await submitIn(`chat-session-${newTabId}`, "second message");
@@ -207,7 +234,7 @@ describe("ChatPanel streaming across two sessions", () => {
 
     // Switch back to tab-1: it must still show its OWN content, not chat-2's.
     act(() => {
-      useChatStore.getState().setActiveTab("tab-1");
+      useChatStore.getState().openChat("tab-1");
     });
 
     const tab1 = screen.getByTestId("chat-session-tab-1");
@@ -218,7 +245,7 @@ describe("ChatPanel streaming across two sessions", () => {
     expect(within(tab2).queryByText(/BBB-from-chat-2/)).toBeNull();
 
     act(() => {
-      useChatStore.getState().setActiveTab(newTabId);
+      useChatStore.getState().openChat(newTabId);
     });
     expect(within(tab2).queryByText(/BBB-from-chat-2/)).toBeTruthy();
     expect(within(tab2).queryByText(/AAA-from-chat-1/)).toBeNull();

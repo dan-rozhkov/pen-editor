@@ -15,8 +15,17 @@ beforeEach(() => {
   mockCapture.mockReset();
   mockCapture.mockResolvedValue("data:image/png;base64,SHOT");
   useChatStore.setState({
-    tabs: [{ id: "tab-0", title: "Chat 1", parallelCount: 1 }],
-    activeTabId: "tab-0",
+    chats: [{
+      id: "tab-0",
+      title: "Chat 1",
+      parallelCount: 1,
+      titleIsAuto: true,
+      unread: false,
+      needsAnswer: false,
+      isBusy: false,
+      updatedAt: 0,
+    }],
+    activeChatId: "tab-0",
     launchQueue: {},
   });
   useSceneStore.setState({
@@ -26,20 +35,20 @@ beforeEach(() => {
 });
 
 describe("launchNodeAgentChat", () => {
-  it("creates a new active tab and queues the trimmed text", async () => {
+  it("creates a new active chat and queues the trimmed text", async () => {
     const ok = await launchNodeAgentChat(NODE_ID, "  hello  ");
     expect(ok).toBe(true);
-    const { tabs, activeTabId, launchQueue } = useChatStore.getState();
-    expect(tabs.length).toBe(2);
-    expect(activeTabId).not.toBe("tab-0");
-    expect(launchQueue[activeTabId]?.text).toBe("hello");
+    const { chats, activeChatId, launchQueue } = useChatStore.getState();
+    expect(chats.length).toBe(2);
+    expect(activeChatId).not.toBe("tab-0");
+    expect(launchQueue[activeChatId!]?.text).toBe("hello");
   });
 
   it("attaches the screenshot by default", async () => {
     await launchNodeAgentChat(NODE_ID, "go");
     expect(mockCapture).toHaveBeenCalledWith(NODE_ID);
-    const { activeTabId, launchQueue } = useChatStore.getState();
-    expect(launchQueue[activeTabId]?.images).toEqual([
+    const { activeChatId, launchQueue } = useChatStore.getState();
+    expect(launchQueue[activeChatId!]?.images).toEqual([
       { dataUrl: "data:image/png;base64,SHOT", name: "Card" },
     ]);
   });
@@ -47,8 +56,8 @@ describe("launchNodeAgentChat", () => {
   it("skips the screenshot when attachScreenshot is false", async () => {
     await launchNodeAgentChat(NODE_ID, "go", { attachScreenshot: false });
     expect(mockCapture).not.toHaveBeenCalled();
-    const { activeTabId, launchQueue } = useChatStore.getState();
-    expect(launchQueue[activeTabId]?.images).toBeUndefined();
+    const { activeChatId, launchQueue } = useChatStore.getState();
+    expect(launchQueue[activeChatId!]?.images).toBeUndefined();
   });
 
   it("reveals and opens the agents panel", async () => {
@@ -60,7 +69,7 @@ describe("launchNodeAgentChat", () => {
   it("is a no-op for empty/whitespace text", async () => {
     const ok = await launchNodeAgentChat(NODE_ID, "   ");
     expect(ok).toBe(false);
-    expect(useChatStore.getState().tabs.length).toBe(1);
+    expect(useChatStore.getState().chats.length).toBe(1);
     expect(mockCapture).not.toHaveBeenCalled();
   });
 });

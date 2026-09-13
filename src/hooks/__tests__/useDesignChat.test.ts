@@ -438,7 +438,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
   }
 
   // Regression guard for "one model for everyone": no request may carry a
-  // model id. A stale per-tab selection leaking back into the body is exactly
+  // model id. A stale per-chat selection leaking back into the body is exactly
   // what the removal of the picker was meant to make impossible.
   it("sends no model id with a chat request", async () => {
     const requests: Array<Record<string, unknown>> = [];
@@ -457,11 +457,29 @@ describe("useDesignChat (hook + UI message stream)", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     useChatStore.setState({
-      tabs: [
-        { id: "tab-active", title: "A", parallelCount: 1 },
-        { id: "tab-bg", title: "B", parallelCount: 1 },
+      chats: [
+        {
+          id: "tab-active",
+          title: "A",
+          parallelCount: 1,
+          titleIsAuto: true,
+          unread: false,
+          needsAnswer: false,
+          isBusy: false,
+          updatedAt: 0,
+        },
+        {
+          id: "tab-bg",
+          title: "B",
+          parallelCount: 1,
+          titleIsAuto: true,
+          unread: false,
+          needsAnswer: false,
+          isBusy: false,
+          updatedAt: 0,
+        },
       ],
-      activeTabId: "tab-active",
+      activeChatId: "tab-active",
     });
 
     const { result } = renderHook(() => useDesignChat({ sessionId: "tab-bg" }));

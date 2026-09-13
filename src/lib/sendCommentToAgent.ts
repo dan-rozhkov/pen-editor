@@ -9,7 +9,7 @@ import type { ChatLaunchPayload } from "@/types/chat";
  * panel. The agent takes it from there — it calls `read_comments` to pull the
  * thread (with its node anchor), acts, and can `reply_comment` / `resolve_comment`.
  *
- * Mirrors `launchNodeAgentChat`'s tab-create + queue-payload + reveal-panel
+ * Mirrors `launchNodeAgentChat`'s create-chat + queue-payload + reveal-panel
  * flow (no screenshot — the anchor already gives the agent a precise nodeId).
  * Returns false (no side effects) when the thread doesn't exist.
  */
@@ -21,8 +21,8 @@ export function sendCommentToAgent(threadId: string): boolean {
     text: `разберись с комментарием #${thread.order}`,
   };
 
-  const tabId = useChatStore.getState().createTab();
-  useChatStore.getState().queueLaunchPayload(tabId, payload);
+  const chatId = useChatStore.getState().createChat();
+  useChatStore.getState().queueLaunchPayload(chatId, payload);
   useLeftSidebarStore.getState().setActiveSection("agents");
   useLeftSidebarStore.getState().setPanelOpen(true);
 

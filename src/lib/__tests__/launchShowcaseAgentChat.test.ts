@@ -11,8 +11,17 @@ import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 beforeEach(() => {
   sessionStorage.clear();
   useChatStore.setState({
-    tabs: [{ id: "tab-0", title: "Chat 1", parallelCount: 1 }],
-    activeTabId: "tab-0",
+    chats: [{
+      id: "tab-0",
+      title: "Chat 1",
+      parallelCount: 1,
+      titleIsAuto: true,
+      unread: false,
+      needsAnswer: false,
+      isBusy: false,
+      updatedAt: 0,
+    }],
+    activeChatId: "tab-0",
     parallelCount: 1,
     launchQueue: {},
   });
@@ -29,9 +38,9 @@ describe("launchShowcaseAgentChat", () => {
     expect(launchShowcaseAgentChat()).toBe(true);
 
     const chat = useChatStore.getState();
-    expect(chat.tabs).toHaveLength(2);
-    expect(chat.activeTabId).not.toBe("tab-0");
-    expect(chat.launchQueue[chat.activeTabId]?.text).toBe("make a travel app");
+    expect(chat.chats).toHaveLength(2);
+    expect(chat.activeChatId).not.toBe("tab-0");
+    expect(chat.launchQueue[chat.activeChatId!]?.text).toBe("make a travel app");
     expect(useLeftSidebarStore.getState().activeSection).toBe("agents");
     expect(useLeftSidebarStore.getState().isPanelOpen).toBe(true);
     expect(consumeShowcaseAgentPrompt()).toBeNull();
@@ -40,7 +49,7 @@ describe("launchShowcaseAgentChat", () => {
   it("does nothing when there is no showcase handoff", () => {
     expect(launchShowcaseAgentChat()).toBe(false);
 
-    expect(useChatStore.getState().tabs).toHaveLength(1);
+    expect(useChatStore.getState().chats).toHaveLength(1);
     expect(useChatStore.getState().launchQueue).toEqual({});
     expect(useLeftSidebarStore.getState().activeSection).toBe("pages");
     expect(useLeftSidebarStore.getState().isPanelOpen).toBe(false);

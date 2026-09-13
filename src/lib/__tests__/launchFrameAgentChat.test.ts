@@ -16,10 +16,19 @@ beforeEach(() => {
   mockCapture.mockReset();
   mockCapture.mockResolvedValue("data:image/png;base64,SHOT");
 
-  // Reset chat store to a single fresh tab.
+  // Reset chat store to a single fresh chat.
   useChatStore.setState({
-    tabs: [{ id: "tab-0", title: "Chat 1", parallelCount: 1 }],
-    activeTabId: "tab-0",
+    chats: [{
+      id: "tab-0",
+      title: "Chat 1",
+      parallelCount: 1,
+      titleIsAuto: true,
+      unread: false,
+      needsAnswer: false,
+      isBusy: false,
+      updatedAt: 0,
+    }],
+    activeChatId: "tab-0",
     launchQueue: {},
   });
 
@@ -32,24 +41,24 @@ beforeEach(() => {
 });
 
 describe("launchFrameAgentChat", () => {
-  it("creates a new active tab and queues the typed text as its first message", async () => {
+  it("creates a new active chat and queues the typed text as its first message", async () => {
     const ok = await launchFrameAgentChat(FRAME_ID, "  make 3 layouts  ");
 
     expect(ok).toBe(true);
-    const { tabs, activeTabId, launchQueue } = useChatStore.getState();
-    // A brand-new tab was created and made active.
-    expect(tabs.length).toBe(2);
-    expect(activeTabId).not.toBe("tab-0");
-    // Trimmed text becomes the queued first message for the new tab.
-    expect(launchQueue[activeTabId]?.text).toBe("make 3 layouts");
+    const { chats, activeChatId, launchQueue } = useChatStore.getState();
+    // A brand-new chat was created and made active.
+    expect(chats.length).toBe(2);
+    expect(activeChatId).not.toBe("tab-0");
+    // Trimmed text becomes the queued first message for the new chat.
+    expect(launchQueue[activeChatId!]?.text).toBe("make 3 layouts");
   });
 
   it("attaches the frame screenshot (named after the frame) as image context", async () => {
     await launchFrameAgentChat(FRAME_ID, "go");
 
     expect(mockCapture).toHaveBeenCalledWith(FRAME_ID);
-    const { activeTabId, launchQueue } = useChatStore.getState();
-    expect(launchQueue[activeTabId]?.images).toEqual([
+    const { activeChatId, launchQueue } = useChatStore.getState();
+    expect(launchQueue[activeChatId!]?.images).toEqual([
       { dataUrl: "data:image/png;base64,SHOT", name: "Home Screen" },
     ]);
   });
@@ -70,15 +79,15 @@ describe("launchFrameAgentChat", () => {
   it("queues a text-only message when the screenshot capture fails", async () => {
     mockCapture.mockResolvedValue(null);
     await launchFrameAgentChat(FRAME_ID, "go");
-    const { activeTabId, launchQueue } = useChatStore.getState();
-    expect(launchQueue[activeTabId]?.images).toBeUndefined();
-    expect(launchQueue[activeTabId]?.text).toBe("go");
+    const { activeChatId, launchQueue } = useChatStore.getState();
+    expect(launchQueue[activeChatId!]?.images).toBeUndefined();
+    expect(launchQueue[activeChatId!]?.text).toBe("go");
   });
 
   it("is a no-op for empty/whitespace text", async () => {
     const ok = await launchFrameAgentChat(FRAME_ID, "   ");
     expect(ok).toBe(false);
-    expect(useChatStore.getState().tabs.length).toBe(1);
+    expect(useChatStore.getState().chats.length).toBe(1);
     expect(mockCapture).not.toHaveBeenCalled();
     expect(useLeftSidebarStore.getState().activeSection).toBe("pages");
   });
