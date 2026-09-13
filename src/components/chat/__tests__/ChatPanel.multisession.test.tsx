@@ -9,15 +9,6 @@ import {
   within,
 } from "@testing-library/react";
 
-// Static model list so ChatPanel doesn't try to fetch /api/models.
-vi.mock("@/hooks/useModelOptions", () => ({
-  useModelOptions: () => [
-    { value: "google/gemini-2.5-flash", label: "Gemini", supportsVision: true },
-  ],
-  // useDesignChat gates its queued-payload drain on this; a mock that omitted
-  // it would make the hook throw instead of just skipping the network fetch.
-  useModelListPending: () => false,
-}));
 
 import { ChatPanelContent } from "../ChatPanel";
 import { useChatStore } from "@/store/chatStore";
