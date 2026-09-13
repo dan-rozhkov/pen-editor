@@ -177,6 +177,13 @@ function truncate(text: string, max: number): string {
   return `${text.slice(0, max)}…`;
 }
 
+/** Truncate an `outerHtml` string to the same limit `describeEmbedElement`
+ * uses, for callers that refresh a selection's `outerHtml` outside of a
+ * fresh pick (e.g. `embedPickerStore`'s `noteSelectionEdit`). */
+export function truncateOuterHtml(html: string): string {
+  return truncate(html, OUTER_HTML_MAX);
+}
+
 export interface EmbedElementSelection {
   embedId: string;
   path: string;

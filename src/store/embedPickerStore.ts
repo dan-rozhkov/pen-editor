@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { EmbedElementSelection } from "@/lib/embedElementPicker";
+import { truncateOuterHtml } from "@/lib/embedElementPicker";
 
 interface EmbedPickerState {
   /** The embed node id currently in "select element" mode, or null. */
@@ -28,6 +29,13 @@ interface EmbedPickerState {
    * never cleared on an html change. */
   selectElement: (selection: EmbedElementSelection, htmlAtPick?: string) => void;
   clearSelection: () => void;
+  /** Called right BEFORE writing an element edit made from the properties
+   * panel into the scene, so the lifecycle check doesn't read it as a
+   * foreign html change and drop the selection. `outerHtml` refreshes the
+   * preview handed to the agent (see `describeEmbedElement`/
+   * `OUTER_HTML_MAX` in `embedElementPicker.ts`). No-op when there is no
+   * selection. */
+  noteSelectionEdit: (html: string, outerHtml?: string) => void;
   reset: () => void;
 }
 
@@ -59,6 +67,18 @@ export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
     set({ selection, selectionHtmlSnapshot: htmlAtPick ?? null }),
 
   clearSelection: () => set({ selection: null, selectionHtmlSnapshot: null }),
+
+  noteSelectionEdit: (html, outerHtml) => {
+    const { selection } = get();
+    if (!selection) return;
+    set({
+      selectionHtmlSnapshot: html,
+      selection:
+        outerHtml !== undefined
+          ? { ...selection, outerHtml: truncateOuterHtml(outerHtml) }
+          : selection,
+    });
+  },
 
   reset: () =>
     set({ pickingEmbedId: null, hoveredPath: null, selection: null, selectionHtmlSnapshot: null }),

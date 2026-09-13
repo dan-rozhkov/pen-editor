@@ -5,6 +5,8 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useViewportStore } from "@/store/viewportStore";
+import { useEmbedPickerStore } from "@/store/embedPickerStore";
+import { EmbedElementProperties } from "@/components/properties/EmbedElementProperties";
 import type {
   FlatFrameNode,
   FlatGroupNode,
@@ -193,6 +195,14 @@ export function PropertiesPanel() {
 
   const singleSelectedId = selectedIds.length === 1 ? selectedIds[0] : null;
 
+  // Narrow selector (just the embed id, not the whole selection object) so
+  // this panel doesn't re-render on every hover/path change the picker
+  // store tracks while picking — only when which embed (if any) has a
+  // picked element actually changes.
+  const embedElementSelectionEmbedId = useEmbedPickerStore((s) => s.selection?.embedId ?? null);
+  const showEmbedElementProperties =
+    !!singleSelectedId && embedElementSelectionEmbedId === singleSelectedId;
+
   // Narrow subscriptions: the panel re-renders only when the selection or the
   // *selected node itself* changes — not on every scene mutation. Dragging
   // the selected node still updates the X/Y/size fields live.
@@ -354,8 +364,14 @@ export function PropertiesPanel() {
             activeTheme={effectiveTheme}
           />
         )}
+        {/* An element picked inside this embed's HTML takes over the panel
+            instead of the embed node's own (HTML-opaque) PropertyEditor —
+            see EmbedElementProperties's doc comment. */}
+        {selectedNode && !instanceContext && activeTool !== "frame" && showEmbedElementProperties && (
+          <EmbedElementProperties />
+        )}
         {/* Show normal property editor */}
-        {selectedNode && !instanceContext && activeTool !== "frame" && (
+        {selectedNode && !instanceContext && activeTool !== "frame" && !showEmbedElementProperties && (
           <PropertyEditor
             // Flat node: sections must not rely on `node.children` (subtree
             // access goes through nodesById/childrenById + materializeLayoutRefs).

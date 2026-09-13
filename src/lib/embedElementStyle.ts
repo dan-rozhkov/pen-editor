@@ -1,0 +1,363 @@
+/**
+ * Read/write helpers for the embed element properties panel.
+ *
+ * `embedElementPicker.ts` gives us a CSS path to a picked element that is
+ * relative to the *live* ShadowRoot an embed's HTML gets mounted into
+ * (`EmbedLayer.tsx`). That path is not usable against the embed node's own
+ * `htmlContent` string directly: `mountHtmlWithBodyStyles` (in
+ * `embedHtmlUtils.ts`) inserts synthetic wrapper nodes between the shadow
+ * root and the author's actual markup — a container `<div>` (the shadow
+ * root's sole child) and, when the source HTML has body-targeted styles, a
+ * synthetic `<body>` inside it. This module's job is to see through both
+ * layers: translate a shadow-relative path into one that resolves against
+ * the *source* html's own `<body>`, then read/write against a live element
+ * or a source-html string using that translated path.
+ *
+ * Kept DOM-only (no React/Zustand) so it's testable against plain DOM trees,
+ * matching `embedElementPicker.ts`.
+ */
+
+import { resolveElementPath } from "./embedElementPicker";
+import { cssColorToHex, isTransparentColor } from "./htmlToDesign/colorParsing";
+
+export interface EmbedElementStyleSnapshot {
+  tagName: string;
+  elementId?: string;
+  classes: string[];
+  /** rendered box size, CSS px */
+  width: number;
+  height: number;
+  display: string;
+  flexDirection: string;
+  gap: number; // px, 0 when "normal"
+  alignItems: string;
+  justifyContent: string;
+  padding: { top: number; right: number; bottom: number; left: number };
+  opacity: number; // 0..1
+  borderRadius: number; // px (top-left corner)
+  backgroundColor: string; // "#rrggbb"; "" when fully transparent
+  borderWidth: number; // px (top edge)
+  borderColor: string; // "#rrggbb"
+  borderStyle: string; // "none" | "solid" | ...
+  fontSize: number; // px
+  fontWeight: number;
+  lineHeight: number; // px; 0 when "normal"
+  letterSpacing: number; // px; 0 when "normal"
+  textAlign: string;
+  color: string; // "#rrggbb"
+  /** Element's text, when it has no child ELEMENTS (only text nodes); null otherwise. */
+  text: string | null;
+}
+
+/** Parse a `<n>px` (or unitless) computed-style string, falling back to 0 for
+ * anything that doesn't parse — happy-dom and real browsers both hand back
+ * keyword values ("normal", "auto", "") in plenty of cases we don't want to
+ * treat as errors, and a NaN leaking into a numeric field would be worse
+ * than a slightly-wrong 0 in a properties panel. */
+function parsePx(value: string | undefined | null): number {
+  if (!value) return 0;
+  const n = Number.parseFloat(value);
+  return Number.isNaN(n) ? 0 : n;
+}
+
+/** "normal" is the initial value for both `line-height` and
+ * `letter-spacing`; the panel has no "normal" concept, so it's reported as
+ * 0 (the same "unset" signal padding/gap use). */
+function parseNormalOrPx(value: string | undefined | null): number {
+  if (!value || value === "normal") return 0;
+  return parsePx(value);
+}
+
+/**
+ * Convert a computed color string to `#rrggbb`.
+ *
+ * `getComputedStyle` resolves most colors to `rgb()`/`rgba()`, but NOT all of
+ * them: Chrome preserves the modern color functions verbatim, so an element
+ * authored in `oklch(...)`/`lab(...)`/`color(display-p3 …)` (or a
+ * `color-mix()`, which resolves to `oklab(...)`) comes back in that syntax.
+ * Showcase HTML is full of OKLCH, so a naive rgb-only regex would report
+ * "no color set" for a swatch that is plainly painted. `cssColorToHex`
+ * already handles every one of those through the browser's own colour
+ * parser, and `isTransparentColor` is the shared notion of "nothing painted"
+ * — reuse both instead of growing a second, weaker parser here.
+ *
+ * A fully transparent colour comes back as `""` rather than `#000000`:
+ * "no colour set" and "black" are different facts and the panel needs to
+ * tell them apart.
+ */
+function parseColor(value: string | undefined | null): string {
+  if (!value || isTransparentColor(value)) return "";
+  const hex = cssColorToHex(value.trim());
+  return /^#[0-9a-f]{6}$/i.test(hex) ? hex.toLowerCase() : "";
+}
+
+/** `font-weight` computes to a numeric string in every modern engine, but
+ * some environments (older happy-dom builds among them) still hand back the
+ * `normal`/`bold` keywords — map those explicitly rather than letting them
+ * fall through to the NaN branch. */
+function parseFontWeight(value: string | undefined | null): number {
+  if (value === "bold") return 700;
+  if (value === "normal" || !value) return 400;
+  const n = Number.parseFloat(value);
+  return Number.isNaN(n) ? 400 : n;
+}
+
+/** Tags that can never carry child text nodes. `<textarea>`/`<option>` are
+ * deliberately absent: their text content IS their value and serializes
+ * normally. */
+const VOID_TAGS = new Set([
+  "area", "base", "br", "col", "embed", "hr", "img", "input",
+  "link", "meta", "param", "source", "track", "wbr",
+]);
+
+/** Snap a snapshot from the LIVE element (`getComputedStyle` +
+ * `getBoundingClientRect`). Never touches the source html string — that's
+ * `applyEmbedElementEdit`'s job. */
+export function readEmbedElementSnapshot(el: Element): EmbedElementStyleSnapshot {
+  const cs = getComputedStyle(el);
+
+  // `offsetWidth`/`offsetHeight`, NOT `getBoundingClientRect()`: an embed's
+  // content container carries `transform: scale(viewportZoom)`
+  // (`EmbedLayer`'s `syncContentScale`), and a client rect is measured in
+  // post-transform SCREEN pixels. At 200% zoom a 100px element would read
+  // 200, and writing that number straight back as `width: 200px` would
+  // double the element on the first nudge. The offset box is the untransformed
+  // layout box, so it round-trips with the `px` we write. Both are 0 in a
+  // DOM-only test environment that never runs layout, and for non-replaced
+  // inline elements — fall back to the computed values there.
+  const layoutWidth = el instanceof HTMLElement ? el.offsetWidth : 0;
+  const layoutHeight = el instanceof HTMLElement ? el.offsetHeight : 0;
+  const width = layoutWidth || parsePx(cs.width);
+  const height = layoutHeight || parsePx(cs.height);
+
+  // Prefer the `gap` shorthand getter (widely supported, and the only one
+  // happy-dom actually populates from an inline `gap:` declaration — it
+  // doesn't expand `gap` into the `row-gap`/`column-gap` longhands the way a
+  // real browser's CSSOM does). Fall back to the longhands for engines where
+  // `gap` itself comes back empty but the expanded longhands are set.
+  const gapRaw = cs.gap || cs.columnGap || cs.rowGap;
+
+  return {
+    tagName: el.tagName.toLowerCase(),
+    ...(el.id ? { elementId: el.id } : {}),
+    classes: el.classList ? Array.from(el.classList) : [],
+    width,
+    height,
+    display: cs.display,
+    flexDirection: cs.flexDirection,
+    gap: parseNormalOrPx(gapRaw),
+    alignItems: cs.alignItems,
+    justifyContent: cs.justifyContent,
+    padding: {
+      top: parsePx(cs.paddingTop),
+      right: parsePx(cs.paddingRight),
+      bottom: parsePx(cs.paddingBottom),
+      left: parsePx(cs.paddingLeft),
+    },
+    opacity: Number.isNaN(Number.parseFloat(cs.opacity)) ? 1 : Number.parseFloat(cs.opacity),
+    borderRadius: parsePx(cs.borderTopLeftRadius),
+    backgroundColor: parseColor(cs.backgroundColor),
+    borderWidth: parsePx(cs.borderTopWidth),
+    borderColor: parseColor(cs.borderTopColor),
+    borderStyle: cs.borderTopStyle || "none",
+    fontSize: parsePx(cs.fontSize),
+    fontWeight: parseFontWeight(cs.fontWeight),
+    lineHeight: parseNormalOrPx(cs.lineHeight),
+    letterSpacing: parseNormalOrPx(cs.letterSpacing),
+    textAlign: cs.textAlign,
+    color: parseColor(cs.color),
+    // Void/replaced elements are reported as having NO editable text even
+    // though they trivially have no element children: setting `textContent`
+    // on an `<img>`/`<input>`/`<br>` mutates a DOM node whose serialization
+    // never emits children, so the edit would vanish on the way back into
+    // the html while the panel showed it as applied.
+    text: el.children.length === 0 && !VOID_TAGS.has(el.tagName.toLowerCase())
+      ? (el.textContent ?? "")
+      : null,
+  };
+}
+
+/** The container `<div>` `EmbedHost` (`EmbedLayer.tsx`) appends as the
+ * ShadowRoot's sole child, and the `nth-of-type` segment `buildElementPath`
+ * always produces for it — every non-id-anchored shadow path starts here. */
+const CONTENT_CONTAINER_SEGMENT = "div:nth-of-type(1)";
+
+/** The segment for the synthetic `<body>` `mountHtmlWithBodyStyles` creates
+ * inside the container when the source html has body-targeted styles (see
+ * that function's doc comment). It's always the container's first (and, in
+ * practice, only) `<body>`-tagged child. */
+const SYNTHETIC_BODY_SEGMENT = "body:nth-of-type(1)";
+
+/**
+ * Translate a shadow-relative path (as produced by `buildElementPath`
+ * against a `ShadowRoot`) into a path that resolves against the *source*
+ * html's own `<body>` — i.e. one `resolveElementPath(doc.body, path)` can
+ * consume after `new DOMParser().parseFromString(html, "text/html")`.
+ *
+ * Two synthetic layers sit between the shadow root and the author's real
+ * markup (see the module doc comment), and both must be stripped:
+ *
+ * 1. The mount container `<div>` — always the first segment, UNLESS the
+ *    path is anchored on a `#id` (an id anchor is only ever emitted as the
+ *    very first segment by `buildElementPath`, and it uniquely identifies
+ *    the element regardless of which synthetic wrappers sit above it — so
+ *    there is nothing to strip and the path is returned unchanged).
+ * 2. The synthetic `<body>` — present only when `mountHtmlWithBodyStyles`
+ *    wrapped the content (body-targeted styles in the source), in which
+ *    case it's always the very next segment after the container.
+ *
+ * What's left maps 1:1 onto the source `<body>`'s own descendant chain,
+ * because in both mounting branches the container/synthetic-body's
+ * *content* children are copied verbatim from the parsed source body
+ * (`container.innerHTML = safeHtml` in the unwrapped case,
+ * `body.innerHTML = parsed.body.innerHTML` in the wrapped one) — so child
+ * indices line up exactly.
+ *
+ * Returns `""` (not null) when nothing is left after stripping — that means
+ * the path pointed at the container or the synthetic body itself, i.e. the
+ * source `<body>` element as a whole; callers resolve that case specially
+ * (see `applyEmbedElementEdit`). Returns `null` for an empty or malformed
+ * path (anything not starting with the expected container segment or a
+ * `#id` anchor) — there's nothing sensible to translate.
+ */
+export function shadowPathToSourcePath(shadowPath: string): string | null {
+  if (!shadowPath) return null;
+
+  const segments = shadowPath.split(" > ");
+  const [first, ...rest] = segments;
+
+  if (first.startsWith("#")) return shadowPath;
+  if (first !== CONTENT_CONTAINER_SEGMENT) return null;
+
+  const remaining = rest[0] === SYNTHETIC_BODY_SEGMENT ? rest.slice(1) : rest;
+  return remaining.join(" > ");
+}
+
+/**
+ * Find the live element a picker path refers to, inside the shadow DOM an
+ * embed's HTML is mounted into. Takes the PICKER path (shadow-relative, not
+ * translated) — this walks the same live tree `buildElementPath` walked
+ * when the path was created, mirroring `EmbedElementHighlight.tsx`'s own
+ * host/shadow-root lookup.
+ */
+export function findLiveEmbedElement(embedId: string, shadowPath: string): Element | null {
+  try {
+    const host = document.querySelector<HTMLElement>(`[data-embed-id="${CSS.escape(embedId)}"]`);
+    const root = host?.shadowRoot;
+    if (!root) return null;
+    return resolveElementPath(root, shadowPath);
+  } catch {
+    return null;
+  }
+}
+
+export interface EmbedElementEdit {
+  /** CSS declarations for the element's inline style. `null`/`""` removes
+   * the property. Keys are kebab-case ("background-color"). */
+  styles?: Record<string, string | null>;
+  /** Replaces the element's text content. */
+  text?: string;
+}
+
+/** Does `html` (the raw, unparsed source string) contain a literal `<tag`
+ * open, ignoring case and requiring a following whitespace/`>` so `<bodyx>`
+ * doesn't false-match `<body`. */
+function hasOpenTag(html: string, tag: string): boolean {
+  return new RegExp(`<${tag}[\\s>]`, "i").test(html);
+}
+
+/**
+ * Apply an edit to the element at `shadowPath` inside `html` (an embed
+ * node's `htmlContent`, NOT the live DOM), returning the updated html plus
+ * the changed element's own `outerHTML`. Returns `null` — leaving `html`
+ * untouched — when the path doesn't resolve to anything, so a stale path
+ * (element removed/reordered since the path was picked) can never silently
+ * edit the wrong element.
+ *
+ * Serialization deliberately preserves the *shape* of the original string
+ * rather than always emitting a full document or always a fragment:
+ * `htmlContent` round-trips through this function repeatedly (each panel
+ * edit calls it again against its own previous output), and an embed's
+ * mounting behavior depends on which of `<html>`/`<body>`/bare-fragment shape
+ * it has (`hasBodyTargetedStyles`/`mountHtmlWithBodyStyles` above) — silently
+ * promoting a fragment to a full document (or vice versa) on the first edit
+ * would change how every subsequent mount behaves, not just the one element
+ * this call touched.
+ */
+export function applyEmbedElementEdit(
+  html: string,
+  shadowPath: string,
+  edit: EmbedElementEdit,
+): { html: string; outerHtml: string } | null {
+  const sourcePath = shadowPathToSourcePath(shadowPath);
+  if (sourcePath === null) return null;
+
+  let doc: Document;
+  try {
+    doc = new DOMParser().parseFromString(html, "text/html");
+  } catch {
+    return null;
+  }
+
+  // "" means the path pointed at the container/synthetic-body wrapper
+  // itself — i.e. the source <body> as a whole (see shadowPathToSourcePath).
+  // That is only writable when the source string actually HAS a <body>/<html>
+  // wrapper to serialize back into: the bare-fragment branch below emits
+  // `doc.body.innerHTML`, which drops everything set on <body> on the floor.
+  // Returning null (rather than a "successful" edit whose html is byte-identical
+  // to the input) is what stops the panel from optimistically showing a change
+  // that was never written, and stops a fabricated <body> wrapper from being
+  // handed to the agent as the picked element's preview.
+  if (sourcePath === "" && !hasOpenTag(html, "body") && !hasOpenTag(html, "html")) {
+    return null;
+  }
+  const target: HTMLElement | null =
+    sourcePath === "" ? doc.body : (resolveElementPath(doc.body, sourcePath) as HTMLElement | null);
+  if (!target) return null;
+
+  if (edit.styles) {
+    for (const [prop, value] of Object.entries(edit.styles)) {
+      if (value == null || value === "") {
+        target.style.removeProperty(prop);
+      } else {
+        target.style.setProperty(prop, value);
+      }
+    }
+    // Never leave a decorative empty `style=""` behind — it's noise in the
+    // serialized html and would make an otherwise-untouched element look
+    // edited.
+    if (target.style.length === 0 && target.hasAttribute("style")) {
+      target.removeAttribute("style");
+    }
+  }
+
+  if (edit.text !== undefined) {
+    target.textContent = edit.text;
+  }
+
+  const outerHtml = target.outerHTML;
+
+  let serialized: string;
+  if (hasOpenTag(html, "html")) {
+    // Full document: preserve a leading DOCTYPE (DOMParser doesn't include
+    // it in `documentElement.outerHTML`) and re-serialize the whole tree.
+    const doctypeMatch = /^\s*<!doctype[^>]*>/i.exec(html);
+    serialized = (doctypeMatch ? doctypeMatch[0] : "") + doc.documentElement.outerHTML;
+  } else if (hasOpenTag(html, "body")) {
+    // Body-only fragment (with or without a <head>): keep that shape rather
+    // than promoting to a full <html> document.
+    // Head content survives either way: DOMParser hoists leading
+    // <style>/<meta>/<link> into `doc.head` even when the source string never
+    // wrote a <head> tag, so dropping it whenever the tag is absent would
+    // silently delete the screen's stylesheet on the first element edit.
+    const headPart = hasOpenTag(html, "head")
+      ? `<head>${doc.head.innerHTML}</head>`
+      : doc.head.innerHTML;
+    serialized = headPart + doc.body.outerHTML;
+  } else {
+    // Bare content fragment: no wrapper tags to preserve at all.
+    serialized = doc.head.innerHTML + doc.body.innerHTML;
+  }
+
+  return { html: serialized, outerHtml };
+}

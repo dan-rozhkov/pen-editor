@@ -133,6 +133,37 @@ describe("useEmbedPickerLifecycle", () => {
     expect(useEmbedPickerStore.getState().selection?.embedId).toBe("e1");
   });
 
+  it("keeps the selection across a properties-panel edit noted via noteSelectionEdit, but still clears it on a foreign html change", () => {
+    seedEmbed("e1", "<div>before</div>");
+    useSelectionStore.setState({ selectedIds: ["e1"] });
+    useEmbedPickerStore.getState().selectElement(selectionFor("e1"), "<div>before</div>");
+    render(<Harness />);
+
+    const htmlB = "<div>edited from panel</div>";
+    act(() => {
+      useEmbedPickerStore.getState().noteSelectionEdit(htmlB);
+      const node = useSceneStore.getState().nodesById.e1 as EmbedNode;
+      useSceneStore.setState({
+        nodesById: {
+          ...useSceneStore.getState().nodesById,
+          e1: { ...node, htmlContent: htmlB },
+        },
+      } as never);
+    });
+    expect(useEmbedPickerStore.getState().selection?.embedId).toBe("e1");
+
+    act(() => {
+      const node = useSceneStore.getState().nodesById.e1 as EmbedNode;
+      useSceneStore.setState({
+        nodesById: {
+          ...useSceneStore.getState().nodesById,
+          e1: { ...node, htmlContent: "<div>edited by agent</div>" },
+        },
+      } as never);
+    });
+    expect(useEmbedPickerStore.getState().selection).toBeNull();
+  });
+
   it("clears the selection when the embed node is deleted", () => {
     seedEmbed("e1");
     useSelectionStore.setState({ selectedIds: ["e1"] });

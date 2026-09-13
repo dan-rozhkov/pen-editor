@@ -78,6 +78,42 @@ describe("embedPickerStore", () => {
     expect(s.pickingEmbedId).toBe("e1");
   });
 
+  it("noteSelectionEdit is a no-op when there is no selection", () => {
+    useEmbedPickerStore.getState().noteSelectionEdit("<div>new</div>");
+    const s = useEmbedPickerStore.getState();
+    expect(s.selection).toBeNull();
+    expect(s.selectionHtmlSnapshot).toBeNull();
+  });
+
+  it("noteSelectionEdit updates the snapshot and outerHtml without touching other selection fields", () => {
+    useEmbedPickerStore.getState().selectElement(selectionFor("e1"), "<div>hi</div>");
+    useEmbedPickerStore.getState().noteSelectionEdit("<div>edited</div>", "<div>edited</div>");
+    const s = useEmbedPickerStore.getState();
+    expect(s.selectionHtmlSnapshot).toBe("<div>edited</div>");
+    expect(s.selection).toEqual({
+      ...selectionFor("e1"),
+      outerHtml: "<div>edited</div>",
+    });
+  });
+
+  it("noteSelectionEdit updates the snapshot alone when outerHtml is omitted", () => {
+    useEmbedPickerStore.getState().selectElement(selectionFor("e1"), "<div>hi</div>");
+    useEmbedPickerStore.getState().noteSelectionEdit("<div>edited</div>");
+    const s = useEmbedPickerStore.getState();
+    expect(s.selectionHtmlSnapshot).toBe("<div>edited</div>");
+    expect(s.selection?.outerHtml).toBe("<div>hi</div>");
+  });
+
+  it("noteSelectionEdit truncates a long outerHtml the same way describeEmbedElement does", () => {
+    useEmbedPickerStore.getState().selectElement(selectionFor("e1"), "<div>hi</div>");
+    const longHtml = `<div>${"x".repeat(1300)}</div>`;
+    useEmbedPickerStore.getState().noteSelectionEdit("<div>edited</div>", longHtml);
+    const outerHtml = useEmbedPickerStore.getState().selection?.outerHtml ?? "";
+    expect(outerHtml.length).toBe(1201);
+    expect(outerHtml.endsWith("…")).toBe(true);
+    expect(outerHtml.startsWith(longHtml.slice(0, 1200))).toBe(true);
+  });
+
   it("reset clears everything", () => {
     useEmbedPickerStore.getState().startPicking("e1");
     useEmbedPickerStore.getState().setHoveredPath("p:nth-of-type(1)");
