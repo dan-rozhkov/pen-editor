@@ -20,11 +20,19 @@ export function getCanvasViewportMetrics(): { width: number; height: number } {
   };
 }
 
+/**
+ * Center of the canvas viewport in canvas-local coordinates (i.e. relative
+ * to the `[data-canvas]` element's own top-left, the same coordinate space
+ * `zoomAtPoint` expects — see `panController.ts`'s `e.clientX - rect.left`).
+ * NOT window/client coordinates: those only coincide with canvas-local ones
+ * when the canvas sits flush at the window origin, which it doesn't once
+ * side panels are open. Falls back to half the window size when the canvas
+ * isn't mounted.
+ */
 export function getCanvasViewportCenter(): { centerX: number; centerY: number } {
-  const canvasEl = getCanvasElement();
-  const rect = canvasEl?.getBoundingClientRect();
+  const { width, height } = getCanvasViewportMetrics();
   return {
-    centerX: rect ? rect.left + rect.width / 2 : window.innerWidth / 2,
-    centerY: rect ? rect.top + rect.height / 2 : window.innerHeight / 2,
+    centerX: width / 2,
+    centerY: height / 2,
   };
 }

@@ -32,4 +32,18 @@ describe("canvasViewport", () => {
     expect(getCanvasElement()).toBe(el);
     expect(getCanvasViewportMetrics()).toEqual({ width: 800, height: 600 });
   });
+
+  it("returns the canvas-local center, not the window/client center", () => {
+    const el = document.createElement("div");
+    el.setAttribute("data-canvas", "");
+    Object.defineProperty(el, "clientWidth", { value: 800, configurable: true });
+    Object.defineProperty(el, "clientHeight", { value: 600, configurable: true });
+    // Simulate a canvas offset from the window origin (e.g. by side panels) —
+    // getCanvasViewportCenter must ignore this and stay canvas-relative.
+    el.getBoundingClientRect = () =>
+      ({ left: 300, top: 50, width: 800, height: 600 }) as DOMRect;
+    document.body.appendChild(el);
+
+    expect(getCanvasViewportCenter()).toEqual({ centerX: 400, centerY: 300 });
+  });
 });

@@ -1,7 +1,11 @@
-import { useMemo } from "react";
-import { CodeIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, CheckIcon, CodeIcon } from "@phosphor-icons/react";
 
-import { SelectWithOptions } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import { useSceneStore } from "@/store/sceneStore";
@@ -22,55 +26,51 @@ export function PageControls() {
   const toggleDevMode = useDevModeStore((s) => s.toggle);
 
   const currentZoom = Math.round(scale * 100);
-  const zoomOptions = useMemo(() => {
-    const presetOptions = ZOOM_PRESETS.map((value) => ({
-      value: String(value),
-      label: `${value}%`,
-    }));
-    const options = [
-      { value: "fit", label: "Fit to content" },
-      ...presetOptions,
-    ];
 
-    if (ZOOM_PRESETS.includes(currentZoom)) {
-      return options;
-    }
+  const handleFitToContent = () => {
+    const nodes = useSceneStore.getState().getNodes();
+    const { width, height } = getCanvasViewportMetrics();
+    fitToContent(nodes, width, height);
+  };
 
-    return [
-      options[0],
-      ...[...presetOptions, { value: String(currentZoom), label: `${currentZoom}%` }].sort(
-        (a, b) => Number(a.value) - Number(b.value),
-      ),
-    ];
-  }, [currentZoom]);
-
-  const handleZoomChange = (value: string | null) => {
-    if (!value) return;
-
-    if (value === "fit") {
-      const nodes = useSceneStore.getState().getNodes();
-      const { width, height } = getCanvasViewportMetrics();
-      fitToContent(nodes, width, height);
-      return;
-    }
-
-    const nextScale = Number(value) / 100;
-    if (!Number.isFinite(nextScale)) return;
-
+  const handleZoomPreset = (value: number) => {
     const { centerX, centerY } = getCanvasViewportCenter();
-    zoomAtPoint(nextScale, centerX, centerY);
+    zoomAtPoint(value / 100, centerX, centerY);
   };
 
   return (
     <div className="border-b border-border-default px-3 py-3">
       <div className="flex items-center gap-2">
-        <SelectWithOptions
-          value={String(currentZoom)}
-          onValueChange={handleZoomChange}
-          options={zoomOptions}
-          className="w-auto min-w-0 border-transparent bg-transparent px-2 hover:bg-secondary hover:text-foreground focus-visible:border-transparent focus-visible:ring-0"
-          size="sm"
-        />
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-auto min-w-0 gap-1.5 px-2"
+                data-testid="page-zoom"
+              />
+            }
+          >
+            {currentZoom}%
+            <CaretDownIcon className="size-3.5 text-muted-foreground" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" sideOffset={4} className="min-w-32">
+            <DropdownMenuItem onClick={handleFitToContent} data-testid="page-zoom-fit">
+              Fit to content
+            </DropdownMenuItem>
+            {ZOOM_PRESETS.map((value) => (
+              <DropdownMenuItem
+                key={value}
+                onClick={() => handleZoomPreset(value)}
+                data-testid={`page-zoom-${value}`}
+              >
+                {value}%
+                {value === currentZoom && <CheckIcon className="ml-auto" />}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
         {/* Dev (inspect) mode toggle — Figma-style read-only CSS inspector. */}
         <IconButton
           variant="ghost"
