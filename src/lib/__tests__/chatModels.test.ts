@@ -4,8 +4,8 @@ import { canSendImages, getChatModel, modelSupportsVision } from "@/lib/chatMode
 describe("chatModels fallback", () => {
   it("reports the single shipped model before any /api/models response", () => {
     expect(getChatModel()).toEqual({
-      id: "deepseek/deepseek-v4.1-flash",
-      label: "DeepSeek V4.1 Flash",
+      id: "deepseek-flash",
+      label: "DeepSeek Flash",
       supportsVision: true,
     });
   });
@@ -60,7 +60,7 @@ describe("chatModels visionFallback", () => {
     const fresh = await import("@/lib/chatModels");
     await fresh.loadModels();
 
-    expect(fresh.getChatModel().id).toBe("deepseek/deepseek-v4.1-flash");
+    expect(fresh.getChatModel().id).toBe("deepseek-flash");
     expect(fresh.canSendImages()).toBe(true);
   });
 });

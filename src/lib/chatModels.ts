@@ -1,6 +1,6 @@
 // The chat model and its capabilities. The design agent runs on exactly ONE
 // model and there is no picker: the backend decides which one (its
-// OPENROUTER_MODEL, reported as `default` by GET /api/models) and the browser
+// CHAT_MODEL, reported as `default` by GET /api/models) and the browser
 // never sends a model id with a turn. This module fetches that metadata once
 // at startup and caches it.
 //
@@ -24,8 +24,8 @@ export interface ChatModel {
 // backend answers. `modelContract.test.ts` pins it against the sibling
 // checkout.
 const FALLBACK_MODEL: ChatModel = {
-  id: "deepseek/deepseek-v4.1-flash",
-  label: "DeepSeek V4.1 Flash",
+  id: "deepseek-flash",
+  label: "DeepSeek Flash",
   supportsVision: true,
 };
 
