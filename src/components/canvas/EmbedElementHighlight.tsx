@@ -11,12 +11,36 @@ const SELECTION_COLOR = "#0d99ff";
 const HOVER_STROKE_WIDTH = 2;
 const SELECTION_STROKE_WIDTH = 1;
 
+// Mirrors the native selection size badge (src/pixi/selectionOverlay/constants.ts
+// SIZE_LABEL_* + drawSelection.ts's drawSizeLabel) so a picked embed element
+// reads identically to a native node's selection badge.
+const SIZE_BADGE_FONT_SIZE = 11;
+const SIZE_BADGE_OFFSET_Y = 6;
+const SIZE_BADGE_PADDING_X = 6;
+const SIZE_BADGE_PADDING_Y = 3;
+const SIZE_BADGE_CORNER_RADIUS = 3;
+const SIZE_BADGE_BG = "#0d99ff";
+const SIZE_BADGE_TEXT_COLOR = "#ffffff";
+
 interface ElementBox {
   left: number;
   top: number;
   width: number;
   height: number;
   tagName: string;
+  /** Untransformed CSS-pixel layout size of the live element, for the size
+   * badge text. `left/top/width/height` above come from
+   * `getBoundingClientRect()` — screen pixels, correct for positioning this
+   * overlay (which lives in the same, also-unscaled, canvas-container
+   * coordinate space) but wrong for a size *label* once the embed host is
+   * zoomed via `transform: scale(zoom)`: a 100px-wide element then measures
+   * 200 at 200% zoom. `offsetWidth`/`offsetHeight` are the element's own
+   * layout box and are unaffected by an ancestor's CSS transform, so prefer
+   * those; fall back to dividing the screen rect by the current viewport
+   * zoom only when the element isn't an `HTMLElement` (e.g. `SVGElement`,
+   * which has no `offsetWidth`). */
+  cssWidth: number;
+  cssHeight: number;
 }
 
 /** Resolve the on-screen box of `path` inside embed `embedId`'s live shadow
@@ -38,13 +62,58 @@ function resolveElementBox(embedId: string, path: string): ElementBox | null {
   const elRect = el.getBoundingClientRect();
   const originRect = origin.getBoundingClientRect();
 
+  let cssWidth: number;
+  let cssHeight: number;
+  if (el instanceof HTMLElement) {
+    cssWidth = el.offsetWidth;
+    cssHeight = el.offsetHeight;
+  } else {
+    const zoom = useViewportStore.getState().scale || 1;
+    cssWidth = elRect.width / zoom;
+    cssHeight = elRect.height / zoom;
+  }
+
   return {
     left: elRect.left - originRect.left,
     top: elRect.top - originRect.top,
     width: elRect.width,
     height: elRect.height,
     tagName: el.tagName.toLowerCase(),
+    cssWidth,
+    cssHeight,
   };
+}
+
+/** Size badge under a selection box, visually matching the native
+ * selection's Pixi-drawn size label (drawSizeLabel in
+ * src/pixi/selectionOverlay/drawSelection.ts): centered horizontally under
+ * the box, `SIZE_BADGE_OFFSET_Y` below its bottom edge, `${w} × ${h}` in
+ * CSS pixels of the embed's content — never the screen-space box size,
+ * which is zoom-scaled (see `ElementBox.cssWidth`/`cssHeight`). */
+function SizeBadge({ box }: { box: ElementBox }) {
+  const text = `${Math.round(box.cssWidth)} × ${Math.round(box.cssHeight)}`;
+  return (
+    <div
+      data-embed-element-size-badge
+      className="text-white"
+      style={{
+        position: "absolute",
+        left: "50%",
+        top: box.height + SIZE_BADGE_OFFSET_Y,
+        transform: "translateX(-50%)",
+        background: SIZE_BADGE_BG,
+        color: SIZE_BADGE_TEXT_COLOR,
+        fontSize: SIZE_BADGE_FONT_SIZE,
+        lineHeight: "14px",
+        whiteSpace: "nowrap",
+        padding: `${SIZE_BADGE_PADDING_Y}px ${SIZE_BADGE_PADDING_X}px`,
+        borderRadius: SIZE_BADGE_CORNER_RADIUS,
+        pointerEvents: "none",
+      }}
+    >
+      {text}
+    </div>
+  );
 }
 
 function OutlineBox({
@@ -53,12 +122,14 @@ function OutlineBox({
   color,
   kind,
   label,
+  showSizeBadge,
 }: {
   box: ElementBox;
   strokeWidth: number;
   color: string;
   kind: "hover" | "selection";
   label?: string;
+  showSizeBadge?: boolean;
 }) {
   const strokeHalf = strokeWidth / 2;
   return (
@@ -105,6 +176,7 @@ function OutlineBox({
           {label}
         </div>
       )}
+      {showSizeBadge && <SizeBadge box={box} />}
     </div>
   );
 }
@@ -129,12 +201,22 @@ function OutlineBox({
  * always just to re-render `null`. The `nodesById` selector below narrows to
  * just the active embed's node, so unrelated scene mutations don't
  * re-render this component either.
+ *
+ * The `dragVersion` selector below is the same kind of narrow, always-safe
+ * subscription as `nodesById`: it's a plain Zustand selector (not the
+ * imperative `useEffect` subscriptions above), so it only re-renders this
+ * component when a drag is actually in progress and `dragVersion` itself
+ * changes — never on every idle render, and it costs nothing while idle.
  */
 export function EmbedElementHighlight() {
   const editorMode = useEditorModeStore((s) => s.mode);
   const pickingEmbedId = useEmbedPickerStore((s) => s.pickingEmbedId);
   const hoveredPath = useEmbedPickerStore((s) => s.hoveredPath);
   const selection = useEmbedPickerStore((s) => s.selection);
+  // Bumped on every frame of an in-progress embed-element drag so the box
+  // and size badge keep following the element — see the field's doc comment
+  // in embedPickerStore.ts for why no other subscription here covers this.
+  useEmbedPickerStore((s) => s.dragVersion);
   const activeEmbedNode = useSceneStore((s) =>
     selection ? s.nodesById[selection.embedId] : undefined,
   );
@@ -191,6 +273,17 @@ export function EmbedElementHighlight() {
 
   if (!hoverBox && !selectionBox) return null;
 
+  // The tag label is a *picking* affordance: it tells you what you're about
+  // to select. Once an element IS selected, hovering it again adds nothing —
+  // and the label would collide with the size badge the selection already
+  // draws. So suppress it when the hover box is the selected element itself;
+  // hovering any *other* element still labels it, which is the whole point
+  // of the mode.
+  const hoverIsSelected =
+    !!selection &&
+    selection.embedId === pickingEmbedId &&
+    selection.path === hoveredPath;
+
   return (
     <div
       data-embed-element-highlight
@@ -202,6 +295,7 @@ export function EmbedElementHighlight() {
           strokeWidth={SELECTION_STROKE_WIDTH}
           color={SELECTION_COLOR}
           kind="selection"
+          showSizeBadge
         />
       )}
       {hoverBox && (
@@ -210,7 +304,7 @@ export function EmbedElementHighlight() {
           strokeWidth={HOVER_STROKE_WIDTH}
           color={HOVER_COLOR}
           kind="hover"
-          label={hoverBox.tagName}
+          label={hoverIsSelected ? undefined : hoverBox.tagName}
         />
       )}
     </div>

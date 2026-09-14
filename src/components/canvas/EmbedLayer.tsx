@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useRenderModeStore } from "@/store/renderModeStore";
-import { useEditorModeStore } from "@/store/editorModeStore";
+import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
+import { useViewportStore } from "@/store/viewportStore";
 import {
   applyEmbedInheritedDefaults,
   mountHtmlWithBodyStyles,
@@ -19,6 +20,36 @@ import {
   describeEmbedElement,
   resolvePickableElement,
 } from "@/lib/embedElementPicker";
+import { applyEmbedElementEdit } from "@/lib/embedElementStyle";
+import { captureDragBase, computeDragStyles, type DragBase } from "@/lib/embedElementDrag";
+
+/** Screen-px movement past which a pointerdown-then-move becomes a drag
+ * rather than a click. */
+const DRAG_THRESHOLD_PX = 3;
+
+interface ElementDragState {
+  el: HTMLElement;
+  /** Shadow-relative path to `el`, as produced by `buildElementPath`. */
+  path: string;
+  base: DragBase;
+  startClientX: number;
+  startClientY: number;
+  /** Only true once the pointer has moved past `DRAG_THRESHOLD_PX` — before
+   * that, this is still a candidate click. */
+  dragging: boolean;
+  /** `el`'s original `style` attribute (or null if it had none), restored on
+   * cancel/Escape. */
+  originalStyle: string | null;
+  /** The `pointerId` that started this drag — move/up/cancel from any other
+   * pointer (a second finger/stylus landing anywhere while this drag is in
+   * flight) must be ignored rather than ending or steering THIS drag. */
+  pointerId: number;
+  /** The embed's `htmlContent` at the moment this drag started, so
+   * pointerup can detect it changed mid-gesture (a streamed
+   * `edit_embed_html`/`batch_design` mutation, or an undo) — see the
+   * staleness check in `handleDragEnd`. */
+  htmlAtPointerDown: string;
+}
 
 /** One Shadow-DOM host for a single embed node, synced to the viewport. */
 function EmbedHost({ nodeId }: { nodeId: string }) {
@@ -89,6 +120,230 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
     // on every raw event.
     let lastMoveTarget: EventTarget | null = null;
 
+    // In-progress element drag (pointerdown -> pointermove* -> pointerup),
+    // or null when idle. A plain local (not a React ref) since it's only
+    // ever read/written from the imperative listeners this effect owns.
+    let drag: ElementDragState | null = null;
+    // Set true by pointerup right after committing (or by Escape right after
+    // reverting) a drag that actually moved past the threshold, so the
+    // `click` event the browser still fires afterwards (mouseup landed on
+    // the same element it went down on) doesn't re-run selection logic.
+    let suppressNextClick = false;
+
+    const revertDrag = (d: ElementDragState) => {
+      if (d.originalStyle === null) d.el.removeAttribute("style");
+      else d.el.setAttribute("style", d.originalStyle);
+      useEmbedPickerStore.getState().bumpDragVersion();
+    };
+
+    const endDrag = () => {
+      drag = null;
+      useEmbedPickerStore.getState().setCancelElementDrag(null);
+      window.removeEventListener("pointermove", handleDragMove);
+      window.removeEventListener("pointerup", handleDragEnd);
+      window.removeEventListener("pointercancel", handleDragCancel);
+    };
+
+    const handleDragMove = (e: PointerEvent) => {
+      if (!drag || e.pointerId !== drag.pointerId) return;
+      // The embed may have re-mounted its shadow DOM mid-drag (htmlContent
+      // changed — see the staleness check in `handleDragEnd`), detaching
+      // `drag.el`. Moving a detached element is a no-op visually; skip the
+      // work rather than mutate a dead node every frame.
+      if (!drag.el.isConnected) return;
+      const dxScreen = e.clientX - drag.startClientX;
+      const dyScreen = e.clientY - drag.startClientY;
+
+      if (!drag.dragging) {
+        if (Math.hypot(dxScreen, dyScreen) <= DRAG_THRESHOLD_PX) return;
+        drag.dragging = true;
+        // Only a drag that actually moved is cancellable — below the
+        // threshold the gesture is still just a click, and Escape must keep
+        // its normal meaning (exit the picker).
+        useEmbedPickerStore.getState().setCancelElementDrag(cancelElementDrag);
+
+        // Make sure the dragged element ends up selected, matching what a
+        // native-node drag does — but only if it isn't already the
+        // selection (avoids clobbering `outerHtml`/snapshot state for no
+        // reason on every drag).
+        const current = useEmbedPickerStore.getState().selection;
+        if (!current || current.embedId !== nodeId || current.path !== drag.path) {
+          const root = shadowRoot();
+          if (root) {
+            const selection = describeEmbedElement(drag.el, root, nodeId);
+            if (selection.path) {
+              const currentHtml = useSceneStore.getState().nodesById[nodeId] as
+                | EmbedNode
+                | undefined;
+              useEmbedPickerStore
+                .getState()
+                .selectElement(selection, currentHtml?.htmlContent ?? "");
+            }
+          }
+        }
+      }
+
+      // The embed's content is scaled by the viewport zoom
+      // (`syncContentScale`), so a screen-px cursor delta must be divided by
+      // the current zoom to get a delta in the content's own CSS px —
+      // otherwise the element would visibly outrun (or lag) the cursor at
+      // any zoom other than 100%.
+      const zoom = useViewportStore.getState().scale || 1;
+      const dx = dxScreen / zoom;
+      const dy = dyScreen / zoom;
+
+      const styles = computeDragStyles(drag.base, dx, dy);
+      for (const [prop, value] of Object.entries(styles)) {
+        drag.el.style.setProperty(prop, value);
+      }
+      useEmbedPickerStore.getState().bumpDragVersion();
+    };
+
+    const handleDragEnd = (e: PointerEvent) => {
+      if (!drag || e.pointerId !== drag.pointerId) return;
+      const d = drag;
+      endDrag();
+      if (!d.dragging) return; // never crossed the threshold: a plain click
+
+      suppressNextClick = true;
+
+      // Permission gate, mirroring EmbedElementProperties.applyEdit's
+      // `if (readOnly) return;` and EmbedElementHighlight's `canEditScene`
+      // gate — a picker drag must not be able to write to the scene in a
+      // non-editable mode. Revert the live element's visual drag either way
+      // so it doesn't end up sitting displaced with nothing committed.
+      if (!canEditScene(useEditorModeStore.getState().mode)) {
+        revertDrag(d);
+        return;
+      }
+
+      // Commit as ONE undo step: read the current htmlContent, apply the
+      // final style to it, and write it back — never the per-frame styles
+      // mutated onto the live element above.
+      const currentHtml = useSceneStore.getState().nodesById[nodeId] as EmbedNode | undefined;
+      const html = currentHtml?.htmlContent ?? "";
+
+      // The embed's htmlContent (and therefore its shadow DOM) may have
+      // changed mid-drag — a streamed `edit_embed_html`/`batch_design`
+      // mutation (applied progressively, not just on completion) or an
+      // undo. `d.el` can then be a detached node, and even when it's still
+      // connected, `d.path`'s `nth-of-type` positions may now resolve to a
+      // DIFFERENT element in the new html. Bail without writing rather than
+      // silently repositioning whatever now occupies that path.
+      if (!d.el.isConnected || html !== d.htmlAtPointerDown) {
+        revertDrag(d);
+        return;
+      }
+
+      const dxScreen = e.clientX - d.startClientX;
+      const dyScreen = e.clientY - d.startClientY;
+      const zoom = useViewportStore.getState().scale || 1;
+      const styles = computeDragStyles(d.base, dxScreen / zoom, dyScreen / zoom);
+
+      const result = applyEmbedElementEdit(html, d.path, { styles });
+      if (!result) {
+        revertDrag(d);
+        return;
+      }
+      // ORDER MATTERS — see EmbedElementProperties.tsx's `applyEdit`:
+      // `noteSelectionEdit` must land before `updateNode` writes the new
+      // `htmlContent`, or `useEmbedPickerLifecycle`'s synchronous staleness
+      // check clears the selection it was meant to keep alive.
+      useEmbedPickerStore.getState().noteSelectionEdit(result.html, result.outerHtml);
+      useSceneStore.getState().updateNode(nodeId, { htmlContent: result.html });
+    };
+
+    const handleDragCancel = (e: PointerEvent) => {
+      if (!drag || e.pointerId !== drag.pointerId) return;
+      const d = drag;
+      endDrag();
+      if (d.dragging) revertDrag(d);
+    };
+
+    /** Abort the in-flight drag, reverting the live element and writing
+     * nothing to the scene. Registered in `embedPickerStore` the moment a
+     * drag crosses the threshold, and invoked by the global Escape handler
+     * (`keyboardCommands.ts`) — the same contract `useDragStore.cancelDrag`
+     * has for a native-node drag.
+     *
+     * This is deliberately NOT a capture-phase `keydown` listener of our
+     * own: capture listeners on the same target (`window`) fire in
+     * REGISTRATION order, and the global canvas handler is registered at app
+     * mount, long before picking starts. It therefore always ran first and
+     * had already called `exitContainer()` -> `stopPicking()` — so Escape
+     * cancelled the drag AND threw the user out of the picker. Caught live
+     * by `e2e/embed-element-drag.spec.ts`. */
+    const cancelElementDrag = () => {
+      if (!drag) return;
+      const d = drag;
+      endDrag();
+      if (d.dragging) {
+        revertDrag(d);
+        // The gesture is still physically in progress (the button is down);
+        // the browser will still fire a `click` on release, which must not
+        // re-run selection.
+        suppressNextClick = true;
+      }
+    };
+
+    const handlePointerDown = (e: PointerEvent) => {
+      // Self-healing: a previous drag may never have gotten a matching
+      // pointerup/pointercancel (e.g. the button was released over browser
+      // chrome outside the window) — always end and, if it had crossed the
+      // drag threshold, revert it BEFORE any of the early returns below, so
+      // a stale drag never keeps steering the live element while a fresh
+      // gesture starts.
+      suppressNextClick = false;
+      if (drag) {
+        const stale = drag;
+        endDrag();
+        if (stale.dragging) revertDrag(stale);
+      }
+
+      // Keep the embed fully inert — same rationale as `swallow` below —
+      // regardless of which button/pointer triggered this.
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Only the primary mouse button (or the primary touch/pen contact)
+      // may start a drag. A right/middle-click drag has no visible warning
+      // — `contextmenu` is swallowed too — besides the element silently
+      // ending up moved.
+      if (e.button !== 0 || !e.isPrimary) return;
+
+      const root = shadowRoot();
+      if (!root) return;
+      const target = e.composedPath()[0] ?? null;
+      const el = resolvePickableElement(target, root);
+      // Only an HTMLElement can be dragged this way: the gesture positions
+      // via CSS `left`/`top`/margin, which don't apply to the internals of
+      // an inline `<svg>` (an SVGElement) at all — a deliberate limitation,
+      // not a bug.
+      if (!el || !(el instanceof HTMLElement)) return;
+      const path = buildElementPath(el, root);
+      if (!path) return; // no anchor to resolve back to later — see handleClick
+
+      const base = captureDragBase(el, getComputedStyle(el));
+      const currentHtml = useSceneStore.getState().nodesById[nodeId] as EmbedNode | undefined;
+      drag = {
+        el,
+        path,
+        base,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        dragging: false,
+        originalStyle: el.getAttribute("style"),
+        pointerId: e.pointerId,
+        htmlAtPointerDown: currentHtml?.htmlContent ?? "",
+      };
+      // Window-level, not host-level: the pointer routinely leaves the
+      // (possibly small) host bounds mid-drag, and a host-scoped listener
+      // would stop firing the moment that happens.
+      window.addEventListener("pointermove", handleDragMove);
+      window.addEventListener("pointerup", handleDragEnd);
+      window.addEventListener("pointercancel", handleDragCancel);
+    };
+
     const handleMove = (e: PointerEvent) => {
       const target = e.composedPath()[0] ?? null;
       if (target === lastMoveTarget) return;
@@ -116,6 +371,16 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
       // Pixi canvas underneath.
       e.preventDefault();
       e.stopPropagation();
+      if (suppressNextClick) {
+        // The click the browser fires right after a pointerup that ended a
+        // drag (mouseup landed on the same element it went down on) — the
+        // drag already selected and committed this element, so re-running
+        // selection here would be redundant at best and, since the element
+        // just re-mounted with the new inline style, could resolve a
+        // different node than the one actually dragged.
+        suppressNextClick = false;
+        return;
+      }
       const root = shadowRoot();
       if (!root) return;
       const target = e.composedPath()[0] ?? null;
@@ -180,7 +445,10 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
     host.addEventListener("pointermove", handleMove);
     host.addEventListener("pointerleave", handleLeave);
     host.addEventListener("click", handleClick, true);
-    host.addEventListener("pointerdown", swallow, true);
+    // pointerdown gets its own handler (drag-start candidate) instead of the
+    // generic `swallow` below, but still preventDefault/stopPropagation's the
+    // event itself — see handlePointerDown.
+    host.addEventListener("pointerdown", handlePointerDown, true);
     host.addEventListener("mousedown", swallow, true);
     host.addEventListener("dblclick", swallow, true);
     host.addEventListener("contextmenu", swallow, true);
@@ -190,11 +458,19 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
       host.removeEventListener("pointermove", handleMove);
       host.removeEventListener("pointerleave", handleLeave);
       host.removeEventListener("click", handleClick, true);
-      host.removeEventListener("pointerdown", swallow, true);
+      host.removeEventListener("pointerdown", handlePointerDown, true);
       host.removeEventListener("mousedown", swallow, true);
       host.removeEventListener("dblclick", swallow, true);
       host.removeEventListener("contextmenu", swallow, true);
       host.removeEventListener("wheel", forwardWheel, true);
+      // In case the effect tears down mid-drag (e.g. isPicking flips off
+      // while dragging) — leave neither a stray live-style mutation nor
+      // dangling window listeners behind.
+      if (drag) {
+        const d = drag;
+        endDrag();
+        if (d.dragging) revertDrag(d);
+      }
     };
   }, [isPicking, isActive, nodeId]);
 

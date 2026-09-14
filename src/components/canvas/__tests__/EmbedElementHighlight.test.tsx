@@ -109,6 +109,48 @@ describe("<EmbedElementHighlight />", () => {
     expect(container.querySelector("[data-embed-element-label]")?.textContent).toBe("button");
   });
 
+  it("hides the tag label while hovering the element that is already selected", () => {
+    mountEmbedDom();
+    stubRects(rect(0, 0, 400, 300), rect(20, 10, 60, 24));
+
+    const path = "div:nth-of-type(1) > button:nth-of-type(1)";
+    useEmbedPickerStore.getState().startPicking("embed1");
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "embed1",
+      path,
+      tagName: "button",
+      classes: [],
+      textPreview: "Buy",
+      outerHtml: "<button>Buy</button>",
+    });
+    useEmbedPickerStore.getState().setHoveredPath(path);
+
+    const { container } = render(<EmbedElementHighlight />);
+
+    expect(container.querySelector('[data-embed-element-box][data-kind="hover"]')).toBeTruthy();
+    expect(container.querySelector("[data-embed-element-label]")).toBeNull();
+  });
+
+  it("still labels a hovered element that is not the selected one", () => {
+    mountEmbedDom();
+    stubRects(rect(0, 0, 400, 300), rect(20, 10, 60, 24));
+
+    useEmbedPickerStore.getState().startPicking("embed1");
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "embed1",
+      path: "div:nth-of-type(1)",
+      tagName: "div",
+      classes: [],
+      textPreview: "",
+      outerHtml: "<div></div>",
+    });
+    useEmbedPickerStore.getState().setHoveredPath("div:nth-of-type(1) > button:nth-of-type(1)");
+
+    const { container } = render(<EmbedElementHighlight />);
+
+    expect(container.querySelector("[data-embed-element-label]")?.textContent).toBe("button");
+  });
+
   it("draws a 1px selection box with no label once an element is picked", () => {
     mountEmbedDom();
     stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
@@ -295,6 +337,66 @@ describe("<EmbedElementHighlight />", () => {
     });
 
     expect(onRender).toHaveBeenCalled();
+  });
+
+  it("draws a size badge with offsetWidth/offsetHeight on the selection box", () => {
+    const { button } = mountEmbedDom();
+    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
+    Object.defineProperty(button, "offsetWidth", { value: 123, configurable: true });
+    Object.defineProperty(button, "offsetHeight", { value: 45, configurable: true });
+
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "embed1",
+      path: "div:nth-of-type(1) > button:nth-of-type(1)",
+      tagName: "button",
+      classes: [],
+      textPreview: "Buy",
+      outerHtml: "<button>Buy</button>",
+    });
+
+    const { container } = render(<EmbedElementHighlight />);
+
+    const badge = container.querySelector("[data-embed-element-size-badge]");
+    expect(badge).toBeTruthy();
+    expect(badge?.textContent).toBe("123 × 45");
+  });
+
+  it("does not draw a size badge on the hover box", () => {
+    mountEmbedDom();
+    stubRects(rect(0, 0, 400, 300), rect(20, 10, 60, 24));
+
+    useEmbedPickerStore.getState().startPicking("embed1");
+    useEmbedPickerStore.getState().setHoveredPath("div:nth-of-type(1) > button:nth-of-type(1)");
+
+    const { container } = render(<EmbedElementHighlight />);
+
+    expect(container.querySelector('[data-embed-element-box][data-kind="hover"]')).toBeTruthy();
+    expect(container.querySelector("[data-embed-element-size-badge]")).toBeNull();
+  });
+
+  it("uses offsetWidth/offsetHeight for the badge text, not the zoomed getBoundingClientRect box", () => {
+    const { button } = mountEmbedDom();
+    // Screen-space rect is 2x the element's real CSS size, as it would be at
+    // 200% zoom on the embed's `transform: scale(zoom)` container.
+    stubRects(rect(0, 0, 400, 300), rect(10, 10, 200, 100));
+    Object.defineProperty(button, "offsetWidth", { value: 100, configurable: true });
+    Object.defineProperty(button, "offsetHeight", { value: 50, configurable: true });
+
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "embed1",
+      path: "div:nth-of-type(1) > button:nth-of-type(1)",
+      tagName: "button",
+      classes: [],
+      textPreview: "Buy",
+      outerHtml: "<button>Buy</button>",
+    });
+
+    const { container } = render(<EmbedElementHighlight />);
+
+    const badge = container.querySelector("[data-embed-element-size-badge]");
+    // Must read 100 × 50 (offsetWidth/offsetHeight), not 200 × 100
+    // (getBoundingClientRect, which is screen pixels under zoom).
+    expect(badge?.textContent).toBe("100 × 50");
   });
 
   it("recomputes the box when the embed's internal content scrolls", () => {

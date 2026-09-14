@@ -11,6 +11,7 @@ import { useMeasurementsStore } from "@/store/measurementsStore";
 import { useCommentsStore } from "@/store/commentsStore";
 import { useConnectorStore } from "@/store/connectorStore";
 import { useDragStore } from "@/store/dragStore";
+import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useGuidesStore } from "@/store/guidesStore";
 import { useRenderModeStore } from "@/store/renderModeStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
@@ -642,6 +643,16 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       // without committing history. (The scaleController state lives in the
       // interaction closure, reachable only via this escape hatch.)
       if (cancelActiveScale()) return;
+
+      // Cancel an in-progress drag of an ELEMENT inside an embed (element
+      // picker) the same way, and before `exitContainer()` below — which
+      // would otherwise read the still-active picker and exit it, so one
+      // Escape both cancelled the drag and dropped the user out of picking.
+      const cancelElementDrag = useEmbedPickerStore.getState().cancelElementDrag;
+      if (cancelElementDrag) {
+        cancelElementDrag();
+        return;
+      }
 
       // Cancel auto-layout drag animation if in progress
       const dragCancelFn = useDragStore.getState().cancelDrag;
