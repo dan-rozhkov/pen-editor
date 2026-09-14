@@ -117,24 +117,33 @@ export function VideoFillEditor({
         accept="video/mp4,video/webm,video/*"
         replaceLabel="Replace Video"
       >
-        {youtubeId ? (
-          <img
-            src={youTubeThumbnailUrl(youtubeId)}
-            alt="YouTube video thumbnail"
-            className="h-20 w-full"
-            style={previewStyle}
-          />
-        ) : (
-          <video
-            src={video.src}
-            className="h-20 w-full"
-            style={previewStyle}
-            autoPlay={video.playback.autoplay}
-            loop={video.playback.loop}
-            muted={previewMuted}
-            playsInline
-          />
-        )}
+        {/* Shared slot for both preview branches: an outline on only the
+            <img> branch (and not the <video> branch) made the two look
+            inconsistent, and an outline on an `object-fit` media element
+            directly rings its full box rather than the letterboxed pixels
+            when `previewStyle` is "contain" — putting it on the common
+            wrapper fixes both at once and keeps the two branches visually
+            identical. */}
+        <div className="h-20 w-full img-outline">
+          {youtubeId ? (
+            <img
+              src={youTubeThumbnailUrl(youtubeId)}
+              alt="YouTube video thumbnail"
+              className="h-full w-full"
+              style={previewStyle}
+            />
+          ) : (
+            <video
+              src={video.src}
+              className="h-full w-full"
+              style={previewStyle}
+              autoPlay={video.playback.autoplay}
+              loop={video.playback.loop}
+              muted={previewMuted}
+              playsInline
+            />
+          )}
+        </div>
       </MediaPreviewReplace>
 
       <MediaCropControls

@@ -403,3 +403,41 @@ html.route-showcase::-webkit-scrollbar,
 html.route-showcase body::-webkit-scrollbar {
   display: none;
 }
+
+/* 1px outline for images against surfaces of a similar tone (better-ui
+   skill) — `outline` (not `border`) so it never changes box size, and
+   `outline-offset: -1px` pulls it flush inside the image's own edge.
+   Pure black/white at low opacity, not a tinted neutral (slate/zinc reads
+   as dirt on a light image's edge) — swapped per theme since the theme
+   class (`.dark`) lives on `<html>`, see `src/lib/uiTheme.ts`. */
+@utility img-outline {
+  outline: 1px solid oklch(0 0 0 / 0.1);
+  outline-offset: -1px;
+
+  .dark & {
+    outline-color: oklch(1 0 0 / 0.1);
+  }
+}
+
+/* Icon cross-fade transition (better-ui skill, IconSwap.tsx). Declared here
+   as real CSS — not inline styles — specifically so
+   `prefers-reduced-motion: reduce` can win: an inline
+   `style.transitionProperty/-Duration/-TimingScale` always beats a
+   `motion-reduce:transition-none` utility class in specificity, so putting
+   the transition declaration inline made the reduced-motion override a
+   no-op. `blur(4px)` (the pre-blur amount, applied inline as
+   `filter`) and the `cubic-bezier(0.2, 0, 0, 1)` easing are values the
+   better-ui skill prescribes specifically for the icon-swap cross-fade —
+   they are deliberately NOT `--blur-small` / `--ease-smooth-out` from the
+   motion-token scale above. Do not "fix" this to use those tokens: a future
+   re-tuning of the general motion scale must not silently retime this
+   transition. */
+@utility icon-swap-transition {
+  transition-property: scale, opacity, filter;
+  transition-duration: var(--duration-fast);
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}

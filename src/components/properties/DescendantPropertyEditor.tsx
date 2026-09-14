@@ -22,6 +22,7 @@ import { ThemeSection } from "@/components/properties/ThemeSection";
 import { TypographySection } from "@/components/properties/TypographySection";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
+import { IconSwap } from "@/components/ui/IconSwap";
 import { Eye, EyeSlash } from "@phosphor-icons/react";
 
 function getParentContextForDescendant(
@@ -159,7 +160,11 @@ export function DescendantPropertyEditor({
             size="icon-sm"
             onClick={() => handleUpdate({ enabled: displayNode.enabled === false ? undefined : false })}
           >
-            {displayNode.enabled === false ? <EyeSlash size={14} /> : <Eye size={14} />}
+            <IconSwap
+              active={displayNode.enabled !== false}
+              activeIcon={<Eye size={14} />}
+              inactiveIcon={<EyeSlash size={14} />}
+            />
           </IconButton>
         </div>
       </PropertySection>

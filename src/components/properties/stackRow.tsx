@@ -3,6 +3,7 @@ import clsx from "clsx";
 import type { Paint, PaintBlendMode } from "@/types/scene";
 import { PAINT_BLEND_MODES } from "@/types/scene";
 import { IconButton } from "@/components/ui/IconButton";
+import { IconSwap } from "@/components/ui/IconSwap";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   DropdownMenu,
@@ -284,7 +285,7 @@ export function StackRowShell({
         onClick={onToggleVisible}
         tooltip={visible ? `Hide ${itemLabel}` : `Show ${itemLabel}`}
       >
-        {visible ? <Eye /> : <EyeSlash />}
+        <IconSwap active={visible} activeIcon={<Eye />} inactiveIcon={<EyeSlash />} />
       </IconButton>
       <IconButton variant="ghost" size="icon-sm" onClick={onRemove} tooltip={`Remove ${itemLabel}`}>
         <MinusIcon />

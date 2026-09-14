@@ -17,6 +17,7 @@ import {
   SelectInput,
 } from "@/components/ui/PropertyInputs";
 import { IconButton } from "@/components/ui/IconButton";
+import { IconSwap } from "@/components/ui/IconSwap";
 
 interface LayoutGridSectionProps {
   node: FrameNode;
@@ -324,7 +325,11 @@ export function LayoutGridSection({ node, onUpdate }: LayoutGridSectionProps) {
             onClick={(e) => { e.stopPropagation(); toggleVisibility(grid.id); }}
             tooltip={grid.visible ? "Hide grid" : "Show grid"}
           >
-            {grid.visible ? <EyeIcon size={14} /> : <EyeSlashIcon size={14} />}
+            <IconSwap
+              active={grid.visible}
+              activeIcon={<EyeIcon size={14} />}
+              inactiveIcon={<EyeSlashIcon size={14} />}
+            />
           </IconButton>
 
           <IconButton

@@ -14,6 +14,7 @@ import { SimpleMarkdown } from "./SimpleMarkdown";
 import { ToolCallIndicator } from "./ToolCallIndicator";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { ImageLightbox } from "./ImageLightbox";
+import { IconSwap } from "@/components/ui/IconSwap";
 import { AskUserForm } from "./AskUserForm";
 import { MemoryToolIndicator } from "./MemoryToolIndicator";
 import { SkillToolIndicator, type SkillManageKind } from "./SkillToolIndicator";
@@ -122,7 +123,7 @@ export function ImagePreview({ url, alt, urls, index = 0 }: ImagePreviewProps) {
           alt={alt ?? "attached image"}
           onClick={() => setLightboxIndex(index)}
           onError={() => setFailed(true)}
-          className="max-w-[120px] max-h-[120px] rounded-md cursor-pointer hover:opacity-80 transition-opacity object-cover"
+          className="max-w-[120px] max-h-[120px] rounded-md cursor-pointer hover:opacity-80 transition-opacity object-cover img-outline"
         />
       )}
       {lightboxIndex !== null && (
@@ -165,7 +166,11 @@ function MessageCopyButton({ msg }: { msg: UIMessage }) {
             className="opacity-0 group-hover:opacity-100 shrink-0 p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
             aria-label={copied ? "Copied" : "Copy message"}
           >
-            {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+            <IconSwap
+              active={copied}
+              activeIcon={<CheckIcon size={14} />}
+              inactiveIcon={<CopyIcon size={14} />}
+            />
           </button>
         }
       />

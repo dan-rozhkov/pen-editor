@@ -598,5 +598,27 @@ describe("<ChatInput />", () => {
       rerender(<Harness onSubmit={vi.fn()} />);
       expect(screen.getByAltText("Screen")).toBeTruthy();
     });
+
+    it("outlines the selection chip's wrapper (not the letterboxed thumbnail) with the shared img-outline utility", () => {
+      mockSelection = selection;
+      render(<Harness onSubmit={vi.fn()} />);
+      const img = screen.getByAltText("Screen");
+      // The thumbnail is `object-contain` inside a fixed-size box, so an
+      // outline on the <img> itself would ring the grey letterbox rather
+      // than the rendered image — it belongs on the wrapper instead.
+      expect(img.className).not.toContain("img-outline");
+      expect(img.parentElement?.className).toContain("img-outline");
+    });
+  });
+
+  it("outlines an attached image chip's wrapper with the shared img-outline utility and no separate border", () => {
+    useChatStore.getState().setAttachedImages("test-session", [
+      { dataUrl: "data:image/png;base64,c", name: "photo.png" },
+    ]);
+    render(<Harness onSubmit={vi.fn()} />);
+    const img = screen.getByAltText("photo.png");
+    expect(img.className).not.toContain("img-outline");
+    expect(img.parentElement?.className).toContain("img-outline");
+    expect(img.parentElement?.className).not.toContain("border-border-default");
   });
 });

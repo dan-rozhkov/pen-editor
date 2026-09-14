@@ -97,7 +97,7 @@ export function ComponentsPanel() {
                     <img
                       src={thumb}
                       alt={component.name || "Component"}
-                      className="max-w-full max-h-full object-contain"
+                      className="max-w-full max-h-full object-contain img-outline"
                     />
                   ) : (
                     <DiamondsFour

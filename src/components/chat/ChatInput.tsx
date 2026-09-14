@@ -482,7 +482,7 @@ export function ChatInput({
                 <div
                   key={sel.nodeId}
                   title={sel.name}
-                  className="relative group w-12 h-12 rounded-md overflow-hidden bg-secondary"
+                  className="relative group w-12 h-12 rounded-md overflow-hidden bg-secondary img-outline"
                 >
                   <img
                     src={sel.dataUrl}
@@ -517,7 +517,7 @@ export function ChatInput({
           {attachedImages.map((img, i) => (
             <div
               key={i}
-              className="relative group w-12 h-12 rounded-md overflow-hidden border border-border-default"
+              className="relative group w-12 h-12 rounded-md overflow-hidden img-outline"
             >
               <img
                 src={img.dataUrl}

@@ -11,6 +11,7 @@ import { writeTextToClipboard } from "@/utils/clipboard";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
+import { IconSwap } from "@/components/ui/IconSwap";
 import { SelectWithOptions } from "@/components/ui/select";
 
 const FORMAT_OPTIONS: { value: CodegenFormat; label: string }[] = [
@@ -61,7 +62,11 @@ function CopyButton({ code }: { code: string }) {
       className="bg-surface-panel hover:bg-surface-panel"
       onClick={handleCopy}
     >
-      {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+      <IconSwap
+        active={copied}
+        activeIcon={<CheckIcon size={14} />}
+        inactiveIcon={<CopyIcon size={14} />}
+      />
     </IconButton>
   );
 }

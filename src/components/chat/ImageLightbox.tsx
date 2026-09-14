@@ -63,7 +63,7 @@ export function ImageLightbox({
         src={url}
         alt="attached image"
         onError={onClose}
-        className="max-w-[90vw] max-h-[90vh] rounded-lg"
+        className="max-w-[90vw] max-h-[90vh] rounded-lg img-outline"
       />
 
       {hasMultiple && (
