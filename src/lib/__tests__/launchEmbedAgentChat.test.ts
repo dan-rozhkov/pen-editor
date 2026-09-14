@@ -18,6 +18,7 @@ beforeEach(() => {
     chats: [{
       id: "tab-0",
       title: "Chat 1",
+      model: "deepseek/deepseek-v4.1-flash",
       parallelCount: 1,
       titleIsAuto: true,
       unread: false,

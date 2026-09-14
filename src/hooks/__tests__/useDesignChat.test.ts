@@ -18,7 +18,8 @@ vi.mock("@/lib/chatModels", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/chatModels")>();
   return {
     ...actual,
-    canSendImages: () => chatModelsOverride.canSendImages ?? actual.canSendImages(),
+    canSendImages: (model: string) =>
+      chatModelsOverride.canSendImages ?? actual.canSendImages(model),
   };
 });
 
@@ -265,9 +266,9 @@ describe("buildCanvasContext", () => {
     const context = buildCanvasContext() as Record<string, unknown>;
 
     expect(context).not.toHaveProperty("agentMode");
-    // The agent runs on one backend-chosen model, so no request carries a
-    // model id — a leftover one would be a stale user selection resurfacing.
-    expect(context).not.toHaveProperty("model");
+    // The user's pick travels with the turn; with no chat id it falls back
+    // to the store's active-chat model.
+    expect(context.model).toBe(useChatStore.getState().model);
 
     const canvas = JSON.parse(context.canvasContext as string);
     expect(canvas.roots).toEqual([
@@ -492,10 +493,11 @@ describe("useDesignChat (hook + UI message stream)", () => {
     });
   }
 
-  // Regression guard for "one model for everyone": no request may carry a
-  // model id. A stale per-chat selection leaking back into the body is exactly
-  // what the removal of the picker was meant to make impossible.
-  it("sends no model id with a chat request", async () => {
+  // A background chat must send ITS OWN model, not the foreground chat's:
+  // `model` at the store root is only the active chat's value and openChat
+  // overwrites it on every switch, so a session that reads the root value
+  // would have its auto-continuations hijacked by an unrelated tab switch.
+  it("sends the session's own model, not the active chat's", async () => {
     const requests: Array<Record<string, unknown>> = [];
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       requests.push(JSON.parse(String(init?.body)));
@@ -516,6 +518,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
         {
           id: "tab-active",
           title: "A",
+          model: "meta/muse-spark-1.3-contributor",
           parallelCount: 1,
           titleIsAuto: true,
           unread: false,
@@ -526,6 +529,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
         {
           id: "tab-bg",
           title: "B",
+          model: "qwen/qwen3.8-flash",
           parallelCount: 1,
           titleIsAuto: true,
           unread: false,
@@ -535,6 +539,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
         },
       ],
       activeChatId: "tab-active",
+      model: "meta/muse-spark-1.3-contributor",
     });
 
     const { result } = renderHook(() => useDesignChat({ sessionId: "tab-bg" }));
@@ -544,7 +549,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
     });
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
-    expect(requests[0]).not.toHaveProperty("model");
+    expect(requests[0].model).toBe("qwen/qwen3.8-flash");
     expect(requests[0]).not.toHaveProperty("agentMode");
   });
 
@@ -608,7 +613,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
 
     expect(requests[0].url).toBe("/api/chat");
     expect(requests[0].body.canvasContext).toBeTypeOf("string");
-    expect(requests[0].body).not.toHaveProperty("model");
+    expect(requests[0].body.model).toBe(useChatStore.getState().model);
 
     // The second request must contain the locally-executed tool result
     const secondMessages = requests[1].body.messages as Array<{
@@ -862,14 +867,10 @@ describe("useDesignChat (hook + UI message stream)", () => {
   // Regression (showcase handoff): the "ask the design agent" composer on "/"
   // navigates to the editor and queues a launch payload that is sent the
   // instant the chat mounts — strictly before GET /api/models can answer. The
-  // send used to go out anyway, resolving "Auto" against the hardcoded
-  // fallback list; when that list drifted from the backend's
-  // (deepseek/deepseek-v4-flash-0731, an id the backend never had), every
-  // showcase prompt came back as 400 "Model ... is not allowed".
-  // The showcase handoff auto-sends on the editor's very first render, long
-  // before GET /api/models can resolve. That used to have to wait for the
-  // model list (a fallback id the backend didn't allow came back as a 400);
-  // with no model id in the body there is nothing left to wait for.
+  // send used to be held back until the list landed, because a fallback id
+  // the backend didn't allow came back as a 400. It isn't any more: the
+  // backend now IGNORES an id outside its list and runs its own default, so
+  // the worst case is a turn on the default model instead of a dead one.
   it("sends a queued launch payload without waiting for GET /api/models", async () => {
     const chatCalls: Array<Record<string, unknown>> = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -893,7 +894,9 @@ describe("useDesignChat (hook + UI message stream)", () => {
     renderHook(() => useDesignChat({ sessionId }));
 
     await waitFor(() => expect(chatCalls).toHaveLength(1));
-    expect(chatCalls[0]).not.toHaveProperty("model");
+    // Whatever the store holds without the backend ever answering — the
+    // hardcoded fallback, or a selection made earlier in the session.
+    expect(chatCalls[0].model).toBe(useChatStore.getState().model);
     expect(useChatStore.getState().launchQueue[sessionId]).toBeUndefined();
   });
 

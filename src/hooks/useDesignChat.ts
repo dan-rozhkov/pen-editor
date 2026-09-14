@@ -41,8 +41,19 @@ export function resolveChatApiUrl(): string {
   return explicitApiUrl ?? resolveApiUrl("/api/chat");
 }
 
+// A session must use ITS OWN chat's model rather than the global active-chat
+// value, which openChat overwrites on every switch. Without this, switching
+// chats while a background session streams hijacks that session's
+// auto-continuation request with the foreground chat's model.
 // Exported for tests.
-export function buildCanvasContext(): object {
+export function resolveSessionModel(sessionId?: string): string {
+  const { model, chats } = useChatStore.getState();
+  const chat = sessionId ? chats.find((c) => c.id === sessionId) : undefined;
+  return chat?.model ?? model;
+}
+
+// Exported for tests.
+export function buildCanvasContext(sessionId?: string): object {
   const { selectedIds } = useSelectionStore.getState();
   const { rootIds, nodesById } = useSceneStore.getState();
   const { activeTheme } = useThemeStore.getState();
@@ -83,7 +94,8 @@ export function buildCanvasContext(): object {
   // the root CLAUDE.md's "Agent vision" section) — canSendImages() mirrors
   // that exact condition on the frontend. Pointing the model at a tool it
   // doesn't have would just waste a turn.
-  const selectionHint = hasReferenceOnlySelection && canSendImages()
+  const model = resolveSessionModel(sessionId);
+  const selectionHint = hasReferenceOnlySelection && canSendImages(model)
     ? "Screenshots of selected frames are intentionally NOT attached. If you need to see a selected frame, call get_screenshot with its node id."
     : null;
 
@@ -142,6 +154,7 @@ export function buildCanvasContext(): object {
       ...(selectedEmbedElement ? { selectedEmbedElement } : {}),
       ...(localRepo ? { localRepo } : {}),
     }),
+    model,
     userId: getUserId(),
   };
 }
@@ -298,10 +311,11 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       new DefaultChatTransport({
         api: resolveChatApiUrl(),
         fetch: createRetryingFetch({ onRetryStateChange: setRetryState }),
-        body: () => buildCanvasContext(),
+        body: () => buildCanvasContext(sessionId),
         prepareSendMessagesRequest: ({ id, messages, body, trigger, messageId }) => {
-          // Images always ride along regardless of the model's own vision
-          // support — the backend decides native-vs-described
+          // Images always ride along regardless of the selected model's
+          // vision support — the backend decides native-vs-described per
+          // model
           // (pen-editor-backend/src/ai/vision-messages.ts) and never
           // forwards raw image parts to a model that can't read them. See
           // pen-editor-backend/docs/specs/2026-08-14-agent-vision-design.md.
@@ -316,9 +330,10 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
           };
         },
       }),
-    // Built once per mounted session: nothing in it varies any more (the
-    // request body is read fresh from the stores on every send).
-    []
+    // Built once per mounted session: the model (and everything else in the
+    // body) is read fresh from the stores on every send, keyed by this
+    // session's own id.
+    [sessionId]
   );
 
   const chat = useChat({

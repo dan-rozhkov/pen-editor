@@ -1,18 +1,34 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { canSendImages, getChatModel, modelSupportsVision } from "@/lib/chatModels";
+import {
+  canSendImages,
+  getDefaultModel,
+  getModelOptions,
+  modelSupportsVision,
+} from "@/lib/chatModels";
 
 describe("chatModels fallback", () => {
-  it("reports the single shipped model before any /api/models response", () => {
-    expect(getChatModel()).toEqual({
-      id: "deepseek-flash",
-      label: "DeepSeek Flash",
-      supportsVision: true,
-    });
+  it("offers the shipped models before any /api/models response", () => {
+    expect(getModelOptions().map((option) => option.value)).toEqual([
+      "meta/muse-spark-1.3-contributor",
+      "qwen/qwen3.8-flash",
+      "z-ai/glm-5.3-flash",
+      "deepseek/deepseek-v4.1-flash",
+    ]);
+    expect(getDefaultModel()).toBe("deepseek/deepseek-v4.1-flash");
   });
 
-  it("allows images on the fallback, which reads them natively", () => {
-    expect(modelSupportsVision()).toBe(true);
-    expect(canSendImages()).toBe(true);
+  it("allows images on every shipped model, all of which read them natively", () => {
+    for (const option of getModelOptions()) {
+      expect(modelSupportsVision(option.value)).toBe(true);
+      expect(canSendImages(option.value)).toBe(true);
+    }
+  });
+
+  // A stale saved selection, or a model the backend added after this bundle
+  // was built: assumed vision-capable, matching the backend's own convention
+  // for an id with no metadata.
+  it("assumes an unknown model reads images", () => {
+    expect(modelSupportsVision("who/knows")).toBe(true);
   });
 });
 
@@ -45,12 +61,13 @@ describe("chatModels visionFallback", () => {
     const fresh = await import("@/lib/chatModels");
     await fresh.loadModels();
 
-    expect(fresh.getChatModel().id).toBe("text-only/model");
-    expect(fresh.modelSupportsVision()).toBe(false);
-    expect(fresh.canSendImages()).toBe(true);
+    expect(fresh.getModelOptions().map((o) => o.value)).toEqual(["text-only/model"]);
+    expect(fresh.getDefaultModel()).toBe("text-only/model");
+    expect(fresh.modelSupportsVision("text-only/model")).toBe(false);
+    expect(fresh.canSendImages("text-only/model")).toBe(true);
   });
 
-  it("keeps the hardcoded fallback model when the fetch fails", async () => {
+  it("keeps the hardcoded fallback list when the fetch fails", async () => {
     vi.resetModules();
     vi.stubGlobal(
       "fetch",
@@ -60,8 +77,9 @@ describe("chatModels visionFallback", () => {
     const fresh = await import("@/lib/chatModels");
     await fresh.loadModels();
 
-    expect(fresh.getChatModel().id).toBe("deepseek-flash");
-    expect(fresh.canSendImages()).toBe(true);
+    expect(fresh.getDefaultModel()).toBe("deepseek/deepseek-v4.1-flash");
+    expect(fresh.getModelOptions()).toHaveLength(4);
+    expect(fresh.canSendImages("deepseek/deepseek-v4.1-flash")).toBe(true);
   });
 });
 

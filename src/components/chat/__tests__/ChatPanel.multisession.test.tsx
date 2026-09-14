@@ -64,6 +64,7 @@ describe("ChatPanel streaming across two sessions", () => {
         {
           id: "tab-1",
           title: "Chat 1",
+          model: "deepseek/deepseek-v4.1-flash",
           parallelCount: 1,
           titleIsAuto: true,
           unread: false,
@@ -74,6 +75,7 @@ describe("ChatPanel streaming across two sessions", () => {
         {
           id: "tab-2",
           title: "Chat 2",
+          model: "deepseek/deepseek-v4.1-flash",
           parallelCount: 1,
           titleIsAuto: true,
           unread: false,
@@ -172,6 +174,7 @@ describe("ChatPanel streaming across two sessions", () => {
         {
           id: "tab-1",
           title: "Chat 1",
+          model: "deepseek/deepseek-v4.1-flash",
           parallelCount: 1,
           titleIsAuto: true,
           unread: false,

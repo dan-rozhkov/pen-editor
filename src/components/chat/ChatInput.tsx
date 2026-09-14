@@ -149,14 +149,15 @@ export function ChatInput({
   // derived from the input (see `showSlashMenu` below), so only the dismissal
   // — a real user event — needs to be remembered.
   const [dismissedSlashQuery, setDismissedSlashQuery] = useState<string | null>(null);
-  // Whether an image may be attached at all — native vision OR the backend's
-  // auxiliary vision fallback. `nativeVision` (native support only) is used
-  // separately to keep the UI copy honest about what happens to the image.
-  // Both go through the models subscription so they update when the backend's
-  // metadata and visionFallback flag land, not on the next unrelated
-  // re-render.
-  const canAttachImages = useCanSendImages();
-  const nativeVision = useModelSupportsVision();
+  const model = useChatStore((s) => s.model);
+  // Whether an image may be attached at all — the selected model's native
+  // vision OR the backend's auxiliary vision fallback. `nativeVision`
+  // (native support only) is used separately to keep the UI copy honest
+  // about what happens to the image. Both go through the models
+  // subscription so they update when the backend's list and visionFallback
+  // flag land, not on the next unrelated re-render.
+  const canAttachImages = useCanSendImages(model);
+  const nativeVision = useModelSupportsVision(model);
   // Sending always needs the backend — disable the send control while offline
   // (the pre-send guard in useDesignChat is kept as defense in depth).
   const isOnline = useOnlineStatus();
@@ -243,7 +244,7 @@ export function ChatInput({
   const canAttach =
     canAttachImages && visibleSelectionImages.length + attachedImages.length < MAX_IMAGES;
   const attachLabel = !canAttachImages
-    ? "The model can't read images"
+    ? "Selected model can't read images"
     : visibleSelectionImages.length + attachedImages.length >= MAX_IMAGES
       ? `Max ${MAX_IMAGES} images`
       : nativeVision
@@ -503,7 +504,7 @@ export function ChatInput({
       {/* Image previews */}
       {attachedImages.length > 0 && !canAttachImages && (
         <div className="mb-2 text-xs text-amber-500">
-          The model can't read images — attachments won't be sent.
+          The selected model can't read images — attachments won't be sent.
         </div>
       )}
       {attachedImages.length > 0 && canAttachImages && !nativeVision && (

@@ -53,6 +53,7 @@ afterEach(() => cleanup());
 function makeChat(overrides: Partial<ChatSummary> & { id: string }): ChatSummary {
   return {
     title: "Chat 1",
+    model: "deepseek/deepseek-v4.1-flash",
     parallelCount: 1,
     titleIsAuto: true,
     unread: false,
@@ -381,5 +382,38 @@ describe("<ChatPanelContent /> chat list", () => {
     useChatStore.getState().openChat(twin!.id);
 
     expect(useChatStore.getState().parallelCount).toBe(1);
+  });
+  // The composer's model picker. The trigger shows the ACTIVE chat's model,
+  // so it must follow a chat switch, and choosing one must go through
+  // setModel (which persists it and stamps only the active chat).
+  it("shows the active chat's model and switches it from the picker", async () => {
+    useChatStore.setState({
+      chats: [makeChat({ id: "tab-1", model: "qwen/qwen3.8-flash" })],
+      activeChatId: "tab-1",
+      model: "qwen/qwen3.8-flash",
+    });
+    render(<ChatPanelContent />);
+
+    const trigger = screen.getByLabelText("Model: Qwen3.8 Flash");
+    fireEvent.click(trigger);
+
+    const option = await screen.findByRole("menuitemradio", { name: "GLM 5.3 Flash" });
+    fireEvent.click(option);
+
+    expect(useChatStore.getState().model).toBe("z-ai/glm-5.3-flash");
+    expect(useChatStore.getState().chats[0].model).toBe("z-ai/glm-5.3-flash");
+  });
+
+  // A selection the backend list doesn't cover (a stale saved id) must still
+  // name itself — "Model" alone would hide which model is running.
+  it("labels an unknown selection by its id", () => {
+    useChatStore.setState({
+      chats: [makeChat({ id: "tab-1", model: "gone/retired-model" })],
+      activeChatId: "tab-1",
+      model: "gone/retired-model",
+    });
+    render(<ChatPanelContent />);
+
+    expect(screen.getByLabelText("Model: gone/retired-model")).toBeTruthy();
   });
 });

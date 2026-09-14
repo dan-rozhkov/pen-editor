@@ -1,8 +1,8 @@
-// The chat model and its capabilities. The design agent runs on exactly ONE
-// model and there is no picker: the backend decides which one (its
-// CHAT_MODEL, reported as `default` by GET /api/models) and the browser
-// never sends a model id with a turn. This module fetches that metadata once
-// at startup and caches it.
+// The chat model list and per-model capabilities. The backend is the source
+// of truth (GET /api/models): it serves the selectable models plus the one
+// that runs when a request names none, and this module fetches that once at
+// startup and caches it. The user's pick travels with every turn as
+// `model` (see useDesignChat's buildCanvasContext).
 //
 // `supportsVision` reports NATIVE vision only. Whether an image may be
 // attached at all is `canSendImages` below, which also allows a
@@ -11,23 +11,36 @@
 
 import { resolveApiUrl } from "@/lib/apiBase";
 
-export interface ChatModel {
-  id: string;
+export interface ChatModelOption {
+  value: string;
   label: string;
   supportsVision: boolean;
 }
 
-// First-paint/offline safety net, mirroring the backend's DEFAULT_MODELS entry
-// (pen-editor-backend src/config.ts). Nothing depends on the id being right —
-// no request carries it — but the label is shown in the composer and
-// `supportsVision` decides whether the attach button is live before the
-// backend answers. `modelContract.test.ts` pins it against the sibling
-// checkout.
-const FALLBACK_MODEL: ChatModel = {
-  id: "deepseek-flash",
-  label: "DeepSeek Flash",
-  supportsVision: true,
-};
+// First-paint/offline safety net, mirroring the backend's DEFAULT_MODELS
+// (pen-editor-backend src/config.ts) — `modelContract.test.ts` pins the two
+// against each other from the sibling checkout. A drifting id here cannot
+// break a turn (the backend IGNORES an id outside its own list and runs its
+// default instead), but it would show the user a menu that doesn't match
+// what they get, so keep it honest.
+const FALLBACK_MODELS: ChatModelOption[] = [
+  {
+    value: "meta/muse-spark-1.3-contributor",
+    label: "Muse Spark 1.3",
+    supportsVision: true,
+  },
+  { value: "qwen/qwen3.8-flash", label: "Qwen3.8 Flash", supportsVision: true },
+  { value: "z-ai/glm-5.3-flash", label: "GLM 5.3 Flash", supportsVision: true },
+  {
+    value: "deepseek/deepseek-v4.1-flash",
+    label: "DeepSeek V4.1 Flash",
+    supportsVision: true,
+  },
+];
+
+// Mirrors the backend's CHAT_MODEL default. Only used until GET /api/models
+// answers with its own `default`.
+const FALLBACK_DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash";
 
 // Backend wire shape (pen-editor-backend GET /api/models).
 interface ModelsResponse {
@@ -37,7 +50,8 @@ interface ModelsResponse {
   imageOps?: { removeBackground: boolean; vectorize: boolean };
 }
 
-let currentModel: ChatModel = FALLBACK_MODEL;
+let currentModels: ChatModelOption[] = FALLBACK_MODELS;
+let defaultModel: string = FALLBACK_DEFAULT_MODEL;
 // Whether the backend has an auxiliary vision model configured, so it can
 // accept images even for a model without native vision (it describes them as
 // text server-side). Default false — conservative until the backend confirms
@@ -45,7 +59,7 @@ let currentModel: ChatModel = FALLBACK_MODEL;
 let visionFallback = false;
 // Whether the backend has each image-op route configured (remove-background/
 // vectorize need their own upstream provider credentials, independent of
-// OPENROUTER_*/VISION_MODEL). Same conservative-false-until-confirmed
+// OPENROUTER_API_KEY/VISION_MODEL). Same conservative-false-until-confirmed
 // reasoning as visionFallback above: canRemoveBackground()/canVectorize()
 // gate whether the corresponding agent tool/UI button is offered at all, and
 // offering one the backend can't actually serve would just fail every call.
@@ -57,24 +71,32 @@ function notify() {
   for (const listener of listeners) listener();
 }
 
-/** The single model every chat turn runs on, as reported by the backend. */
-export function getChatModel(): ChatModel {
-  return currentModel;
+/** Every model the user may pick, as reported by the backend. */
+export function getModelOptions(): ChatModelOption[] {
+  return currentModels;
 }
 
-/** Whether the model reads images itself, without the backend's text fallback. */
-export function modelSupportsVision(): boolean {
-  return currentModel.supportsVision;
+/** The model a turn runs on when nothing is selected (the backend's own). */
+export function getDefaultModel(): string {
+  return defaultModel;
 }
 
-// Whether the app may let the user attach an image at all. True if the model
-// has native vision, OR if the backend has an auxiliary vision model
-// configured (visionFallback) — in that case the image is still sent, but the
-// backend converts it to a text description before it reaches the model, so
-// fine visual detail (exact colors, small text, precise layout) is lost even
-// though the image itself is "read".
-export function canSendImages(): boolean {
-  return modelSupportsVision() || visionFallback;
+/** Whether `model` reads images itself, without the backend's text fallback. */
+export function modelSupportsVision(model: string): boolean {
+  // An id we don't know (a stale selection, or a model the backend added
+  // after this bundle was built) is assumed vision-capable, matching the
+  // backend's own convention for an unlisted id.
+  return currentModels.find((option) => option.value === model)?.supportsVision ?? true;
+}
+
+// Whether the app may let the user attach an image for this model at all.
+// True if the model has native vision, OR if the backend has an auxiliary
+// vision model configured (visionFallback) — in that case the image is still
+// sent, but the backend converts it to a text description before it reaches
+// the model, so fine visual detail (exact colors, small text, precise
+// layout) is lost even though the image itself is "read".
+export function canSendImages(model: string): boolean {
+  return modelSupportsVision(model) || visionFallback;
 }
 
 /** Whether the backend can serve `remove_background`/the "Remove background" button. */
@@ -87,8 +109,8 @@ export function canVectorize(): boolean {
   return imageOpsCapabilities.vectorize;
 }
 
-// Subscription surface for React (useSyncExternalStore) so capability-driven
-// controls re-render when the backend metadata lands.
+// Subscription surface for React (useSyncExternalStore) so the picker and
+// capability-driven controls re-render when the backend metadata lands.
 export function subscribeModels(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -104,16 +126,14 @@ export function loadModels(): Promise<void> {
       const res = await fetch(resolveApiUrl("/api/models"));
       if (!res.ok) return;
       const data = (await res.json()) as ModelsResponse;
-      const active = Array.isArray(data.models)
-        ? (data.models.find((m) => m.id === data.default) ?? data.models[0])
-        : undefined;
-      if (active) {
-        currentModel = {
-          id: active.id,
-          label: active.label,
-          supportsVision: active.supportsVision,
-        };
+      if (Array.isArray(data.models) && data.models.length > 0) {
+        currentModels = data.models.map((m) => ({
+          value: m.id,
+          label: m.label,
+          supportsVision: m.supportsVision,
+        }));
       }
+      if (data.default) defaultModel = data.default;
       visionFallback = data.visionFallback ?? false;
       imageOpsCapabilities = {
         removeBackground: data.imageOps?.removeBackground ?? false,

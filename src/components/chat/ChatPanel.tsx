@@ -16,6 +16,7 @@ import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import { useUserSkillStore } from "@/store/userSkillStore";
 import type { ChatSummary, ParallelCount } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
+import { useModelOptions } from "@/hooks/useModelOptions";
 import { useAgentActivityToast } from "@/hooks/useAgentActivityToast";
 import { getUserId } from "@/lib/userId";
 import { MessageList } from "./MessageList";
@@ -399,6 +400,9 @@ function ChatSession({
 export function ChatPanelContent() {
   const isExpanded = useChatStore((s) => s.isExpanded);
   const toggleExpanded = useChatStore((s) => s.toggleExpanded);
+  const model = useChatStore((s) => s.model);
+  const setModel = useChatStore((s) => s.setModel);
+  const modelOptions = useModelOptions();
   const parallelCount = useChatStore((s) => s.parallelCount);
   const setParallelCount = useChatStore((s) => s.setParallelCount);
   const chats = useChatStore((s) => s.chats);
@@ -413,6 +417,12 @@ export function ChatPanelContent() {
   useEffect(() => {
     void ensureSkillsHydrated();
   }, [ensureSkillsHydrated]);
+  // Falls back to the id itself, never a generic "Model": a selection the
+  // backend list doesn't cover is exactly when the user needs to see WHICH
+  // model they're on. reconcileModels() resets such a selection once
+  // GET /api/models answers.
+  const activeModelLabel =
+    modelOptions.find((option) => option.value === model)?.label ?? model;
   const composerControls: ComposerControlsRenderer = ({
     formId,
     canSubmit,
@@ -441,7 +451,32 @@ export function ChatPanelContent() {
               type="button"
               variant="ghost"
               size="default"
-              className="ml-auto inline-flex h-[30px] items-center gap-1 rounded-lg px-2 text-xs leading-none text-text-muted hover:bg-secondary"
+              className="ml-auto inline-flex h-[30px] min-w-0 items-center gap-1 rounded-lg px-2 text-xs leading-none text-text-muted hover:bg-secondary"
+              aria-label={`Model: ${activeModelLabel}`}
+            >
+              <span className="truncate">{activeModelLabel}</span>
+              <CaretDownIcon className="size-3 shrink-0" />
+            </Button>
+          }
+        />
+        <DropdownMenuContent side="top" align="end" className="w-56">
+          <DropdownMenuRadioGroup value={model} onValueChange={setModel}>
+            {modelOptions.map((option) => (
+              <DropdownMenuRadioItem key={option.value} value={option.value}>
+                {option.label}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="default"
+              className="inline-flex h-[30px] shrink-0 items-center gap-1 rounded-lg px-2 text-xs leading-none text-text-muted hover:bg-secondary"
               aria-label={`Parallel agents: x${parallelCount}`}
             >
               <LightningIcon className="size-4" />

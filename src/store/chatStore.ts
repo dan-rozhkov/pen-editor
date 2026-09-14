@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { deriveChatTitle } from "@/lib/chatTitle";
+import { getDefaultModel, getModelOptions } from "@/lib/chatModels";
 import type { AttachedImage, ChatLaunchPayload, QueuedChatMessage } from "@/types/chat";
 
 /** Stable empty reference so the per-session selector never returns a fresh
@@ -18,6 +19,14 @@ export const NO_QUEUED_MESSAGES: QueuedChatMessage[] = [];
 export interface ChatSummary {
   id: string;
   title: string;
+  /**
+   * The model this chat's turns run on. Per chat, not global: `model` below
+   * is only the ACTIVE chat's value, and openChat overwrites it on every
+   * switch — a background chat mid-stream must keep sending its own model on
+   * each auto-continuation rather than inherit whatever the user is looking
+   * at now.
+   */
+  model: string;
   parallelCount: ParallelCount;
   /**
    * True while `title` is still the default "Chat N" placeholder and hasn't
@@ -51,6 +60,8 @@ export interface ChatSessionActions {
 interface ChatState {
   isOpen: boolean;
   isExpanded: boolean;
+  /** The active chat's model — see ChatSummary.model. */
+  model: string;
   parallelCount: ParallelCount;
   chats: ChatSummary[];
   /** The chat currently shown in the panel, or null to show the chat list
@@ -86,6 +97,7 @@ interface ChatState {
   open: () => void;
   close: () => void;
   toggleExpanded: () => void;
+  setModel: (model: string) => void;
   setParallelCount: (count: ParallelCount) => void;
 
   createChat: (opts?: { activate?: boolean; parallelCount?: ParallelCount }) => string;
@@ -136,11 +148,29 @@ interface ChatState {
 
 const DEFAULT_PARALLEL_COUNT: ParallelCount = 1;
 
-// The design agent runs on one model chosen by the backend, so there is no
-// per-chat or per-user model any more. Drop the key every previous build wrote:
-// a stale selection must not survive as a value anything could read back, and
-// the request no longer carries a model id at all.
-localStorage.removeItem("chat-model");
+function normalizeModel(model: string | null): string {
+  // The backend-served list is the authority and isn't loaded yet at init, so
+  // accept any saved id here rather than rejecting it against the fallback
+  // list. reconcileModels() below resets ids the backend doesn't offer, once
+  // it answers. A saved id the backend no longer knows is harmless in the
+  // meantime: /api/chat ignores an unknown id and runs its own default.
+  return model || getDefaultModel();
+}
+
+// Re-validate the active/per-chat models against the freshly loaded backend
+// list. Called after loadModels() resolves; resets any selection the backend
+// no longer offers, so the picker can't keep showing a model nobody runs.
+export function reconcileModels() {
+  const { model, chats, setModel } = useChatStore.getState();
+  const known = getModelOptions();
+  const isValid = (m: string) => known.some((option) => option.value === m);
+  if (chats.some((c) => !isValid(c.model)) || !isValid(model)) {
+    useChatStore.setState((s) => ({
+      chats: s.chats.map((c) => (isValid(c.model) ? c : { ...c, model: getDefaultModel() })),
+    }));
+    if (!isValid(model)) setModel(getDefaultModel());
+  }
+}
 
 function normalizeParallelCount(count: string | null): ParallelCount {
   if (count === "2") return 2;
@@ -160,10 +190,16 @@ function generateQueuedMessageId(): string {
   return `qmsg-${Date.now()}-${nextMessageIdCounter++}`;
 }
 
-function makeChat(id: string, title: string, parallelCount: ParallelCount): ChatSummary {
+function makeChat(
+  id: string,
+  title: string,
+  model: string,
+  parallelCount: ParallelCount,
+): ChatSummary {
   return {
     id,
     title,
+    model,
     parallelCount,
     titleIsAuto: true,
     unread: false,
@@ -178,11 +214,13 @@ const initialChatId = generateChatId();
 export const useChatStore = create<ChatState>((set, get) => ({
   isOpen: false,
   isExpanded: localStorage.getItem("chat-expanded") === "true",
+  model: normalizeModel(localStorage.getItem("chat-model")),
   parallelCount: normalizeParallelCount(localStorage.getItem("chat-parallel-count")),
   chats: [
     makeChat(
       initialChatId,
       "Chat 1",
+      normalizeModel(localStorage.getItem("chat-model")),
       normalizeParallelCount(localStorage.getItem("chat-parallel-count")),
     ),
   ],
@@ -202,6 +240,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     localStorage.setItem("chat-expanded", String(next));
     set({ isExpanded: next });
   },
+  setModel: (model) => {
+    localStorage.setItem("chat-model", model);
+    const { activeChatId } = get();
+    set((s) => ({
+      model,
+      chats: s.chats.map((c) => (c.id === activeChatId ? { ...c, model } : c)),
+    }));
+  },
+
   setParallelCount: (parallelCount) => {
     localStorage.setItem("chat-parallel-count", String(parallelCount));
     const { activeChatId } = get();
@@ -223,9 +270,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // next message sent from one of them.
     const parallelCount =
       opts?.parallelCount ?? normalizeParallelCount(localStorage.getItem("chat-parallel-count"));
+    const model = normalizeModel(localStorage.getItem("chat-model"));
     set({
-      chats: [...chats, makeChat(id, title, parallelCount)],
-      ...(activate ? { activeChatId: id, parallelCount } : {}),
+      chats: [...chats, makeChat(id, title, model, parallelCount)],
+      ...(activate ? { activeChatId: id, model, parallelCount } : {}),
     });
     return id;
   },
@@ -253,6 +301,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const newControllers = { ...abortControllers };
       delete newControllers[chatId];
       const parallelCount = normalizeParallelCount(localStorage.getItem("chat-parallel-count"));
+      const model = normalizeModel(localStorage.getItem("chat-model"));
       const newLaunchQueue = { ...launchQueue };
       delete newLaunchQueue[chatId];
       const newMessageQueue = { ...messageQueue };
@@ -262,11 +311,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const newDismissedSelection = { ...dismissedSelection };
       delete newDismissedSelection[chatId];
       set({
-        chats: [makeChat(newId, "Chat 1", parallelCount)],
+        chats: [makeChat(newId, "Chat 1", model, parallelCount)],
         // Only jump into the replacement chat if the user was already looking
         // at one — deleting the last chat from the *list* view must leave
         // them on the list, not yank them into a new empty chat.
         activeChatId: activeChatId === null ? null : newId,
+        model,
         parallelCount,
         abortControllers: newControllers,
         launchQueue: newLaunchQueue,
@@ -309,6 +359,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!chat) return;
     set((s) => ({
       activeChatId: chatId,
+      model: chat.model,
       parallelCount: chat.parallelCount,
       chats: chat.unread
         ? s.chats.map((c) => (c.id === chatId ? { ...c, unread: false } : c))

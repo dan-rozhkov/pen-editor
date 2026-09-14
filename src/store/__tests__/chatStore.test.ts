@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useChatStore, type ChatSummary } from "@/store/chatStore";
+import { reconcileModels, useChatStore, type ChatSummary } from "@/store/chatStore";
+import { getDefaultModel, getModelOptions } from "@/lib/chatModels";
 
 function makeChat(overrides: Partial<ChatSummary> & { id: string }): ChatSummary {
   return {
     title: "Chat",
+    model: "deepseek/deepseek-v4.1-flash",
     parallelCount: 1,
     titleIsAuto: true,
     unread: false,
@@ -275,5 +277,73 @@ describe("chatStore — chat list state", () => {
     const chat = useChatStore.getState().chats.find((c) => c.id === "tab-A");
     expect(chat?.isBusy).toBe(true);
     expect(chat?.needsAnswer).toBe(true);
+  });
+});
+
+describe("chatStore — model selection", () => {
+  beforeEach(() => {
+    localStorage.removeItem("chat-model");
+    useChatStore.setState({
+      chats: [
+        makeChat({ id: "tab-A", title: "A" }),
+        makeChat({ id: "tab-B", title: "B" }),
+      ],
+      activeChatId: "tab-A",
+      model: "deepseek/deepseek-v4.1-flash",
+    });
+  });
+
+  it("setModel writes the active chat's model, not every chat's", () => {
+    useChatStore.getState().setModel("qwen/qwen3.8-flash");
+
+    const state = useChatStore.getState();
+    expect(state.model).toBe("qwen/qwen3.8-flash");
+    expect(state.chats.find((c) => c.id === "tab-A")?.model).toBe("qwen/qwen3.8-flash");
+    // A background chat keeps its own model — it may be mid-stream, and its
+    // auto-continuations must not switch models under it.
+    expect(state.chats.find((c) => c.id === "tab-B")?.model).toBe(
+      "deepseek/deepseek-v4.1-flash",
+    );
+    expect(localStorage.getItem("chat-model")).toBe("qwen/qwen3.8-flash");
+  });
+
+  it("openChat restores that chat's model as the active one", () => {
+    useChatStore.setState((s) => ({
+      chats: s.chats.map((c) =>
+        c.id === "tab-B" ? { ...c, model: "z-ai/glm-5.3-flash" } : c,
+      ),
+    }));
+
+    useChatStore.getState().openChat("tab-B");
+
+    expect(useChatStore.getState().model).toBe("z-ai/glm-5.3-flash");
+  });
+
+  it("reconcileModels resets a selection the backend does not offer", () => {
+    useChatStore.setState((s) => ({
+      model: "gone/retired-model",
+      chats: s.chats.map((c) =>
+        c.id === "tab-B" ? { ...c, model: "gone/retired-model" } : c,
+      ),
+    }));
+
+    reconcileModels();
+
+    const state = useChatStore.getState();
+    expect(state.model).toBe(getDefaultModel());
+    expect(state.chats.every((c) => c.model === getDefaultModel() ||
+      getModelOptions().some((o) => o.value === c.model))).toBe(true);
+  });
+
+  it("reconcileModels leaves a valid selection alone", () => {
+    const valid = getModelOptions()[0].value;
+    useChatStore.setState((s) => ({
+      model: valid,
+      chats: s.chats.map((c) => ({ ...c, model: valid })),
+    }));
+
+    reconcileModels();
+
+    expect(useChatStore.getState().model).toBe(valid);
   });
 });

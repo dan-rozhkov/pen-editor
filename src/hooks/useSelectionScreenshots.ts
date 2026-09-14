@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useChatStore } from "@/store/chatStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useModelSupportsVision } from "@/hooks/useImageSupport";
 import { captureNodeScreenshot } from "@/lib/captureNodeScreenshot";
@@ -68,7 +69,8 @@ const NO_ITEMS: SelectionContextItem[] = [];
  */
 export function useSelectionScreenshots(): SelectionContextItem[] {
   const selectedIds = useSelectionStore((s) => s.selectedIds);
-  const canAttach = useModelSupportsVision();
+  const model = useChatStore((s) => s.model);
+  const canAttach = useModelSupportsVision(model);
   // Captures are tagged with the selection they were taken for, so the
   // result can be DERIVED rather than reset by the effect: a selection the
   // capture doesn't match (nothing selected, or a new selection whose
