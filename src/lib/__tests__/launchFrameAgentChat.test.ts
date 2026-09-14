@@ -4,7 +4,10 @@ import { useChatStore } from "@/store/chatStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 
-// The real screenshot path needs a live PixiJS renderer; stub it.
+// The real screenshot path needs a live PixiJS renderer; stub it. It must
+// stay unused by launchFrameAgentChat — the frame is selected, so its id
+// already rides in canvasContext (see the doc comment on
+// launchFrameAgentChat.ts) and no screenshot should ever be captured here.
 const mockCapture = vi.fn<(nodeId: string) => Promise<string | null>>();
 vi.mock("@/lib/captureNodeScreenshot", () => ({
   captureNodeScreenshot: (nodeId: string) => mockCapture(nodeId),
@@ -32,7 +35,6 @@ beforeEach(() => {
     launchQueue: {},
   });
 
-  // Provide a named frame so the attached image carries the frame's name.
   useSceneStore.setState({
     nodesById: { [FRAME_ID]: { id: FRAME_ID, type: "frame", name: "Home Screen" } },
   } as never);
@@ -53,14 +55,13 @@ describe("launchFrameAgentChat", () => {
     expect(launchQueue[activeChatId!]?.text).toBe("make 3 layouts");
   });
 
-  it("attaches the frame screenshot (named after the frame) as image context", async () => {
+  it("does NOT capture or attach a screenshot — the frame's id already rides in canvasContext", async () => {
     await launchFrameAgentChat(FRAME_ID, "go");
 
-    expect(mockCapture).toHaveBeenCalledWith(FRAME_ID);
+    expect(mockCapture).not.toHaveBeenCalled();
     const { activeChatId, launchQueue } = useChatStore.getState();
-    expect(launchQueue[activeChatId!]?.images).toEqual([
-      { dataUrl: "data:image/png;base64,SHOT", name: "Home Screen" },
-    ]);
+    expect(launchQueue[activeChatId!]?.images).toBeUndefined();
+    expect(launchQueue[activeChatId!]?.text).toBe("go");
   });
 
   it("reveals the Design Agent panel by switching the left section to agents", async () => {
@@ -74,14 +75,6 @@ describe("launchFrameAgentChat", () => {
     useLeftSidebarStore.setState({ isPanelOpen: false });
     await launchFrameAgentChat(FRAME_ID, "go");
     expect(useLeftSidebarStore.getState().isPanelOpen).toBe(true);
-  });
-
-  it("queues a text-only message when the screenshot capture fails", async () => {
-    mockCapture.mockResolvedValue(null);
-    await launchFrameAgentChat(FRAME_ID, "go");
-    const { activeChatId, launchQueue } = useChatStore.getState();
-    expect(launchQueue[activeChatId!]?.images).toBeUndefined();
-    expect(launchQueue[activeChatId!]?.text).toBe("go");
   });
 
   it("is a no-op for empty/whitespace text", async () => {

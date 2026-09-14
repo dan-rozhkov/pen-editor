@@ -13,16 +13,18 @@ import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
  *
  * Returns false (no side effects) when the text is empty/whitespace.
  *
- * `opts.attachScreenshot` (default true) controls whether a PixiJS screenshot
- * is attached — embeds render via a DOM overlay with an empty Pixi container,
- * so callers pass false for them.
+ * `opts.attachScreenshot` (default false) controls whether a PixiJS screenshot
+ * is attached — the node's id already rides along in the next request's
+ * canvasContext, so the agent can call `get_screenshot` itself if it needs
+ * pixels. Pass true only when a caller genuinely needs a screenshot attached
+ * up front regardless.
  */
 export async function launchNodeAgentChat(
   nodeId: string,
   text: string,
   opts: { attachScreenshot?: boolean } = {},
 ): Promise<boolean> {
-  const { attachScreenshot = true } = opts;
+  const { attachScreenshot = false } = opts;
   const trimmed = text.trim();
   if (!trimmed) return false;
 

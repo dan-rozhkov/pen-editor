@@ -8,6 +8,8 @@ import { track, bucketLength } from "@/lib/analytics";
 import { consumeFirstPromptTiming } from "@/lib/analytics/sessionTiming";
 import { resolveApiUrl, isOffline, OFFLINE_MESSAGE } from "@/lib/apiBase";
 import { getUserId } from "@/lib/userId";
+import { canSendImages } from "@/lib/chatModels";
+import { isReferenceOnlyNodeType } from "@/lib/selectionContextTypes";
 import { createRetryingFetch, type RetryState } from "@/lib/retryFetch";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -66,6 +68,25 @@ export function buildCanvasContext(): object {
     };
   });
 
+  // Frames/instances are never auto-screenshotted (see
+  // useSelectionScreenshots.ts) to save tokens — only their id goes out
+  // above in selectedIds/selectedNodes. Tell the model that explicitly, but
+  // only when it's actually relevant: a constant string, not derived from
+  // selection data, so it doesn't churn the request when nothing in the
+  // selection would trigger it.
+  const hasReferenceOnlySelection = selectedIds.some((id) => {
+    const n = nodesById[id];
+    return n && isReferenceOnlyNodeType(n.type);
+  });
+  // get_screenshot may not be in the model's toolset at all (the backend
+  // drops it for a vision-less model with no VISION_MODEL configured — see
+  // the root CLAUDE.md's "Agent vision" section) — canSendImages() mirrors
+  // that exact condition on the frontend. Pointing the model at a tool it
+  // doesn't have would just waste a turn.
+  const selectionHint = hasReferenceOnlySelection && canSendImages()
+    ? "Screenshots of selected frames are intentionally NOT attached. If you need to see a selected frame, call get_screenshot with its node id."
+    : null;
+
   // A repo pushed in over WebMCP (attach_local_repo) otherwise silently
   // changes what read_design_repo/read_repo_files answer with no signal to
   // the model that it should reach for them — this is the only thing that
@@ -117,6 +138,7 @@ export function buildCanvasContext(): object {
         value: v.value,
         themeValues: v.themeValues,
       })),
+      ...(selectionHint ? { selectionHint } : {}),
       ...(selectedEmbedElement ? { selectedEmbedElement } : {}),
       ...(localRepo ? { localRepo } : {}),
     }),

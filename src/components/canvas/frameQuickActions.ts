@@ -9,8 +9,9 @@ import {
 /**
  * A one-click prompt shown in the on-canvas frame agent popup. Clicking an
  * action launches a fresh Design Agent chat seeded with `prompt`, scoped to
- * the selected frame (a screenshot is attached automatically by
- * `launchFrameAgentChat`).
+ * the selected frame. No screenshot is attached (`launchFrameAgentChat`) —
+ * the frame's id rides along in canvasContext, and a prompt that needs to
+ * see the frame should tell the agent to call `get_screenshot` itself.
  */
 export interface FrameQuickAction {
   id: string;
@@ -39,7 +40,7 @@ export const FRAME_QUICK_ACTIONS: FrameQuickAction[] = [
     label: "Generate image",
     icon: ImageIcon,
     prompt:
-      "Use the `generate_frame_image` tool to generate an image for this frame and set it as the frame's fill in a single step. First look at the attached frame to decide what imagery fits its purpose (e.g. a hero background, a product photo, a textured backdrop), then call `generate_frame_image` with a detailed prompt and this frame's id. Do NOT use `generate_image` + a manual fill, and do NOT use placeholder/stock images (no picsum) — the real generated image must land on the frame.",
+      "Use the `generate_frame_image` tool to generate an image for this frame and set it as the frame's fill in a single step. If you need to see the frame first to decide what imagery fits its purpose (e.g. a hero background, a product photo, a textured backdrop), call `get_screenshot` with the selected frame's id — if that tool isn't available, work from the frame's existing content and context instead. Then call `generate_frame_image` with a detailed prompt and this frame's id. Do NOT use `generate_image` + a manual fill, and do NOT use placeholder/stock images (no picsum) — the real generated image must land on the frame.",
   },
   {
     id: "find-references",

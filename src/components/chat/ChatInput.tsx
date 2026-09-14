@@ -4,6 +4,7 @@ import {
   StopIcon,
   ImageIcon,
   XIcon,
+  FrameCornersIcon,
 } from "@phosphor-icons/react";
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import type { SlashCommand } from "./slashCommands";
@@ -68,6 +69,40 @@ function readFileAsDataUrl(file: File): Promise<string> {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+// Small top-right "x" overlay shared by every dismissible chip in this file
+// (a selected-element image preview, or a manually attached image) — same
+// hover-reveal button, tooltip and position, differing only in the label and
+// what removing actually does. Reference-only chips (a selected frame/ref,
+// see the `dataUrl === null` branch below) deliberately don't get one: the
+// node id they represent keeps riding along in canvasContext regardless of
+// anything dismissed here, so a "remove" affordance on them would be dead —
+// clicking it could never actually take the frame out of context.
+function RemoveChipButton({
+  label,
+  onRemove,
+}: {
+  label: string;
+  onRemove: () => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label={label}
+            className="absolute top-0 right-0 p-0.5 bg-black/60 rounded-bl text-white opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <XIcon size={10} />
+          </button>
+        }
+      />
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
 }
 
 async function processFiles(files: FileList | File[]): Promise<AttachedImage[]> {
@@ -153,6 +188,14 @@ export function ChatInput({
     () => selectionScreenshots.filter((s) => !dismissedSelection.has(s.nodeId)),
     [selectionScreenshots, dismissedSelection]
   );
+  // Only image items (dataUrl set) occupy an attachment slot / count toward
+  // MAX_IMAGES and canSubmit — reference-only items (frame/ref: dataUrl
+  // null) carry no message content, they just point the agent at an id it
+  // already has via canvasContext's selectedIds.
+  const visibleSelectionImages = useMemo(
+    () => visibleSelection.filter((s) => s.dataUrl !== null),
+    [visibleSelection]
+  );
 
   const dismissSelection = useCallback(
     (nodeId: string) => {
@@ -184,20 +227,24 @@ export function ChatInput({
   // selected elements) is dropped — warn so nothing disappears silently.
   const overImageLimit =
     canAttachImages &&
-    visibleSelection.length + attachedImages.length > MAX_IMAGES;
+    visibleSelectionImages.length + attachedImages.length > MAX_IMAGES;
   const canSubmit =
     isOnline &&
     // Block sending while an ask_user question is unanswered so the answer
     // isn't stranded (covers both the built-in send button and renderFooter).
     !awaitingAnswer &&
+    // A reference-only selection (a selected frame with no screenshot) is
+    // not message content by itself — its id already rides along in
+    // canvasContext regardless of whether this message is sent, so it must
+    // not unlock an otherwise-empty send.
     (input.trim().length > 0 ||
       attachedImages.length > 0 ||
-      visibleSelection.length > 0);
+      visibleSelectionImages.length > 0);
   const canAttach =
-    canAttachImages && visibleSelection.length + attachedImages.length < MAX_IMAGES;
+    canAttachImages && visibleSelectionImages.length + attachedImages.length < MAX_IMAGES;
   const attachLabel = !canAttachImages
     ? "The model can't read images"
-    : visibleSelection.length + attachedImages.length >= MAX_IMAGES
+    : visibleSelectionImages.length + attachedImages.length >= MAX_IMAGES
       ? `Max ${MAX_IMAGES} images`
       : nativeVision
         ? "Attach image"
@@ -273,9 +320,9 @@ export function ChatInput({
       // user's own attachments are never silently displaced.
       const room = Math.max(0, MAX_IMAGES - attachedImages.length);
       const selectionImages: AttachedImage[] = canAttachImages
-        ? visibleSelection
+        ? visibleSelectionImages
             .slice(0, room)
-            .map((s) => ({ dataUrl: s.dataUrl, name: s.name }))
+            .map((s) => ({ dataUrl: s.dataUrl as string, name: s.name }))
         : [];
       const images = canAttachImages
         ? [...selectionImages, ...attachedImages]
@@ -303,7 +350,7 @@ export function ChatInput({
     [
       input,
       attachedImages,
-      visibleSelection,
+      visibleSelectionImages,
       canAttachImages,
       awaitingAnswer,
       onSubmit,
@@ -418,34 +465,37 @@ export function ChatInput({
       {visibleSelection.length > 0 && (
         <div className="mb-2">
           <div className="flex gap-2 flex-wrap">
-            {visibleSelection.map((sel) => (
-              <div
-                key={sel.nodeId}
-                title={sel.name}
-                className="relative group w-12 h-12 rounded-md overflow-hidden bg-secondary"
-              >
-                <img
-                  src={sel.dataUrl}
-                  alt={sel.name}
-                  className="w-full h-full object-contain"
-                />
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button
-                        type="button"
-                        onClick={() => dismissSelection(sel.nodeId)}
-                        aria-label="Remove from context"
-                        className="absolute top-0 right-0 p-0.5 bg-black/60 rounded-bl text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <XIcon size={10} />
-                      </button>
-                    }
+            {visibleSelection.map((sel) =>
+              sel.dataUrl === null ? (
+                // Reference-only chip (frame/ref): no remove button — see
+                // RemoveChipButton's doc comment for why one would be dead.
+                <div
+                  key={sel.nodeId}
+                  title={sel.name}
+                  aria-label={sel.name}
+                  className="flex items-center gap-1 h-12 pl-2 pr-2 rounded-md bg-secondary text-xs text-text-muted"
+                >
+                  <FrameCornersIcon size={14} />
+                  <span className="max-w-24 truncate">{sel.name}</span>
+                </div>
+              ) : (
+                <div
+                  key={sel.nodeId}
+                  title={sel.name}
+                  className="relative group w-12 h-12 rounded-md overflow-hidden bg-secondary"
+                >
+                  <img
+                    src={sel.dataUrl}
+                    alt={sel.name}
+                    className="w-full h-full object-contain"
                   />
-                  <TooltipContent>Remove from context</TooltipContent>
-                </Tooltip>
-              </div>
-            ))}
+                  <RemoveChipButton
+                    label="Remove from context"
+                    onRemove={() => dismissSelection(sel.nodeId)}
+                  />
+                </div>
+              )
+            )}
           </div>
         </div>
       )}
@@ -474,21 +524,7 @@ export function ChatInput({
                 alt={img.name}
                 className="w-full h-full object-cover"
               />
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      type="button"
-                      onClick={() => removeImage(i)}
-                      aria-label="Remove image"
-                      className="absolute top-0 right-0 p-0.5 bg-black/60 rounded-bl text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <XIcon size={10} />
-                    </button>
-                  }
-                />
-                <TooltipContent>Remove image</TooltipContent>
-              </Tooltip>
+              <RemoveChipButton label="Remove image" onRemove={() => removeImage(i)} />
             </div>
           ))}
         </div>

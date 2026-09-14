@@ -7,6 +7,21 @@ vi.mock("@/lib/analytics", async (importOriginal) => {
   return { ...actual, track: trackMock };
 });
 
+// Overrides canSendImages() for selectionHint gating tests below; every
+// other test falls through to the real (fallback-model-backed) behavior, so
+// this must not disturb the loadModels()/GET-api-models tests elsewhere in
+// this file.
+const chatModelsOverride = vi.hoisted(
+  () => ({ canSendImages: undefined as boolean | undefined }),
+);
+vi.mock("@/lib/chatModels", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/chatModels")>();
+  return {
+    ...actual,
+    canSendImages: () => chatModelsOverride.canSendImages ?? actual.canSendImages(),
+  };
+});
+
 import {
   executeToolCall,
   buildCanvasContext,
@@ -48,6 +63,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   trackMock.mockClear();
+  chatModelsOverride.canSendImages = undefined;
 });
 
 // Regression: images must survive to the request body unchanged — the
@@ -279,6 +295,44 @@ describe("buildCanvasContext", () => {
     const context = buildCanvasContext() as { canvasContext: string };
     const canvas = JSON.parse(context.canvasContext);
     expect(canvas.selectedNodes).toEqual([{ id: "ghost" }]);
+  });
+
+  it("adds selectionHint when a frame is selected and the model can be sent images — its screenshot is never auto-attached", () => {
+    chatModelsOverride.canSendImages = true;
+    useSelectionStore.setState({ selectedIds: ["frame1"] });
+    const context = buildCanvasContext() as { canvasContext: string };
+    const canvas = JSON.parse(context.canvasContext);
+    expect(canvas.selectionHint).toBe(
+      "Screenshots of selected frames are intentionally NOT attached. If you need to see a selected frame, call get_screenshot with its node id."
+    );
+  });
+
+  // Regression: get_screenshot is dropped from the model's toolset entirely
+  // when the model has no native vision AND no VISION_MODEL is configured
+  // (pen-editor-backend's per-request tool set — see the root CLAUDE.md's
+  // "Agent vision" section). canSendImages() mirrors that exact condition on
+  // the frontend; pointing the model at a tool it doesn't have would waste a
+  // turn.
+  it("omits selectionHint for a frame selection when the model can't be sent images", () => {
+    chatModelsOverride.canSendImages = false;
+    useSelectionStore.setState({ selectedIds: ["frame1"] });
+    const context = buildCanvasContext() as { canvasContext: string };
+    const canvas = JSON.parse(context.canvasContext);
+    expect(canvas).not.toHaveProperty("selectionHint");
+  });
+
+  it("omits selectionHint when the selection has no frame/ref node", () => {
+    useSelectionStore.setState({ selectedIds: ["rect1"] });
+    const context = buildCanvasContext() as { canvasContext: string };
+    const canvas = JSON.parse(context.canvasContext);
+    expect(canvas).not.toHaveProperty("selectionHint");
+  });
+
+  it("omits selectionHint when nothing is selected", () => {
+    useSelectionStore.setState({ selectedIds: [] });
+    const context = buildCanvasContext() as { canvasContext: string };
+    const canvas = JSON.parse(context.canvasContext);
+    expect(canvas).not.toHaveProperty("selectionHint");
   });
 
   it("carries a stable userId in the request body", () => {

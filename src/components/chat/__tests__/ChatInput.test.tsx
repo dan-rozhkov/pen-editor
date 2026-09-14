@@ -4,10 +4,10 @@ import { useState } from "react";
 import { ChatInput } from "../ChatInput";
 import { useChatStore } from "@/store/chatStore";
 import type { ChatLaunchPayload } from "@/types/chat";
-import type { SelectionScreenshot } from "@/hooks/useSelectionScreenshots";
+import type { SelectionContextItem } from "@/hooks/useSelectionScreenshots";
 
 // Controllable selection screenshots — the real hook needs the PixiJS renderer.
-let mockSelection: SelectionScreenshot[] = [];
+let mockSelection: SelectionContextItem[] = [];
 vi.mock("@/hooks/useSelectionScreenshots", () => ({
   useSelectionScreenshots: () => mockSelection,
 }));
@@ -245,8 +245,8 @@ describe("<ChatInput />", () => {
     });
 
     it("keeps attachments and dismissed-selection state when onSubmit reports the send failed", () => {
-      const selection: SelectionScreenshot[] = [
-        { nodeId: "frame1", name: "Screen", dataUrl: "data:image/png;base64,a" },
+      const selection: SelectionContextItem[] = [
+        { nodeId: "frame1", name: "Screen", type: "rect", dataUrl: "data:image/png;base64,a" },
       ];
       mockSelection = selection;
       vi.stubGlobal("navigator", { onLine: false });
@@ -386,9 +386,9 @@ describe("<ChatInput />", () => {
   });
 
   describe("selected canvas elements as context", () => {
-    const selection: SelectionScreenshot[] = [
-      { nodeId: "frame1", name: "Screen", dataUrl: "data:image/png;base64,a" },
-      { nodeId: "rect2", name: "Box", dataUrl: "data:image/png;base64,b" },
+    const selection: SelectionContextItem[] = [
+      { nodeId: "text1", name: "Screen", type: "text", dataUrl: "data:image/png;base64,a" },
+      { nodeId: "rect2", name: "Box", type: "rect", dataUrl: "data:image/png;base64,b" },
     ];
 
     it("shows selected elements as previews above the input", () => {
@@ -482,10 +482,87 @@ describe("<ChatInput />", () => {
       expect(onSubmit).toHaveBeenCalledWith({ text: "hi", images: undefined });
     });
 
+    it("renders a reference-only (frame) selection item as a chip, not an image, and omits it from the sent images", () => {
+      const withFrame: SelectionContextItem[] = [
+        { nodeId: "frame1", name: "Home Screen", type: "frame", dataUrl: null },
+        { nodeId: "rect2", name: "Box", type: "rect", dataUrl: "data:image/png;base64,b" },
+      ];
+      mockSelection = withFrame;
+      const onSubmit = vi.fn();
+      render(<Harness onSubmit={onSubmit} />);
+
+      // Chip renders the node's name, not an <img>.
+      expect(screen.getByText("Home Screen")).toBeTruthy();
+      expect(screen.queryByAltText("Home Screen")).toBeNull();
+      expect(screen.getByAltText("Box")).toBeTruthy();
+
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: "tweak this" },
+      });
+      fireEvent.click(screen.getByLabelText("Send"));
+      // Only the image item is sent — the frame reference carries no
+      // message content of its own (its id already rides in canvasContext).
+      expect(onSubmit).toHaveBeenCalledWith({
+        text: "tweak this",
+        images: [{ dataUrl: "data:image/png;base64,b", name: "Box" }],
+      });
+    });
+
+    it("does not render a remove button on a reference-only (frame) chip — its id keeps riding in canvasContext regardless", () => {
+      const withFrame: SelectionContextItem[] = [
+        { nodeId: "frame1", name: "Home Screen", type: "frame", dataUrl: null },
+        { nodeId: "rect2", name: "Box", type: "rect", dataUrl: "data:image/png;base64,b" },
+      ];
+      mockSelection = withFrame;
+      render(<Harness onSubmit={vi.fn()} />);
+
+      // The image chip ("Box") gets exactly one remove button; the
+      // reference-only chip ("Home Screen") gets none — a button that
+      // dismissed it from the composer's list could never actually take its
+      // id out of the next request's canvasContext, so it isn't offered.
+      expect(screen.getAllByLabelText("Remove from context")).toHaveLength(1);
+    });
+
+    it("does not count a reference-only (frame) item toward MAX_IMAGES", () => {
+      const manyFrames: SelectionContextItem[] = Array.from(
+        { length: 5 },
+        (_, i) => ({
+          nodeId: `frame-${i}`,
+          name: `Frame ${i}`,
+          type: "frame",
+          dataUrl: null,
+        }),
+      );
+      mockSelection = manyFrames;
+      render(<Harness onSubmit={vi.fn()} initialInput="go" />);
+      // 5 frame references exceed MAX_IMAGES (4) but none are images, so no
+      // overflow warning and the attach button stays enabled.
+      expect(
+        screen.queryByText(/Only 4 images can be sent per message/)
+      ).toBeNull();
+      const attach = screen.getByLabelText("Attach image") as HTMLButtonElement;
+      expect(attach.disabled).toBe(false);
+    });
+
+    it("blocks sending when only a reference-only frame is selected and there's no text or image", () => {
+      // A reference-only selection is not message content — sending must
+      // stay blocked unless there's text or an actual image attached.
+      mockSelection = [
+        { nodeId: "frame1", name: "Home Screen", type: "frame", dataUrl: null },
+      ];
+      const onSubmit = vi.fn();
+      render(<Harness onSubmit={onSubmit} />);
+      const sendBtn = screen.getByLabelText("Send") as HTMLButtonElement;
+      expect(sendBtn.disabled).toBe(true);
+      fireEvent.click(sendBtn);
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
     it("caps a selection larger than the limit and warns about the overflow", () => {
       mockSelection = Array.from({ length: 6 }, (_, i) => ({
         nodeId: `n${i}`,
         name: `Node ${i}`,
+        type: "rect",
         dataUrl: `data:image/png;base64,${i}`,
       }));
       const onSubmit = vi.fn();

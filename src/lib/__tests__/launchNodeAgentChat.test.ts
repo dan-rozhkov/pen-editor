@@ -44,8 +44,8 @@ describe("launchNodeAgentChat", () => {
     expect(launchQueue[activeChatId!]?.text).toBe("hello");
   });
 
-  it("attaches the screenshot by default", async () => {
-    await launchNodeAgentChat(NODE_ID, "go");
+  it("attaches the screenshot when attachScreenshot is true", async () => {
+    await launchNodeAgentChat(NODE_ID, "go", { attachScreenshot: true });
     expect(mockCapture).toHaveBeenCalledWith(NODE_ID);
     const { activeChatId, launchQueue } = useChatStore.getState();
     expect(launchQueue[activeChatId!]?.images).toEqual([
@@ -53,8 +53,8 @@ describe("launchNodeAgentChat", () => {
     ]);
   });
 
-  it("skips the screenshot when attachScreenshot is false", async () => {
-    await launchNodeAgentChat(NODE_ID, "go", { attachScreenshot: false });
+  it("skips the screenshot by default", async () => {
+    await launchNodeAgentChat(NODE_ID, "go");
     expect(mockCapture).not.toHaveBeenCalled();
     const { activeChatId, launchQueue } = useChatStore.getState();
     expect(launchQueue[activeChatId!]?.images).toBeUndefined();

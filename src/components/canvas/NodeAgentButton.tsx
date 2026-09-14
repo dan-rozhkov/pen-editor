@@ -21,8 +21,9 @@ interface NodeAgentButtonProps {
 /**
  * On-canvas affordance shown at a selected node's top-right corner: a small
  * trigger that opens a composer (text input + send + quick actions). Sending
- * invokes the injected `launch` (frame variant attaches a screenshot; embed
- * variant relies on selection). Positioning mirrors EmbedActionBar — world
+ * invokes the injected `launch` — both the frame and embed variants rely on
+ * the current selection (no screenshot is attached up front). Positioning
+ * mirrors EmbedActionBar — world
  * coordinates are converted to screen space via the viewport transform so the
  * button tracks pan/zoom.
  */
