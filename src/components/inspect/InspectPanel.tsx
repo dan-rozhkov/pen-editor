@@ -25,7 +25,7 @@ import { DevExportAddButton, DevExportSection } from "./DevExportSection";
 const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
   <CaretRightIcon
     size={12}
-    className={clsx("w-3 h-3 transition-transform duration-150", "text-text-muted", expanded && "rotate-90")}
+    className={clsx("w-3 h-3 transition-transform duration-250 ease-smooth-out", "text-text-muted", expanded && "rotate-90")}
     weight="bold"
   />
 );

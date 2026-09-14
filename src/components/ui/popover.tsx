@@ -150,7 +150,7 @@ function PopoverContent({
           className={cn(
             // Mirrors the existing color-picker popover surface so all popovers
             // in the editor read as the same object.
-            "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 z-50 flex w-[220px] flex-col gap-2 p-3 duration-100",
+            "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-99 data-open:zoom-in-97 z-50 flex w-[220px] flex-col gap-2 p-3 data-open:duration-250 data-closed:duration-150 ease-smooth-out",
             DRAGGABLE_SURFACE_CLASS,
             className,
           )}

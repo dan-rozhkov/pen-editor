@@ -50,8 +50,9 @@ export function PresentOverlay() {
     <div
       data-testid="present-pill"
       className={cn(
-        "absolute bottom-4 left-1/2 -translate-x-1/2 z-50 pointer-events-auto transition-opacity duration-200",
-        visible ? "opacity-100" : "opacity-0 pointer-events-none",
+        "absolute bottom-4 left-1/2 -translate-x-1/2 z-50 pointer-events-auto transition-opacity ease-smooth-out",
+        // Asymmetric: the pill invites on reveal and gets out of the way on hide.
+        visible ? "opacity-100 duration-250" : "opacity-0 pointer-events-none duration-150",
       )}
       onMouseEnter={() => {
         isHoveredRef.current = true;

@@ -209,6 +209,56 @@
   --color-code-tag: #f87171;
 }
 
+/* Motion tokens — the transitions.dev scale (transitions-polish skill).
+   One place to tune timing; reference as `var(--duration-fast)` in CSS-in-JS
+   or through the `duration-250` / `ease-smooth-out` utilities below.
+
+   Deliberately NOT redefined here: `--ease-out`, `--ease-in-out` and
+   `--ease-linear`. Tailwind already ships those names in its own theme, and
+   overriding them would silently retime every existing `ease-out` in the app. */
+:root {
+  /* Durations */
+  --duration-stagger: 40ms; /* per-item stagger offset */
+  --duration-micro: 80ms; /* intent delay, shake segment */
+  --duration-quick: 150ms; /* modal/dropdown close, text swap, tooltip appear */
+  --duration-fast: 250ms; /* dropdown/modal open, tabs sliding, accordion, icon swap */
+  --duration-medium: 350ms; /* panel close, toast close */
+  --duration-slow: 400ms; /* panel open, skeleton reveal */
+  --duration-very-slow: 500ms; /* emphasis moments, badge appear, success check */
+
+  /* Distances (pre-translate, settles to 0) */
+  --distance-micro: 4px; /* text swap */
+  --distance-small: 6px; /* error shake (small segment) */
+  --distance-base: 8px; /* page slide, menu slide-in */
+  --distance-medium: 12px; /* text reveal */
+  --distance-large: 30px; /* check badge appear */
+
+  /* Scales (pre-scale, settles to 1) */
+  --scale-large: 0.96; /* modal open/close */
+  --scale-medium: 0.97; /* dropdown open */
+  --scale-small: 0.98; /* tooltip open */
+  --scale-tiny: 0.99; /* dropdown close */
+
+  /* Blur (pre-blur, settles to 0) */
+  --blur-small: 2px; /* panel reveal, icon swap, text swap */
+  --blur-medium: 3px; /* page slide, text reveal */
+  --blur-large: 8px; /* success check open */
+}
+
+@theme static {
+  /* Easings that Tailwind does not already own, exposed as `ease-*`
+     utilities: `ease-smooth-out`, `ease-bounce`, `ease-bounce-strong`.
+
+     `static` is load-bearing: a plain `@theme` only emits a variable once
+     Tailwind spots a matching utility in the scanned source, so the two
+     bounce easings — real tokens of the scale, just not used yet — would be
+     tree-shaken out of the build. A later `var(--ease-bounce)` in an inline
+     style would then resolve to nothing and silently fall back to `ease`. */
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1); /* open + close, slide, resize, position change */
+  --ease-bounce: cubic-bezier(0.34, 1.36, 0.64, 1); /* badge pop open */
+  --ease-bounce-strong: cubic-bezier(0.34, 3.85, 0.64, 1); /* bouncy hover-out */
+}
+
 html.disable-theme-transitions *,
 html.disable-theme-transitions *::before,
 html.disable-theme-transitions *::after {

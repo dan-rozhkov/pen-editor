@@ -86,7 +86,7 @@ export function InspectRow({ row }: { row: InspectValue }) {
           <CaretRightIcon
             size={10}
             weight="bold"
-            className={clsx("text-text-muted transition-transform duration-150 shrink-0", expanded && "rotate-90")}
+            className={clsx("text-text-muted transition-transform duration-250 ease-smooth-out shrink-0", expanded && "rotate-90")}
           />
           <span className="text-xs text-text-primary truncate">{token.name}</span>
         </span>

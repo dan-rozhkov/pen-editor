@@ -323,7 +323,7 @@ export function SlidesPanel() {
                     translateY !== 0 || isDragging
                       ? {
                           transform: `translateY(${translateY}px)`,
-                          transition: isDragging ? "none" : "transform 150ms ease",
+                          transition: isDragging ? "none" : "transform 150ms var(--ease-smooth-out)",
                           position: "relative",
                           zIndex: isDragging ? 10 : undefined,
                           opacity: isDragging ? 0.85 : undefined,

@@ -117,7 +117,7 @@ export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
         </span>
         <CaretDownIcon
           size={10}
-          className={`transition-transform shrink-0 ${open ? "" : "-rotate-90"}`}
+          className={`transition-transform duration-250 ease-smooth-out shrink-0 ${open ? "" : "-rotate-90"}`}
         />
       </button>
       {status === "completed" && imageUrls.length > 0 && (
