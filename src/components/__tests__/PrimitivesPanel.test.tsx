@@ -7,9 +7,9 @@ import { PrimitivesPanel } from "../PrimitivesPanel";
 
 /**
  * The bottom tool dock. Embed took Frame's old second-position slot (right
- * after Move) and Frame moved into that slot's chevron dropdown, mirroring
- * the existing Move/Rectangle/Pen `ToolDropdownGroup` pattern — see
- * toolDefinitions.ts's EMBED_TOOL/EMBED_SUB_TOOLS.
+ * after Move) and renders as a plain button with no chevron of its own;
+ * Frame moved into the Rectangle group's "More shapes" dropdown — see
+ * toolDefinitions.ts's EMBED_TOOL/RECT_SUB_TOOLS.
  */
 describe("<PrimitivesPanel /> tool dock", () => {
   beforeEach(() => {
@@ -32,9 +32,25 @@ describe("<PrimitivesPanel /> tool dock", () => {
     expect(screen.getAllByRole("button", { name: "Embed" })).toHaveLength(1);
   });
 
-  it("does not render a standalone Frame button — it lives in the Embed group's dropdown", () => {
+  it("does not render a standalone Frame button — it lives in the shapes dropdown", () => {
     render(<PrimitivesPanel />);
     expect(screen.queryByRole("button", { name: "Frame" })).toBeNull();
+  });
+
+  // Structural rather than label-based: a chevron re-added to the Embed slot
+  // under any wording must fail this, so counting the dropdown triggers beats
+  // querying the tooltip strings that happen to exist today.
+  it("renders exactly three chevron triggers — Move, shapes and Pen, none for Embed", () => {
+    render(<PrimitivesPanel />);
+    const chevrons = screen
+      .getAllByRole("button")
+      .filter((b) => /^More /.test(b.getAttribute("aria-label") ?? ""));
+
+    expect(chevrons.map((b) => b.getAttribute("aria-label"))).toEqual([
+      "More move tools",
+      "More shapes",
+      "More pen tools",
+    ]);
   });
 
   it("clicking the Embed main button activates the embed tool", () => {
@@ -43,9 +59,9 @@ describe("<PrimitivesPanel /> tool dock", () => {
     expect(useDrawModeStore.getState().activeTool).toBe("embed");
   });
 
-  it("opens the Embed group's dropdown and activates Frame from it", async () => {
+  it("opens the shapes dropdown and activates Frame from it", async () => {
     render(<PrimitivesPanel />);
-    fireEvent.click(screen.getByRole("button", { name: "More container tools" }));
+    fireEvent.click(screen.getByRole("button", { name: "More shapes" }));
 
     const frameItem = await screen.findByRole("menuitem", { name: /Frame/ });
     fireEvent.click(frameItem);

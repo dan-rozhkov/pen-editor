@@ -45,10 +45,6 @@ export const EMBED_TOOL: ToolDefinition = {
   shortcut: "E",
 };
 
-export const EMBED_SUB_TOOLS: ToolDefinition[] = [
-  { icon: HashStraight, label: "Frame", tool: "frame", shortcut: "F" },
-];
-
 export const MOVE_TOOL: ToolDefinition = {
   icon: NavigationArrowIcon,
   label: "Move",
@@ -68,6 +64,9 @@ export const RECT_TOOL: ToolDefinition = {
 };
 
 export const RECT_SUB_TOOLS: ToolDefinition[] = [
+  // Frame is not a shape, but it is the only other rectangle-drawn tool and
+  // the shapes chevron is where the dock hides its secondary draw tools.
+  { icon: HashStraight, label: "Frame", tool: "frame", shortcut: "F" },
   { icon: CircleIcon, label: "Ellipse", tool: "ellipse", shortcut: "O" },
   { icon: LineSegmentIcon, label: "Line", tool: "line", shortcut: "L" },
   { icon: HexagonIcon, label: "Polygon", tool: "polygon", shortcut: "G" },
@@ -106,7 +105,6 @@ export const ALL_TOOLS: ToolDefinition[] = [
   MOVE_TOOL,
   ...MOVE_SUB_TOOLS,
   EMBED_TOOL,
-  ...EMBED_SUB_TOOLS,
   RECT_TOOL,
   ...RECT_SUB_TOOLS,
   PEN_TOOL,

@@ -5,7 +5,6 @@ import type { DrawToolType } from "../store/drawModeStore";
 import type { ToolDefinition } from "../lib/toolDefinitions";
 import {
   EMBED_TOOL,
-  EMBED_SUB_TOOLS,
   MOVE_TOOL,
   MOVE_SUB_TOOLS,
   RECT_TOOL,
@@ -123,7 +122,6 @@ export function PrimitivesPanel() {
 
   const isMoveSubToolActive = MOVE_SUB_TOOLS.some((t) => t.tool === activeTool);
   const isMoveActive = activeTool === null;
-  const isEmbedSubToolActive = EMBED_SUB_TOOLS.some((t) => t.tool === activeTool);
   const isEmbedActive = activeTool === "embed";
   const isRectSubToolActive = rectSubTools.some((t) => t.tool === activeTool);
   const isRectangleActive = activeTool === "rect";
@@ -147,17 +145,21 @@ export function PrimitivesPanel() {
           toolButtonBaseClass={toolButtonBaseClass}
         />
 
-        <ToolDropdownGroup
-          mainTool={EMBED_TOOL}
-          onMainClick={() => toggleTool("embed")}
-          isMainActive={isEmbedActive}
-          subMenuTooltip="More container tools"
-          subTools={EMBED_SUB_TOOLS}
-          activeTool={activeTool}
-          isSubGroupActive={isEmbedSubToolActive}
-          onToggleTool={toggleTool}
-          toolButtonBaseClass={toolButtonBaseClass}
-        />
+        <IconButton
+          onClick={() => toggleTool(EMBED_TOOL.tool)}
+          tooltip={EMBED_TOOL.label}
+          shortcut={EMBED_TOOL.shortcut}
+          side="top"
+          variant="ghost"
+          size="lg"
+          className={`${toolButtonBaseClass} ${
+            isEmbedActive
+              ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
+              : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
+          }`}
+        >
+          <EMBED_TOOL.icon size={40} className="size-6" weight="light" />
+        </IconButton>
 
         <ToolDropdownGroup
           mainTool={RECT_TOOL}
