@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CaretLeftIcon } from "@phosphor-icons/react";
+import { CaretLeftIcon, MinusIcon } from "@phosphor-icons/react";
 import {
   findLiveEmbedElement,
   readEmbedElementSnapshot,
@@ -364,14 +364,12 @@ function ElementPropertyFields({ snapshot, onWriteStyles, onApplyEdit }: FieldsP
             value={snapshot.width}
             onChange={(v) => onWriteStyles({ width: `${v}px` })}
             min={0}
-            labelOutside
           />
           <NumberInput
             label="H"
             value={snapshot.height}
             onChange={(v) => onWriteStyles({ height: `${v}px` })}
             min={0}
-            labelOutside
           />
         </PropertyRow>
       </PropertySection>
@@ -380,6 +378,7 @@ function ElementPropertyFields({ snapshot, onWriteStyles, onApplyEdit }: FieldsP
         <PropertyRow>
           <SelectInput
             label="Display"
+            labelOutside
             value={snapshot.display}
             options={DISPLAY_OPTIONS}
             onChange={(v) => onWriteStyles({ display: v })}
@@ -390,6 +389,7 @@ function ElementPropertyFields({ snapshot, onWriteStyles, onApplyEdit }: FieldsP
             <PropertyRow>
               <SelectInput
                 label="Direction"
+                labelOutside
                 value={snapshot.flexDirection}
                 options={FLEX_DIRECTION_OPTIONS}
                 onChange={(v) => onWriteStyles({ "flex-direction": v })}
@@ -405,14 +405,14 @@ function ElementPropertyFields({ snapshot, onWriteStyles, onApplyEdit }: FieldsP
             <PropertyRow>
               <SelectInput
                 label="Align"
+                labelOutside
                 value={snapshot.alignItems}
                 options={ALIGN_ITEMS_OPTIONS}
                 onChange={(v) => onWriteStyles({ "align-items": v })}
               />
-            </PropertyRow>
-            <PropertyRow>
               <SelectInput
                 label="Justify"
+                labelOutside
                 value={snapshot.justifyContent}
                 options={JUSTIFY_CONTENT_OPTIONS}
                 onChange={(v) => onWriteStyles({ "justify-content": v })}
@@ -420,36 +420,33 @@ function ElementPropertyFields({ snapshot, onWriteStyles, onApplyEdit }: FieldsP
             </PropertyRow>
           </>
         )}
+        <div className="mt-2 text-[10px] font-normal text-text-muted">Padding</div>
         <PropertyRow>
           <NumberInput
-            label="Pad T"
+            label="T"
             value={snapshot.padding.top}
             onChange={(v) => onWriteStyles({ "padding-top": `${v}px` })}
             min={0}
-            labelOutside
           />
           <NumberInput
-            label="Pad R"
+            label="R"
             value={snapshot.padding.right}
             onChange={(v) => onWriteStyles({ "padding-right": `${v}px` })}
             min={0}
-            labelOutside
           />
         </PropertyRow>
         <PropertyRow>
           <NumberInput
-            label="Pad B"
+            label="B"
             value={snapshot.padding.bottom}
             onChange={(v) => onWriteStyles({ "padding-bottom": `${v}px` })}
             min={0}
-            labelOutside
           />
           <NumberInput
-            label="Pad L"
+            label="L"
             value={snapshot.padding.left}
             onChange={(v) => onWriteStyles({ "padding-left": `${v}px` })}
             min={0}
-            labelOutside
           />
         </PropertyRow>
       </PropertySection>
@@ -478,22 +475,24 @@ function ElementPropertyFields({ snapshot, onWriteStyles, onApplyEdit }: FieldsP
         title="Fill"
         action={
           snapshot.backgroundColor ? (
-            <button
-              type="button"
-              className="text-[11px] text-text-muted hover:text-text-primary"
+            <IconButton
+              tooltip="Remove fill"
+              aria-label="Remove fill"
+              variant="ghost"
+              size="icon-sm"
               onClick={() => onWriteStyles({ "background-color": null })}
             >
-              Remove
-            </button>
+              <MinusIcon />
+            </IconButton>
           ) : undefined
         }
       >
-        <PropertyRow>
+        <div className="[&>div]:w-full">
           <ColorInput
             value={snapshot.backgroundColor}
             onChange={(v) => onWriteStyles({ "background-color": v })}
           />
-        </PropertyRow>
+        </div>
       </PropertySection>
 
       <PropertySection title="Stroke">
@@ -507,14 +506,15 @@ function ElementPropertyFields({ snapshot, onWriteStyles, onApplyEdit }: FieldsP
           />
           <SelectInput
             label="Style"
+            labelOutside
             value={snapshot.borderStyle}
             options={BORDER_STYLE_OPTIONS}
             onChange={(v) => setBorder({ style: v })}
           />
         </PropertyRow>
-        <PropertyRow>
+        <div className="[&>div]:w-full">
           <ColorInput value={snapshot.borderColor} onChange={(v) => setBorder({ color: v })} />
-        </PropertyRow>
+        </div>
       </PropertySection>
 
       <PropertySection title="Typography">
@@ -528,6 +528,7 @@ function ElementPropertyFields({ snapshot, onWriteStyles, onApplyEdit }: FieldsP
           />
           <SelectInput
             label="Weight"
+            labelOutside
             value={String(snapshot.fontWeight)}
             options={FONT_WEIGHT_OPTIONS}
             onChange={(v) => onWriteStyles({ "font-weight": v })}
@@ -535,14 +536,14 @@ function ElementPropertyFields({ snapshot, onWriteStyles, onApplyEdit }: FieldsP
         </PropertyRow>
         <PropertyRow>
           <NumberInput
-            label="Line"
+            label="Line height"
             value={snapshot.lineHeight}
             onChange={(v) => onWriteStyles({ "line-height": v ? `${v}px` : "normal" })}
             min={0}
             labelOutside
           />
           <NumberInput
-            label="Spacing"
+            label="Letter spacing"
             value={snapshot.letterSpacing}
             onChange={(v) => onWriteStyles({ "letter-spacing": `${v}px` })}
             labelOutside
@@ -551,14 +552,15 @@ function ElementPropertyFields({ snapshot, onWriteStyles, onApplyEdit }: FieldsP
         <PropertyRow>
           <SelectInput
             label="Align"
+            labelOutside
             value={snapshot.textAlign}
             options={TEXT_ALIGN_OPTIONS}
             onChange={(v) => onWriteStyles({ "text-align": v })}
           />
         </PropertyRow>
-        <PropertyRow>
+        <div className="[&>div]:w-full">
           <ColorInput value={snapshot.color} onChange={(v) => onWriteStyles({ color: v })} />
-        </PropertyRow>
+        </div>
       </PropertySection>
 
       {snapshot.text !== null && (
