@@ -1,11 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   applyEmbedElementEdit,
+  applyEmbedElementReorder,
   findLiveEmbedElement,
   readEmbedElementSnapshot,
   shadowPathToSourcePath,
+  sourcePathToShadowPath,
 } from "../embedElementStyle";
-import { buildElementPath } from "../embedElementPicker";
+import { buildElementPath, resolveElementPath } from "../embedElementPicker";
 import { mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
 
 // `sanitizeEmbedHtml`'s own doc comment documents that DOMPurify's tag walk
@@ -198,6 +200,182 @@ describe("applyEmbedElementEdit", () => {
       expect(result!.html).toContain('<div class="card">');
       expect(result!.html).toContain("<p>new</p>");
     });
+  });
+});
+
+describe("sourcePathToShadowPath", () => {
+  it("re-prepends the container prefix (no synthetic body)", () => {
+    expect(sourcePathToShadowPath("div:nth-of-type(1) > p:nth-of-type(2)", "p:nth-of-type(1)")).toBe(
+      "div:nth-of-type(1) > p:nth-of-type(1)",
+    );
+  });
+
+  it("re-prepends the container AND synthetic-body prefix when the original path had one", () => {
+    expect(
+      sourcePathToShadowPath(
+        "div:nth-of-type(1) > body:nth-of-type(1) > p:nth-of-type(2)",
+        "p:nth-of-type(1)",
+      ),
+    ).toBe("div:nth-of-type(1) > body:nth-of-type(1) > p:nth-of-type(1)");
+  });
+
+  it("returns the new path unchanged when it's id-anchored", () => {
+    expect(sourcePathToShadowPath("div:nth-of-type(1) > p:nth-of-type(2)", "#hero")).toBe("#hero");
+  });
+
+  it("returns the new path unchanged when the original path was itself id-anchored", () => {
+    expect(sourcePathToShadowPath("#hero", "p:nth-of-type(3)")).toBe("p:nth-of-type(3)");
+  });
+
+  it("re-prepends just the container prefix when the new source path is '' (moved to be the sole/last content)", () => {
+    expect(sourcePathToShadowPath("div:nth-of-type(1) > p:nth-of-type(2)", "")).toBe(
+      "div:nth-of-type(1)",
+    );
+  });
+});
+
+describe("applyEmbedElementReorder", () => {
+  it("moves an element up (before an earlier sibling) on a body fragment", () => {
+    const html = `<head></head><body><p>one</p><p>two</p><p>three</p></body>`;
+    const result = applyEmbedElementReorder(
+      html,
+      "div:nth-of-type(1) > p:nth-of-type(2)", // "two"
+      "div:nth-of-type(1) > p:nth-of-type(1)", // before "one"
+    );
+    expect(result).not.toBeNull();
+    expect(result!.outerHtml).toBe("<p>two</p>");
+
+    const doc = new DOMParser().parseFromString(result!.html, "text/html");
+    const order = Array.from(doc.body.querySelectorAll("p")).map((p) => p.textContent);
+    expect(order).toEqual(["two", "one", "three"]);
+
+    // newPath resolves to the SAME element at its new position.
+    expect(result!.newPath).toBe("div:nth-of-type(1) > p:nth-of-type(1)");
+    const newSourcePath = shadowPathToSourcePath(result!.newPath)!;
+    expect(resolveElementPath(doc.body, newSourcePath)?.textContent).toBe("two");
+  });
+
+  it("moves an element down (before a later sibling) on a body fragment", () => {
+    const html = `<head></head><body><p>one</p><p>two</p><p>three</p></body>`;
+    const result = applyEmbedElementReorder(
+      html,
+      "div:nth-of-type(1) > p:nth-of-type(1)", // "one"
+      "div:nth-of-type(1) > p:nth-of-type(3)", // before "three"
+    );
+    expect(result).not.toBeNull();
+    expect(result!.outerHtml).toBe("<p>one</p>");
+
+    const doc = new DOMParser().parseFromString(result!.html, "text/html");
+    const order = Array.from(doc.body.querySelectorAll("p")).map((p) => p.textContent);
+    expect(order).toEqual(["two", "one", "three"]);
+
+    const newSourcePath = shadowPathToSourcePath(result!.newPath)!;
+    expect(resolveElementPath(doc.body, newSourcePath)?.textContent).toBe("one");
+  });
+
+  it("moves an element to the end when beforeShadowPath is null", () => {
+    const html = `<head></head><body><p>one</p><p>two</p><p>three</p></body>`;
+    const result = applyEmbedElementReorder(html, "div:nth-of-type(1) > p:nth-of-type(2)", null);
+    expect(result).not.toBeNull();
+
+    const doc = new DOMParser().parseFromString(result!.html, "text/html");
+    const order = Array.from(doc.body.querySelectorAll("p")).map((p) => p.textContent);
+    expect(order).toEqual(["one", "three", "two"]);
+
+    const newSourcePath = shadowPathToSourcePath(result!.newPath)!;
+    expect(resolveElementPath(doc.body, newSourcePath)?.textContent).toBe("two");
+  });
+
+  it("preserves a full <html> document shape, including a leading doctype", () => {
+    const html = `<!DOCTYPE html><html><head><title>T</title></head><body><p>one</p><p>two</p><p>three</p></body></html>`;
+    const result = applyEmbedElementReorder(
+      html,
+      "div:nth-of-type(1) > body:nth-of-type(1) > p:nth-of-type(2)", // "two"
+      "div:nth-of-type(1) > body:nth-of-type(1) > p:nth-of-type(1)", // before "one"
+    );
+    expect(result).not.toBeNull();
+    expect(result!.html.toLowerCase().startsWith("<!doctype html>")).toBe(true);
+    expect(result!.html).toContain("<html");
+    expect(result!.html).toContain("<title>T</title>");
+
+    const doc = new DOMParser().parseFromString(result!.html, "text/html");
+    const order = Array.from(doc.body.querySelectorAll("p")).map((p) => p.textContent);
+    expect(order).toEqual(["two", "one", "three"]);
+
+    // newPath carries the container + synthetic-body prefix forward.
+    expect(result!.newPath).toBe("div:nth-of-type(1) > body:nth-of-type(1) > p:nth-of-type(1)");
+  });
+
+  it("preserves a bare content-fragment shape (no <body> tag at all)", () => {
+    const html = `<p>one</p><p>two</p><p>three</p>`;
+    const result = applyEmbedElementReorder(
+      html,
+      "div:nth-of-type(1) > p:nth-of-type(3)", // "three"
+      "div:nth-of-type(1) > p:nth-of-type(1)", // before "one"
+    );
+    expect(result).not.toBeNull();
+    expect(result!.html).not.toContain("<html");
+    expect(result!.html).not.toContain("<body");
+
+    const doc = new DOMParser().parseFromString(result!.html, "text/html");
+    const order = Array.from(doc.body.querySelectorAll("p")).map((p) => p.textContent);
+    expect(order).toEqual(["three", "one", "two"]);
+  });
+
+  it("returns null when target and before-sibling don't share a parent (stale beforeShadowPath)", () => {
+    const html = `<div id="a"><p>x</p></div><div id="b"><p>y</p></div>`;
+    const result = applyEmbedElementReorder(
+      html,
+      "div:nth-of-type(1) > div:nth-of-type(1) > p:nth-of-type(1)", // p inside div#a
+      "div:nth-of-type(1) > div:nth-of-type(2) > p:nth-of-type(1)", // p inside div#b
+    );
+    expect(result).toBeNull();
+  });
+
+  it("returns null for a no-op reorder (element already immediately before the target sibling)", () => {
+    const html = `<head></head><body><p>one</p><p>two</p></body>`;
+    const result = applyEmbedElementReorder(
+      html,
+      "div:nth-of-type(1) > p:nth-of-type(1)", // "one" is already right before "two"
+      "div:nth-of-type(1) > p:nth-of-type(2)",
+    );
+    expect(result).toBeNull();
+  });
+
+  it("returns null for a no-op reorder onto the end when the element is already last", () => {
+    const html = `<head></head><body><p>one</p><p>two</p></body>`;
+    const result = applyEmbedElementReorder(html, "div:nth-of-type(1) > p:nth-of-type(2)", null);
+    expect(result).toBeNull();
+  });
+
+  it("returns null when the target path resolves to the source <body> itself", () => {
+    const html = `<html><head></head><body><p>one</p><p>two</p></body></html>`;
+    const result = applyEmbedElementReorder(html, "div:nth-of-type(1)", "div:nth-of-type(1) > body:nth-of-type(1) > p:nth-of-type(1)");
+    expect(result).toBeNull();
+  });
+
+  it("returns null when beforeShadowPath resolves to the source <body> itself", () => {
+    const html = `<html><head></head><body><p>one</p><p>two</p></body></html>`;
+    const result = applyEmbedElementReorder(html, "div:nth-of-type(1) > body:nth-of-type(1) > p:nth-of-type(1)", "div:nth-of-type(1)");
+    expect(result).toBeNull();
+  });
+
+  it("returns null for an unresolvable target path, leaving html untouched", () => {
+    const html = `<div><p>hi</p></div>`;
+    const result = applyEmbedElementReorder(html, "div:nth-of-type(1) > span:nth-of-type(1)", null);
+    expect(result).toBeNull();
+    expect(html).toBe(`<div><p>hi</p></div>`);
+  });
+
+  it("returns null for an unresolvable beforeShadowPath, leaving html untouched", () => {
+    const html = `<div><p>a</p><p>b</p></div>`;
+    const result = applyEmbedElementReorder(
+      html,
+      "div:nth-of-type(1) > div:nth-of-type(1) > p:nth-of-type(1)", // "a" (resolves fine)
+      "div:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1)", // no such element
+    );
+    expect(result).toBeNull();
+    expect(html).toBe(`<div><p>a</p><p>b</p></div>`);
   });
 });
 

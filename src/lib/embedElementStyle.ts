@@ -17,7 +17,7 @@
  * matching `embedElementPicker.ts`.
  */
 
-import { resolveElementPath } from "./embedElementPicker";
+import { buildElementPath, resolveElementPath } from "./embedElementPicker";
 import { cssColorToHex, isTransparentColor } from "./htmlToDesign/colorParsing";
 
 export interface EmbedElementStyleSnapshot {
@@ -267,22 +267,50 @@ function hasOpenTag(html: string, tag: string): boolean {
 }
 
 /**
+ * Serialize `doc` (a DOMParser round-trip of `html`) back to a string,
+ * preserving the *shape* of the original `html` rather than always emitting
+ * a full document or always a fragment: `htmlContent` round-trips through
+ * this repeatedly (each panel edit/reorder calls its owning function again
+ * against its own previous output), and an embed's mounting behavior
+ * depends on which of `<html>`/`<body>`/bare-fragment shape it has
+ * (`hasBodyTargetedStyles`/`mountHtmlWithBodyStyles` above) — silently
+ * promoting a fragment to a full document (or vice versa) on the first edit
+ * would change how every subsequent mount behaves, not just the one element
+ * that edit touched.
+ *
+ * Shared by `applyEmbedElementEdit` and `applyEmbedElementReorder` — both
+ * round-trip through the same DOMParser dance and must agree on shape, so
+ * this is deliberately the one place that decides it (a CI dup-check gate
+ * forbids re-deriving it a second time).
+ */
+function serializePreservingShape(html: string, doc: Document): string {
+  if (hasOpenTag(html, "html")) {
+    // Full document: preserve a leading DOCTYPE (DOMParser doesn't include
+    // it in `documentElement.outerHTML`) and re-serialize the whole tree.
+    const doctypeMatch = /^\s*<!doctype[^>]*>/i.exec(html);
+    return (doctypeMatch ? doctypeMatch[0] : "") + doc.documentElement.outerHTML;
+  }
+  if (hasOpenTag(html, "body")) {
+    // Body-only fragment (with or without a <head>): keep that shape rather
+    // than promoting to a full <html> document.
+    // Head content survives either way: DOMParser hoists leading
+    // <style>/<meta>/<link> into `doc.head` even when the source string never
+    // wrote a <head> tag, so dropping it whenever the tag is absent would
+    // silently delete the screen's stylesheet on the first element edit.
+    const headPart = hasOpenTag(html, "head") ? `<head>${doc.head.innerHTML}</head>` : doc.head.innerHTML;
+    return headPart + doc.body.outerHTML;
+  }
+  // Bare content fragment: no wrapper tags to preserve at all.
+  return doc.head.innerHTML + doc.body.innerHTML;
+}
+
+/**
  * Apply an edit to the element at `shadowPath` inside `html` (an embed
  * node's `htmlContent`, NOT the live DOM), returning the updated html plus
  * the changed element's own `outerHTML`. Returns `null` — leaving `html`
  * untouched — when the path doesn't resolve to anything, so a stale path
  * (element removed/reordered since the path was picked) can never silently
  * edit the wrong element.
- *
- * Serialization deliberately preserves the *shape* of the original string
- * rather than always emitting a full document or always a fragment:
- * `htmlContent` round-trips through this function repeatedly (each panel
- * edit calls it again against its own previous output), and an embed's
- * mounting behavior depends on which of `<html>`/`<body>`/bare-fragment shape
- * it has (`hasBodyTargetedStyles`/`mountHtmlWithBodyStyles` above) — silently
- * promoting a fragment to a full document (or vice versa) on the first edit
- * would change how every subsequent mount behaves, not just the one element
- * this call touched.
  */
 export function applyEmbedElementEdit(
   html: string,
@@ -336,28 +364,119 @@ export function applyEmbedElementEdit(
   }
 
   const outerHtml = target.outerHTML;
+  return { html: serializePreservingShape(html, doc), outerHtml };
+}
 
-  let serialized: string;
-  if (hasOpenTag(html, "html")) {
-    // Full document: preserve a leading DOCTYPE (DOMParser doesn't include
-    // it in `documentElement.outerHTML`) and re-serialize the whole tree.
-    const doctypeMatch = /^\s*<!doctype[^>]*>/i.exec(html);
-    serialized = (doctypeMatch ? doctypeMatch[0] : "") + doc.documentElement.outerHTML;
-  } else if (hasOpenTag(html, "body")) {
-    // Body-only fragment (with or without a <head>): keep that shape rather
-    // than promoting to a full <html> document.
-    // Head content survives either way: DOMParser hoists leading
-    // <style>/<meta>/<link> into `doc.head` even when the source string never
-    // wrote a <head> tag, so dropping it whenever the tag is absent would
-    // silently delete the screen's stylesheet on the first element edit.
-    const headPart = hasOpenTag(html, "head")
-      ? `<head>${doc.head.innerHTML}</head>`
-      : doc.head.innerHTML;
-    serialized = headPart + doc.body.outerHTML;
-  } else {
-    // Bare content fragment: no wrapper tags to preserve at all.
-    serialized = doc.head.innerHTML + doc.body.innerHTML;
+/**
+ * Translate a shadow-relative path that was resolved AGAINST the source
+ * html (i.e. the inverse of `shadowPathToSourcePath`): re-prepend whatever
+ * synthetic-wrapper prefix `shadowPathToSourcePath` stripped off
+ * `originalShadowPath`, so a freshly-computed source path (e.g. from
+ * `buildElementPath(target, doc.body)` after a reorder) becomes a path
+ * that resolves against the live shadow DOM again via
+ * `findLiveEmbedElement`/`resolveElementPath`.
+ *
+ * The prefix is derived from `originalShadowPath` alone — never from
+ * `newSourcePath` — because it records a fact about how THIS embed's html
+ * is mounted (container div, plus a synthetic `<body>` iff the source has
+ * body-targeted styles), which doesn't change just because the element
+ * moved. The one exception is when `newSourcePath` is itself id-anchored:
+ * `shadowPathToSourcePath` treats a `#id` anchor as already resolving
+ * identically under both the shadow root and the source `<body>` (nothing
+ * was ever stripped for it), so it's returned unchanged rather than
+ * prefixed — prefixing it would produce an unresolvable path.
+ */
+export function sourcePathToShadowPath(originalShadowPath: string, newSourcePath: string): string {
+  if (newSourcePath.startsWith("#")) return newSourcePath;
+
+  const segments = originalShadowPath.split(" > ");
+  const first = segments[0];
+  if (!first || first.startsWith("#") || first !== CONTENT_CONTAINER_SEGMENT) {
+    // The original path was itself an id anchor (nothing was ever stripped
+    // off it) or malformed — either way there's no synthetic prefix to
+    // reattach.
+    return newSourcePath;
   }
 
-  return { html: serialized, outerHtml };
+  const hasSyntheticBody = segments[1] === SYNTHETIC_BODY_SEGMENT;
+  const prefix = hasSyntheticBody
+    ? `${CONTENT_CONTAINER_SEGMENT} > ${SYNTHETIC_BODY_SEGMENT}`
+    : CONTENT_CONTAINER_SEGMENT;
+  return newSourcePath ? `${prefix} > ${newSourcePath}` : prefix;
+}
+
+/**
+ * Move the element at `shadowPath` to just before the element at
+ * `beforeShadowPath` (or to the end of its parent, when `beforeShadowPath`
+ * is `null`) inside `html` — the DOM-mutation half of the embed element
+ * sortable drag (see `embedElementSortable.ts` for the "where would it go"
+ * half). Returns `null` — leaving `html` untouched — when:
+ *
+ * - either path fails to resolve (stale path);
+ * - the target resolves to the source `<body>` itself, or `beforeShadowPath`
+ *   does — the body can't be reordered relative to its own children, and
+ *   isn't one of them (mirrors `applyEmbedElementEdit`'s "" source-path
+ *   handling);
+ * - the target and the `before` element don't share a parent in the parsed
+ *   document — a stale `beforeShadowPath` computed before some other edit
+ *   reshuffled the tree could otherwise silently reparent the element
+ *   instead of just reordering it, which this function never does;
+ * - the move is a no-op BY RAW DOM ADJACENCY (the element's next sibling in
+ *   the parsed document is already `beforeEl`) — a no-op "successful" write
+ *   would be indistinguishable from an actual move to a caller that only
+ *   checks for `null`, and the drag gesture relies on `null` here meaning
+ *   "just revert the visual-only transform, there's nothing to commit".
+ *   This check is deliberately mechanical, unlike `isNoOpSlot` in
+ *   `embedElementSortable.ts`: a `DOMParser` document has no layout or
+ *   `getComputedStyle`, so this function has no way to know which siblings
+ *   are in-flow and which aren't — only the live shadow DOM does. The drag
+ *   gesture is expected to have already called `isNoOpSlot` against the live
+ *   DOM before ever reaching this function, so by the time `beforeShadowPath`
+ *   gets here it always names an in-flow candidate (or is `null`), and raw
+ *   adjacency and in-flow adjacency agree.
+ */
+export function applyEmbedElementReorder(
+  html: string,
+  shadowPath: string,
+  beforeShadowPath: string | null,
+): { html: string; outerHtml: string; newPath: string } | null {
+  const sourcePath = shadowPathToSourcePath(shadowPath);
+  if (sourcePath === null || sourcePath === "") return null;
+
+  const beforeSourcePath = beforeShadowPath === null ? null : shadowPathToSourcePath(beforeShadowPath);
+  if (beforeShadowPath !== null && (beforeSourcePath === null || beforeSourcePath === "")) {
+    return null;
+  }
+
+  let doc: Document;
+  try {
+    doc = new DOMParser().parseFromString(html, "text/html");
+  } catch {
+    return null;
+  }
+
+  const target = resolveElementPath(doc.body, sourcePath) as HTMLElement | null;
+  if (!target) return null;
+
+  const beforeEl =
+    beforeSourcePath === null ? null : (resolveElementPath(doc.body, beforeSourcePath) as HTMLElement | null);
+  if (beforeSourcePath !== null && !beforeEl) return null;
+  if (beforeEl === target) return null;
+
+  const parent = target.parentNode;
+  if (!parent) return null;
+  if (beforeEl && beforeEl.parentNode !== parent) return null;
+
+  const alreadyAtSlot = beforeEl
+    ? target.nextElementSibling === beforeEl
+    : target.nextElementSibling === null;
+  if (alreadyAtSlot) return null;
+
+  parent.insertBefore(target, beforeEl);
+
+  const outerHtml = target.outerHTML;
+  const newSourcePath = buildElementPath(target, doc.body);
+  const newPath = sourcePathToShadowPath(shadowPath, newSourcePath);
+
+  return { html: serializePreservingShape(html, doc), outerHtml, newPath };
 }

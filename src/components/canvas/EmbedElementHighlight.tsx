@@ -84,6 +84,56 @@ function resolveElementBox(embedId: string, path: string): ElementBox | null {
   };
 }
 
+/** Convert a sortable drop indicator's rect — CLIENT coordinates, as
+ * published by `EmbedLayer`'s drag gesture via `setDropIndicator` — into
+ * this overlay's canvas-relative coordinate space, the same way
+ * `resolveElementBox` does for hover/selection boxes: subtract the
+ * `[data-canvas]` container's own client rect. `embedId` locates that
+ * container via the dragged embed's host, exactly like `resolveElementBox`.
+ * Returns null when the embed host isn't currently resolvable (e.g. it was
+ * unmounted mid-drag). */
+function resolveDropIndicatorBox(
+  embedId: string,
+  indicator: { left: number; top: number; width: number; height: number },
+): { left: number; top: number; width: number; height: number } | null {
+  const host = document.querySelector<HTMLElement>(`[data-embed-id="${CSS.escape(embedId)}"]`);
+  if (!host) return null;
+  const origin = (host.closest("[data-canvas]") as HTMLElement | null) ?? document.body;
+  const originRect = origin.getBoundingClientRect();
+  return {
+    left: indicator.left - originRect.left,
+    top: indicator.top - originRect.top,
+    width: indicator.width,
+    height: indicator.height,
+  };
+}
+
+/** The insertion-line drawn while a sortable element drag is in flight (see
+ * `embedElementSortable.ts`'s `DropSlot.indicator`). `box` is already
+ * converted into this overlay's canvas-relative coordinate space by
+ * `resolveDropIndicatorBox`. */
+function DropIndicatorLine({
+  box,
+}: {
+  box: { left: number; top: number; width: number; height: number };
+}) {
+  return (
+    <div
+      data-embed-drop-indicator
+      style={{
+        position: "absolute",
+        left: box.left,
+        top: box.top,
+        width: box.width,
+        height: box.height,
+        background: "#0d99ff",
+        borderRadius: 1,
+        pointerEvents: "none",
+      }}
+    />
+  );
+}
+
 /** Size badge under a selection box, visually matching the native
  * selection's Pixi-drawn size label (drawSizeLabel in
  * src/pixi/selectionOverlay/drawSelection.ts): centered horizontally under
@@ -202,11 +252,11 @@ function OutlineBox({
  * just the active embed's node, so unrelated scene mutations don't
  * re-render this component either.
  *
- * The `dragVersion` selector below is the same kind of narrow, always-safe
- * subscription as `nodesById`: it's a plain Zustand selector (not the
- * imperative `useEffect` subscriptions above), so it only re-renders this
- * component when a drag is actually in progress and `dragVersion` itself
- * changes — never on every idle render, and it costs nothing while idle.
+ * The `dragVersion`/`dropIndicator` selectors below are the same kind of
+ * narrow, always-safe subscription as `nodesById`: plain Zustand selectors
+ * (not the imperative `useEffect` subscriptions above), so they only
+ * re-render this component when a drag is actually in progress — never on
+ * every idle render, and they cost nothing while idle.
  */
 export function EmbedElementHighlight() {
   const editorMode = useEditorModeStore((s) => s.mode);
@@ -217,6 +267,10 @@ export function EmbedElementHighlight() {
   // and size badge keep following the element — see the field's doc comment
   // in embedPickerStore.ts for why no other subscription here covers this.
   useEmbedPickerStore((s) => s.dragVersion);
+  // Narrow, always-safe selector (same reasoning as `dragVersion` above):
+  // only re-renders while a sortable drag is actually publishing an
+  // indicator rect, never on every idle render.
+  const dropIndicator = useEmbedPickerStore((s) => s.dropIndicator);
   const activeEmbedNode = useSceneStore((s) =>
     selection ? s.nodesById[selection.embedId] : undefined,
   );
@@ -270,8 +324,13 @@ export function EmbedElementHighlight() {
     selection && activeEmbedNode
       ? resolveElementBox(selection.embedId, selection.path)
       : null;
+  const dropIndicatorEmbedId = pickingEmbedId ?? selection?.embedId ?? null;
+  const indicatorBox =
+    dropIndicator && dropIndicatorEmbedId
+      ? resolveDropIndicatorBox(dropIndicatorEmbedId, dropIndicator)
+      : null;
 
-  if (!hoverBox && !selectionBox) return null;
+  if (!hoverBox && !selectionBox && !indicatorBox) return null;
 
   // The tag label is a *picking* affordance: it tells you what you're about
   // to select. Once an element IS selected, hovering it again adds nothing —
@@ -307,6 +366,7 @@ export function EmbedElementHighlight() {
           label={hoverIsSelected ? undefined : hoverBox.tagName}
         />
       )}
+      {indicatorBox && <DropIndicatorLine box={indicatorBox} />}
     </div>
   );
 }

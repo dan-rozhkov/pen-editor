@@ -399,6 +399,56 @@ describe("<EmbedElementHighlight />", () => {
     expect(badge?.textContent).toBe("100 × 50");
   });
 
+  it("draws the drop indicator line from dropIndicator, converted into canvas-relative coordinates", () => {
+    mountEmbedDom();
+    // Canvas origin offset from the viewport, so the conversion from the
+    // CLIENT coordinates `dropIndicator` carries actually has to subtract
+    // something for the test to be meaningful.
+    stubRects(rect(50, 100, 400, 300), rect(0, 0, 0, 0));
+
+    useEmbedPickerStore.getState().startPicking("embed1");
+    useEmbedPickerStore.getState().setDropIndicator({ left: 70, top: 130, width: 60, height: 2 });
+
+    const { container } = render(<EmbedElementHighlight />);
+
+    const indicator = container.querySelector<HTMLElement>("[data-embed-drop-indicator]");
+    expect(indicator).toBeTruthy();
+    expect(indicator!.style.left).toBe("20px"); // 70 - 50
+    expect(indicator!.style.top).toBe("30px"); // 130 - 100
+    expect(indicator!.style.width).toBe("60px");
+    expect(indicator!.style.height).toBe("2px");
+  });
+
+  it("draws the drop indicator even with no hover and no selection", () => {
+    mountEmbedDom();
+    stubRects(rect(0, 0, 400, 300), rect(0, 0, 0, 0));
+
+    useEmbedPickerStore.getState().startPicking("embed1");
+    useEmbedPickerStore.getState().setDropIndicator({ left: 10, top: 10, width: 60, height: 2 });
+
+    const { container } = render(<EmbedElementHighlight />);
+
+    expect(container.querySelector("[data-embed-drop-indicator]")).toBeTruthy();
+    expect(container.querySelector('[data-embed-element-box][data-kind="hover"]')).toBeNull();
+    expect(container.querySelector('[data-embed-element-box][data-kind="selection"]')).toBeNull();
+  });
+
+  it("renders nothing once picking stops and the indicator is cleared", () => {
+    mountEmbedDom();
+    stubRects(rect(0, 0, 400, 300), rect(0, 0, 0, 0));
+
+    useEmbedPickerStore.getState().startPicking("embed1");
+    useEmbedPickerStore.getState().setDropIndicator({ left: 10, top: 10, width: 60, height: 2 });
+
+    const { container, rerender } = render(<EmbedElementHighlight />);
+    expect(container.querySelector("[data-embed-drop-indicator]")).toBeTruthy();
+
+    act(() => useEmbedPickerStore.getState().stopPicking());
+    rerender(<EmbedElementHighlight />);
+
+    expect(container.querySelector("[data-embed-element-highlight]")).toBeNull();
+  });
+
   it("recomputes the box when the embed's internal content scrolls", () => {
     const { canvas } = mountEmbedDom();
     const canvasRect = rect(0, 0, 400, 300);

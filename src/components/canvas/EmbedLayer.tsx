@@ -20,8 +20,15 @@ import {
   describeEmbedElement,
   resolvePickableElement,
 } from "@/lib/embedElementPicker";
-import { applyEmbedElementEdit } from "@/lib/embedElementStyle";
-import { captureDragBase, computeDragStyles, type DragBase } from "@/lib/embedElementDrag";
+import { applyEmbedElementReorder } from "@/lib/embedElementStyle";
+import {
+  buildDropSlots,
+  collectSortCandidates,
+  isSortable,
+  pickDropSlot,
+  isNoOpSlot,
+  type DropSlot,
+} from "@/lib/embedElementSortable";
 
 /** Screen-px movement past which a pointerdown-then-move becomes a drag
  * rather than a click. */
@@ -31,7 +38,29 @@ interface ElementDragState {
   el: HTMLElement;
   /** Shadow-relative path to `el`, as produced by `buildElementPath`. */
   path: string;
-  base: DragBase;
+  /** `el`'s in-flow candidate siblings, computed ONCE — right when the drag
+   * crosses `DRAG_THRESHOLD_PX` — since which siblings are in-flow is a
+   * function of computed style, and computed styles don't change over the
+   * course of a gesture (see `collectSortCandidates`'s doc comment). `null`
+   * until the threshold is crossed. Slots themselves are rebuilt from this
+   * on EVERY `pointermove` via `buildDropSlots`, not cached: `forwardWheel`
+   * deliberately keeps zoom/pan (and therefore every sibling's rect) live
+   * while picking, so a slot list computed once would silently go stale —
+   * the indicator would draw between the wrong siblings, and a commit would
+   * follow it. */
+  candidates: Element[] | null;
+  /** `el`'s own rect, captured in the SAME moment as `candidates` — before
+   * the visual-only ghost transform below is ever applied to `el`. Passed to
+   * `buildDropSlots` every move only to decide the indicator axis at the
+   * edges of the candidate list (see `embedElementSortable.ts`'s
+   * `determineAxis`); using a live (transformed) rect there would drift the
+   * axis decision as the drag progressed. Frozen, not re-measured — unlike
+   * the *candidates'* rects, which `buildDropSlots` re-reads every frame. */
+  elRect: DOMRect | null;
+  /** The slot the pointer is currently over, or null when it isn't over any
+   * slot (e.g. `candidates` is null, or empty). Read by `handleDragEnd` to
+   * decide what to commit. */
+  currentSlot: DropSlot | null;
   startClientX: number;
   startClientY: number;
   /** Only true once the pointer has moved past `DRAG_THRESHOLD_PX` — before
@@ -40,6 +69,16 @@ interface ElementDragState {
   /** `el`'s original `style` attribute (or null if it had none), restored on
    * cancel/Escape. */
   originalStyle: string | null;
+  /** `el`'s own computed `transform` at the moment the drag crossed the
+   * threshold, or `""` when it computes to `none`. The ghost drag below must
+   * not simply overwrite `transform` with its own `translate(...)` — that
+   * would clobber whatever the element's own CSS was expressing (e.g. a
+   * centering `translateX(-50%)`, or a `rotate(...)`), visibly snapping the
+   * element to an untransformed position the instant the drag starts.
+   * Composed as `translate(dx, dy) ${baseTransform}` (translate OUTSIDE, so
+   * the drag offset stays in screen axes regardless of what the base
+   * transform does to the element's own coordinate system). */
+  baseTransform: string;
   /** The `pointerId` that started this drag — move/up/cancel from any other
    * pointer (a second finger/stylus landing anywhere while this drag is in
    * flight) must be ignored rather than ending or steering THIS drag. */
@@ -104,9 +143,21 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
     return () => { contentRef.current = null; };
   }, [position, nodeId, htmlContent, width, height]);
 
-  // Element-picking mode: hover highlights, click selects. Guarded against
-  // inline-edit mode (isActive) — that mode already owns pointer events on
-  // the host for real interaction with the embedded page.
+  // Element-picking mode: hover highlights, click selects, and a drag past
+  // the threshold REORDERS the element among its in-flow siblings — it does
+  // NOT reposition it via coordinates. A free coordinate drag (the gesture's
+  // previous form) wrote `position`/`left`/`top`/`margin`, which took the
+  // element out of the layout its own CSS specified and broke whatever
+  // alignment that CSS was expressing; sortable reordering never writes a
+  // coordinate at all; the only committed mutation is moving the node in the
+  // DOM (`applyEmbedElementReorder` in `embedElementStyle.ts`). Out-of-flow
+  // elements (`position: absolute`/`fixed`) are excluded from the drag
+  // entirely (see `isSortable` in `embedElementSortable.ts`): such an
+  // element is placed relative to its containing block, not its position in
+  // the DOM, so reordering it among siblings would change paint order but
+  // move nothing on screen — the drag would look like a no-op. Guarded
+  // against inline-edit mode (isActive) — that mode already owns pointer
+  // events on the host for real interaction with the embedded page.
   useEffect(() => {
     const host = hostRef.current;
     if (!host || !isPicking || isActive) return;
@@ -131,8 +182,13 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
     let suppressNextClick = false;
 
     const revertDrag = (d: ElementDragState) => {
+      // Restore the live element's original `style` attribute — undoes the
+      // visual-only transform/opacity `handleDragMove` applied below. This
+      // is a REVERT, never a commit: the sortable reorder itself is only
+      // ever written via `applyEmbedElementReorder` in `handleDragEnd`.
       if (d.originalStyle === null) d.el.removeAttribute("style");
       else d.el.setAttribute("style", d.originalStyle);
+      useEmbedPickerStore.getState().setDropIndicator(null);
       useEmbedPickerStore.getState().bumpDragVersion();
     };
 
@@ -157,6 +213,24 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
       if (!drag.dragging) {
         if (Math.hypot(dxScreen, dyScreen) <= DRAG_THRESHOLD_PX) return;
         drag.dragging = true;
+        // Capture the candidate siblings and `el`'s own rect NOW, before any
+        // visual transform is ever applied to `drag.el` — see the field doc
+        // comments on `ElementDragState.candidates`/`elRect`. Slots
+        // themselves are rebuilt from these every move, below.
+        drag.candidates = collectSortCandidates(drag.el);
+        drag.elRect = drag.el.getBoundingClientRect();
+        // Capture the element's own authored transform (if any) before it's
+        // overwritten by the ghost drag below — see
+        // `ElementDragState.baseTransform`.
+        const computedTransform = getComputedStyle(drag.el).transform;
+        drag.baseTransform = computedTransform === "none" ? "" : computedTransform;
+        // The dragged element itself gets `pointer-events: none` below, so
+        // from this point on `handleMove`'s `composedPath()[0]` resolves to
+        // whatever sibling is under the cursor — stop steering the hover
+        // highlight from that (see `handleMove`'s own gate) and clear
+        // whatever it was last set to, so the insertion-line indicator isn't
+        // joined by a hover box chasing the cursor across siblings.
+        useEmbedPickerStore.getState().setHoveredPath(null);
         // Only a drag that actually moved is cancellable — below the
         // threshold the gesture is still just a click, and Escape must keep
         // its normal meaning (exit the picker).
@@ -188,14 +262,42 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
       // the current zoom to get a delta in the content's own CSS px —
       // otherwise the element would visibly outrun (or lag) the cursor at
       // any zoom other than 100%.
+      // Known, deliberately unfixed cosmetic gap: `startClientX/Y` (the
+      // ghost's zero point) was captured at pointerdown under whatever zoom
+      // was active then. If the zoom changes mid-drag (the wheel forwarding
+      // above keeps that live on purpose), this delta — and therefore the
+      // ghost's on-screen offset from the cursor — no longer matches the
+      // CURRENT zoom, so the ghost drifts away from the pointer. Nothing
+      // about the COMMIT is affected: the drop slot below is still picked
+      // from the live cursor position against live sibling rects, so the
+      // wrong thing never gets reordered — only the translucent ghost looks
+      // slightly offset while dragging through a zoom change.
       const zoom = useViewportStore.getState().scale || 1;
       const dx = dxScreen / zoom;
       const dy = dyScreen / zoom;
 
-      const styles = computeDragStyles(drag.base, dx, dy);
-      for (const [prop, value] of Object.entries(styles)) {
-        drag.el.style.setProperty(prop, value);
-      }
+      // Visual-only: the element follows the cursor via a temporary
+      // transform, never committed (see `revertDrag`) — the actual reorder
+      // is a DOM move among siblings, decided by the nearest drop slot, not
+      // a coordinate offset. Composed with `baseTransform` (translate
+      // OUTSIDE it) rather than overwriting `transform` outright — see the
+      // field's doc comment on `ElementDragState.baseTransform`.
+      const translate = `translate(${dx}px, ${dy}px)`;
+      drag.el.style.setProperty(
+        "transform",
+        drag.baseTransform ? `${translate} ${drag.baseTransform}` : translate,
+      );
+      drag.el.style.setProperty("opacity", "0.75");
+      drag.el.style.setProperty("pointer-events", "none");
+
+      // Slots are rebuilt from the frozen `candidates`/`elRect` on EVERY
+      // move, not cached — see `ElementDragState.candidates`'s doc comment
+      // for why (zoom/pan stay live while picking, so a stale slot list
+      // would draw the indicator, and commit, against the wrong siblings).
+      const slots = drag.candidates && drag.elRect ? buildDropSlots(drag.candidates, drag.elRect) : [];
+      const slot = pickDropSlot(slots, e.clientX, e.clientY);
+      drag.currentSlot = slot;
+      useEmbedPickerStore.getState().setDropIndicator(slot?.indicator ?? null);
       useEmbedPickerStore.getState().bumpDragVersion();
     };
 
@@ -207,19 +309,21 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
 
       suppressNextClick = true;
 
+      // Always revert the live element's visual-only transform FIRST —
+      // whatever happens below (permission gate, staleness, no-op slot,
+      // unresolvable path), the temporary transform/opacity must never be
+      // what's left on screen or what a subsequent read of `style` sees.
+      revertDrag(d);
+
       // Permission gate, mirroring EmbedElementProperties.applyEdit's
       // `if (readOnly) return;` and EmbedElementHighlight's `canEditScene`
       // gate — a picker drag must not be able to write to the scene in a
-      // non-editable mode. Revert the live element's visual drag either way
-      // so it doesn't end up sitting displaced with nothing committed.
-      if (!canEditScene(useEditorModeStore.getState().mode)) {
-        revertDrag(d);
-        return;
-      }
+      // non-editable mode.
+      if (!canEditScene(useEditorModeStore.getState().mode)) return;
 
       // Commit as ONE undo step: read the current htmlContent, apply the
-      // final style to it, and write it back — never the per-frame styles
-      // mutated onto the live element above.
+      // reorder to it, and write it back — never the live element's
+      // per-frame transform mutated above.
       const currentHtml = useSceneStore.getState().nodesById[nodeId] as EmbedNode | undefined;
       const html = currentHtml?.htmlContent ?? "";
 
@@ -229,27 +333,27 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
       // undo. `d.el` can then be a detached node, and even when it's still
       // connected, `d.path`'s `nth-of-type` positions may now resolve to a
       // DIFFERENT element in the new html. Bail without writing rather than
-      // silently repositioning whatever now occupies that path.
-      if (!d.el.isConnected || html !== d.htmlAtPointerDown) {
-        revertDrag(d);
-        return;
-      }
+      // silently reordering whatever now occupies that path.
+      if (!d.el.isConnected || html !== d.htmlAtPointerDown) return;
 
-      const dxScreen = e.clientX - d.startClientX;
-      const dyScreen = e.clientY - d.startClientY;
-      const zoom = useViewportStore.getState().scale || 1;
-      const styles = computeDragStyles(d.base, dxScreen / zoom, dyScreen / zoom);
+      const slot = d.currentSlot;
+      if (!slot || isNoOpSlot(d.el, slot)) return; // nothing to commit
 
-      const result = applyEmbedElementEdit(html, d.path, { styles });
-      if (!result) {
-        revertDrag(d);
-        return;
-      }
+      // `slot.before` is a live shadow-DOM element; translate it to the
+      // shadow-relative path `applyEmbedElementReorder` expects (mirroring
+      // `d.path`, built the same way at pointerdown).
+      const beforeShadowPath = slot.before ? buildElementPath(slot.before, shadowRoot()!) : null;
+      if (slot.before && !beforeShadowPath) return; // no anchor to resolve back to
+
+      const result = applyEmbedElementReorder(html, d.path, beforeShadowPath);
+      if (!result) return;
       // ORDER MATTERS — see EmbedElementProperties.tsx's `applyEdit`:
       // `noteSelectionEdit` must land before `updateNode` writes the new
       // `htmlContent`, or `useEmbedPickerLifecycle`'s synchronous staleness
       // check clears the selection it was meant to keep alive.
-      useEmbedPickerStore.getState().noteSelectionEdit(result.html, result.outerHtml);
+      useEmbedPickerStore
+        .getState()
+        .noteSelectionEdit(result.html, result.outerHtml, result.newPath);
       useSceneStore.getState().updateNode(nodeId, { htmlContent: result.html });
     };
 
@@ -272,7 +376,7 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
      * mount, long before picking starts. It therefore always ran first and
      * had already called `exitContainer()` -> `stopPicking()` — so Escape
      * cancelled the drag AND threw the user out of the picker. Caught live
-     * by `e2e/embed-element-drag.spec.ts`. */
+     * by `e2e/embed-element-sortable.spec.ts`. */
     const cancelElementDrag = () => {
       if (!drag) return;
       const d = drag;
@@ -315,24 +419,32 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
       if (!root) return;
       const target = e.composedPath()[0] ?? null;
       const el = resolvePickableElement(target, root);
-      // Only an HTMLElement can be dragged this way: the gesture positions
-      // via CSS `left`/`top`/margin, which don't apply to the internals of
-      // an inline `<svg>` (an SVGElement) at all — a deliberate limitation,
-      // not a bug.
+      // Only an HTMLElement can be dragged this way: sortability is decided
+      // by CSS `position`/layout among *element* siblings, neither of which
+      // means anything for the internals of an inline `<svg>` (an
+      // SVGElement) — a deliberate limitation, not a bug.
       if (!el || !(el instanceof HTMLElement)) return;
       const path = buildElementPath(el, root);
       if (!path) return; // no anchor to resolve back to later — see handleClick
 
-      const base = captureDragBase(el, getComputedStyle(el));
+      // Out-of-flow elements (position: absolute/fixed) and elements with no
+      // other in-flow sibling to reorder against don't start a drag at all —
+      // click-select (handleClick, below) still runs normally on release.
+      // See `isSortable`'s doc comment for why.
+      if (!isSortable(el, getComputedStyle(el))) return;
+
       const currentHtml = useSceneStore.getState().nodesById[nodeId] as EmbedNode | undefined;
       drag = {
         el,
         path,
-        base,
+        candidates: null,
+        elRect: null,
+        currentSlot: null,
         startClientX: e.clientX,
         startClientY: e.clientY,
         dragging: false,
         originalStyle: el.getAttribute("style"),
+        baseTransform: "",
         pointerId: e.pointerId,
         htmlAtPointerDown: currentHtml?.htmlContent ?? "",
       };
@@ -345,6 +457,15 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
     };
 
     const handleMove = (e: PointerEvent) => {
+      // While a sortable drag is in flight the dragged element itself has
+      // `pointer-events: none` (see `handleDragMove`), so `composedPath()[0]`
+      // resolves to whichever SIBLING the cursor happens to be over instead —
+      // without this gate, `setHoveredPath` would fire on every sibling the
+      // cursor crosses, drawing a hover box that chases the cursor on top of
+      // the insertion-line indicator. `hoveredPath` is reset to null once, at
+      // the moment the drag crosses the threshold (see `handleDragMove`), so
+      // there's nothing stale left over once the drag ends either.
+      if (drag?.dragging) return;
       const target = e.composedPath()[0] ?? null;
       if (target === lastMoveTarget) return;
       lastMoveTarget = target;

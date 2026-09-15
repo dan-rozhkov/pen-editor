@@ -43,8 +43,14 @@ interface EmbedPickerState {
    * mount — long before picking ever starts — so it always wins the race and
    * would have already run `exitContainer()`/`stopPicking()` (dropping the
    * user out of the picker entirely) before our listener could consume the
-   * event. Caught live by `e2e/embed-element-drag.spec.ts`. */
+   * event. Caught live by `e2e/embed-element-sortable.spec.ts`. */
   cancelElementDrag: (() => void) | null;
+  /** The insertion-line rect for the sortable drag currently in flight (see
+   * `embedElementSortable.ts`'s `DropSlot.indicator`), in CLIENT
+   * coordinates — `null` whenever no drag is in progress or the pointer
+   * isn't currently over any drop slot. `EmbedElementHighlight` reads this
+   * to draw the line; `EmbedLayer`'s drag gesture is the only writer. */
+  dropIndicator: { left: number; top: number; width: number; height: number } | null;
 
   startPicking: (embedId: string) => void;
   stopPicking: () => void;
@@ -55,14 +61,22 @@ interface EmbedPickerState {
   selectElement: (selection: EmbedElementSelection, htmlAtPick?: string) => void;
   clearSelection: () => void;
   /** Called right BEFORE writing an element edit made from the properties
-   * panel into the scene, so the lifecycle check doesn't read it as a
-   * foreign html change and drop the selection. `outerHtml` refreshes the
-   * preview handed to the agent (see `describeEmbedElement`/
-   * `OUTER_HTML_MAX` in `embedElementPicker.ts`). No-op when there is no
-   * selection. */
-  noteSelectionEdit: (html: string, outerHtml?: string) => void;
+   * panel — or a sortable reorder — into the scene, so the lifecycle check
+   * doesn't read it as a foreign html change and drop the selection.
+   * `outerHtml` refreshes the preview handed to the agent (see
+   * `describeEmbedElement`/`OUTER_HTML_MAX` in `embedElementPicker.ts`).
+   * `newPath` updates `selection.path`: after a reorder the element's
+   * `nth-of-type` position among its siblings changes, so the OLD path
+   * would resolve to whatever now sits in the element's former slot rather
+   * than the element itself — every subsequent hover/highlight/edit call
+   * would silently target the wrong node without this. No-op when there is
+   * no selection. */
+  noteSelectionEdit: (html: string, outerHtml?: string, newPath?: string) => void;
   bumpDragVersion: () => void;
   setCancelElementDrag: (cancel: (() => void) | null) => void;
+  setDropIndicator: (
+    indicator: { left: number; top: number; width: number; height: number } | null,
+  ) => void;
   reset: () => void;
 }
 
@@ -73,6 +87,7 @@ export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
   selectionHtmlSnapshot: null,
   dragVersion: 0,
   cancelElementDrag: null,
+  dropIndicator: null,
 
   startPicking: (embedId) => {
     const { selection } = get();
@@ -88,7 +103,7 @@ export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
     });
   },
 
-  stopPicking: () => set({ pickingEmbedId: null, hoveredPath: null }),
+  stopPicking: () => set({ pickingEmbedId: null, hoveredPath: null, dropIndicator: null }),
 
   setHoveredPath: (path) => set({ hoveredPath: path }),
 
@@ -97,21 +112,24 @@ export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
 
   clearSelection: () => set({ selection: null, selectionHtmlSnapshot: null }),
 
-  noteSelectionEdit: (html, outerHtml) => {
+  noteSelectionEdit: (html, outerHtml, newPath) => {
     const { selection } = get();
     if (!selection) return;
     set({
       selectionHtmlSnapshot: html,
-      selection:
-        outerHtml !== undefined
-          ? { ...selection, outerHtml: truncateOuterHtml(outerHtml) }
-          : selection,
+      selection: {
+        ...selection,
+        ...(outerHtml !== undefined ? { outerHtml: truncateOuterHtml(outerHtml) } : null),
+        ...(newPath !== undefined ? { path: newPath } : null),
+      },
     });
   },
 
   bumpDragVersion: () => set((s) => ({ dragVersion: s.dragVersion + 1 })),
 
   setCancelElementDrag: (cancel) => set({ cancelElementDrag: cancel }),
+
+  setDropIndicator: (indicator) => set({ dropIndicator: indicator }),
 
   reset: () =>
     set({
@@ -120,5 +138,6 @@ export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
       selection: null,
       selectionHtmlSnapshot: null,
       cancelElementDrag: null,
+      dropIndicator: null,
     }),
 }));

@@ -114,14 +114,52 @@ describe("embedPickerStore", () => {
     expect(outerHtml.startsWith(longHtml.slice(0, 1200))).toBe(true);
   });
 
+  // A sortable reorder changes the element's `nth-of-type` position among
+  // its siblings, so the OLD path would resolve to whatever now sits in the
+  // element's former slot instead of the element itself — `newPath` is how
+  // `EmbedLayer`'s drag gesture keeps `selection.path` pointing at the right
+  // element after a commit.
+  it("noteSelectionEdit updates selection.path when newPath is given", () => {
+    useEmbedPickerStore.getState().selectElement(selectionFor("e1"), "<div>hi</div>");
+    useEmbedPickerStore
+      .getState()
+      .noteSelectionEdit("<div>edited</div>", "<div>edited</div>", "div:nth-of-type(3)");
+    const s = useEmbedPickerStore.getState();
+    expect(s.selection?.path).toBe("div:nth-of-type(3)");
+    expect(s.selection?.outerHtml).toBe("<div>edited</div>");
+  });
+
+  it("noteSelectionEdit leaves selection.path untouched when newPath is omitted", () => {
+    useEmbedPickerStore.getState().selectElement(selectionFor("e1"), "<div>hi</div>");
+    useEmbedPickerStore.getState().noteSelectionEdit("<div>edited</div>");
+    expect(useEmbedPickerStore.getState().selection?.path).toBe("div:nth-of-type(1)");
+  });
+
+  it("setDropIndicator sets and clears the indicator rect", () => {
+    const rect = { left: 1, top: 2, width: 3, height: 4 };
+    useEmbedPickerStore.getState().setDropIndicator(rect);
+    expect(useEmbedPickerStore.getState().dropIndicator).toEqual(rect);
+    useEmbedPickerStore.getState().setDropIndicator(null);
+    expect(useEmbedPickerStore.getState().dropIndicator).toBeNull();
+  });
+
+  it("stopPicking clears a live drop indicator", () => {
+    useEmbedPickerStore.getState().startPicking("e1");
+    useEmbedPickerStore.getState().setDropIndicator({ left: 0, top: 0, width: 1, height: 1 });
+    useEmbedPickerStore.getState().stopPicking();
+    expect(useEmbedPickerStore.getState().dropIndicator).toBeNull();
+  });
+
   it("reset clears everything", () => {
     useEmbedPickerStore.getState().startPicking("e1");
     useEmbedPickerStore.getState().setHoveredPath("p:nth-of-type(1)");
     useEmbedPickerStore.getState().selectElement(selectionFor("e1"));
+    useEmbedPickerStore.getState().setDropIndicator({ left: 0, top: 0, width: 1, height: 1 });
     useEmbedPickerStore.getState().reset();
     const s = useEmbedPickerStore.getState();
     expect(s.pickingEmbedId).toBeNull();
     expect(s.hoveredPath).toBeNull();
     expect(s.selection).toBeNull();
+    expect(s.dropIndicator).toBeNull();
   });
 });
