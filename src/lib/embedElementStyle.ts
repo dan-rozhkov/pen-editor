@@ -18,6 +18,7 @@
  */
 
 import { buildElementPath, resolveElementPath } from "./embedElementPicker";
+import { hasOpenTag, parseEmbedHtml, serializeEmbedDoc } from "./embedHtmlDocument";
 import { cssColorToHex, isTransparentColor } from "./htmlToDesign/colorParsing";
 
 export interface EmbedElementStyleSnapshot {
@@ -179,14 +180,17 @@ export function readEmbedElementSnapshot(el: Element): EmbedElementStyleSnapshot
 
 /** The container `<div>` `EmbedHost` (`EmbedLayer.tsx`) appends as the
  * ShadowRoot's sole child, and the `nth-of-type` segment `buildElementPath`
- * always produces for it — every non-id-anchored shadow path starts here. */
-const CONTENT_CONTAINER_SEGMENT = "div:nth-of-type(1)";
+ * always produces for it — every non-id-anchored shadow path starts here.
+ * Exported so `embedLayerTree.ts` can build shadow paths without retyping
+ * the literal (a jscpd duplication gate runs in CI). */
+export const CONTENT_CONTAINER_SEGMENT = "div:nth-of-type(1)";
 
 /** The segment for the synthetic `<body>` `mountHtmlWithBodyStyles` creates
  * inside the container when the source html has body-targeted styles (see
  * that function's doc comment). It's always the container's first (and, in
- * practice, only) `<body>`-tagged child. */
-const SYNTHETIC_BODY_SEGMENT = "body:nth-of-type(1)";
+ * practice, only) `<body>`-tagged child. Exported for the same reason as
+ * `CONTENT_CONTAINER_SEGMENT` above. */
+export const SYNTHETIC_BODY_SEGMENT = "body:nth-of-type(1)";
 
 /**
  * Translate a shadow-relative path (as produced by `buildElementPath`
@@ -234,6 +238,21 @@ export function shadowPathToSourcePath(shadowPath: string): string | null {
 }
 
 /**
+ * Look up the live ShadowRoot an embed's HTML is mounted into, by embed id.
+ * Shared by `findLiveEmbedElement` below and the layers panel (`LayerItem`),
+ * which needs the root itself (not just an element resolved against it) to
+ * call `describeEmbedElement`.
+ */
+export function findEmbedShadowRoot(embedId: string): ShadowRoot | null {
+  try {
+    const host = document.querySelector<HTMLElement>(`[data-embed-id="${CSS.escape(embedId)}"]`);
+    return host?.shadowRoot ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Find the live element a picker path refers to, inside the shadow DOM an
  * embed's HTML is mounted into. Takes the PICKER path (shadow-relative, not
  * translated) — this walks the same live tree `buildElementPath` walked
@@ -241,10 +260,9 @@ export function shadowPathToSourcePath(shadowPath: string): string | null {
  * host/shadow-root lookup.
  */
 export function findLiveEmbedElement(embedId: string, shadowPath: string): Element | null {
+  const root = findEmbedShadowRoot(embedId);
+  if (!root) return null;
   try {
-    const host = document.querySelector<HTMLElement>(`[data-embed-id="${CSS.escape(embedId)}"]`);
-    const root = host?.shadowRoot;
-    if (!root) return null;
     return resolveElementPath(root, shadowPath);
   } catch {
     return null;
@@ -259,51 +277,6 @@ export interface EmbedElementEdit {
   text?: string;
 }
 
-/** Does `html` (the raw, unparsed source string) contain a literal `<tag`
- * open, ignoring case and requiring a following whitespace/`>` so `<bodyx>`
- * doesn't false-match `<body`. */
-function hasOpenTag(html: string, tag: string): boolean {
-  return new RegExp(`<${tag}[\\s>]`, "i").test(html);
-}
-
-/**
- * Serialize `doc` (a DOMParser round-trip of `html`) back to a string,
- * preserving the *shape* of the original `html` rather than always emitting
- * a full document or always a fragment: `htmlContent` round-trips through
- * this repeatedly (each panel edit/reorder calls its owning function again
- * against its own previous output), and an embed's mounting behavior
- * depends on which of `<html>`/`<body>`/bare-fragment shape it has
- * (`hasBodyTargetedStyles`/`mountHtmlWithBodyStyles` above) — silently
- * promoting a fragment to a full document (or vice versa) on the first edit
- * would change how every subsequent mount behaves, not just the one element
- * that edit touched.
- *
- * Shared by `applyEmbedElementEdit` and `applyEmbedElementReorder` — both
- * round-trip through the same DOMParser dance and must agree on shape, so
- * this is deliberately the one place that decides it (a CI dup-check gate
- * forbids re-deriving it a second time).
- */
-function serializePreservingShape(html: string, doc: Document): string {
-  if (hasOpenTag(html, "html")) {
-    // Full document: preserve a leading DOCTYPE (DOMParser doesn't include
-    // it in `documentElement.outerHTML`) and re-serialize the whole tree.
-    const doctypeMatch = /^\s*<!doctype[^>]*>/i.exec(html);
-    return (doctypeMatch ? doctypeMatch[0] : "") + doc.documentElement.outerHTML;
-  }
-  if (hasOpenTag(html, "body")) {
-    // Body-only fragment (with or without a <head>): keep that shape rather
-    // than promoting to a full <html> document.
-    // Head content survives either way: DOMParser hoists leading
-    // <style>/<meta>/<link> into `doc.head` even when the source string never
-    // wrote a <head> tag, so dropping it whenever the tag is absent would
-    // silently delete the screen's stylesheet on the first element edit.
-    const headPart = hasOpenTag(html, "head") ? `<head>${doc.head.innerHTML}</head>` : doc.head.innerHTML;
-    return headPart + doc.body.outerHTML;
-  }
-  // Bare content fragment: no wrapper tags to preserve at all.
-  return doc.head.innerHTML + doc.body.innerHTML;
-}
-
 /**
  * Apply an edit to the element at `shadowPath` inside `html` (an embed
  * node's `htmlContent`, NOT the live DOM), returning the updated html plus
@@ -311,6 +284,11 @@ function serializePreservingShape(html: string, doc: Document): string {
  * untouched — when the path doesn't resolve to anything, so a stale path
  * (element removed/reordered since the path was picked) can never silently
  * edit the wrong element.
+ *
+ * Serialization deliberately preserves the *shape* of the original string
+ * (full document / body-only fragment / bare fragment) rather than always
+ * emitting one canonical shape — see `serializeEmbedDoc`'s doc comment
+ * (`embedHtmlDocument.ts`) for why that's a hard invariant here.
  */
 export function applyEmbedElementEdit(
   html: string,
@@ -320,12 +298,8 @@ export function applyEmbedElementEdit(
   const sourcePath = shadowPathToSourcePath(shadowPath);
   if (sourcePath === null) return null;
 
-  let doc: Document;
-  try {
-    doc = new DOMParser().parseFromString(html, "text/html");
-  } catch {
-    return null;
-  }
+  const doc = parseEmbedHtml(html);
+  if (!doc) return null;
 
   // "" means the path pointed at the container/synthetic-body wrapper
   // itself — i.e. the source <body> as a whole (see shadowPathToSourcePath).
@@ -364,7 +338,7 @@ export function applyEmbedElementEdit(
   }
 
   const outerHtml = target.outerHTML;
-  return { html: serializePreservingShape(html, doc), outerHtml };
+  return { html: serializeEmbedDoc(html, doc), outerHtml };
 }
 
 /**
@@ -448,12 +422,8 @@ export function applyEmbedElementReorder(
     return null;
   }
 
-  let doc: Document;
-  try {
-    doc = new DOMParser().parseFromString(html, "text/html");
-  } catch {
-    return null;
-  }
+  const doc = parseEmbedHtml(html);
+  if (!doc) return null;
 
   const target = resolveElementPath(doc.body, sourcePath) as HTMLElement | null;
   if (!target) return null;
@@ -478,5 +448,5 @@ export function applyEmbedElementReorder(
   const newSourcePath = buildElementPath(target, doc.body);
   const newPath = sourcePathToShadowPath(shadowPath, newSourcePath);
 
-  return { html: serializePreservingShape(html, doc), outerHtml, newPath };
+  return { html: serializeEmbedDoc(html, doc), outerHtml, newPath };
 }

@@ -12,6 +12,7 @@ import { useCommentsStore } from "@/store/commentsStore";
 import { useConnectorStore } from "@/store/connectorStore";
 import { useDragStore } from "@/store/dragStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
+import { deleteEmbedElement } from "@/components/layers/embedLayerActions";
 import { useGuidesStore } from "@/store/guidesStore";
 import { useRenderModeStore } from "@/store/renderModeStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
@@ -616,6 +617,46 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
 
     if (e.code === "Delete" || e.code === "Backspace") {
       if (isTyping) return;
+
+      // A picked embed ELEMENT takes priority over the owning embed node:
+      // while `embedPickerStore.selection` names an element and its embed
+      // is still the sole native selection (the same condition that keeps
+      // the properties panel showing element fields instead of the embed's
+      // own), Delete/Backspace removes that element from the embed's
+      // `htmlContent` — not the whole embed node.
+      //
+      // WHY this never falls through to the native node-delete path below,
+      // even when `deleteEmbedElement` REJECTS the delete (stale path, or a
+      // path resolving to the source `<body>`, never a legal delete
+      // target): falling through in that case is exactly what nukes the
+      // entire screen the instant an element is picked — the earlier
+      // "swallow the keystroke unconditionally" fix traded that for
+      // silently eating the keystroke forever instead, which is also wrong.
+      // The actual fix is to make Delete never remove the embed node while
+      // a picker selection for it exists: on a rejected element delete,
+      // clear the (already-stale) picker selection instead and consume the
+      // keystroke — releasing the element selection visibly, so a SECOND
+      // Delete press (now with no picker selection) removes the embed node
+      // normally through the fallthrough. Falling through to the native
+      // delete only happens when there was no picker selection at all.
+      const pickerSelection = useEmbedPickerStore.getState().selection;
+      const soleSelectedIds = useSelectionStore.getState().selectedIds;
+      if (
+        pickerSelection &&
+        soleSelectedIds.length === 1 &&
+        soleSelectedIds[0] === pickerSelection.embedId
+      ) {
+        e.preventDefault();
+        // `deleteEmbedElement` already clears the picker selection itself
+        // when the deleted element WAS the selection (the success case) —
+        // see `applyStructuralMutation`. On rejection it writes nothing and
+        // leaves the (stale) selection in place, so clear it here.
+        if (!deleteEmbedElement(pickerSelection.embedId, pickerSelection.path)) {
+          useEmbedPickerStore.getState().clearSelection();
+        }
+        return;
+      }
+
       e.preventDefault();
       const ids = useSelectionStore.getState().selectedIds;
 

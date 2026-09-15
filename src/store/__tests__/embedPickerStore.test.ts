@@ -20,15 +20,40 @@ describe("embedPickerStore", () => {
     const s = useEmbedPickerStore.getState();
     expect(s.pickingEmbedId).toBeNull();
     expect(s.hoveredPath).toBeNull();
+    expect(s.hoveredEmbedId).toBeNull();
     expect(s.selection).toBeNull();
   });
 
+  it("setHoveredElement sets hoveredEmbedId and hoveredPath together", () => {
+    useEmbedPickerStore.getState().setHoveredElement("e1", "span:nth-of-type(1)");
+    const s = useEmbedPickerStore.getState();
+    expect(s.hoveredEmbedId).toBe("e1");
+    expect(s.hoveredPath).toBe("span:nth-of-type(1)");
+  });
+
+  it("setHoveredElement(null, null) clears both fields", () => {
+    useEmbedPickerStore.getState().setHoveredElement("e1", "span:nth-of-type(1)");
+    useEmbedPickerStore.getState().setHoveredElement(null, null);
+    const s = useEmbedPickerStore.getState();
+    expect(s.hoveredEmbedId).toBeNull();
+    expect(s.hoveredPath).toBeNull();
+  });
+
+  it("setHoveredPath alone does not touch hoveredEmbedId", () => {
+    useEmbedPickerStore.getState().setHoveredElement("e1", "span:nth-of-type(1)");
+    useEmbedPickerStore.getState().setHoveredPath("div:nth-of-type(2)");
+    const s = useEmbedPickerStore.getState();
+    expect(s.hoveredEmbedId).toBe("e1");
+    expect(s.hoveredPath).toBe("div:nth-of-type(2)");
+  });
+
   it("startPicking sets pickingEmbedId and clears hover", () => {
-    useEmbedPickerStore.getState().setHoveredPath("p:nth-of-type(1)");
+    useEmbedPickerStore.getState().setHoveredElement("other-embed", "p:nth-of-type(1)");
     useEmbedPickerStore.getState().startPicking("e1");
     const s = useEmbedPickerStore.getState();
     expect(s.pickingEmbedId).toBe("e1");
     expect(s.hoveredPath).toBeNull();
+    expect(s.hoveredEmbedId).toBeNull();
   });
 
   it("startPicking on the same embed keeps an existing selection for it", () => {
@@ -51,14 +76,15 @@ describe("embedPickerStore", () => {
     expect(useEmbedPickerStore.getState().hoveredPath).toBeNull();
   });
 
-  it("stopPicking clears pickingEmbedId and hoveredPath but keeps selection", () => {
+  it("stopPicking clears pickingEmbedId, hover state, but keeps selection", () => {
     useEmbedPickerStore.getState().startPicking("e1");
-    useEmbedPickerStore.getState().setHoveredPath("p:nth-of-type(1)");
+    useEmbedPickerStore.getState().setHoveredElement("e1", "p:nth-of-type(1)");
     useEmbedPickerStore.getState().selectElement(selectionFor("e1"));
     useEmbedPickerStore.getState().stopPicking();
     const s = useEmbedPickerStore.getState();
     expect(s.pickingEmbedId).toBeNull();
     expect(s.hoveredPath).toBeNull();
+    expect(s.hoveredEmbedId).toBeNull();
     expect(s.selection?.embedId).toBe("e1");
   });
 
@@ -152,13 +178,14 @@ describe("embedPickerStore", () => {
 
   it("reset clears everything", () => {
     useEmbedPickerStore.getState().startPicking("e1");
-    useEmbedPickerStore.getState().setHoveredPath("p:nth-of-type(1)");
+    useEmbedPickerStore.getState().setHoveredElement("e1", "p:nth-of-type(1)");
     useEmbedPickerStore.getState().selectElement(selectionFor("e1"));
     useEmbedPickerStore.getState().setDropIndicator({ left: 0, top: 0, width: 1, height: 1 });
     useEmbedPickerStore.getState().reset();
     const s = useEmbedPickerStore.getState();
     expect(s.pickingEmbedId).toBeNull();
     expect(s.hoveredPath).toBeNull();
+    expect(s.hoveredEmbedId).toBeNull();
     expect(s.selection).toBeNull();
     expect(s.dropIndicator).toBeNull();
   });

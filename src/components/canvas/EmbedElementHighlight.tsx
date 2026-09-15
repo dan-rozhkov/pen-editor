@@ -242,13 +242,14 @@ function OutlineBox({
  * the resolved geometry itself — on viewport pan/zoom, scene mutation of the
  * selected embed node, and the picked embed's own internal layout changes
  * (content scroll/resize), but ONLY while the picker is actually active
- * (picking, or holding a selection). Idle (`!pickingEmbedId && !selection`,
- * i.e. this component renders `null`), it subscribes to nothing at all: it's
- * mounted for the full lifetime of `PixiCanvas`, so an unconditional
- * subscription would schedule a React state update — and, once a selection
- * exists, a `querySelector` plus two `getBoundingClientRect()` layout reads
- * — on every pan/zoom/scene-mutation tick (~60/s while panning), almost
- * always just to re-render `null`. The `nodesById` selector below narrows to
+ * (picking, holding a selection, or hovering a row in the layers panel).
+ * Idle (`!pickingEmbedId && !hoveredEmbedId && !selection`, i.e. this
+ * component renders `null`), it subscribes to nothing at all: it's mounted
+ * for the full lifetime of `PixiCanvas`, so an unconditional subscription
+ * would schedule a React state update — and, once a selection exists, a
+ * `querySelector` plus two `getBoundingClientRect()` layout reads — on
+ * every pan/zoom/scene-mutation tick (~60/s while panning), almost always
+ * just to re-render `null`. The `nodesById` selector below narrows to
  * just the active embed's node, so unrelated scene mutations don't
  * re-render this component either.
  *
@@ -262,7 +263,13 @@ export function EmbedElementHighlight() {
   const editorMode = useEditorModeStore((s) => s.mode);
   const pickingEmbedId = useEmbedPickerStore((s) => s.pickingEmbedId);
   const hoveredPath = useEmbedPickerStore((s) => s.hoveredPath);
+  const hoveredEmbedId = useEmbedPickerStore((s) => s.hoveredEmbedId);
   const selection = useEmbedPickerStore((s) => s.selection);
+  // While picking, `hoveredPath` is always resolved against the embed being
+  // picked — `hoveredEmbedId` only matters for a layers-panel row hover,
+  // which happens with `pickingEmbedId` null. Picking takes priority so this
+  // never changes behaviour while the canvas picker is active.
+  const hoverEmbedId = pickingEmbedId ?? hoveredEmbedId;
   // Bumped on every frame of an in-progress embed-element drag so the box
   // and size badge keep following the element — see the field's doc comment
   // in embedPickerStore.ts for why no other subscription here covers this.
@@ -277,7 +284,7 @@ export function EmbedElementHighlight() {
 
   const [, setTick] = useState(0);
   useEffect(() => {
-    const activeEmbedId = pickingEmbedId ?? selection?.embedId ?? null;
+    const activeEmbedId = hoverEmbedId ?? selection?.embedId ?? null;
     if (!activeEmbedId) return;
     const rerender = () => setTick((t) => t + 1);
     const unsubViewport = useViewportStore.subscribe(rerender);
@@ -309,7 +316,7 @@ export function EmbedElementHighlight() {
       shadowRoot?.removeEventListener("scroll", rerender, true);
       resizeObserver?.disconnect();
     };
-  }, [pickingEmbedId, selection]);
+  }, [hoverEmbedId, selection]);
 
   // Same gate as EmbedActionBar: the picker is purely an editing affordance
   // and must never paint over a presented slide or a view-mode canvas.
@@ -319,7 +326,7 @@ export function EmbedElementHighlight() {
   if (!canEditScene(editorMode)) return null;
 
   const hoverBox =
-    pickingEmbedId && hoveredPath ? resolveElementBox(pickingEmbedId, hoveredPath) : null;
+    hoverEmbedId && hoveredPath ? resolveElementBox(hoverEmbedId, hoveredPath) : null;
   const selectionBox =
     selection && activeEmbedNode
       ? resolveElementBox(selection.embedId, selection.path)
@@ -340,7 +347,7 @@ export function EmbedElementHighlight() {
   // of the mode.
   const hoverIsSelected =
     !!selection &&
-    selection.embedId === pickingEmbedId &&
+    selection.embedId === hoverEmbedId &&
     selection.path === hoveredPath;
 
   return (

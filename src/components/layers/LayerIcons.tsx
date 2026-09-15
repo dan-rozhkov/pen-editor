@@ -13,9 +13,11 @@ import {
   CodeIcon,
   FlowArrow,
   ScissorsIcon,
+  ImageSquareIcon,
 } from "@phosphor-icons/react";
 import clsx from "clsx";
 import type { SceneNode, LayoutProperties } from "../../types/scene";
+import type { EmbedLayerKind } from "@/lib/embedLayerTree";
 
 // Auto-layout alignment icon — shows 2 outlined bars positioned according to layout settings
 const AutoLayoutIcon = ({ layout }: { layout: LayoutProperties }) => {
@@ -150,6 +152,29 @@ export const NodeIcon = ({
     default:
       return null;
   }
+};
+
+/** Maps an embed-element row's `kind` (from `embedLayerTree.ts`) to the icon
+ * a plain (non-component/slot/mask/auto-layout) native node of the closest
+ * matching type gets — "closest matching" because an embed element isn't a
+ * scene node and has no `NodeIcon` case of its own. Delegates to `NodeIcon`
+ * for the three kinds that DO have an exact type equivalent (a jscpd
+ * duplication gate runs in CI, so this must not re-render the same SVGs);
+ * "image" has no scene-node equivalent (no bitmap-fill node type), so it
+ * gets its own Phosphor icon instead. */
+export const EmbedElementIcon = ({ kind }: { kind: EmbedLayerKind }) => {
+  if (kind === "image") {
+    return (
+      <ImageSquareIcon
+        size={16}
+        className={clsx("w-4 h-4 shrink-0", "text-text-muted")}
+        weight="regular"
+      />
+    );
+  }
+
+  const nodeType: SceneNode["type"] = kind === "text" ? "text" : kind === "shape" ? "rect" : "frame";
+  return <NodeIcon type={nodeType} />;
 };
 
 export const EyeIcon = ({ visible }: { visible: boolean }) => {

@@ -6,8 +6,17 @@ interface EmbedPickerState {
   /** The embed node id currently in "select element" mode, or null. */
   pickingEmbedId: string | null;
   /** CSS path (relative to that embed's content root) of the element under
-   * the pointer while picking. */
+   * the pointer while picking, OR the element the pointer is over in the
+   * layers panel (see `hoveredEmbedId`). */
   hoveredPath: string | null;
+  /** The embed `hoveredPath` resolves against when it comes from a layers
+   * panel row hover rather than the canvas picker — the picker case always
+   * resolves `hoveredPath` against `pickingEmbedId` instead (see
+   * `EmbedElementHighlight`'s `pickingEmbedId ?? hoveredEmbedId`), so this
+   * field only matters while `pickingEmbedId` is null. Kept as a separate
+   * field rather than repurposing `pickingEmbedId` itself: hovering a row in
+   * the panel must NOT put the app into "select element" mode. */
+  hoveredEmbedId: string | null;
   /** The last element the user clicked while picking. Survives `stopPicking`
    * — the whole point is that the agent still knows what was pointed at. */
   selection: EmbedElementSelection | null;
@@ -55,6 +64,11 @@ interface EmbedPickerState {
   startPicking: (embedId: string) => void;
   stopPicking: () => void;
   setHoveredPath: (path: string | null) => void;
+  /** Sets `hoveredEmbedId`/`hoveredPath` together — used by the layers panel
+   * row hover (`LayerItem`'s embed-element branch), as opposed to
+   * `setHoveredPath` alone, which the canvas picker (`EmbedLayer`) uses
+   * while `pickingEmbedId` already names the embed. */
+  setHoveredElement: (embedId: string | null, path: string | null) => void;
   /** `htmlAtPick` is optional only for callers (and older tests) that don't
    * care about staleness invalidation; omitting it means the selection is
    * never cleared on an html change. */
@@ -83,6 +97,7 @@ interface EmbedPickerState {
 export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
   pickingEmbedId: null,
   hoveredPath: null,
+  hoveredEmbedId: null,
   selection: null,
   selectionHtmlSnapshot: null,
   dragVersion: 0,
@@ -95,6 +110,7 @@ export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
     set({
       pickingEmbedId: embedId,
       hoveredPath: null,
+      hoveredEmbedId: null,
       // A selection belonging to a different embed is stale once picking
       // starts on this one — clear it so a leftover selection from another
       // embed doesn't get sent to the agent alongside a fresh pick.
@@ -103,9 +119,12 @@ export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
     });
   },
 
-  stopPicking: () => set({ pickingEmbedId: null, hoveredPath: null, dropIndicator: null }),
+  stopPicking: () =>
+    set({ pickingEmbedId: null, hoveredPath: null, hoveredEmbedId: null, dropIndicator: null }),
 
   setHoveredPath: (path) => set({ hoveredPath: path }),
+
+  setHoveredElement: (embedId, path) => set({ hoveredEmbedId: embedId, hoveredPath: path }),
 
   selectElement: (selection, htmlAtPick) =>
     set({ selection, selectionHtmlSnapshot: htmlAtPick ?? null }),
@@ -135,6 +154,7 @@ export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
     set({
       pickingEmbedId: null,
       hoveredPath: null,
+      hoveredEmbedId: null,
       selection: null,
       selectionHtmlSnapshot: null,
       cancelElementDrag: null,

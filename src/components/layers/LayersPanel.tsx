@@ -17,8 +17,12 @@ import {
   flattenLayers,
   selectionFromLayersRef,
   getLayerKey,
+  getEmbedElementLayerKey,
 } from "./layerTypes";
-import type { DragState, DropPosition } from "./layerTypes";
+import type { DragEmbedElement, DragState, DropPosition } from "./layerTypes";
+import { useEmbedPickerStore } from "@/store/embedPickerStore";
+import { normalizeShadowPathToSourcePath } from "@/lib/embedLayerTree";
+import { reorderEmbedElement } from "./embedLayerActions";
 
 export function LayersPanel() {
   const nodes = useSceneStore((state) => state.getNodes());
@@ -31,9 +35,28 @@ export function LayersPanel() {
   const nodesById = useSceneStore((state) => state.nodesById);
   const selectedIds = useSelectionStore((state) => state.selectedIds);
   const select = useSelectionStore((state) => state.select);
+  const embedPickerSelection = useEmbedPickerStore((state) => state.selection);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
+
+  // Canonicalize the picker's (possibly `#id`-anchored) shadow path to the
+  // positional `sourcePath` a row's key is built from, ONCE here — not per
+  // row in LayerItem, which would re-parse the embed's html on every render
+  // of every row under it. `null` (no selection, embed not in the scene, or
+  // the path no longer resolves — e.g. `edit_embed_html` ran since the
+  // pick) means no row should read as selected.
+  const selectedEmbedElement = useMemo(() => {
+    if (!embedPickerSelection) return null;
+    const embedNode = nodesById[embedPickerSelection.embedId];
+    if (embedNode?.type !== "embed") return null;
+    const sourcePath = normalizeShadowPathToSourcePath(
+      embedPickerSelection.path,
+      embedNode.htmlContent ?? "",
+    );
+    if (sourcePath === null) return null;
+    return { embedId: embedPickerSelection.embedId, sourcePath };
+  }, [embedPickerSelection, nodesById]);
 
   // Auto-expand ancestors when selection changes (e.g. from canvas click)
   useEffect(() => {
@@ -41,7 +64,7 @@ export function LayersPanel() {
       selectionFromLayersRef.current = false;
       return;
     }
-    if (selectedIds.length === 0) return;
+    if (selectedIds.length === 0 && !selectedEmbedElement) return;
 
     const idsToExpand: string[] = [];
     for (const id of selectedIds) {
@@ -52,27 +75,58 @@ export function LayersPanel() {
       }
     }
 
+    // Auto-expand the embed row and every ancestor element row of a
+    // canvas-picked embed element. This is what makes "pick an element on
+    // canvas -> its row reveals itself in the panel" work; a pick that
+    // originated FROM this panel already returned above via
+    // selectionFromLayersRef, so this only ever fires for a canvas pick.
+    let embedElementScrollKey: string | null = null;
+    if (selectedEmbedElement) {
+      const { embedId, sourcePath } = selectedEmbedElement;
+      if (!expandedFrameIds.has(embedId)) {
+        idsToExpand.push(embedId);
+      }
+      const segments = sourcePath ? sourcePath.split(" > ") : [];
+      for (let i = 0; i < segments.length - 1; i++) {
+        const ancestorKey = getEmbedElementLayerKey(embedId, segments.slice(0, i + 1).join(" > "));
+        if (!expandedFrameIds.has(ancestorKey)) {
+          idsToExpand.push(ancestorKey);
+        }
+      }
+      embedElementScrollKey = getEmbedElementLayerKey(embedId, sourcePath);
+    }
+
     if (idsToExpand.length > 0) {
       expandAncestors(idsToExpand);
     }
 
     // Scroll first selected node into view after DOM updates
     requestAnimationFrame(() => {
-      const selector = `[data-node-id="${selectedIds[0]}"]`;
+      const selector = embedElementScrollKey
+        ? `[data-layer-key="${embedElementScrollKey}"]`
+        : `[data-node-id="${selectedIds[0]}"]`;
       const el = scrollRef.current?.querySelector(selector);
       el?.scrollIntoView({ block: "nearest", inline: "nearest" });
     });
-  }, [selectedIds, parentById, expandedFrameIds, expandAncestors]);
+  }, [
+    selectedIds,
+    parentById,
+    expandedFrameIds,
+    expandAncestors,
+    selectedEmbedElement,
+  ]);
 
   const [dragState, setDragState] = useState<DragState>({
     draggedId: null,
     dropTargetId: null,
     dropPosition: null,
     dropParentId: null,
+    draggedEmbedElement: null,
+    dropEmbedElement: null,
   });
 
   const handleDragStart = useCallback(
-    (nodeId: string) => {
+    (nodeId: string, embedElementContext?: DragEmbedElement) => {
       select(nodeId);
 
       setDragState({
@@ -80,18 +134,26 @@ export function LayersPanel() {
         dropTargetId: null,
         dropPosition: null,
         dropParentId: null,
+        draggedEmbedElement: embedElementContext ?? null,
+        dropEmbedElement: null,
       });
     },
     [select],
   );
 
   const handleDragOver = useCallback(
-    (nodeId: string, position: DropPosition, parentId: string | null) => {
+    (
+      nodeId: string,
+      position: DropPosition,
+      parentId: string | null,
+      embedElementContext?: DragEmbedElement,
+    ) => {
       setDragState((prev) => ({
         ...prev,
         dropTargetId: nodeId,
         dropPosition: position,
         dropParentId: parentId,
+        dropEmbedElement: embedElementContext ?? null,
       }));
     },
     [],
@@ -103,11 +165,49 @@ export function LayersPanel() {
       dropTargetId: null,
       dropPosition: null,
       dropParentId: null,
+      draggedEmbedElement: null,
+      dropEmbedElement: null,
     });
   }, []);
 
   const handleDrop = useCallback(() => {
-    const { draggedId, dropTargetId, dropPosition, dropParentId } = dragState;
+    const {
+      draggedId,
+      dropTargetId,
+      dropPosition,
+      dropParentId,
+      draggedEmbedElement,
+      dropEmbedElement,
+    } = dragState;
+
+    // Embed-element reorder: dragging a DOM element row within an embed's
+    // `htmlContent`. Handled entirely separately from the native move logic
+    // below, which speaks scene node ids and parent/child references that
+    // don't exist for a plain DOM element — and rejected outright (rather
+    // than falling through) for any mismatched combination: two different
+    // embeds, or one native end and one embed-element end.
+    if (draggedEmbedElement) {
+      if (
+        dropEmbedElement &&
+        dropPosition &&
+        dropEmbedElement.embedId === draggedEmbedElement.embedId &&
+        dropEmbedElement.shadowPath !== draggedEmbedElement.shadowPath
+      ) {
+        reorderEmbedElement(
+          draggedEmbedElement.embedId,
+          draggedEmbedElement.shadowPath,
+          dropEmbedElement.shadowPath,
+          dropPosition,
+        );
+      }
+      handleDragEnd();
+      return;
+    }
+    if (dropEmbedElement) {
+      // Dragging a native/ref row onto an embed-element row — never legal.
+      handleDragEnd();
+      return;
+    }
 
     if (!draggedId || !dropTargetId || !dropPosition) {
       handleDragEnd();
@@ -150,8 +250,18 @@ export function LayersPanel() {
     () => flattenLayers(reversedNodes, expandedFrameIds, nodesById, childrenById),
     [reversedNodes, expandedFrameIds, nodesById, childrenById],
   );
+  // Native-row ids ONLY: `selectionStore.selectRange` slices this array
+  // straight into `selectedIds`, which every consumer (deleteNode,
+  // groupNodes, alignment, `buildCanvasContext`) expects to be scene-node
+  // ids. An embed-element row's key is `embed:<embedId>:<sourcePath>` —
+  // never a scene node id — so including those would let a shift-click
+  // spanning an expanded embed write keys naming no node into
+  // `selectedIds`, which then behave as silent no-ops (or `{ id }` stubs
+  // sent to the agent). Element rows are never range-selected in the first
+  // place — `LayerItem`'s embed-element click branch never calls
+  // `selectRange` — so leaving them out here costs nothing.
   const selectableFlatIds = useMemo(
-    () => flatLayers.map((l) => getLayerKey(l)),
+    () => flatLayers.filter((l) => !l.embedElement).map((l) => getLayerKey(l)),
     [flatLayers],
   );
   const totalHeight = flatLayers.length * ROW_HEIGHT;
@@ -237,6 +347,8 @@ export function LayersPanel() {
                   onDragOver={handleDragOver}
                   onDrop={handleDrop}
                   selectableFlatIds={selectableFlatIds}
+                  embedElement={item.embedElement}
+                  selectedEmbedElement={selectedEmbedElement}
                 />
               ))}
             </div>

@@ -173,6 +173,55 @@ describe("<EmbedElementHighlight />", () => {
     expect(container.querySelector('[data-embed-element-box][data-kind="hover"]')).toBeNull();
   });
 
+  it("draws a hover box from a layers-panel row hover (hoveredEmbedId, no picking)", () => {
+    mountEmbedDom();
+    stubRects(rect(0, 0, 400, 300), rect(20, 10, 60, 24));
+
+    // No startPicking call here — this is the layers-panel path, which sets
+    // hoveredEmbedId/hoveredPath directly without entering "select element"
+    // mode.
+    useEmbedPickerStore
+      .getState()
+      .setHoveredElement("embed1", "div:nth-of-type(1) > button:nth-of-type(1)");
+
+    const { container } = render(<EmbedElementHighlight />);
+
+    const box = container.querySelector('[data-embed-element-box][data-kind="hover"]') as HTMLElement;
+    expect(box).toBeTruthy();
+    expect(box.style.left).toBe("20px");
+    expect(box.style.top).toBe("10px");
+  });
+
+  it("does not draw a panel-hover box once hoveredEmbedId/hoveredPath are cleared", () => {
+    mountEmbedDom();
+    stubRects(rect(0, 0, 400, 300), rect(20, 10, 60, 24));
+
+    useEmbedPickerStore
+      .getState()
+      .setHoveredElement("embed1", "div:nth-of-type(1) > button:nth-of-type(1)");
+    useEmbedPickerStore.getState().setHoveredElement(null, null);
+
+    const { container } = render(<EmbedElementHighlight />);
+    expect(container.querySelector("[data-embed-element-highlight]")).toBeNull();
+  });
+
+  it("does not subscribe to viewport/layout stores from a panel hover while picking is also active elsewhere is irrelevant — picking still wins for path resolution", () => {
+    mountEmbedDom();
+    stubRects(rect(0, 0, 400, 300), rect(20, 10, 60, 24));
+
+    // pickingEmbedId takes priority over hoveredEmbedId for which embed the
+    // hover path resolves against — a stale hoveredEmbedId from a previous
+    // panel hover must not hijack an active canvas pick.
+    useEmbedPickerStore.getState().setHoveredElement("some-other-embed", "p:nth-of-type(1)");
+    useEmbedPickerStore.getState().startPicking("embed1");
+    useEmbedPickerStore.getState().setHoveredPath("div:nth-of-type(1) > button:nth-of-type(1)");
+
+    const { container } = render(<EmbedElementHighlight />);
+    const box = container.querySelector('[data-embed-element-box][data-kind="hover"]') as HTMLElement;
+    expect(box).toBeTruthy();
+    expect(box.style.top).toBe("10px");
+  });
+
   it("skips rendering the selection box once its embed node is removed from the scene", () => {
     mountEmbedDom();
     stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));

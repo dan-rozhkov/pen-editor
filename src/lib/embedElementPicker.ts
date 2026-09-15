@@ -46,15 +46,25 @@ function isUniqueId(root: ParentNode, id: string): boolean {
  *
  * Returns "" when `el` IS `root` (never a valid pick target — callers should
  * avoid this case; `resolveElementPath` also refuses to resolve it).
+ *
+ * `options.anchorOnId` (default `true`) can disable the `#id` shortcut,
+ * producing a purely positional path all the way to `root`. `embedLayerTree.ts`
+ * needs that form for row identity (a stable, always-positional `sourcePath`)
+ * without duplicating this walk.
  */
-export function buildElementPath(el: Element, root: ParentNode): string {
+export function buildElementPath(
+  el: Element,
+  root: ParentNode,
+  options?: { anchorOnId?: boolean },
+): string {
   if ((el as unknown as Node) === (root as unknown as Node)) return "";
 
+  const anchorOnId = options?.anchorOnId ?? true;
   const segments: string[] = [];
   let current: Element | null = el;
 
   while (current && (current as unknown as Node) !== (root as unknown as Node)) {
-    if (current.id && isSafeId(current.id) && isUniqueId(root, current.id)) {
+    if (anchorOnId && current.id && isSafeId(current.id) && isUniqueId(root, current.id)) {
       segments.unshift(`#${current.id}`);
       break;
     }
