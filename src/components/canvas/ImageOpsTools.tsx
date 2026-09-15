@@ -22,9 +22,9 @@ type OpKind = "remove-background" | "vectorize";
  * "Remove background" / "Vectorize" action buttons, shown in the tools
  * panel (PrimitivesPanel.tsx) when exactly one node with an image fill is
  * selected. Unlike every other button in that panel these are one-shot
- * actions, not draw-tool toggles — see toolDefinitions.ts's invariant note
- * on why they live outside ALL_TOOLS/LEADING_TOOLS/TRAILING_TOOLS, in the
- * same "contextual extras" zone as Layers3DToggle/SpeakerNotesCard.
+ * actions, not draw-tool toggles, so they deliberately live outside the
+ * tool lists in toolDefinitions.ts (ALL_TOOLS and friends) — they belong to
+ * the same "contextual extras" zone as Layers3DToggle/SpeakerNotesCard.
  *
  * The two buttons appear independently: a backend that only has one image
  * op configured (canRemoveBackground()/canVectorize(), from the cached

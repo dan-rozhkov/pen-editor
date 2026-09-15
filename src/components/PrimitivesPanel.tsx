@@ -4,7 +4,8 @@ import { useDrawModeStore } from "../store/drawModeStore";
 import type { DrawToolType } from "../store/drawModeStore";
 import type { ToolDefinition } from "../lib/toolDefinitions";
 import {
-  LEADING_TOOLS,
+  EMBED_TOOL,
+  EMBED_SUB_TOOLS,
   MOVE_TOOL,
   MOVE_SUB_TOOLS,
   RECT_TOOL,
@@ -116,13 +117,14 @@ export function PrimitivesPanel() {
   const toggleTool = useDrawModeStore((s) => s.toggleTool);
   const setActiveTool = useDrawModeStore((s) => s.setActiveTool);
 
-  const leadingTools = LEADING_TOOLS;
   const trailingTools = TRAILING_TOOLS;
   const rectSubTools = RECT_SUB_TOOLS;
   const penSubTools = PEN_SUB_TOOLS;
 
   const isMoveSubToolActive = MOVE_SUB_TOOLS.some((t) => t.tool === activeTool);
   const isMoveActive = activeTool === null;
+  const isEmbedSubToolActive = EMBED_SUB_TOOLS.some((t) => t.tool === activeTool);
+  const isEmbedActive = activeTool === "embed";
   const isRectSubToolActive = rectSubTools.some((t) => t.tool === activeTool);
   const isRectangleActive = activeTool === "rect";
   const isPenSubToolActive = penSubTools.some((t) => t.tool === activeTool);
@@ -145,30 +147,17 @@ export function PrimitivesPanel() {
           toolButtonBaseClass={toolButtonBaseClass}
         />
 
-        {leadingTools.map(({ icon: Icon, label, tool, shortcut }) => {
-          const isActive =
-            tool === "cursor" ? activeTool === null : activeTool === tool;
-          return (
-            <IconButton
-              key={label}
-              onClick={() =>
-                tool === "cursor" ? setActiveTool(null) : toggleTool(tool)
-              }
-              tooltip={label}
-              shortcut={shortcut}
-              side="top"
-              variant="ghost"
-              size="lg"
-              className={`${toolButtonBaseClass} ${
-                isActive
-                  ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
-                  : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
-              }`}
-            >
-              <Icon size={40} className="size-6" weight="light" />
-            </IconButton>
-          );
-        })}
+        <ToolDropdownGroup
+          mainTool={EMBED_TOOL}
+          onMainClick={() => toggleTool("embed")}
+          isMainActive={isEmbedActive}
+          subMenuTooltip="More container tools"
+          subTools={EMBED_SUB_TOOLS}
+          activeTool={activeTool}
+          isSubGroupActive={isEmbedSubToolActive}
+          onToggleTool={toggleTool}
+          toolButtonBaseClass={toolButtonBaseClass}
+        />
 
         <ToolDropdownGroup
           mainTool={RECT_TOOL}

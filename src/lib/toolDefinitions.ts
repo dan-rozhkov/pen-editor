@@ -38,7 +38,14 @@ export interface ToolDefinition {
  * render from these lists instead of maintaining their own copies, so the
  * tool set and its shortcuts can't drift between the two surfaces.
  */
-export const LEADING_TOOLS: ToolDefinition[] = [
+export const EMBED_TOOL: ToolDefinition = {
+  icon: CodeBlockIcon,
+  label: "Embed",
+  tool: "embed",
+  shortcut: "E",
+};
+
+export const EMBED_SUB_TOOLS: ToolDefinition[] = [
   { icon: HashStraight, label: "Frame", tool: "frame", shortcut: "F" },
 ];
 
@@ -92,14 +99,14 @@ export const COMMENT_TOOL: ToolDefinition = {
 
 export const TRAILING_TOOLS: ToolDefinition[] = [
   { icon: TextTIcon, label: "Text", tool: "text", shortcut: "T" },
-  { icon: CodeBlockIcon, label: "Embed", tool: "embed", shortcut: "E" },
 ];
 
 /** Every tool, flattened into a single list (used by the command palette). */
 export const ALL_TOOLS: ToolDefinition[] = [
   MOVE_TOOL,
   ...MOVE_SUB_TOOLS,
-  ...LEADING_TOOLS,
+  EMBED_TOOL,
+  ...EMBED_SUB_TOOLS,
   RECT_TOOL,
   ...RECT_SUB_TOOLS,
   PEN_TOOL,
