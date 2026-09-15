@@ -277,12 +277,100 @@ export function setupPixiInteraction(
     });
   }
 
+  // A gesture that starts on the canvas can be stolen mid-flight by another
+  // element: selecting an embed can synchronously flip that embed's DOM host
+  // to `pointer-events: auto` (useEmbedPickerLifecycle → EmbedLayer) as a
+  // side effect of THIS SAME pointerdown, so every later pointermove/pointerup
+  // of the gesture lands on the host instead of the canvas — the canvas-only
+  // listeners below never see them, dragController never gets its pointerup,
+  // and the dragged node follows the cursor forever with no way to release
+  // it. Arming a `window`-level fallback for the duration of the gesture
+  // means it still gets released no matter which element ends up under the
+  // cursor.
+  //
+  // Gated on `e.isTrusted`: EmbedLayer's own node-drag-forward dispatches
+  // SYNTHETIC pointerdown/pointermove/pointerup at this canvas (see
+  // `forwardPointerEvent` in EmbedLayer.tsx) and runs its own window-level
+  // forwarding for the real events already. Those synthetic events are
+  // untrusted, so this fallback must ignore them — arming it from a
+  // synthetic pointerdown would double-process every real pointermove once
+  // via EmbedLayer's forward-to-canvas and once via this window listener.
+  // Touch is excluded because it never reaches these handlers at all (see
+  // the early return right below) and has its own gesture handling.
+  //
+  // `windowFallbackPointerId` pins the fallback to the ONE pointer that
+  // armed it (like dragController/nodeDragForward, this whole file only
+  // ever tracks one in-flight mouse/pen gesture at a time). Without this, a
+  // stray pointer event from a DIFFERENT pointer — a finger touching the
+  // screen during a stolen mouse drag on a touch-capable machine, or any
+  // other pointerId's pointerup/pointercancel reaching `window` — would
+  // reach `handleWindowPointerUp` and disarm/end the real gesture, putting
+  // us right back in the stuck-drag state this fallback exists to prevent
+  // (the real mouse pointerup would then land on the host with no listener
+  // left).
+  let windowFallbackArmed = false;
+  let windowFallbackPointerId: number | null = null;
+
+  function armWindowPointerFallback(pointerId: number): void {
+    if (windowFallbackArmed) return;
+    windowFallbackArmed = true;
+    windowFallbackPointerId = pointerId;
+    window.addEventListener("pointermove", handleWindowPointerMove);
+    window.addEventListener("pointerup", handleWindowPointerUp);
+    window.addEventListener("pointercancel", handleWindowPointerUp);
+  }
+
+  function disarmWindowPointerFallback(): void {
+    if (!windowFallbackArmed) return;
+    windowFallbackArmed = false;
+    windowFallbackPointerId = null;
+    window.removeEventListener("pointermove", handleWindowPointerMove);
+    window.removeEventListener("pointerup", handleWindowPointerUp);
+    window.removeEventListener("pointercancel", handleWindowPointerUp);
+  }
+
+  // A real pointer event that targets the canvas bubbles up to `window` too
+  // (canvas listeners are added without `{ capture: true }`, so canvas sees
+  // it first) — skip it here so it is never handled twice. Anything that
+  // reaches this listener with a different target is exactly the "stolen by
+  // another element" case the fallback exists for.
+  function handleWindowPointerMove(e: PointerEvent): void {
+    if (e.pointerId !== windowFallbackPointerId) return;
+    if (e.target === canvas) return;
+    // Self-heal a gesture that ended without a pointerup/pointercancel ever
+    // reaching us — released outside the window, over browser chrome, or
+    // any other way the button can go up without an event we saw (mirrors
+    // EmbedLayer.tsx's `healStaleNodeDragForward` doc comment: the SAME
+    // "gesture that never got its terminating event" reality, here for the
+    // canvas's own gesture rather than the embed node-drag forward). Left
+    // unarmed, this listener would otherwise keep running `handlePointerMove`
+    // for every mouse move on the page with the button already up — moving
+    // the dragged node under a stale drag state AND hit-testing world
+    // coordinates for a cursor that may not even be over the canvas.
+    if (e.buttons === 0) {
+      handlePointerUp(e);
+      return;
+    }
+    handlePointerMove(e);
+  }
+
+  function handleWindowPointerUp(e: PointerEvent): void {
+    if (e.pointerId !== windowFallbackPointerId) return;
+    if (e.target === canvas) return;
+    // handlePointerUp disarms the fallback itself (every gesture end goes
+    // through it, canvas-sourced or not) — no need to do it here too.
+    handlePointerUp(e);
+  }
+
   function handlePointerDown(e: PointerEvent): void {
     // Touch is handled entirely by the touch listeners (pan/tap-select,
     // read-only) — never let its synthetic pointer events reach
     // drag/marquee/transform/draw.
     if (e.pointerType === "touch") return;
     lastPointerEvent = e;
+    // See armWindowPointerFallback's doc comment above for why this exists
+    // and why it must never arm for a synthetic (untrusted) pointerdown.
+    if (e.isTrusted) armWindowPointerFallback(e.pointerId);
     // A two-finger touch gesture (pan/zoom) owns the canvas — ignore the
     // per-finger pointer events it also emits.
     if (touch.isGesturing()) return;
@@ -455,6 +543,10 @@ export function setupPixiInteraction(
   }
 
   function handlePointerUp(e: PointerEvent): void {
+    // The gesture is ending either way (real pointerup/pointercancel) — drop
+    // the window fallback armed in handlePointerDown so it doesn't linger
+    // into the next, unrelated gesture.
+    disarmWindowPointerFallback();
     if (e.pointerType === "touch") {
       // A touch tap is never a click for double-click purposes, but it can
       // land between two real mouse clicks — reset the click-train so a
@@ -482,6 +574,20 @@ export function setupPixiInteraction(
     // routed to this same handler — never a real click, so exclude it
     // explicitly rather than relying on e.button (see below).
     if (e.type !== "pointerup") {
+      dblClickDetector.reset();
+      return;
+    }
+
+    // A pointerup that reaches this (via the window fallback) with a target
+    // other than the canvas means the up landed on some other element — the
+    // embed-picker host that flipped to `pointer-events: auto` mid-gesture,
+    // the exact scenario the fallback exists for. Native `dblclick` requires
+    // both clicks of a pair to share a target, so this must not register a
+    // click here and risk pairing it with a later, unrelated canvas click at
+    // roughly the same point within DOUBLE_CLICK_TIME_MS. Nothing is lost:
+    // once the host is interactive, ITS OWN dblclick handling in
+    // EmbedLayer.tsx takes over the second click, not this detector.
+    if (e.target !== canvas) {
       dblClickDetector.reset();
       return;
     }
@@ -745,6 +851,7 @@ export function setupPixiInteraction(
       hoverRafId = null;
     }
     pendingHoverWorld = null;
+    disarmWindowPointerFallback();
     pan.destroy();
     touch.destroy();
     canvas.removeEventListener("wheel", handleWheel);
