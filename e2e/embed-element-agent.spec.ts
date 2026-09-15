@@ -71,8 +71,13 @@ test("picked embed element: size badge, no tag label, element-scoped agent butto
     const rect = canvas.getBoundingClientRect();
     return w.__hitTestScreenPoint(point.x - rect.left, point.y - rect.top) === "e1";
   }, clickPoint);
-  await host.dblclick({ force: true });
-  await expect(page.getByRole("button", { name: "Exit element select" })).toBeVisible();
+  // Selecting the embed is all it takes: the element picker starts with the
+  // selection (useEmbedPickerLifecycle), and the host flipping to
+  // pointer-events:auto is the signal that it owns the pointer now.
+  await host.click({ force: true });
+  await expect
+    .poll(async () => host.evaluate((el) => getComputedStyle(el).pointerEvents))
+    .toBe("auto");
 
   // Click the button inside the embed's shadow DOM to pick it.
   const cta = host.locator("#cta");

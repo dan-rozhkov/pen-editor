@@ -60,15 +60,29 @@ async function enterElementPicker(page: Page) {
     { point, id: EMBED_ID },
   );
 
-  await host.dblclick({ force: true, position: { x: box.width / 2, y: box.height - 20 } });
-  await expect(page.getByRole("button", { name: "Exit element select" })).toBeVisible();
+  // A single click on the canvas selects the embed, which auto-starts the
+  // picker (useEmbedPickerLifecycle) — there is no toggle button any more, so
+  // the signal is the host flipping to pointer-events:auto for the picker
+  // overlay, the same one embed-dom-layer/-sortable use.
+  await host.click({ force: true, position: { x: box.width / 2, y: box.height - 20 } });
+  await expect
+    .poll(async () => host.evaluate((el) => getComputedStyle(el).pointerEvents))
+    .toBe("auto");
   return host;
 }
 
+/** The inspector's element header (EmbedElementProperties renders the label
+ * with a matching `title`). Matched by title rather than by text: the chat
+ * composer shows the very same label in its attachment chip, so plain
+ * `getByText` is a strict-mode violation. */
+function elementHeader(page: Page, selectedElement: string) {
+  return page.getByTitle(selectedElement, { exact: true });
+}
+
 function sidebarFor(page: Page, selectedElement: string) {
-  return page
-    .getByText(selectedElement, { exact: true })
-    .locator('xpath=ancestor::div[contains(@class, "w-[300px]")]');
+  return elementHeader(page, selectedElement).locator(
+    'xpath=ancestor::div[contains(@class, "w-[300px]")]',
+  );
 }
 
 test("picked embed elements use the native inspector field layout", async ({ page }) => {
@@ -79,7 +93,7 @@ test("picked embed elements use the native inspector field layout", async ({ pag
   // regression surface: all select labels share the native outside-label
   // pattern and Padding uses the same compact T/R/B/L grid as Auto Layout.
   await host.click({ position: { x: 12, y: 12 } });
-  await expect(page.getByText("div#fixture-card", { exact: true })).toBeVisible();
+  await expect(elementHeader(page, "div#fixture-card")).toBeVisible();
   await expect(page.getByText("Padding", { exact: true })).toBeVisible();
   await expect(page.getByText("Direction", { exact: true })).toBeVisible();
   await expect(page.getByText("Justify", { exact: true })).toBeVisible();
@@ -107,12 +121,12 @@ test("picked embed elements use the native inspector field layout", async ({ pag
       }, EMBED_ID),
     )
     .toBe("24px");
-  await expect(page.getByText("div#fixture-card", { exact: true })).toBeVisible();
+  await expect(elementHeader(page, "div#fixture-card")).toBeVisible();
 
   // Then select text and capture its editable typography/text state. Scrolling
   // the real 300px sidebar catches clipped or misaligned lower sections.
   await host.click({ position: { x: 88, y: 42 } });
-  await expect(page.getByText("h2", { exact: true })).toBeVisible();
+  await expect(elementHeader(page, "h2")).toBeVisible();
   const propertiesScroll = page.locator(".layers-scrollbar").last();
   await propertiesScroll.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
