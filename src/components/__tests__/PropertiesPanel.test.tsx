@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { PropertiesPanel } from "../PropertiesPanel";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
@@ -228,6 +228,63 @@ describe("<PropertiesPanel /> (orchestration)", () => {
       expect(screen.getByTestId("pencil-properties")).toBeTruthy();
       // No page properties while the pencil tool owns the panel.
       expect(screen.queryByTestId("page-properties")).toBeNull();
+    });
+
+    it("shows the embed presets panel when the embed tool is active", () => {
+      useDrawModeStore.setState({ activeTool: "embed" });
+      render(<PropertiesPanel />);
+
+      expect(screen.getByText("Embed Presets")).toBeTruthy();
+      expect(screen.getByText("iPhone 16")).toBeTruthy();
+      // Page properties are suppressed under the embed tool.
+      expect(screen.queryByTestId("page-properties")).toBeNull();
+    });
+
+    it("suppresses the editor surfaces under the embed tool even with a selection", () => {
+      useDrawModeStore.setState({ activeTool: "embed" });
+      select(["frame1"]);
+      render(<PropertiesPanel />);
+
+      expect(screen.getByText("Embed Presets")).toBeTruthy();
+      expect(screen.queryByTestId("property-editor")).toBeNull();
+      expect(screen.queryByTestId("multi-select-editor")).toBeNull();
+    });
+
+    it("clicking an embed preset adds an embed node, selects it, and clears the active tool", () => {
+      useDrawModeStore.setState({ activeTool: "embed" });
+      render(<PropertiesPanel />);
+
+      fireEvent.click(screen.getByText("iPhone 16").closest("button")!);
+
+      const { nodesById, rootIds } = useSceneStore.getState();
+      const newId = rootIds.find((id) => !["frame1", "rect1", "rect2", "text1"].includes(id));
+      expect(newId).toBeTruthy();
+      const node = nodesById[newId!];
+      expect(node.type).toBe("embed");
+      expect(node.width).toBe(393);
+      expect(node.height).toBe(852);
+      expect(node.name).toBe("iPhone 16");
+
+      expect(useSelectionStore.getState().selectedIds).toEqual([newId]);
+      expect(useDrawModeStore.getState().activeTool).toBeNull();
+    });
+
+    it("clicking a frame preset still adds a frame node (existing behaviour)", () => {
+      useDrawModeStore.setState({ activeTool: "frame" });
+      render(<PropertiesPanel />);
+
+      fireEvent.click(screen.getByText("iPhone 16").closest("button")!);
+
+      const { nodesById, rootIds } = useSceneStore.getState();
+      const newId = rootIds.find((id) => !["frame1", "rect1", "rect2", "text1"].includes(id));
+      expect(newId).toBeTruthy();
+      const node = nodesById[newId!];
+      expect(node.type).toBe("frame");
+      expect(node.width).toBe(393);
+      expect(node.height).toBe(852);
+
+      expect(useSelectionStore.getState().selectedIds).toEqual([newId]);
+      expect(useDrawModeStore.getState().activeTool).toBeNull();
     });
   });
 });

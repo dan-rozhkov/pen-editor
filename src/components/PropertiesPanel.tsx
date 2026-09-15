@@ -8,6 +8,7 @@ import { useViewportStore } from "@/store/viewportStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { EmbedElementProperties } from "@/components/properties/EmbedElementProperties";
 import type {
+  EmbedNode,
   FlatFrameNode,
   FlatGroupNode,
   FlatSceneNode,
@@ -15,6 +16,7 @@ import type {
   SceneNode,
 } from "@/types/scene";
 import { generateId } from "@/types/scene";
+import { DEFAULT_EMBED_HTML } from "@/lib/embedDefaults";
 import {
   getAbsolutePositionFlat,
   getParentContextFlat,
@@ -91,7 +93,7 @@ const FRAME_PRESETS = [
   },
 ];
 
-function FramePresetsPanel() {
+function SizePresetsPanel({ kind }: { kind: "frame" | "embed" }) {
   const addNode = useSceneStore((s) => s.addNode);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
     new Set(["Mobile"]), // Mobile expanded by default
@@ -123,20 +125,38 @@ function FramePresetsPanel() {
     const worldCenterY = (-y + canvasHeight / 2) / scale;
 
     const id = generateId();
-    const node: FrameNode = {
-      id,
-      type: "frame",
-      x: Math.round(worldCenterX - preset.width / 2),
-      y: Math.round(worldCenterY - preset.height / 2),
-      width: preset.width,
-      height: preset.height,
-      name: preset.name,
-      fill: "#ffffff",
-      stroke: "#cccccc",
-      strokeWidth: 1,
-      children: [],
-    };
+    const x0 = Math.round(worldCenterX - preset.width / 2);
+    const y0 = Math.round(worldCenterY - preset.height / 2);
+    const node: FrameNode | EmbedNode =
+      kind === "frame"
+        ? {
+            id,
+            type: "frame",
+            x: x0,
+            y: y0,
+            width: preset.width,
+            height: preset.height,
+            name: preset.name,
+            fill: "#ffffff",
+            stroke: "#cccccc",
+            strokeWidth: 1,
+            children: [],
+          }
+        : {
+            id,
+            type: "embed",
+            x: x0,
+            y: y0,
+            width: preset.width,
+            height: preset.height,
+            name: preset.name,
+            htmlContent: DEFAULT_EMBED_HTML,
+          };
 
+    // Deliberately a root-level node, unlike the draw tools (which nest what
+    // you drag inside whatever frame contains the rect): a preset is a
+    // screen-sized artboard, so it belongs at the top level even when the
+    // viewport happens to be centered over an existing frame.
     addNode(node);
     useSelectionStore.getState().select(id);
     useDrawModeStore.getState().setActiveTool(null);
@@ -145,7 +165,7 @@ function FramePresetsPanel() {
   return (
     <div className="px-4 pt-3 pb-5 border-b border-border-default">
       <div className="text-[11px] font-semibold text-text-primary mb-2">
-        Frame Presets
+        {kind === "frame" ? "Frame Presets" : "Embed Presets"}
       </div>
       {FRAME_PRESETS.map((group) => {
         const isExpanded = expandedCategories.has(group.category);
@@ -192,6 +212,7 @@ export function PropertiesPanel() {
   const updateNode = useSceneStore((s) => s.updateNode);
   const variables = useVariableStore((s) => s.variables);
   const activeTool = useDrawModeStore((s) => s.activeTool);
+  const presetsToolActive = activeTool === "frame" || activeTool === "embed";
 
   const singleSelectedId = selectedIds.length === 1 ? selectedIds[0] : null;
 
@@ -266,7 +287,7 @@ export function PropertiesPanel() {
   // 120x40 button frame) should hide the section entirely rather than show
   // pure noise.
   const showcaseCandidate =
-    activeTool !== "frame" &&
+    !presetsToolActive &&
     showcaseNodes.length >= 1 &&
     showcaseNodes.length <= SHOWCASE_MAX_SCREENS &&
     showcaseNodes.every((n) => n.type === "embed" || n.type === "frame");
@@ -319,21 +340,22 @@ export function PropertiesPanel() {
     <div className="flex-1 flex flex-col overflow-hidden [&_[data-slot=button-group]_[data-slot=button]:focus-visible]:border-transparent [&_[data-slot=button-group]_[data-slot=button]:focus-visible]:ring-0 [&_[data-slot=button-group]_[data-slot=button]:focus-visible]:outline-none">
       <div className="layers-scrollbar flex-1 overflow-y-auto">
         {activeTool === "pencil" && selectedIds.length === 0 && <PencilToolProperties />}
-        {activeTool === "frame" && <FramePresetsPanel />}
-        {selectedIds.length === 0 && activeTool !== "frame" && activeTool !== "pencil" && (
+        {activeTool === "frame" && <SizePresetsPanel kind="frame" />}
+        {activeTool === "embed" && <SizePresetsPanel kind="embed" />}
+        {selectedIds.length === 0 && !presetsToolActive && activeTool !== "pencil" && (
           <PageProperties />
         )}
-        {selectedNodes.length > 1 && activeTool !== "frame" && (
+        {selectedNodes.length > 1 && !presetsToolActive && (
           <BooleanOperationsSection
             selectedIds={selectedIds}
             selectedNodes={selectedNodes as SceneNode[]}
           />
         )}
-        {selectedNodes.length > 1 && activeTool !== "frame" && (
+        {selectedNodes.length > 1 && !presetsToolActive && (
           <SpacingSection selectedIds={selectedIds} />
         )}
         {/* Multi-select property editor */}
-        {selectedNodes.length > 1 && activeTool !== "frame" && (
+        {selectedNodes.length > 1 && !presetsToolActive && (
           <MultiSelectPropertyEditor
             selectedNodes={selectedNodes as SceneNode[]}
             variables={variables}
@@ -341,7 +363,7 @@ export function PropertiesPanel() {
           />
         )}
         {selectedNodes.length > 1 &&
-          activeTool !== "frame" &&
+          !presetsToolActive &&
           selectedNodes.every((n) => n.type === "embed") && (
             <PrototypeExportSection
               embeds={selectedNodes.map((n) => {
@@ -357,7 +379,7 @@ export function PropertiesPanel() {
               })}
             />
           )}
-        {instanceContext && activeTool !== "frame" && (
+        {instanceContext && !presetsToolActive && (
           <DescendantPropertyEditor
             instanceContext={instanceContext}
             variables={variables}
@@ -367,11 +389,11 @@ export function PropertiesPanel() {
         {/* An element picked inside this embed's HTML takes over the panel
             instead of the embed node's own (HTML-opaque) PropertyEditor —
             see EmbedElementProperties's doc comment. */}
-        {selectedNode && !instanceContext && activeTool !== "frame" && showEmbedElementProperties && (
+        {selectedNode && !instanceContext && !presetsToolActive && showEmbedElementProperties && (
           <EmbedElementProperties />
         )}
         {/* Show normal property editor */}
-        {selectedNode && !instanceContext && activeTool !== "frame" && !showEmbedElementProperties && (
+        {selectedNode && !instanceContext && !presetsToolActive && !showEmbedElementProperties && (
           <PropertyEditor
             // Flat node: sections must not rely on `node.children` (subtree
             // access goes through nodesById/childrenById + materializeLayoutRefs).

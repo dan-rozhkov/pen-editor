@@ -9,6 +9,7 @@ import {
   findTopmostFrameContainingRectWithLayout,
 } from "@/utils/nodeUtils";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
+import { DEFAULT_EMBED_HTML } from "@/lib/embedDefaults";
 import type { InteractionContext, DrawState, PointerGestureHandlers } from "./types";
 
 export interface DrawController extends PointerGestureHandlers {
@@ -121,7 +122,7 @@ export function createDrawController(_context: InteractionContext): DrawControll
           y,
           width,
           height,
-          htmlContent: '<div style="padding: 16px; font-family: sans-serif; color: #333;"><h2 style="margin: 0 0 8px 0;">HTML Embed</h2><p style="margin: 0;">Edit HTML content in the properties panel.</p></div>',
+          htmlContent: DEFAULT_EMBED_HTML,
         };
         break;
       default:
