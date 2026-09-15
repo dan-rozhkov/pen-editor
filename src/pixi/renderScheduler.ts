@@ -42,6 +42,7 @@ import { useRenderModeStore } from "@/store/renderModeStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { useDevModeStore } from "@/store/devModeStore";
 import { useAiVectorPreviewStore } from "@/store/aiVectorPreviewStore";
+import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { subscribeOverlayState } from "./pixiOverlayState";
 
 // Keep rendering this long after the last signal. Covers drop animations
@@ -80,6 +81,23 @@ export function setupRenderScheduler(app: Application): () => void {
     dirty = true;
   };
   invalidate = markActivity;
+
+  // Filtered to `selection?.embedId` alone, same rationale (and same
+  // `!== last` pattern) as `selectionOverlay/index.ts`'s own embedPickerStore
+  // subscription: `drawSelection.ts`'s single-embed size-badge skip is the
+  // only thing downstream of this store that needs a repaint, and it reads
+  // only that one field. Left unfiltered, the store's hot writers —
+  // `setHoveredPath` on every hovered element while picking, and
+  // `setDropIndicator` on every `pointermove` of a sortable element drag
+  // (~60/s) — each triggered a full `markActivity` here for no visual
+  // reason at all.
+  let lastEmbedPickerSelectionEmbedId = useEmbedPickerStore.getState().selection?.embedId ?? null;
+  const unsubEmbedPicker = useEmbedPickerStore.subscribe((state) => {
+    const embedId = state.selection?.embedId ?? null;
+    if (embedId === lastEmbedPickerSelectionEmbedId) return;
+    lastEmbedPickerSelectionEmbedId = embedId;
+    markActivity();
+  });
 
   const onTick = () => {
     const now = performance.now();
@@ -144,6 +162,15 @@ export function setupRenderScheduler(app: Application): () => void {
     // cached scene frames — without this the repaint would only land on the
     // next safety tick, same class of bug as the pen-tool-lag fix above.
     useAiVectorPreviewStore.subscribe(markActivity),
+    // Picking an element inside the selected embed hides that embed's Pixi
+    // size badge (drawSelection.ts's `pickedElementOwnsSingleEmbed`) in favor
+    // of EmbedElementHighlight's own box — a Pixi Graphics change that writes
+    // no sceneStore, so without this subscription the repaint would only
+    // land on the next safety tick, same class of bug as the pen-tool-lag
+    // fix above. (The DOM-rendered EmbedSelectionFrame/EmbedElementHighlight
+    // toggle via React's own re-render from the same store, independent of
+    // this scheduler.) Filtered above — see `unsubEmbedPicker`.
+    unsubEmbedPicker,
     subscribeOverlayState(markActivity),
   ];
 

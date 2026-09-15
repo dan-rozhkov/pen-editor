@@ -273,8 +273,30 @@ export interface EmbedElementEdit {
   /** CSS declarations for the element's inline style. `null`/`""` removes
    * the property. Keys are kebab-case ("background-color"). */
   styles?: Record<string, string | null>;
-  /** Replaces the element's text content. */
+  /** Replaces the element's text content. Used by the properties panel's
+   * text field (`EmbedElementProperties`), which only ever offers this field
+   * for an element `readEmbedElementSnapshot` reported as having no child
+   * ELEMENTS — so a plain `target.textContent = text` can never delete a
+   * structural child here, because there isn't one. */
   text?: string;
+  /** Replaces the element's `innerHTML` verbatim. Used by the canvas
+   * picker's dblclick-to-edit-text gesture (`EmbedLayer.tsx`), which can
+   * enter edit mode on an `isTextLeaf` element that still has non-text
+   * children — `isTextLeaf` deliberately allows `SKIP_TAGS` children (`img`,
+   * `svg`, `br`, ...) and empty-text children through, which is exactly the
+   * Phosphor-icon-inside-a-button idiom (`<button><i class="ph ph-plus">
+   * </i>Add</button>`) the showcase's HTML is full of. `text` can't be used
+   * there: `target.textContent = text` deletes every child ELEMENT
+   * outright, icon included, on ANY edit — even reverting one character.
+   * `innerHtml` is safe to trust verbatim here because the only way it's
+   * ever produced is by reading `innerHTML` back off a live element that was
+   * `contenteditable="plaintext-only"` — the browser itself refuses to let
+   * the user type markup into such an element, so the string can only ever
+   * be "this element's original markup, with plain-text edits to its own
+   * text nodes." A second, parallel field rather than a replacement for
+   * `text`: giving the properties panel's plain textarea this field instead
+   * would let an ordinary text edit there reintroduce markup injection. */
+  innerHtml?: string;
 }
 
 /**
@@ -335,6 +357,10 @@ export function applyEmbedElementEdit(
 
   if (edit.text !== undefined) {
     target.textContent = edit.text;
+  }
+
+  if (edit.innerHtml !== undefined) {
+    target.innerHTML = edit.innerHtml;
   }
 
   const outerHtml = target.outerHTML;

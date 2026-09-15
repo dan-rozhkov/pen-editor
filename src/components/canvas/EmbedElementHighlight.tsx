@@ -252,6 +252,12 @@ export function EmbedElementHighlight() {
   const hoveredPath = useEmbedPickerStore((s) => s.hoveredPath);
   const hoveredEmbedId = useEmbedPickerStore((s) => s.hoveredEmbedId);
   const selection = useEmbedPickerStore((s) => s.selection);
+  // The element currently being typed into (see `embedPickerStore.ts`'s doc
+  // comment on these two fields) — the selection box drawn for it below
+  // must be withheld, or it sits on top of the live caret/text for the
+  // whole edit.
+  const editingEmbedId = useEmbedPickerStore((s) => s.editingEmbedId);
+  const editingPath = useEmbedPickerStore((s) => s.editingPath);
   // While picking, `hoveredPath` is always resolved against the embed being
   // picked — `hoveredEmbedId` only matters for a layers-panel row hover,
   // which happens with `pickingEmbedId` null. Picking takes priority so this
@@ -305,8 +311,9 @@ export function EmbedElementHighlight() {
     };
   }, [hoverEmbedId, selection]);
 
-  // Same gate as EmbedActionBar: the picker is purely an editing affordance
-  // and must never paint over a presented slide or a view-mode canvas.
+  // The picker is purely an editing affordance and must never paint over a
+  // presented slide or a view-mode canvas — same gate useEmbedPickerLifecycle
+  // uses to decide whether to auto-start picking in the first place.
   // Placed after the hooks above (Rules of Hooks) but before any of the
   // work below, so a non-edit mode also skips the querySelector/rect-read
   // work, not just the subscriptions.
@@ -314,8 +321,18 @@ export function EmbedElementHighlight() {
 
   const hoverBox =
     hoverEmbedId && hoveredPath ? resolveElementBox(hoverEmbedId, hoveredPath) : null;
+  // Withhold the selection box entirely while its element is the one being
+  // typed into — `EmbedLayer`'s dblclick handler puts the picker's own
+  // selection on that same element (see `beginElementEdit`), so without this
+  // check the box + size badge would be drawn right on top of the caret for
+  // the whole edit.
+  const isEditingSelection =
+    editingPath !== null &&
+    !!selection &&
+    selection.embedId === editingEmbedId &&
+    selection.path === editingPath;
   const selectionBox =
-    selection && activeEmbedNode
+    !isEditingSelection && selection && activeEmbedNode
       ? resolveElementBox(selection.embedId, selection.path)
       : null;
   const dropIndicatorEmbedId = pickingEmbedId ?? selection?.embedId ?? null;

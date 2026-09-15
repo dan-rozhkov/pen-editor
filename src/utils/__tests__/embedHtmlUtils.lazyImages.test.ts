@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { forceEagerImageLoading, mountHtmlWithBodyStyles } from "../embedHtmlUtils";
+import {
+  forceEagerImageLoading,
+  mountHtmlWithBodyStyles,
+  stripForcedEagerImageLoading,
+} from "../embedHtmlUtils";
 
 /**
  * Regression coverage for the mobile-Safari lazy-image bug: WebKit never
@@ -110,5 +114,71 @@ describe("mountHtmlWithBodyStyles - lazy image neutralisation", () => {
     const img = result.root.querySelector("img");
     expect(img).not.toBeNull();
     expect(img!.getAttribute("loading")).toBe("eager");
+  });
+});
+
+/**
+ * `stripForcedEagerImageLoading` is `forceEagerImageLoading`'s inverse,
+ * added for the code-review finding that `EmbedLayer.tsx`'s single-element
+ * text-edit commit was reading `innerHTML` straight off the LIVE mounted
+ * DOM — which this forcing pass had already mutated — so the attributes it
+ * added leaked into the embed's persisted `htmlContent` on the very next
+ * unrelated edit. It must undo EXACTLY what was added or overwritten, never
+ * touch anything else, and never be run against the live element itself
+ * (see `forceEagerImageLoading`'s own doc comment on `EmbedLayer.tsx`'s
+ * commit path for why).
+ */
+describe("stripForcedEagerImageLoading", () => {
+  it("removes a loading attribute it added where none existed before", () => {
+    const div = document.createElement("div");
+    div.innerHTML = '<img src="a.png" />';
+    forceEagerImageLoading(div);
+    stripForcedEagerImageLoading(div);
+    const img = div.querySelector("img")!;
+    expect(img.hasAttribute("loading")).toBe(false);
+    expect(img.hasAttribute("decoding")).toBe(false);
+  });
+
+  it("restores an author-specified loading value it overwrote", () => {
+    const div = document.createElement("div");
+    div.innerHTML = '<img src="a.png" loading="lazy" />';
+    forceEagerImageLoading(div);
+    expect(div.querySelector("img")!.getAttribute("loading")).toBe("eager");
+    stripForcedEagerImageLoading(div);
+    const img = div.querySelector("img")!;
+    expect(img.getAttribute("loading")).toBe("lazy");
+  });
+
+  it("leaves an element it never touched (author already wrote loading=eager) completely alone", () => {
+    const div = document.createElement("div");
+    div.innerHTML = '<img src="a.png" loading="eager" decoding="sync" />';
+    forceEagerImageLoading(div);
+    stripForcedEagerImageLoading(div);
+    const img = div.querySelector("img")!;
+    expect(img.getAttribute("loading")).toBe("eager");
+    expect(img.getAttribute("decoding")).toBe("sync");
+  });
+
+  it("leaves no marker attributes behind", () => {
+    const div = document.createElement("div");
+    div.innerHTML = '<img src="a.png" />';
+    forceEagerImageLoading(div);
+    stripForcedEagerImageLoading(div);
+    const img = div.querySelector("img")!;
+    expect(img.outerHTML).not.toContain("data-pen-embed-eager");
+    expect(img.outerHTML).not.toContain("data-pen-embed-decoding");
+  });
+
+  it("running it on a clone never affects the live element it was cloned from", () => {
+    const div = document.createElement("div");
+    div.innerHTML = '<img src="a.png" />';
+    forceEagerImageLoading(div);
+
+    const clone = div.cloneNode(true) as HTMLElement;
+    stripForcedEagerImageLoading(clone);
+
+    expect(clone.querySelector("img")!.getAttribute("loading")).toBeNull();
+    // The live element is untouched — still eager, exactly as mounted.
+    expect(div.querySelector("img")!.getAttribute("loading")).toBe("eager");
   });
 });

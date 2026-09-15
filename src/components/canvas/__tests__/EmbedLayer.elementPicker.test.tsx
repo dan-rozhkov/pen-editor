@@ -186,6 +186,123 @@ describe("<EmbedLayer /> element picker interaction", () => {
       dataCanvas.remove();
     }
   });
+
+  describe("multitouch forwarding (Finding 3)", () => {
+    function makeTouch(target: Element, id: number, clientX = 0, clientY = 0): Touch {
+      return new Touch({ identifier: id, target, clientX, clientY });
+    }
+
+    function touchEvent(
+      type: "touchstart" | "touchmove" | "touchend" | "touchcancel",
+      touches: Touch[],
+      changedTouches: Touch[] = touches,
+    ): TouchEvent {
+      return new TouchEvent(type, {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        touches,
+        targetTouches: touches,
+        changedTouches,
+      });
+    }
+
+    function renderWithCanvas() {
+      const dataCanvas = document.createElement("div");
+      dataCanvas.setAttribute("data-canvas", "");
+      document.body.appendChild(dataCanvas);
+      const canvas = document.createElement("canvas");
+      dataCanvas.appendChild(canvas);
+      const mountPoint = document.createElement("div");
+      dataCanvas.appendChild(mountPoint);
+      const { container } = render(<EmbedLayer />, { container: mountPoint });
+      return { container, canvas, cleanupCanvas: () => dataCanvas.remove() };
+    }
+
+    it("forwards a two-finger touchstart to the Pixi canvas instead of letting the picker treat it as a tap", () => {
+      const { container, canvas, cleanupCanvas } = renderWithCanvas();
+      try {
+        act(() => useEmbedPickerStore.getState().startPicking("e1"));
+        const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+        const button = host.shadowRoot!.querySelector("button")!;
+
+        const onCanvasTouchStart = vi.fn();
+        canvas.addEventListener("touchstart", onCanvasTouchStart);
+
+        act(() => {
+          host.dispatchEvent(
+            touchEvent("touchstart", [makeTouch(button, 1, 10, 10), makeTouch(button, 2, 20, 20)]),
+          );
+        });
+
+        expect(onCanvasTouchStart).toHaveBeenCalledTimes(1);
+        const forwarded = onCanvasTouchStart.mock.calls[0][0] as TouchEvent;
+        expect(forwarded.touches).toHaveLength(2);
+      } finally {
+        cleanupCanvas();
+      }
+    });
+
+    it("never forwards a single-finger touch — that stays the picker's own tap-to-select", () => {
+      const { container, canvas, cleanupCanvas } = renderWithCanvas();
+      try {
+        act(() => useEmbedPickerStore.getState().startPicking("e1"));
+        const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+        const button = host.shadowRoot!.querySelector("button")!;
+
+        const onCanvasTouchStart = vi.fn();
+        canvas.addEventListener("touchstart", onCanvasTouchStart);
+
+        act(() => {
+          host.dispatchEvent(touchEvent("touchstart", [makeTouch(button, 1, 10, 10)]));
+        });
+
+        expect(onCanvasTouchStart).not.toHaveBeenCalled();
+      } finally {
+        cleanupCanvas();
+      }
+    });
+
+    it("keeps forwarding touchmove/touchend through to the end of a gesture that started multitouch, even after a finger lifts and the count drops below 2", () => {
+      const { container, canvas, cleanupCanvas } = renderWithCanvas();
+      try {
+        act(() => useEmbedPickerStore.getState().startPicking("e1"));
+        const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+        const button = host.shadowRoot!.querySelector("button")!;
+
+        const forwarded: string[] = [];
+        canvas.addEventListener("touchstart", () => forwarded.push("touchstart"));
+        canvas.addEventListener("touchmove", () => forwarded.push("touchmove"));
+        canvas.addEventListener("touchend", () => forwarded.push("touchend"));
+
+        const t1 = makeTouch(button, 1, 10, 10);
+        const t2 = makeTouch(button, 2, 20, 20);
+
+        act(() => {
+          // Two fingers down — starts the multitouch forward.
+          host.dispatchEvent(touchEvent("touchstart", [t1, t2]));
+          // One finger lifts — the remaining touch list has only 1 entry —
+          // but the gesture already started as multitouch, so this must
+          // still forward rather than silently stopping.
+          host.dispatchEvent(touchEvent("touchend", [t1], [t2]));
+          // The last finger lifts.
+          host.dispatchEvent(touchEvent("touchend", [], [t1]));
+        });
+
+        expect(forwarded).toEqual(["touchstart", "touchend", "touchend"]);
+
+        // The series is over (0 touches) — the NEXT touchstart is judged
+        // fresh: a single finger must not forward again.
+        forwarded.length = 0;
+        act(() => {
+          host.dispatchEvent(touchEvent("touchstart", [makeTouch(button, 3, 5, 5)]));
+        });
+        expect(forwarded).toEqual([]);
+      } finally {
+        cleanupCanvas();
+      }
+    });
+  });
 });
 
 describe("<EmbedLayer /> element picker — drag to reorder", () => {
@@ -296,6 +413,19 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     };
   }
 
+  /** Makes `el` the picker's current selection via a real click, exactly the
+   * way a user would before dragging it — sortable reorder now only
+   * re-enters for a pointerdown that lands on the element ALREADY selected
+   * (see `EmbedLayer.tsx`'s `handlePointerDown`/`isCurrentSelection`); a
+   * pointerdown on anything else forwards to Pixi as a node-move drag
+   * instead (covered by its own describe block below). Every reorder test
+   * in this block calls this first so it keeps exercising the sortable
+   * path rather than silently falling through to the (here, canvas-less,
+   * so no-op) node-move branch. */
+  function selectItem(item: Element): void {
+    item.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }));
+  }
+
   it("a small pointer move is treated as a click, not a drag — htmlContent is untouched", () => {
     const { container } = render(<EmbedLayer />);
     act(() => useEmbedPickerStore.getState().startPicking("e1"));
@@ -328,6 +458,7 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     const { item2 } = itemsOf(host);
     const updateNodeSpy = spyOnUpdateNode();
 
+    act(() => selectItem(item2));
     act(() => {
       item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
       // Past DRAG_THRESHOLD_PX, and nearest (by the stubbed rects above) to
@@ -374,6 +505,7 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     const { item2 } = itemsOf(host);
     const updateNodeSpy = spyOnUpdateNode();
 
+    act(() => selectItem(item2));
     act(() => {
       item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 20 }));
       // y=30 is nearest the slot between item1 and item3 — item2's own
@@ -403,6 +535,12 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     const item4 = host.shadowRoot!.querySelector('[data-slot="4"]')!;
     const updateNodeSpy = spyOnUpdateNode();
 
+    // Select it first — even the CURRENT picker selection must not start a
+    // sortable drag when it's out-of-flow; `isSortable` is checked in
+    // addition to (not instead of) the "is this the current selection"
+    // gate.
+    act(() => selectItem(item4));
+
     act(() => {
       item4.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
       window.dispatchEvent(pointerEvent("pointermove", { clientX: 20, clientY: 20 }));
@@ -422,6 +560,7 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     const { item2 } = itemsOf(host);
     const updateNodeSpy = spyOnUpdateNode();
 
+    act(() => selectItem(item2));
     act(() => {
       item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
       window.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 80 }));
@@ -452,6 +591,7 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     const { item2 } = itemsOf(host);
     const updateNodeSpy = spyOnUpdateNode();
 
+    act(() => selectItem(item2));
     act(() => {
       item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
       window.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 80 }));
@@ -501,6 +641,7 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     const { item2 } = itemsOf(host);
     spyOnUpdateNode();
 
+    act(() => selectItem(item2));
     expect(useEmbedPickerStore.getState().cancelElementDrag).toBeNull();
 
     act(() => {
@@ -599,6 +740,7 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     const { item2 } = itemsOf(host);
     const updateNodeSpy = spyOnUpdateNode();
 
+    act(() => selectItem(item2));
     act(() => {
       item2.dispatchEvent(
         pointerEvent("pointerdown", { clientX: 10, clientY: 30, pointerId: 1 }),
@@ -639,6 +781,11 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     const { item2 } = itemsOf(host);
     const updateNodeSpy = spyOnUpdateNode();
 
+    // Select it (via a plain click, unaffected by `canEditScene`) BEFORE
+    // switching to view mode, so the pointerdown below still takes the
+    // sortable-reorder path rather than falling through to a node-move
+    // drag it has nothing to do with.
+    act(() => selectItem(item2));
     act(() => useEditorModeStore.setState({ mode: "view" }));
     try {
       act(() => {
@@ -669,6 +816,7 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
     const { item2, item3 } = itemsOf(host);
 
+    act(() => selectItem(item2));
     act(() => {
       item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
       window.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 80 }));
@@ -678,6 +826,10 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
 
     const updateNodeSpy = spyOnUpdateNode();
 
+    // item2's own commit never landed (its pointerup was lost), so it is
+    // still the picker's selection — select item3 instead before dragging
+    // IT, for the same reason as item2 above.
+    act(() => selectItem(item3));
     act(() => {
       item3.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 50 }));
     });
@@ -712,6 +864,7 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
     const { item2 } = itemsOf(host);
 
+    act(() => selectItem(item2));
     act(() => {
       // pointerdown well above the cursor's landing spot, so the first move
       // below clears DRAG_THRESHOLD_PX (3px).
@@ -791,6 +944,7 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     });
     expect(useEmbedPickerStore.getState().hoveredPath).not.toBeNull();
 
+    act(() => selectItem(item2));
     act(() => {
       item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
       // Cross the threshold — this is the moment the stale hover must clear.
@@ -847,6 +1001,7 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
       return realGetComputedStyle(el) as CSSStyleDeclaration;
     });
 
+    act(() => selectItem(item2));
     act(() => {
       item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
       window.dispatchEvent(pointerEvent("pointermove", { clientX: 15, clientY: 34 }));
@@ -876,6 +1031,7 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
     const { item2 } = itemsOf(host);
 
+    act(() => selectItem(item2));
     act(() => {
       item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
       window.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 80 }));

@@ -54,12 +54,51 @@ interface EmbedPickerState {
    * user out of the picker entirely) before our listener could consume the
    * event. Caught live by `e2e/embed-element-sortable.spec.ts`. */
   cancelElementDrag: (() => void) | null;
+  /** Cancels the single-element inline TEXT edit currently in flight inside
+   * an embed, reverting the live element and writing nothing to the scene —
+   * or `null` when no edit is in progress. Registered by `EmbedLayer`'s
+   * `beginElementEdit` and called by the global Escape handler
+   * (`keyboardCommands.ts`), exactly mirroring `cancelElementDrag` right
+   * above (same field, same contract, same reason it has to be a
+   * store-registered callback rather than something the edit's own
+   * `keydown` listener can win by registration order): a capture-phase
+   * `keydown` listener on `window` always runs before one on a descendant
+   * target, `el` included — `window` is the topmost node visited in the
+   * capture phase, and that ordering has nothing to do with WHEN either
+   * listener was registered. Without this, the global handler's Escape
+   * branch reaches `exitContainer()` first, which sees this edit's picker
+   * `selection` (set on entry, in `beginElementEdit`) as leftover state to
+   * clear — silently dropping the element selection (and the properties
+   * panel jumping back to the embed) on every Escape-cancelled text edit,
+   * even though the edit itself reverted correctly via `el`'s own listener. */
+  cancelElementEdit: (() => void) | null;
   /** The insertion-line rect for the sortable drag currently in flight (see
    * `embedElementSortable.ts`'s `DropSlot.indicator`), in CLIENT
    * coordinates — `null` whenever no drag is in progress or the pointer
    * isn't currently over any drop slot. `EmbedElementHighlight` reads this
    * to draw the line; `EmbedLayer`'s drag gesture is the only writer. */
   dropIndicator: { left: number; top: number; width: number; height: number } | null;
+  /** The embed a dblclicked text leaf is currently being inline-edited in,
+   * or null. A separate pair of fields rather than reusing `pickingEmbedId`
+   * itself: picking (hover/click/drag) stays active for the REST of the
+   * embed while one element is being typed into.
+   *
+   * `EmbedLayer`'s own picking effect does NOT read these — it suppresses
+   * hover-highlighting and drag-start for the editing element via a plain
+   * local closure variable (`edit`) it already has for free, since it's the
+   * one that started the edit. What genuinely needs these is
+   * `EmbedElementHighlight`: a separate component with no access to that
+   * closure, which uses them to withhold the SELECTION outline + size badge
+   * for the element currently being typed into — without this, that box
+   * would sit drawn on top of the live caret for the whole edit. Kept in
+   * the store (not a local ref in `EmbedLayer`) so it's independently
+   * readable by tests and so a picker-lifecycle reset (`reset`/
+   * `stopPicking`) can't leave editing-mode flags dangling once the picker
+   * itself goes away. */
+  editingEmbedId: string | null;
+  /** Shadow-relative path (see `buildElementPath`) of the element currently
+   * being inline-edited, paired with `editingEmbedId`. */
+  editingPath: string | null;
 
   startPicking: (embedId: string) => void;
   stopPicking: () => void;
@@ -88,6 +127,8 @@ interface EmbedPickerState {
   noteSelectionEdit: (html: string, outerHtml?: string, newPath?: string) => void;
   bumpDragVersion: () => void;
   setCancelElementDrag: (cancel: (() => void) | null) => void;
+  /** Registers/clears `cancelElementEdit` — see that field's own doc comment. */
+  setCancelElementEdit: (cancel: (() => void) | null) => void;
   setDropIndicator: (
     indicator: { left: number; top: number; width: number; height: number } | null,
   ) => void;
@@ -106,6 +147,15 @@ interface EmbedPickerState {
    * toward `false`, i.e. toward showing the embed-level button. */
   elementAffordanceVisible: boolean;
   setElementAffordanceVisible: (visible: boolean) => void;
+  /** Enters single-element inline text editing — see `editingEmbedId`'s doc
+   * comment. Called by `EmbedLayer`'s dblclick handler once it has resolved
+   * a text-leaf target and made it contenteditable. */
+  startElementEdit: (embedId: string, path: string) => void;
+  /** Leaves single-element inline text editing, on commit, on Escape
+   * revert, or on effect teardown (isPicking flips off mid-edit). Does NOT
+   * touch `selection`/`pickingEmbedId` — those are the picker's own
+   * concerns and outlive one element's edit session. */
+  stopElementEdit: () => void;
   reset: () => void;
 }
 
@@ -117,8 +167,11 @@ export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
   selectionHtmlSnapshot: null,
   dragVersion: 0,
   cancelElementDrag: null,
+  cancelElementEdit: null,
   dropIndicator: null,
   elementAffordanceVisible: false,
+  editingEmbedId: null,
+  editingPath: null,
 
   startPicking: (embedId) => {
     const { selection } = get();
@@ -132,11 +185,23 @@ export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
       // embed doesn't get sent to the agent alongside a fresh pick.
       selection: staysForThisEmbed ? selection : null,
       selectionHtmlSnapshot: staysForThisEmbed ? get().selectionHtmlSnapshot : null,
+      // A (re-)start of picking always begins with no element mid-edit,
+      // even if some earlier session left these set — there is no live
+      // contenteditable element left to finish editing at this point.
+      editingEmbedId: null,
+      editingPath: null,
     });
   },
 
   stopPicking: () =>
-    set({ pickingEmbedId: null, hoveredPath: null, hoveredEmbedId: null, dropIndicator: null }),
+    set({
+      pickingEmbedId: null,
+      hoveredPath: null,
+      hoveredEmbedId: null,
+      dropIndicator: null,
+      editingEmbedId: null,
+      editingPath: null,
+    }),
 
   setHoveredPath: (path) => set({ hoveredPath: path }),
 
@@ -164,12 +229,17 @@ export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
 
   setCancelElementDrag: (cancel) => set({ cancelElementDrag: cancel }),
 
+  setCancelElementEdit: (cancel) => set({ cancelElementEdit: cancel }),
+
   setDropIndicator: (indicator) => set({ dropIndicator: indicator }),
 
   setElementAffordanceVisible: (visible) => {
     if (get().elementAffordanceVisible === visible) return;
     set({ elementAffordanceVisible: visible });
   },
+  startElementEdit: (embedId, path) => set({ editingEmbedId: embedId, editingPath: path }),
+
+  stopElementEdit: () => set({ editingEmbedId: null, editingPath: null }),
 
   reset: () =>
     set({
@@ -179,7 +249,10 @@ export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
       selection: null,
       selectionHtmlSnapshot: null,
       cancelElementDrag: null,
+      cancelElementEdit: null,
       dropIndicator: null,
       elementAffordanceVisible: false,
+      editingEmbedId: null,
+      editingPath: null,
     }),
 }));

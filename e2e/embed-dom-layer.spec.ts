@@ -4,10 +4,13 @@ import { expectEditorMounted } from "./support/editor";
 // Smoke test for the code-layer DOM overlay (EmbedLayer). An embed node is
 // added to the scene store (dev-only global), and we verify it renders as a
 // Shadow-DOM host above the canvas, is non-interactive by default, and a
-// double-click selects it and enters the element-picker mode (`pickingEmbedId`,
-// not `activeEmbedId` — nothing in the UI sets `activeEmbedId` today).
+// single click selects it and — since the element picker now auto-starts as
+// soon as an embed is the sole selection (useEmbedPickerLifecycle; there is
+// no more manual "Select element" toggle) — enters element-picker mode
+// (`pickingEmbedId`, not `activeEmbedId` — nothing in the UI sets
+// `activeEmbedId` today).
 
-test("embed renders as a DOM overlay and enters element-picker mode on double-click", async ({
+test("embed renders as a DOM overlay and enters element-picker mode on selection", async ({
   page,
 }) => {
   // The app fetches the model list at startup; stub it so the dev server
@@ -51,21 +54,24 @@ test("embed renders as a DOM overlay and enters element-picker mode on double-cl
   // Default: not interactive (pointer-events: none).
   expect(await host.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe("none");
 
-  // Double-click selects the embed and enters element-picker mode
-  // (pointer-events: auto while picking too, so the picker overlay can
-  // receive pointer events inside the shadow DOM).
-  // The host is pointer-events:none, so the double-click reaches the Pixi
-  // canvas at the embed's screen position, where the dblclick handler
-  // resolves the embed, selects it, and calls startPicking.
+  // A single click selects the embed, which auto-starts element-picker mode
+  // (pointer-events: auto while picking, so the picker overlay can receive
+  // pointer events inside the shadow DOM — this is also the only
+  // externally-observable signal available here, since there is no dev
+  // global for the picker store and no more toggle button to read
+  // aria-pressed from).
+  // The host is pointer-events:none, so the click reaches the Pixi canvas at
+  // the embed's screen position, where the click handler resolves the embed
+  // and selects it.
   //
   // That resolution goes through the canvas hit test, which prunes root
   // subtrees against the culling index — and pixiSync only refreshes that
   // index on its rAF-deferred flush. The host above becomes visible on
   // React's commit, which happens first, so a visible overlay does not mean
   // a click would reach the embed: measured, the index is still empty for
-  // the first frame after `addNode`, the hit test returns null, and the
-  // single double-click below is consumed doing nothing (this made the test
-  // fail ~50-90% of the time in isolation, on both the current and the
+  // the first frame after `addNode`, the hit test returns null, and a click
+  // sent too early is consumed doing nothing (this made the test fail
+  // ~50-90% of the time in isolation, on both the current and the
   // pre-dependency-bump lockfile). Wait for the editor to actually resolve a
   // click at the point we are about to click, then click once.
   const box = await host.boundingBox();
@@ -80,18 +86,10 @@ test("embed renders as a DOM overlay and enters element-picker mode on double-cl
     return w.__hitTestScreenPoint(point.x - rect.left, point.y - rect.top) === "e1";
   }, clickPoint);
 
-  await host.dblclick({ force: true });
+  await host.click({ force: true });
   await expect
     .poll(async () => host.evaluate((el) => getComputedStyle(el).pointerEvents))
     .toBe("auto");
-
-  // Picker mode: the embed's "Select element" toggle in EmbedActionBar reads
-  // `pickingEmbedId` and shows as pressed/"Exit element select" — there is
-  // no dev global for the picker store, so the button's own aria-pressed
-  // state is the visible signal.
-  const selectElementToggle = page.getByRole("button", { name: "Exit element select" });
-  await expect(selectElementToggle).toBeVisible();
-  await expect(selectElementToggle).toHaveAttribute("aria-pressed", "true");
 });
 
 test("embed preserves every leading style block in a showcase HTML fragment", async ({ page }) => {

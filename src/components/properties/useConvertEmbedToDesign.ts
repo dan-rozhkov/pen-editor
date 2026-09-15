@@ -4,10 +4,13 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 
 /**
- * Shared "Convert to design" logic for embed nodes — used by both
- * `EmbedActionBar` (canvas overlay) and `EmbedContentSection` (properties
- * panel). Guards against re-entrant clicks with a ref (state alone lags one
- * render behind), converts via `sceneStore`, and selects the resulting frame.
+ * "Convert to design" logic for embed nodes, used by `EmbedContentSection`
+ * (properties panel) — the canvas-overlay `EmbedActionBar` this was
+ * originally shared with has been removed (the element picker is now
+ * always-on, see `useEmbedPickerLifecycle`). Kept as its own hook rather
+ * than inlined since it still has non-trivial behavior to get right: guards
+ * against re-entrant clicks with a ref (state alone lags one render behind),
+ * converts via `sceneStore`, and selects the resulting frame.
  */
 export function useConvertEmbedToDesign(nodeId: string) {
   const [converting, setConverting] = useState(false);

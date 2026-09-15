@@ -5,6 +5,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { useDevModeStore } from "@/store/devModeStore";
+import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { createOverlayHelpers } from "./helpers";
 import { redrawSelection } from "./drawSelection";
 import { redrawHover, cleanupSpacingPool } from "./drawHover";
@@ -126,6 +127,31 @@ export function createSelectionOverlay(
     scheduleSelectionRedraw(DIRTY_SELECTION | DIRTY_FRAME_NAMES);
   });
 
+  // drawSelection.ts skips the single-embed size badge once an ELEMENT
+  // inside it is picked (embedPickerStore's `selection`) — without this
+  // subscription that skip would only take effect on the next redraw
+  // triggered by something else (selection/hover/scene), so picking an
+  // element could leave the stale badge on screen until an unrelated
+  // interaction forced a repaint.
+  //
+  // Filtered to `selection?.embedId` alone (mirrors `unsubMode` below,
+  // which does the same `!== lastX` comparison for the same reason):
+  // `drawSelection.ts`'s `pickedElementOwnsSingleEmbed` reads only that one
+  // field, but the store also has hot writers this overlay doesn't care
+  // about at all — `setHoveredPath` on every hovered-element change while
+  // picking, and `setDropIndicator` on every `pointermove` of a sortable
+  // element drag (~60/s). An unfiltered subscription scheduled a full
+  // Graphics rebuild AND `markActivity` (via `renderScheduler`'s own
+  // subscription) on every one of those, even though neither ever changes
+  // what this overlay draws.
+  let lastEmbedPickerSelectionEmbedId = useEmbedPickerStore.getState().selection?.embedId ?? null;
+  const unsubEmbedPicker = useEmbedPickerStore.subscribe((state) => {
+    const embedId = state.selection?.embedId ?? null;
+    if (embedId === lastEmbedPickerSelectionEmbedId) return;
+    lastEmbedPickerSelectionEmbedId = embedId;
+    scheduleSelectionRedraw(DIRTY_SELECTION);
+  });
+
   // Dev Mode makes a selected auto-layout frame's spacing overlays persistent,
   // so entering or exiting it must redraw the hover layer even if the cursor
   // and selection have not changed.
@@ -217,6 +243,7 @@ export function createSelectionOverlay(
     unsubSelection();
     unsubHover();
     unsubScene();
+    unsubEmbedPicker();
     unsubDevMode();
     unsubViewport();
     unsubMode();

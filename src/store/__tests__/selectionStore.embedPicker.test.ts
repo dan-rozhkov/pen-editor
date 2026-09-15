@@ -6,20 +6,7 @@ import { resetStores } from "@/test/fixtures";
 describe("selectionStore.exitContainer + embed element picker", () => {
   beforeEach(() => resetStores());
 
-  it("exitContainer stops picking mode first, before any other back-out step, and reports handled", () => {
-    useEmbedPickerStore.getState().startPicking("e1");
-    useSelectionStore.setState({ activeEmbedId: "e1", editingNodeId: "e1" });
-
-    const handled = useSelectionStore.getState().exitContainer();
-
-    expect(handled).toBe(true);
-    expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
-    // Picking-mode exit takes priority: nothing else was touched this call.
-    expect(useSelectionStore.getState().activeEmbedId).toBe("e1");
-    expect(useSelectionStore.getState().editingNodeId).toBe("e1");
-  });
-
-  it("stopPicking keeps a prior selection alive", () => {
+  it("exitContainer clears a picked element first, before any other back-out step, and reports handled", () => {
     useEmbedPickerStore.getState().startPicking("e1");
     useEmbedPickerStore.getState().selectElement({
       embedId: "e1",
@@ -29,13 +16,37 @@ describe("selectionStore.exitContainer + embed element picker", () => {
       textPreview: "hi",
       outerHtml: "<div>hi</div>",
     });
+    useSelectionStore.setState({ activeEmbedId: "e1", editingNodeId: "e1" });
 
-    useSelectionStore.getState().exitContainer();
+    const handled = useSelectionStore.getState().exitContainer();
 
-    expect(useEmbedPickerStore.getState().selection?.embedId).toBe("e1");
+    expect(handled).toBe(true);
+    expect(useEmbedPickerStore.getState().selection).toBeNull();
+    // Clearing the picked element takes priority: nothing else was touched
+    // this call — picking itself is left alone too (auto-start owns it, not
+    // Escape), and the surrounding activeEmbedId/editingNodeId are untouched.
+    expect(useEmbedPickerStore.getState().pickingEmbedId).toBe("e1");
+    expect(useSelectionStore.getState().activeEmbedId).toBe("e1");
+    expect(useSelectionStore.getState().editingNodeId).toBe("e1");
   });
 
-  it("falls through to the ordinary back-out chain when not picking", () => {
+  it("falls through to the ordinary back-out chain when no element is picked, even while picking mode is active", () => {
+    // Picking with no element selected yet (e.g. auto-started on selection,
+    // nothing clicked inside the embed) — Escape must not treat this as
+    // "handled" by the picker; it should fall through to the ordinary chain.
+    useEmbedPickerStore.getState().startPicking("e1");
+    useSelectionStore.setState({ activeEmbedId: "e1" });
+
+    const handled = useSelectionStore.getState().exitContainer();
+
+    expect(handled).toBe(true);
+    expect(useSelectionStore.getState().activeEmbedId).toBeNull();
+    // Picking mode itself is left running — only the lifecycle hook (reacting
+    // to a selection change) turns it off, not exitContainer directly.
+    expect(useEmbedPickerStore.getState().pickingEmbedId).toBe("e1");
+  });
+
+  it("falls through to the ordinary back-out chain when not picking at all", () => {
     useSelectionStore.setState({ activeEmbedId: "e1" });
     const handled = useSelectionStore.getState().exitContainer();
     expect(handled).toBe(true);

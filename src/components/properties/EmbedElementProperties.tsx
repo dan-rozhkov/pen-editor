@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { CaretLeftIcon, MinusIcon } from "@phosphor-icons/react";
+import { useCallback, useEffect, useState } from "react";
+import { CaretLeftIcon, MinusIcon, PencilSimpleLineIcon } from "@phosphor-icons/react";
 import {
   findLiveEmbedElement,
   readEmbedElementSnapshot,
@@ -9,6 +9,7 @@ import {
 } from "@/lib/embedElementStyle";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useSceneStore } from "@/store/sceneStore";
+import { useSelectionStore } from "@/store/selectionStore";
 import { useReadOnly } from "@/hooks/useReadOnly";
 import { IconButton } from "@/components/ui/IconButton";
 import {
@@ -86,6 +87,10 @@ function isFlexDisplay(display: string): boolean {
  * (via the embed element picker, `embedElementPicker.ts`/`EmbedLayer.tsx`).
  * Rendered by `PropertiesPanel` instead of the normal `PropertyEditor` while
  * `embedPickerStore.selection` points at the currently-selected embed node.
+ * Also carries its own "Edit inline" affordance (mirroring
+ * `EmbedContentSection`'s) so `startEditing(embedId, "embed")` stays reachable
+ * without first pressing Escape to get back to the embed-level section — see
+ * the comment above `handleEditInline`.
  */
 export function EmbedElementProperties() {
   const readOnly = useReadOnly();
@@ -96,6 +101,21 @@ export function EmbedElementProperties() {
   // deriving nullable locals instead of returning early here.
   const embedId = selection?.embedId ?? null;
   const path = selection?.path ?? null;
+
+  // Second entry point into InlineEmbedEditor, alongside the "Edit inline"
+  // button in `EmbedContentSection` (the embed node's own PropertyEditor
+  // section). That button is now unreachable from here without an Escape
+  // first: `PropertiesPanel` swaps in this component the instant an element
+  // is picked inside the embed, which (picker-always-on) is the normal first
+  // click on any embed. Since `EmbedActionBar` was removed, this WAS the
+  // only remaining path to `startEditing(nodeId, "embed")` while an element
+  // is selected — duplicating the button here (rather than un-swapping the
+  // section, which would also hide every element-editing control this panel
+  // exists for) is the smaller change.
+  const handleEditInline = useCallback(() => {
+    if (!embedId) return;
+    useSelectionStore.getState().startEditing(embedId, "embed");
+  }, [embedId]);
 
   const htmlContent = useSceneStore((s) =>
     embedId ? ((s.nodesById[embedId] as { htmlContent?: string } | undefined)?.htmlContent ?? null) : null,
@@ -177,15 +197,26 @@ export function EmbedElementProperties() {
       <PropertySection
         title="Element"
         action={
-          <IconButton
-            tooltip="Back to embed"
-            aria-label="Back to embed"
-            variant="ghost"
-            size="icon-sm"
-            onClick={clearSelection}
-          >
-            <CaretLeftIcon />
-          </IconButton>
+          <div className="flex items-center gap-1">
+            <IconButton
+              tooltip="Edit inline"
+              aria-label="Edit inline"
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleEditInline}
+            >
+              <PencilSimpleLineIcon />
+            </IconButton>
+            <IconButton
+              tooltip="Back to embed"
+              aria-label="Back to embed"
+              variant="ghost"
+              size="icon-sm"
+              onClick={clearSelection}
+            >
+              <CaretLeftIcon />
+            </IconButton>
+          </div>
         }
       >
         <div className="flex flex-col gap-0.5 min-w-0">

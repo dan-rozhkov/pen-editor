@@ -22,7 +22,6 @@ import { useShallow } from "zustand/react/shallow";
 import { InlineNameEditor} from "@/components/InlineNameEditor";
 import { InlineTextEditor } from "@/components/InlineTextEditor";
 import { InlineEmbedEditor } from "@/components/InlineEmbedEditor";
-import { EmbedActionBar } from "@/components/canvas/EmbedActionBar";
 import { EmbedAgentButton } from "@/components/canvas/EmbedAgentButton";
 import { EmbedSelectionFrame } from "@/components/canvas/EmbedSelectionFrame";
 import { EmbedElementHighlight } from "@/components/canvas/EmbedElementHighlight";
@@ -212,6 +211,13 @@ export function PixiCanvas() {
   const clearSelection = useSelectionStore((s) => s.clearSelection);
   const editingNodeId = useSelectionStore((s) => s.editingNodeId);
   const editingMode = useSelectionStore((s) => s.editingMode);
+  // A picked ELEMENT inside the selected embed means the user's attention is
+  // on that element, not the embed's own bounds — the DOM selection frame
+  // (with resize handles) would visually compete with the element highlight
+  // (EmbedElementHighlight) drawn on top of it. Only the embed-level frame is
+  // suppressed; the same-purpose hover frame for a DIFFERENT embed is
+  // untouched (see the `hoveredEmbedNode` block below).
+  const embedWithPickedElementId = useEmbedPickerStore((s) => s.selection?.embedId ?? null);
   const selectedIds = useSelectionStore((s) => s.selectedIds);
   const undo = useHistoryStore((s) => s.undo);
   const redo = useHistoryStore((s) => s.redo);
@@ -501,13 +507,16 @@ export function PixiCanvas() {
       <CommentLayer />
       {/* Selection frame + resize handles mirrored as DOM above the embed
           layer — the Pixi overlay is hidden behind the embed's HTML content. */}
-      {selectedEmbedNode && selectedEmbedPosition && editingMode !== "embed" && (
-        <EmbedSelectionFrame
-          node={selectedEmbedNode}
-          absoluteX={selectedEmbedPosition.x}
-          absoluteY={selectedEmbedPosition.y}
-        />
-      )}
+      {selectedEmbedNode &&
+        selectedEmbedPosition &&
+        editingMode !== "embed" &&
+        embedWithPickedElementId !== selectedEmbedNode.id && (
+          <EmbedSelectionFrame
+            node={selectedEmbedNode}
+            absoluteX={selectedEmbedPosition.x}
+            absoluteY={selectedEmbedPosition.y}
+          />
+        )}
       {hoveredEmbedNode &&
         hoveredEmbedPosition &&
         hoveredEmbedNode.id !== selectedEmbedNode?.id &&
@@ -522,17 +531,9 @@ export function PixiCanvas() {
         )}
       {/* Element-picker hover/selection highlight — only renders while
           picking or once an element has been picked. Gated internally on
-          canEditScene(editorMode), the same way EmbedActionBar gates
-          itself, so it never paints over a presented slide or a
-          view-mode canvas. */}
+          canEditScene(editorMode) so it never paints over a presented
+          slide or a view-mode canvas. */}
       <EmbedElementHighlight />
-      {selectedEmbedNode && selectedEmbedPosition && editingMode !== "embed" && (
-        <EmbedActionBar
-          node={selectedEmbedNode}
-          absoluteX={selectedEmbedPosition.x}
-          absoluteY={selectedEmbedPosition.y}
-        />
-      )}
       {/* On-canvas agent affordance for a selected embed. Suppressed while an
           element inside that embed is picked: EmbedElementHighlight then draws
           its own, element-scoped agent button, and two identical sparkle

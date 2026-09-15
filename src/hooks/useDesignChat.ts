@@ -119,7 +119,8 @@ export function buildCanvasContext(sessionId?: string): object {
     : null;
 
   // Element the user pointed at inside an embed via the element picker
-  // (EmbedActionBar's "Select element" mode). Only forwarded while the
+  // (auto-started whenever an embed is the sole selection — see
+  // useEmbedPickerLifecycle). Only forwarded while the
   // embed it belongs to still exists in the scene — a stale embedId (node
   // deleted) is otherwise cleared by useEmbedPickerLifecycle, but this is a
   // last-line guard against sending a dangling reference to the agent.

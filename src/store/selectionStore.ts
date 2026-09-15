@@ -230,10 +230,19 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
 
   exitContainer: () => {
     const { enteredContainerId, editingNodeId, activeEmbedId } = get()
-    // Step -1: Exit element-picking mode first — the user is mid-pick inside
-    // an embed, which takes priority over every other back-out step below.
-    if (useEmbedPickerStore.getState().pickingEmbedId) {
-      useEmbedPickerStore.getState().stopPicking()
+    // Step -1: a picked ELEMENT takes priority over every other back-out step
+    // below. `pickingEmbedId` alone is no longer the signal to act on here —
+    // the picker auto-starts as soon as an embed is the sole selection
+    // (`useEmbedPickerLifecycle`), so calling `stopPicking()` on Escape would
+    // be pointless theater: the very next `check()` (fired by the selection
+    // change below, or by nothing changing at all) turns it right back on,
+    // and Escape would look dead. Instead: clear a picked element if there is
+    // one (leaving the embed itself selected, so picking stays active for a
+    // fresh pick), otherwise fall through to the ordinary chain below, whose
+    // last resort deselects the embed node — which is what actually stops
+    // picking, via the lifecycle hook reacting to the selection change.
+    if (useEmbedPickerStore.getState().selection) {
+      useEmbedPickerStore.getState().clearSelection()
       return true
     }
     // Step 0: Exit an active (interactive) embed first

@@ -6,35 +6,7 @@ import { useSelectionStore } from '../store/selectionStore'
 import { useViewportStore } from '../store/viewportStore'
 import { mountHtmlWithBodyStyles, type MountResult } from '../utils/embedHtmlUtils'
 import { normalizeTinySvgDotPathsWithOptions, stripTinySvgDotPathNormalization } from '../utils/svgDotNormalization'
-
-/** Tags that should never be made contenteditable */
-const SKIP_TAGS = new Set([
-  'STYLE','SCRIPT','SVG','CANVAS','VIDEO','AUDIO','IFRAME',
-  'IMG','INPUT','TEXTAREA','SELECT','BR','HR','META','LINK',
-])
-
-/**
- * Determine if an element is a "text leaf" — it contains meaningful
- * direct text content and no block-level child elements.
- * This catches <div>, <span>, <p>, <h1>, <button>, <td>, etc.
- */
-function isTextLeaf(el: Element): boolean {
-  if (SKIP_TAGS.has(el.tagName)) return false
-  // Must have some non-whitespace text content
-  let hasText = false
-  for (const child of el.childNodes) {
-    if (child.nodeType === Node.TEXT_NODE && child.textContent?.trim()) {
-      hasText = true
-    }
-  }
-  if (!hasText) return false
-  // No child elements that themselves contain text (i.e., this is the deepest text container)
-  for (const child of el.children) {
-    if (SKIP_TAGS.has(child.tagName)) continue
-    if (child.textContent?.trim()) return false
-  }
-  return true
-}
+import { isTextLeaf } from '../lib/embedTextLeaf'
 
 /** Check if an element has an ancestor that is already contenteditable */
 function hasEditableAncestor(el: Element, root: Element): boolean {

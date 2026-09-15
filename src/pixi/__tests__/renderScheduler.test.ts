@@ -6,6 +6,7 @@ import { useViewportStore } from "@/store/viewportStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { useDevModeStore } from "@/store/devModeStore";
 import { useMeasurementsStore } from "@/store/measurementsStore";
+import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { requestCanvasRender, setupRenderScheduler } from "../renderScheduler";
 
 describe("requestCanvasRender", () => {
@@ -158,6 +159,71 @@ describe("setupRenderScheduler invalidation sources", () => {
     expect(render).toHaveBeenCalledTimes(1);
 
     useMeasurementsStore.getState().setMeasurements([]);
+    cleanup();
+  });
+
+  it("renders promptly when an embed element is picked (picked-element size-badge skip isn't a scene mutation)", () => {
+    const now = vi.spyOn(performance, "now");
+
+    now.mockReturnValue(0);
+    const { app, render, tick } = makeFakeApp();
+    const cleanup = setupRenderScheduler(app);
+
+    now.mockReturnValue(5000);
+    tick();
+    render.mockClear();
+
+    // `drawSelection.ts`'s size-badge skip reads `selection?.embedId` alone
+    // (see `renderScheduler.ts`'s own comment on this subscription) — a
+    // picked ELEMENT, not merely entering picking mode, is what has to
+    // repaint here.
+    now.mockReturnValue(5100);
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "e1",
+      path: "div:nth-of-type(1)",
+      tagName: "div",
+      classes: [],
+      textPreview: "hi",
+      outerHtml: "<div>hi</div>",
+    });
+
+    now.mockReturnValue(5116);
+    tick();
+    expect(render).toHaveBeenCalledTimes(1);
+
+    useEmbedPickerStore.getState().reset();
+    cleanup();
+  });
+
+  it("does NOT render for embedPickerStore writes that never change selection.embedId (hover/drop-indicator noise)", () => {
+    const now = vi.spyOn(performance, "now");
+
+    now.mockReturnValue(0);
+    const { app, render, tick } = makeFakeApp();
+    const cleanup = setupRenderScheduler(app);
+
+    now.mockReturnValue(5000);
+    tick();
+    render.mockClear();
+
+    // `startPicking` alone (no element picked yet) doesn't touch
+    // `selection.embedId` — see `EmbedPickerState.startPicking`, which only
+    // clears/keeps an existing selection, never sets a NEW one.
+    now.mockReturnValue(5100);
+    useEmbedPickerStore.getState().startPicking("e1");
+    useEmbedPickerStore.getState().setHoveredPath("div:nth-of-type(1)");
+    useEmbedPickerStore.getState().setDropIndicator({ left: 0, top: 0, width: 10, height: 10 });
+
+    // Still inside the safety cadence's 1000ms window (lastRender was 5000)
+    // and well past the trailing-activity window (lastActivity is still the
+    // pre-setup timestamp — nothing has called `markActivity`), so a render
+    // here can only be explained by one of the writes above having (wrongly)
+    // done so.
+    now.mockReturnValue(5900);
+    tick();
+    expect(render).not.toHaveBeenCalled();
+
+    useEmbedPickerStore.getState().reset();
     cleanup();
   });
 

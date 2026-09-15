@@ -686,12 +686,31 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       if (cancelActiveScale()) return;
 
       // Cancel an in-progress drag of an ELEMENT inside an embed (element
-      // picker) the same way, and before `exitContainer()` below — which
-      // would otherwise read the still-active picker and exit it, so one
-      // Escape both cancelled the drag and dropped the user out of picking.
+      // picker) the same way, and before `exitContainer()` below — a drag
+      // this far along already has a picked element (`selection`), so
+      // `exitContainer()` would otherwise treat this Escape as "clear the
+      // pick" instead of "cancel the drag", losing the in-flight gesture.
       const cancelElementDrag = useEmbedPickerStore.getState().cancelElementDrag;
       if (cancelElementDrag) {
         cancelElementDrag();
+        return;
+      }
+
+      // Cancel an in-progress single-element inline TEXT edit inside an
+      // embed the same way, and — same reasoning as `cancelElementDrag`
+      // right above — before `exitContainer()`: entering text-edit mode
+      // already picks the element being edited (`beginElementEdit` in
+      // `EmbedLayer.tsx`), so without this, `exitContainer()`'s own Escape
+      // handling would see that pick as leftover state and clear it as an
+      // unrelated side effect of an Escape that was only ever meant to
+      // cancel the text edit — dropping the element selection (and bouncing
+      // the properties panel back to the embed) even though the edit itself
+      // reverted correctly. See `cancelElementEdit`'s doc comment in
+      // `embedPickerStore.ts` for why this can't instead be won by relying
+      // on listener registration order.
+      const cancelElementEdit = useEmbedPickerStore.getState().cancelElementEdit;
+      if (cancelElementEdit) {
+        cancelElementEdit();
         return;
       }
 

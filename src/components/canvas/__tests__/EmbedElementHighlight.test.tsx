@@ -182,6 +182,52 @@ describe("<EmbedElementHighlight />", () => {
     expect(container.querySelector('[data-embed-element-box][data-kind="hover"]')).toBeNull();
   });
 
+  it("withholds the selection box while the selected element is the one being inline-edited (Finding 6)", () => {
+    mountEmbedDom();
+    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
+
+    const path = "div:nth-of-type(1) > button:nth-of-type(1)";
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "embed1",
+      path,
+      tagName: "button",
+      classes: [],
+      textPreview: "Buy",
+      outerHtml: "<button>Buy</button>",
+    });
+    useEmbedPickerStore.getState().startElementEdit("embed1", path);
+
+    const { container } = render(<EmbedElementHighlight />);
+
+    expect(container.querySelector("[data-embed-element-box]")).toBeNull();
+  });
+
+  it("draws the selection box again once inline editing of that same element ends", () => {
+    mountEmbedDom();
+    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
+
+    const path = "div:nth-of-type(1) > button:nth-of-type(1)";
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "embed1",
+      path,
+      tagName: "button",
+      classes: [],
+      textPreview: "Buy",
+      outerHtml: "<button>Buy</button>",
+    });
+    useEmbedPickerStore.getState().startElementEdit("embed1", path);
+
+    const { container, rerender } = render(<EmbedElementHighlight />);
+    expect(container.querySelector("[data-embed-element-box]")).toBeNull();
+
+    act(() => useEmbedPickerStore.getState().stopElementEdit());
+    rerender(<EmbedElementHighlight />);
+
+    expect(
+      container.querySelector('[data-embed-element-box][data-kind="selection"]'),
+    ).toBeTruthy();
+  });
+
   it("draws a hover box from a layers-panel row hover (hoveredEmbedId, no picking)", () => {
     mountEmbedDom();
     stubRects(rect(0, 0, 400, 300), rect(20, 10, 60, 24));

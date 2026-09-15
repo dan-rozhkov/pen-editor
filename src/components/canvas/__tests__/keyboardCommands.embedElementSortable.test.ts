@@ -69,12 +69,19 @@ describe("keyboardCommands — Escape during an embed element drag", () => {
     expect(deps.clearSelection).not.toHaveBeenCalled();
   });
 
-  it("exits the picker when no drag is in flight", () => {
+  it("falls through to the ordinary Escape chain when no drag is in flight — picking mode itself is left running", () => {
+    // With auto-start (useEmbedPickerLifecycle), Escape no longer turns
+    // picking off directly — that would just be undone by the next check().
+    // With nothing else to back out of (no selected element, no active
+    // container/embed/editing state), exitContainer reports "not handled"
+    // and clearSelection() runs — see keyboardCommands.embedElementDelete /
+    // selectionStore.embedPicker.test.ts for the full chain.
     useEmbedPickerStore.getState().startPicking("e1");
 
     handler(new KeyboardEvent("keydown", { code: "Escape", key: "Escape" }));
 
-    expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
+    expect(useEmbedPickerStore.getState().pickingEmbedId).toBe("e1");
+    expect(deps.clearSelection).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -82,8 +89,9 @@ describe("keyboardCommands — Escape during an embed element drag", () => {
  * The on-canvas agent composer (`AgentComposerButton`) closes on Escape from
  * its own textarea. This handler is registered on `window` in the CAPTURE
  * phase at app mount, so the composer cannot stop it by propagation — without
- * an `isTyping` guard, dismissing the composer also exited element-pick mode,
- * and a second Escape cleared the picked element.
+ * an `isTyping` guard, dismissing the composer also cleared the picked
+ * element. Outside the composer, Escape must still reach `exitContainer`,
+ * whose first step clears that element.
  */
 describe("keyboardCommands — Escape while typing", () => {
   let deps: KeyDownHandlerDeps;
@@ -111,33 +119,51 @@ describe("keyboardCommands — Escape while typing", () => {
     return textarea;
   }
 
-  it("leaves the picker and the selection alone when the agent composer has focus", () => {
+  /** The picked element Escape is expected to clear (or leave alone). */
+  function pickElement(): void {
     useEmbedPickerStore.getState().startPicking("e1");
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "e1",
+      path: "div:nth-of-type(1)",
+      tagName: "div",
+      classes: [],
+      textPreview: "hi",
+      outerHtml: "<div>hi</div>",
+    });
+  }
+
+  it("leaves the picked element and the selection alone when the agent composer has focus", () => {
+    pickElement();
 
     handler(escapeFrom(composerTextarea()));
 
-    expect(useEmbedPickerStore.getState().pickingEmbedId).toBe("e1");
+    expect(useEmbedPickerStore.getState().selection).not.toBeNull();
     expect(deps.clearSelection).not.toHaveBeenCalled();
   });
 
   // Deliberately NOT a blanket `isTyping` guard: leaving pick mode with focus
   // in an element-property field is a normal thing to want, and the picker is
   // what surfaced that panel.
-  it("still exits the picker from a text field outside the composer", () => {
-    useEmbedPickerStore.getState().startPicking("e1");
+  it("still clears the picked element from a text field outside the composer", () => {
+    pickElement();
     const input = document.createElement("input");
     document.body.appendChild(input);
 
     handler(escapeFrom(input));
 
-    expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
+    // Picking mode itself stays on — it is no longer a mode Escape can leave
+    // (useEmbedPickerLifecycle re-arms it for as long as the embed is the
+    // sole selection); the picked ELEMENT is what backs out here.
+    expect(useEmbedPickerStore.getState().selection).toBeNull();
+    expect(useEmbedPickerStore.getState().pickingEmbedId).toBe("e1");
   });
 
-  it("still exits the picker when the canvas itself has focus", () => {
-    useEmbedPickerStore.getState().startPicking("e1");
+  it("still clears the picked element when the canvas itself has focus", () => {
+    pickElement();
 
     handler(escapeFrom(document.createElement("div")));
 
-    expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
+    expect(useEmbedPickerStore.getState().selection).toBeNull();
+    expect(useEmbedPickerStore.getState().pickingEmbedId).toBe("e1");
   });
 });

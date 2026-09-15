@@ -5,6 +5,7 @@ import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useRenderModeStore } from "@/store/renderModeStore";
+import { useEditorModeStore } from "@/store/editorModeStore";
 import { resetStores } from "@/test/fixtures";
 import type { EmbedNode, FlatSceneNode } from "@/types/scene";
 
@@ -47,9 +48,131 @@ describe("useEmbedPickerLifecycle", () => {
   beforeEach(() => {
     resetStores();
     useRenderModeStore.setState({ renderMode: "normal" });
+    useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
+    // resetStores() (src/test/fixtures.ts) does not clear activeEmbedId —
+    // several tests below set it directly rather than through an action
+    // that clears it as a side effect, so it would otherwise leak into
+    // whichever test runs next.
+    useSelectionStore.setState({ activeEmbedId: null });
   });
 
   afterEach(() => cleanup());
+
+  describe("auto-start", () => {
+    it("starts picking as soon as an embed becomes the sole selection", () => {
+      seedEmbed("e1");
+      render(<Harness />);
+      expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
+
+      act(() => useSelectionStore.setState({ selectedIds: ["e1"] }));
+
+      expect(useEmbedPickerStore.getState().pickingEmbedId).toBe("e1");
+    });
+
+    it("does not start when the embed is one of several selected nodes", () => {
+      seedEmbed("e1");
+      render(<Harness />);
+
+      act(() => useSelectionStore.setState({ selectedIds: ["e1", "other"] }));
+
+      expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
+    });
+
+    it("does not start while the inline HTML editor is already open on the embed", () => {
+      seedEmbed("e1");
+      render(<Harness />);
+
+      act(() =>
+        useSelectionStore.setState({
+          selectedIds: ["e1"],
+          editingNodeId: "e1",
+          editingMode: "embed",
+        }),
+      );
+
+      expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
+    });
+
+    it("does not start while the embed is the active (interactive) one", () => {
+      seedEmbed("e1");
+      render(<Harness />);
+
+      act(() => useSelectionStore.setState({ selectedIds: ["e1"], activeEmbedId: "e1" }));
+
+      expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
+    });
+
+    it("does not start outside an editable canvas mode", () => {
+      seedEmbed("e1");
+      useEditorModeStore.setState({ mode: "view" });
+      render(<Harness />);
+
+      act(() => useSelectionStore.setState({ selectedIds: ["e1"] }));
+
+      expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
+    });
+
+    it("starts picking on an already-selected embed when the mode changes from view back to edit", () => {
+      // Regression for exitToEdit(): unlike enterView/enterPresent (which
+      // clear the selection as a side effect and so happen to re-fire
+      // check() via selectionStore), exitToEdit() only flips editorModeStore
+      // — an already-selected embed must still pick up picking once
+      // canEditScene(mode) becomes true again, without any selection change.
+      seedEmbed("e1");
+      useEditorModeStore.setState({ mode: "view" });
+      useSelectionStore.setState({ selectedIds: ["e1"] });
+      render(<Harness />);
+      expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
+
+      act(() => useEditorModeStore.getState().exitToEdit());
+
+      expect(useEmbedPickerStore.getState().pickingEmbedId).toBe("e1");
+    });
+
+    it("never starts picking for a non-embed node", () => {
+      useSceneStore.setState({
+        nodesById: { r1: { id: "r1", type: "rect", x: 0, y: 0, width: 10, height: 10 } as unknown as FlatSceneNode },
+        parentById: { r1: null },
+        rootIds: ["r1"],
+      } as never);
+      render(<Harness />);
+
+      act(() => useSelectionStore.setState({ selectedIds: ["r1"] }));
+
+      expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
+    });
+
+    it("does not re-invoke startPicking on every check() once already picking (no runaway loop)", () => {
+      seedEmbed("e1");
+      const calls: string[] = [];
+      const originalStartPicking = useEmbedPickerStore.getState().startPicking;
+      useEmbedPickerStore.setState({
+        startPicking: (id: string) => {
+          calls.push(id);
+          originalStartPicking(id);
+        },
+      });
+
+      render(<Harness />);
+      act(() => useSelectionStore.setState({ selectedIds: ["e1"] }));
+      expect(calls).toEqual(["e1"]);
+
+      // An unrelated scene mutation re-runs check() while "e1" is still the
+      // sole selection and still picking — must take the "already picking"
+      // branch, not call startPicking again.
+      act(() => {
+        useSceneStore.setState({
+          nodesById: { ...useSceneStore.getState().nodesById },
+          _cachedTree: null,
+        } as never);
+      });
+      expect(calls).toEqual(["e1"]);
+
+      // Restore — this store is a module-level singleton shared with every
+      // other test in the file.
+      useEmbedPickerStore.setState({ startPicking: originalStartPicking });
+    });
+  });
 
   it("clears the selection once its embed is no longer the sole selected node", () => {
     seedEmbed("e1");
@@ -82,15 +205,18 @@ describe("useEmbedPickerLifecycle", () => {
     expect(useEmbedPickerStore.getState().selection).toBeNull();
   });
 
-  it("keeps the selection when picking mode is exited but the embed stays selected", () => {
+  it("keeps the selection when picking mode is exited (inline edit opens) but the embed stays selected", () => {
     seedEmbed("e1");
     useSelectionStore.setState({ selectedIds: ["e1"] });
     useEmbedPickerStore.getState().startPicking("e1");
     useEmbedPickerStore.getState().selectElement(selectionFor("e1"));
     render(<Harness />);
 
-    // Toolbar toggle / Escape exits picking mode but leaves the embed selected.
-    act(() => useEmbedPickerStore.getState().stopPicking());
+    // Opening the inline HTML editor is the real-world way picking mode
+    // turns off today (no more manual toggle) while the embed stays
+    // selected — the picked element's context must survive it, so the agent
+    // can still act on it.
+    act(() => useSelectionStore.getState().startEditing("e1", "embed"));
     expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
     expect(useEmbedPickerStore.getState().selection?.embedId).toBe("e1");
   });
@@ -173,8 +299,8 @@ describe("useEmbedPickerLifecycle", () => {
     render(<Harness />);
     expect(useEmbedPickerStore.getState().pickingEmbedId).toBe("e1");
 
-    // The "Inline edit" button in EmbedActionBar calls this — it sets
-    // editingMode/editingNodeId, not activeEmbedId.
+    // The "Edit inline" button in the properties panel's EmbedContentSection
+    // calls this — it sets editingMode/editingNodeId, not activeEmbedId.
     act(() => useSelectionStore.getState().startEditing("e1", "embed"));
 
     expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();

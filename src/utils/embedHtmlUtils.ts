@@ -187,14 +187,68 @@ function applyGlobalRootCustomProperties(container: HTMLElement, root: HTMLEleme
  * main thread. If embed images ever need throttling, cull at the
  * `EmbedLayer` level rather than by restoring native lazy loading.
  */
+/** Marks an element whose `loading` attribute did not exist before
+ * `forceEagerImageLoading` added it — `stripForcedEagerImageLoading` removes
+ * the attribute entirely for these rather than restoring a value, since
+ * there never was one. */
+const EAGER_LOADING_ADDED_ATTR = "data-pen-embed-eager-added";
+/** Marks an element whose `loading` attribute existed with some OTHER value
+ * (author asked for `lazy`, say) before it was overwritten to `"eager"` —
+ * the original value is stashed in the attribute's own value so
+ * `stripForcedEagerImageLoading` can restore it verbatim. */
+const EAGER_LOADING_PREV_ATTR = "data-pen-embed-eager-prev";
+/** Marks an `<img>` whose `decoding` attribute `forceEagerImageLoading`
+ * added (it only ever does so when the attribute was absent — see below —
+ * so unlike `loading` there is no "previously had some other value" case to
+ * track). */
+const EAGER_DECODING_ADDED_ATTR = "data-pen-embed-decoding-added";
+
 export function forceEagerImageLoading(root: ParentNode): void {
   for (const el of root.querySelectorAll("img, iframe")) {
-    if (el.getAttribute("loading") !== "eager") {
+    const currentLoading = el.getAttribute("loading");
+    if (currentLoading !== "eager") {
+      if (currentLoading === null) {
+        el.setAttribute(EAGER_LOADING_ADDED_ATTR, "1");
+      } else {
+        el.setAttribute(EAGER_LOADING_PREV_ATTR, currentLoading);
+      }
       el.setAttribute("loading", "eager");
     }
     if (el.tagName === "IMG" && !el.hasAttribute("decoding")) {
+      el.setAttribute(EAGER_DECODING_ADDED_ATTR, "1");
       el.setAttribute("decoding", "async");
     }
+  }
+}
+
+/**
+ * The inverse of `forceEagerImageLoading`: undoes exactly what that function
+ * added or overwrote, restoring every `<img>`/`<iframe>` under `root` to how
+ * the author's own markup described it — never touching an element it never
+ * marked (an explicit author `loading="eager"`, or one already stripped).
+ *
+ * WHY THIS EXISTS: `EmbedLayer.tsx`'s single-element text-edit commit reads
+ * `innerHTML` off a live DOM subtree that `mountHtmlWithBodyStyles` already
+ * ran this forcing pass over. Without undoing it first, `loading="eager"
+ * decoding="async"` the author never wrote would ride along into the
+ * embed's persisted `htmlContent` on the very next unrelated text edit.
+ * Callers MUST run this against a detached clone, never the live element —
+ * removing these attributes from the live img/iframe would put it right
+ * back into WebKit's off-screen-lazy-load bug this pass exists to avoid.
+ */
+export function stripForcedEagerImageLoading(root: ParentNode): void {
+  for (const el of root.querySelectorAll(`[${EAGER_LOADING_ADDED_ATTR}]`)) {
+    el.removeAttribute("loading");
+    el.removeAttribute(EAGER_LOADING_ADDED_ATTR);
+  }
+  for (const el of root.querySelectorAll(`[${EAGER_LOADING_PREV_ATTR}]`)) {
+    const prev = el.getAttribute(EAGER_LOADING_PREV_ATTR);
+    if (prev != null) el.setAttribute("loading", prev);
+    el.removeAttribute(EAGER_LOADING_PREV_ATTR);
+  }
+  for (const el of root.querySelectorAll(`[${EAGER_DECODING_ADDED_ATTR}]`)) {
+    el.removeAttribute("decoding");
+    el.removeAttribute(EAGER_DECODING_ADDED_ATTR);
   }
 }
 

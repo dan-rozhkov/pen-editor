@@ -15,9 +15,8 @@ interface NodeAgentButtonProps {
  * trigger that opens a composer (text input + send + quick actions). Sending
  * invokes the injected `launch` — both the frame and embed variants rely on
  * the current selection (no screenshot is attached up front). Positioning
- * mirrors EmbedActionBar — world
- * coordinates are converted to screen space via the viewport transform so the
- * button tracks pan/zoom.
+ * mirrors `EmbedSelectionFrame` — world coordinates are converted to screen
+ * space via the viewport transform so the button tracks pan/zoom.
  *
  * Thin wrapper around the shared `AgentComposerButton`: this component only
  * computes the screen rect and the frame quick actions; the popup itself

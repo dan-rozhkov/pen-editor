@@ -60,9 +60,13 @@ async function gotoEditorWithEmbed(page: Page) {
 }
 
 /** Enter element-picker mode the same way embed-dom-layer.spec.ts does:
- * double-click the embed on the canvas, after waiting for the culling index
- * to actually resolve a hit test there (see that spec's comment — without
- * this wait the double-click is consumed doing nothing ~50-90% of the time). */
+ * click the embed on the canvas (selecting it auto-starts picking — see
+ * useEmbedPickerLifecycle, there is no more manual toggle), after waiting
+ * for the culling index to actually resolve a hit test there (see that
+ * spec's comment — without this wait the click is consumed doing nothing
+ * ~50-90% of the time). Still a double-click here only because that is a
+ * convenient way to land the click in the empty strip below the three
+ * blocks without ever hitting a block itself. */
 async function enterPicker(page: Page) {
   const host = page.locator(`[data-embed-id="${EMBED_ID}"]`);
   await expect(host).toBeVisible();
@@ -89,9 +93,12 @@ async function enterPicker(page: Page) {
 
   await host.dblclick({ force: true, position: { x: box.width / 2, y: box.height - 10 } });
 
-  const selectElementToggle = page.getByRole("button", { name: "Exit element select" });
-  await expect(selectElementToggle).toBeVisible();
-  await expect(selectElementToggle).toHaveAttribute("aria-pressed", "true");
+  // No more toggle button to assert against — pointer-events flips to "auto"
+  // while picking, so the picker overlay can receive events inside the
+  // shadow DOM (same signal embed-dom-layer.spec.ts uses).
+  await expect
+    .poll(async () => host.evaluate((el) => getComputedStyle(el).pointerEvents))
+    .toBe("auto");
 
   return host;
 }
@@ -150,6 +157,13 @@ test.describe("embed element sortable drag", () => {
     const host = await enterPicker(page);
     const htmlBefore = await readHtmlContent(page);
 
+    // Sortable reorder now only re-enters for a drag that starts on the
+    // element ALREADY selected in the picker — anything else moves the
+    // embed node itself (see EmbedLayer.tsx's `isCurrentSelection` gate).
+    // Select block2 with a plain click first, exactly like a real user
+    // would before dragging it.
+    await host.click({ position: BLOCK2_CENTER });
+
     const hostBox = await host.boundingBox();
     if (!hostBox) throw new Error("embed host has no box");
     const start = { x: hostBox.x + BLOCK2_CENTER.x, y: hostBox.y + BLOCK2_CENTER.y };
@@ -196,6 +210,10 @@ test.describe("embed element sortable drag", () => {
     const host = await enterPicker(page);
     const htmlBefore = await readHtmlContent(page);
 
+    // Select block2 first — see the same-named comment in the previous
+    // test for why a sortable drag now requires this.
+    await host.click({ position: BLOCK2_CENTER });
+
     const hostBox = await host.boundingBox();
     if (!hostBox) throw new Error("embed host has no box");
     const start = { x: hostBox.x + BLOCK2_CENTER.x, y: hostBox.y + BLOCK2_CENTER.y };
@@ -224,9 +242,9 @@ test.describe("embed element sortable drag", () => {
     await expect(page.locator("[data-embed-drop-indicator]")).toHaveCount(0);
 
     // Still inside the picker — Escape cancelled the drag, not the picker.
-    const selectElementToggle = page.getByRole("button", { name: "Exit element select" });
-    await expect(selectElementToggle).toBeVisible();
-    await expect(selectElementToggle).toHaveAttribute("aria-pressed", "true");
+    await expect
+      .poll(async () => host.evaluate((el) => getComputedStyle(el).pointerEvents))
+      .toBe("auto");
 
     // The element itself (its live inline style, restored by `revertDrag`)
     // is back where it started too, not just the committed htmlContent.

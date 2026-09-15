@@ -4,6 +4,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import { useDevModeStore } from "@/store/devModeStore";
+import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import type { TextNode } from "@/types/scene";
 import type { OverlayHelpers } from "./helpers";
 import { drawTextBaselines } from "./helpers";
@@ -151,8 +152,16 @@ export function redrawSelection(
     }
   }
 
+  // A picked ELEMENT inside the single selected embed means attention is on
+  // that element, not the embed's own box — EmbedElementHighlight already
+  // draws that element's own size/position; the embed's size badge here
+  // would just be visual noise sitting next to (or overlapping) it.
+  const pickedElementOwnsSingleEmbed =
+    singleEmbedId !== null &&
+    useEmbedPickerStore.getState().selection?.embedId === singleEmbedId;
+
   // Size label (hidden in point-edit mode — see isPathEditing above)
-  if (totalW > 0 && totalH > 0 && !isPathEditing) {
+  if (totalW > 0 && totalH > 0 && !isPathEditing && !pickedElementOwnsSingleEmbed) {
     let badgeWidthMode: string | undefined;
     let badgeHeightMode: string | undefined;
     if (selectedIds.length === 1) {
