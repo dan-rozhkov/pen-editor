@@ -5,6 +5,7 @@ import {
   ImageIcon,
   XIcon,
   FrameCornersIcon,
+  CodeIcon,
 } from "@phosphor-icons/react";
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import type { SlashCommand } from "./slashCommands";
@@ -19,6 +20,7 @@ import {
   useModelSupportsVision,
 } from "@/hooks/useImageSupport";
 import { useSelectionScreenshots } from "@/hooks/useSelectionScreenshots";
+import { useEmbedElementContext } from "@/hooks/useEmbedElementContext";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { OFFLINE_SEND_TITLE } from "@/lib/apiBase";
 import { downscaleImageDataUrl } from "@/lib/tools/screenshotDownscale";
@@ -171,6 +173,11 @@ export function ChatInput({
   // as visual context. The user can drop individual ones for the message they
   // are composing without changing the canvas selection.
   const selectionScreenshots = useSelectionScreenshots();
+  // The element the user last picked inside an embed (if any and still
+  // live) — display-only, mirroring what's already riding in
+  // canvasContext.selectedEmbedElement (see useDesignChat.ts). Not part of
+  // attachments/images: it's not message content, just an indicator.
+  const embedElementContext = useEmbedElementContext();
   // Persisted in chatStore keyed by sessionId (like attachedImages) so the
   // user's per-message "remove from context" choices survive the input
   // unmounting when its tab goes inactive.
@@ -459,6 +466,29 @@ export function ChatInput({
         <div className="mb-2 text-xs text-amber-500">
           Only {MAX_IMAGES} images can be sent per message — extra selected
           elements won't be attached.
+        </div>
+      )}
+
+      {/* Selected element inside an embed, attached as visual context.
+          No remove button, same reasoning as the reference-only canvas
+          chips below — the picker selection keeps riding in canvasContext
+          regardless of anything dismissed in the composer. */}
+      {embedElementContext && (
+        <div className="mb-2">
+          <div className="flex gap-2 flex-wrap">
+            <div
+              title={
+                embedElementContext.selection.textPreview
+                  ? `${embedElementContext.label} in ${embedElementContext.embedName} — "${embedElementContext.selection.textPreview}"`
+                  : `${embedElementContext.label} in ${embedElementContext.embedName}`
+              }
+              aria-label={`Selected embed element: ${embedElementContext.label}`}
+              className="flex items-center gap-1 h-12 pl-2 pr-2 rounded-md bg-secondary text-xs text-text-muted"
+            >
+              <CodeIcon size={14} />
+              <span className="max-w-24 truncate">{embedElementContext.label}</span>
+            </div>
+          </div>
         </div>
       )}
 

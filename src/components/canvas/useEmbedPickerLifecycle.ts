@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
+import { useRenderModeStore } from "@/store/renderModeStore";
+import { findHiddenSelfOrAncestor } from "@/utils/nodeUtils";
 import type { EmbedNode } from "@/types/scene";
 
 /**
@@ -28,6 +30,17 @@ import type { EmbedNode } from "@/types/scene";
  *   act on it. Deleting the embed node trivially fails this same check (it
  *   can no longer be selected at all), so no separate deletion branch is
  *   needed.
+ * - Picking mode AND a stored `selection` are both dropped as soon as the
+ *   embed stops being rendered as a live DOM host by `EmbedLayer` — outline
+ *   render mode drops every host, and a hidden/disabled embed (or any
+ *   ancestor) takes the whole subtree off screen. The picker is defined
+ *   entirely against that host's shadow DOM: with no host there is nothing
+ *   to hover, nothing to outline, and the retained pick would keep
+ *   describing to the agent an element the user can no longer see. It also
+ *   keeps the on-canvas agent affordances honest — `PixiCanvas` suppresses
+ *   the embed-level button whenever a pick names that embed, on the
+ *   assumption that `EmbedElementHighlight` draws the element-scoped one
+ *   instead, which it can't do without a host.
  * - A stored `selection` is also cleared if the owning embed's
  *   `htmlContent` has changed since the pick (e.g. the agent just ran
  *   `edit_embed_html`) — the recorded `outerHtml` and positional
@@ -43,13 +56,27 @@ export function useEmbedPickerLifecycle(): void {
       const { selectedIds, activeEmbedId, editingNodeId, editingMode } =
         useSelectionStore.getState();
 
+      // Mirrors EmbedLayer's own `embedIds` filter (outline mode / hidden
+      // self-or-ancestor) — the two ways an embed keeps existing in the
+      // scene while having no DOM host to pick inside of.
+      const hasDomHost = (embedId: string): boolean => {
+        if (useRenderModeStore.getState().renderMode === "outline") return false;
+        const { nodesById, parentById } = useSceneStore.getState();
+        return !findHiddenSelfOrAncestor(nodesById, parentById, embedId);
+      };
+
       if (pickingEmbedId) {
         const stillSelectedAlone =
           selectedIds.length === 1 && selectedIds[0] === pickingEmbedId;
         const enteredInteractMode = activeEmbedId === pickingEmbedId;
         const enteredInlineEdit =
           editingMode === "embed" && editingNodeId === pickingEmbedId;
-        if (!stillSelectedAlone || enteredInteractMode || enteredInlineEdit) {
+        if (
+          !stillSelectedAlone ||
+          enteredInteractMode ||
+          enteredInlineEdit ||
+          !hasDomHost(pickingEmbedId)
+        ) {
           useEmbedPickerStore.getState().stopPicking();
         }
       }
@@ -65,7 +92,12 @@ export function useEmbedPickerLifecycle(): void {
           !!embedNode &&
           embedNode.htmlContent !== selectionHtmlSnapshot;
 
-        if (!embedStillSoleSelection || !embedNode || htmlChangedSincePick) {
+        if (
+          !embedStillSoleSelection ||
+          !embedNode ||
+          htmlChangedSincePick ||
+          !hasDomHost(selection.embedId)
+        ) {
           useEmbedPickerStore.getState().clearSelection();
         }
       }
@@ -74,9 +106,14 @@ export function useEmbedPickerLifecycle(): void {
     check();
     const unsubSelection = useSelectionStore.subscribe(check);
     const unsubScene = useSceneStore.subscribe(check);
+    // Render mode is neither selection nor scene state, so flipping to
+    // outline mode would otherwise go unnoticed until some unrelated store
+    // write happened to re-run the check.
+    const unsubRenderMode = useRenderModeStore.subscribe(check);
     return () => {
       unsubSelection();
       unsubScene();
+      unsubRenderMode();
     };
   }, []);
 }

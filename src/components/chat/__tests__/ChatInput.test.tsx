@@ -5,11 +5,20 @@ import { ChatInput } from "../ChatInput";
 import { useChatStore } from "@/store/chatStore";
 import type { ChatLaunchPayload } from "@/types/chat";
 import type { SelectionContextItem } from "@/hooks/useSelectionScreenshots";
+import type { EmbedElementContext } from "@/hooks/useEmbedElementContext";
 
 // Controllable selection screenshots — the real hook needs the PixiJS renderer.
 let mockSelection: SelectionContextItem[] = [];
 vi.mock("@/hooks/useSelectionScreenshots", () => ({
   useSelectionScreenshots: () => mockSelection,
+}));
+
+// Controllable embed element context — the real hook reads two stores;
+// stubbing it keeps this file focused on ChatInput's own rendering/gating
+// logic (the hook itself is covered by useEmbedElementContext.test.ts).
+let mockEmbedElementContext: EmbedElementContext | null = null;
+vi.mock("@/hooks/useEmbedElementContext", () => ({
+  useEmbedElementContext: () => mockEmbedElementContext,
 }));
 
 // Dropped/pasted files must be routed through the downscale helper (finding
@@ -51,6 +60,7 @@ beforeEach(() => {
     dismissedSelection: {},
   });
   mockSelection = [];
+  mockEmbedElementContext = null;
   downscaleImageDataUrl.mockClear();
 });
 
@@ -608,6 +618,55 @@ describe("<ChatInput />", () => {
       // than the rendered image — it belongs on the wrapper instead.
       expect(img.className).not.toContain("img-outline");
       expect(img.parentElement?.className).toContain("img-outline");
+    });
+  });
+
+  describe("selected embed element as context", () => {
+    it("renders a chip with the formatted label when an element is selected in a live embed", () => {
+      mockEmbedElementContext = {
+        selection: {
+          embedId: "embed1",
+          path: "div:nth-of-type(1)",
+          tagName: "button",
+          classes: ["primary"],
+          textPreview: "Buy now",
+          outerHtml: "<button class=\"primary\">Buy now</button>",
+        },
+        label: "button.primary",
+        embedName: "Hero Embed",
+      };
+      render(<Harness onSubmit={vi.fn()} />);
+      expect(screen.getByText("button.primary")).toBeTruthy();
+      expect(
+        screen.getByLabelText("Selected embed element: button.primary")
+      ).toBeTruthy();
+    });
+
+    it("does not render a chip when there is no embed element selection", () => {
+      mockEmbedElementContext = null;
+      render(<Harness onSubmit={vi.fn()} />);
+      expect(screen.queryByText("button.primary")).toBeNull();
+      expect(
+        screen.queryByLabelText(/^Selected embed element:/)
+      ).toBeNull();
+    });
+
+    it("does not render a remove button on the embed element chip", () => {
+      mockEmbedElementContext = {
+        selection: {
+          embedId: "embed1",
+          path: "div:nth-of-type(1)",
+          tagName: "div",
+          classes: [],
+          textPreview: "",
+          outerHtml: "<div></div>",
+        },
+        label: "div",
+        embedName: "Hero Embed",
+      };
+      render(<Harness onSubmit={vi.fn()} />);
+      expect(screen.getByText("div")).toBeTruthy();
+      expect(screen.queryByLabelText("Remove from context")).toBeNull();
     });
   });
 

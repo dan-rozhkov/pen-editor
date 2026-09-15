@@ -26,6 +26,7 @@ import { EmbedActionBar } from "@/components/canvas/EmbedActionBar";
 import { EmbedAgentButton } from "@/components/canvas/EmbedAgentButton";
 import { EmbedSelectionFrame } from "@/components/canvas/EmbedSelectionFrame";
 import { EmbedElementHighlight } from "@/components/canvas/EmbedElementHighlight";
+import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useEmbedPickerLifecycle } from "@/components/canvas/useEmbedPickerLifecycle";
 import { EmbedLayer } from "@/components/canvas/EmbedLayer";
 import { CommentLayer } from "@/components/comments/CommentLayer";
@@ -273,6 +274,14 @@ export function PixiCanvas() {
   // Keeps embedPickerStore in sync with selection/scene changes (deselect,
   // inline-edit entry, embed deletion) — see the hook for the full list.
   useEmbedPickerLifecycle();
+
+  // The embed whose picked element currently HAS an on-canvas agent button
+  // drawn for it (not merely a picker selection — see
+  // `elementAffordanceVisible` in embedPickerStore.ts). Gates the
+  // embed-level agent button below.
+  const pickedElementEmbedId = useEmbedPickerStore((s) =>
+    s.elementAffordanceVisible ? (s.selection?.embedId ?? null) : null,
+  );
 
   // Keyboard shortcuts (reuse existing hook)
   useCanvasKeyboardShortcuts({
@@ -524,10 +533,16 @@ export function PixiCanvas() {
           absoluteY={selectedEmbedPosition.y}
         />
       )}
-      {/* On-canvas agent affordance for a selected embed */}
+      {/* On-canvas agent affordance for a selected embed. Suppressed while an
+          element inside that embed is picked: EmbedElementHighlight then draws
+          its own, element-scoped agent button, and two identical sparkle
+          triggers a couple of hundred pixels apart — one meaning "this embed",
+          one meaning "this element" — read as a single control duplicated by
+          accident. The narrower context wins. */}
       {selectedEmbedNode &&
         selectedEmbedPosition &&
         editingMode !== "embed" &&
+        pickedElementEmbedId !== selectedEmbedNode.id &&
         canEditScene(editorMode) && (
           <EmbedAgentButton
             key={selectedEmbedNode.id}

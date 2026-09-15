@@ -1,0 +1,170 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { SparkleIcon, ArrowUpIcon } from "@phosphor-icons/react";
+import { IconButton } from "@/components/ui/IconButton";
+import { cn } from "@/lib/utils";
+import { useDevModeStore } from "@/store/devModeStore";
+import type { FrameQuickAction } from "@/components/canvas/frameQuickActions";
+
+interface AgentComposerButtonProps {
+  /** Where the trigger's top-left corner goes, in the overlay's coordinate
+   * space, BEFORE the 8px gap this component adds. Callers decide what to
+   * anchor on: a native node uses its own top-right corner, while a picked
+   * embed element anchors on its embed's right edge (so the affordance never
+   * covers the live HTML the user is picking inside). */
+  anchor: { x: number; y: number };
+  placeholder: string;
+  onSend: (text: string) => void;
+  quickActions?: FrameQuickAction[];
+}
+
+/**
+ * Presentational on-canvas agent affordance: a small trigger at `anchor`
+ * that opens a composer (text input + send + optional quick actions).
+ * `anchor` is an already-computed screen position (see
+ * `useEmbedScreenRect`/embed-element box resolution) — this component does
+ * no positioning math of its own, so it works identically for a native
+ * node (`NodeAgentButton`) and a picked embed element
+ * (`EmbedElementAgentButton`).
+ */
+export function AgentComposerButton({
+  anchor,
+  placeholder,
+  onSend,
+  quickActions = [],
+}: AgentComposerButtonProps) {
+  const isDevMode = useDevModeStore((state) => state.active);
+
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Callers remount this component (keyed by node/element identity) when the
+  // selection changes, so composer state resets without a synchronizing
+  // effect.
+  useEffect(() => {
+    if (open) textareaRef.current?.focus();
+  }, [open]);
+
+  const stopCanvasPointer = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+  }, []);
+
+  const canSend = text.trim().length > 0;
+
+  const submit = useCallback(() => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    onSend(trimmed);
+    setText("");
+    setOpen(false);
+  }, [text, onSend]);
+
+  const runQuickAction = useCallback(
+    (action: FrameQuickAction) => {
+      onSend(action.prompt);
+      setText("");
+      setOpen(false);
+    },
+    [onSend],
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        submit();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        setOpen(false);
+      }
+    },
+    [submit],
+  );
+
+  if (isDevMode) return null;
+
+  return (
+    <div
+      data-agent-composer
+      className="absolute z-20"
+      style={{
+        left: anchor.x,
+        top: anchor.y,
+        transform: "translate(8px, 0)",
+      }}
+      onPointerDown={stopCanvasPointer}
+    >
+      {!open ? (
+        <IconButton
+          tooltip="Ask agent"
+          side="top"
+          variant="default"
+          size="icon-sm"
+          className={cn(
+            "size-6 rounded-lg border-transparent text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)]",
+            "bg-accent-primary hover:bg-accent-primary/90",
+          )}
+          onClick={() => setOpen(true)}
+        >
+          <SparkleIcon className="size-3.5" weight="fill" />
+        </IconButton>
+      ) : (
+        <div className="flex w-72 flex-col gap-1 rounded-xl border border-border-default bg-surface-panel p-1.5 shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
+          <div className="flex items-end gap-1.5">
+            <textarea
+              ref={textareaRef}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={2}
+              placeholder={placeholder}
+              className="flex-1 resize-none bg-transparent px-1.5 py-1 text-[13px] text-text-primary outline-none placeholder:text-text-muted"
+            />
+            <IconButton
+              tooltip="Send"
+              side="top"
+              variant="default"
+              size="icon-sm"
+              className={cn(
+                "size-6 shrink-0 rounded-lg",
+                canSend
+                  ? "bg-accent-primary text-white hover:bg-accent-primary/90"
+                  : "bg-transparent text-text-secondary hover:bg-transparent disabled:opacity-100",
+              )}
+              disabled={!canSend}
+              onClick={submit}
+            >
+              <ArrowUpIcon className="size-3.5" weight="regular" />
+            </IconButton>
+          </div>
+          {quickActions.length > 0 && (
+            <>
+              {/* Full-bleed divider: negative margins cancel the container padding. */}
+              <div className="-mx-1.5 my-0.5 h-px bg-border-default" />
+              <ul className="flex flex-col">
+                {quickActions.map((action) => {
+                  const Icon = action.icon;
+                  return (
+                    <li key={action.id}>
+                      <button
+                        type="button"
+                        onClick={() => runQuickAction(action)}
+                        className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-[13px] text-text-primary hover:bg-secondary"
+                      >
+                        <Icon
+                          className="size-3.5 shrink-0 text-text-muted"
+                          weight="regular"
+                        />
+                        <span className="truncate">{action.label}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

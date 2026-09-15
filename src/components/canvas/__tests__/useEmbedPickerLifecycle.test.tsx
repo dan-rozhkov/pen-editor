@@ -4,6 +4,7 @@ import { useEmbedPickerLifecycle } from "../useEmbedPickerLifecycle";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
+import { useRenderModeStore } from "@/store/renderModeStore";
 import { resetStores } from "@/test/fixtures";
 import type { EmbedNode, FlatSceneNode } from "@/types/scene";
 
@@ -45,6 +46,7 @@ function selectionFor(embedId: string) {
 describe("useEmbedPickerLifecycle", () => {
   beforeEach(() => {
     resetStores();
+    useRenderModeStore.setState({ renderMode: "normal" });
   });
 
   afterEach(() => cleanup());
@@ -190,6 +192,48 @@ describe("useEmbedPickerLifecycle", () => {
     act(() => useSelectionStore.getState().setActiveEmbed("e1"));
 
     expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
+  });
+
+  // EmbedLayer mounts no DOM host in outline mode or for a hidden embed, and
+  // the picker is defined entirely against that host's shadow DOM. A pick
+  // retained without one is invisible but still described to the agent — and
+  // PixiCanvas suppresses the embed-level agent button on the assumption that
+  // an element-scoped one is being drawn instead, which it can't be.
+  it("stops picking and clears the selection in outline render mode", () => {
+    seedEmbed("e1");
+    useSelectionStore.setState({ selectedIds: ["e1"] });
+    useEmbedPickerStore.getState().startPicking("e1");
+    useEmbedPickerStore.getState().selectElement(selectionFor("e1"));
+    render(<Harness />);
+    expect(useEmbedPickerStore.getState().selection?.embedId).toBe("e1");
+
+    act(() => useRenderModeStore.setState({ renderMode: "outline" }));
+
+    expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
+    expect(useEmbedPickerStore.getState().selection).toBeNull();
+  });
+
+  it("stops picking and clears the selection when the embed is hidden", () => {
+    seedEmbed("e1");
+    useSelectionStore.setState({ selectedIds: ["e1"] });
+    useEmbedPickerStore.getState().startPicking("e1");
+    useEmbedPickerStore.getState().selectElement(selectionFor("e1"));
+    render(<Harness />);
+
+    act(() => {
+      useSceneStore.setState({
+        nodesById: {
+          ...useSceneStore.getState().nodesById,
+          e1: {
+            ...(useSceneStore.getState().nodesById.e1 as EmbedNode),
+            visible: false,
+          } as unknown as FlatSceneNode,
+        },
+      } as never);
+    });
+
+    expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
+    expect(useEmbedPickerStore.getState().selection).toBeNull();
   });
 
   it("clears the selection when the embed node is deleted", () => {

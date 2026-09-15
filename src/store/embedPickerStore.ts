@@ -91,6 +91,21 @@ interface EmbedPickerState {
   setDropIndicator: (
     indicator: { left: number; top: number; width: number; height: number } | null,
   ) => void;
+  /** True exactly while `EmbedElementHighlight` has the element-scoped agent
+   * affordance mounted — i.e. it resolved the picked element to a live box
+   * and drew a button for it. `PixiCanvas` reads this to decide whether to
+   * suppress the embed-level "Ask agent" button, which it replaces.
+   *
+   * A store flag rather than the presence of `selection`, because the two
+   * can disagree: the element can vanish from the embed's live shadow DOM
+   * with `htmlContent` untouched (the embed's own script rotating a carousel
+   * slide out, closing a modal, …), and nothing clears the selection then.
+   * Suppressing on `selection` alone left such an embed with no agent
+   * affordance at all. Written by the affordance's own mount/unmount, so it
+   * cannot claim a button that isn't there; if it is ever stale it errs
+   * toward `false`, i.e. toward showing the embed-level button. */
+  elementAffordanceVisible: boolean;
+  setElementAffordanceVisible: (visible: boolean) => void;
   reset: () => void;
 }
 
@@ -103,6 +118,7 @@ export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
   dragVersion: 0,
   cancelElementDrag: null,
   dropIndicator: null,
+  elementAffordanceVisible: false,
 
   startPicking: (embedId) => {
     const { selection } = get();
@@ -150,6 +166,11 @@ export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
 
   setDropIndicator: (indicator) => set({ dropIndicator: indicator }),
 
+  setElementAffordanceVisible: (visible) => {
+    if (get().elementAffordanceVisible === visible) return;
+    set({ elementAffordanceVisible: visible });
+  },
+
   reset: () =>
     set({
       pickingEmbedId: null,
@@ -159,5 +180,6 @@ export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
       selectionHtmlSnapshot: null,
       cancelElementDrag: null,
       dropIndicator: null,
+      elementAffordanceVisible: false,
     }),
 }));

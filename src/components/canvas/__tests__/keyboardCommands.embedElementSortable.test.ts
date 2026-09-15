@@ -77,3 +77,67 @@ describe("keyboardCommands — Escape during an embed element drag", () => {
     expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
   });
 });
+
+/**
+ * The on-canvas agent composer (`AgentComposerButton`) closes on Escape from
+ * its own textarea. This handler is registered on `window` in the CAPTURE
+ * phase at app mount, so the composer cannot stop it by propagation — without
+ * an `isTyping` guard, dismissing the composer also exited element-pick mode,
+ * and a second Escape cleared the picked element.
+ */
+describe("keyboardCommands — Escape while typing", () => {
+  let deps: KeyDownHandlerDeps;
+  let handler: (e: KeyboardEvent) => void;
+
+  beforeEach(() => {
+    deps = makeDeps();
+    handler = createKeyDownHandler(deps);
+    useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
+    useEmbedPickerStore.getState().reset();
+  });
+
+  function escapeFrom(target: EventTarget): KeyboardEvent {
+    const e = new KeyboardEvent("keydown", { code: "Escape", key: "Escape" });
+    Object.defineProperty(e, "target", { value: target });
+    return e;
+  }
+
+  function composerTextarea(): HTMLTextAreaElement {
+    const composer = document.createElement("div");
+    composer.setAttribute("data-agent-composer", "");
+    const textarea = document.createElement("textarea");
+    composer.appendChild(textarea);
+    document.body.appendChild(composer);
+    return textarea;
+  }
+
+  it("leaves the picker and the selection alone when the agent composer has focus", () => {
+    useEmbedPickerStore.getState().startPicking("e1");
+
+    handler(escapeFrom(composerTextarea()));
+
+    expect(useEmbedPickerStore.getState().pickingEmbedId).toBe("e1");
+    expect(deps.clearSelection).not.toHaveBeenCalled();
+  });
+
+  // Deliberately NOT a blanket `isTyping` guard: leaving pick mode with focus
+  // in an element-property field is a normal thing to want, and the picker is
+  // what surfaced that panel.
+  it("still exits the picker from a text field outside the composer", () => {
+    useEmbedPickerStore.getState().startPicking("e1");
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+
+    handler(escapeFrom(input));
+
+    expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
+  });
+
+  it("still exits the picker when the canvas itself has focus", () => {
+    useEmbedPickerStore.getState().startPicking("e1");
+
+    handler(escapeFrom(document.createElement("div")));
+
+    expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
+  });
+});

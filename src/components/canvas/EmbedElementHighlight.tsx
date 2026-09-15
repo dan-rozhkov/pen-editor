@@ -5,6 +5,7 @@ import { useViewportStore } from "@/store/viewportStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import { resolveElementPath } from "@/lib/embedElementPicker";
+import { EmbedElementAgentButton } from "@/components/canvas/EmbedElementAgentButton";
 
 const HOVER_COLOR = "#0d99ff";
 const SELECTION_COLOR = "#0d99ff";
@@ -27,7 +28,6 @@ interface ElementBox {
   top: number;
   width: number;
   height: number;
-  tagName: string;
   /** Untransformed CSS-pixel layout size of the live element, for the size
    * badge text. `left/top/width/height` above come from
    * `getBoundingClientRect()` — screen pixels, correct for positioning this
@@ -41,6 +41,11 @@ interface ElementBox {
    * which has no `offsetWidth`). */
   cssWidth: number;
   cssHeight: number;
+  /** The owning embed host's right edge, in the same canvas-relative space
+   * as `left`/`top`. The element-scoped agent button anchors on it so it
+   * sits beside the embed instead of on top of its content — see
+   * `EmbedElementAgentButton`'s `anchor` prop. */
+  hostRight: number;
 }
 
 /** Resolve the on-screen box of `path` inside embed `embedId`'s live shadow
@@ -73,12 +78,14 @@ function resolveElementBox(embedId: string, path: string): ElementBox | null {
     cssHeight = elRect.height / zoom;
   }
 
+  const hostRect = host.getBoundingClientRect();
+
   return {
     left: elRect.left - originRect.left,
     top: elRect.top - originRect.top,
+    hostRight: hostRect.right - originRect.left,
     width: elRect.width,
     height: elRect.height,
-    tagName: el.tagName.toLowerCase(),
     cssWidth,
     cssHeight,
   };
@@ -145,7 +152,6 @@ function SizeBadge({ box }: { box: ElementBox }) {
   return (
     <div
       data-embed-element-size-badge
-      className="text-white"
       style={{
         position: "absolute",
         left: "50%",
@@ -153,8 +159,9 @@ function SizeBadge({ box }: { box: ElementBox }) {
         transform: "translateX(-50%)",
         background: SIZE_BADGE_BG,
         color: SIZE_BADGE_TEXT_COLOR,
+        fontFamily: "system-ui, -apple-system, sans-serif",
         fontSize: SIZE_BADGE_FONT_SIZE,
-        lineHeight: "14px",
+        lineHeight: `${SIZE_BADGE_FONT_SIZE}px`,
         whiteSpace: "nowrap",
         padding: `${SIZE_BADGE_PADDING_Y}px ${SIZE_BADGE_PADDING_X}px`,
         borderRadius: SIZE_BADGE_CORNER_RADIUS,
@@ -171,14 +178,12 @@ function OutlineBox({
   strokeWidth,
   color,
   kind,
-  label,
   showSizeBadge,
 }: {
   box: ElementBox;
   strokeWidth: number;
   color: string;
   kind: "hover" | "selection";
-  label?: string;
   showSizeBadge?: boolean;
 }) {
   const strokeHalf = strokeWidth / 2;
@@ -208,24 +213,6 @@ function OutlineBox({
           pointerEvents: "none",
         }}
       />
-      {label && (
-        <div
-          data-embed-element-label
-          className="bg-[#0d99ff] text-white text-[10px]"
-          style={{
-            position: "absolute",
-            left: 0,
-            top: -18,
-            padding: "1px 5px",
-            borderRadius: 3,
-            lineHeight: "14px",
-            whiteSpace: "nowrap",
-            pointerEvents: "none",
-          }}
-        >
-          {label}
-        </div>
-      )}
       {showSizeBadge && <SizeBadge box={box} />}
     </div>
   );
@@ -339,17 +326,6 @@ export function EmbedElementHighlight() {
 
   if (!hoverBox && !selectionBox && !indicatorBox) return null;
 
-  // The tag label is a *picking* affordance: it tells you what you're about
-  // to select. Once an element IS selected, hovering it again adds nothing —
-  // and the label would collide with the size badge the selection already
-  // draws. So suppress it when the hover box is the selected element itself;
-  // hovering any *other* element still labels it, which is the whole point
-  // of the mode.
-  const hoverIsSelected =
-    !!selection &&
-    selection.embedId === hoverEmbedId &&
-    selection.path === hoveredPath;
-
   return (
     <div
       data-embed-element-highlight
@@ -370,10 +346,22 @@ export function EmbedElementHighlight() {
           strokeWidth={HOVER_STROKE_WIDTH}
           color={HOVER_COLOR}
           kind="hover"
-          label={hoverIsSelected ? undefined : hoverBox.tagName}
         />
       )}
       {indicatorBox && <DropIndicatorLine box={indicatorBox} />}
+      {selectionBox && selection && (
+        // Keyed by embed id alone, NOT by the element path: a sortable
+        // reorder rewrites `selection.path` for the very element being
+        // dragged (`noteSelectionEdit` in EmbedLayer), and keying on it would
+        // remount the composer mid-gesture, silently discarding a prompt the
+        // user had already typed into it.
+        <div key={selection.embedId} style={{ pointerEvents: "auto" }}>
+          <EmbedElementAgentButton
+            selection={selection}
+            anchor={{ x: selectionBox.hostRight, y: selectionBox.top }}
+          />
+        </div>
+      )}
     </div>
   );
 }

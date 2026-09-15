@@ -1,7 +1,8 @@
 import { Profiler } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, cleanup, act } from "@testing-library/react";
+import { render, cleanup, act, fireEvent } from "@testing-library/react";
 import { EmbedElementHighlight } from "../EmbedElementHighlight";
+import { launchEmbedElementAgentChat } from "@/lib/launchEmbedElementAgentChat";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
@@ -9,6 +10,10 @@ import { useLayoutStore } from "@/store/layoutStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { resetStores } from "@/test/fixtures";
 import type { FlatSceneNode } from "@/types/scene";
+
+vi.mock("@/lib/launchEmbedElementAgentChat", () => ({
+  launchEmbedElementAgentChat: vi.fn(),
+}));
 
 /** Build a canvas container + embed host + shadow-DOM button, all attached
  * to document.body, mirroring what EmbedLayer produces at runtime. */
@@ -55,6 +60,7 @@ function rect(left: number, top: number, width: number, height: number): DOMRect
 describe("<EmbedElementHighlight />", () => {
   beforeEach(() => {
     resetStores();
+    vi.mocked(launchEmbedElementAgentChat).mockReset();
     useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
     useSceneStore.setState({
       nodesById: {
@@ -86,7 +92,7 @@ describe("<EmbedElementHighlight />", () => {
     expect(container.querySelector("[data-embed-element-highlight]")).toBeNull();
   });
 
-  it("draws a 2px hover box with a tag label while picking", () => {
+  it("draws a 2px hover box with no tag label while picking", () => {
     mountEmbedDom();
     stubRects(rect(0, 0, 400, 300), rect(20, 10, 60, 24));
 
@@ -106,10 +112,13 @@ describe("<EmbedElementHighlight />", () => {
     expect(outline.style.borderWidth).toBe("2px");
     expect(outline.style.borderColor).toBe("#0d99ff");
 
-    expect(container.querySelector("[data-embed-element-label]")?.textContent).toBe("button");
+    // Native nodes never show a tag-name label on hover — the embed overlay
+    // must read identically, so the label is gone entirely, not just
+    // conditionally suppressed.
+    expect(container.querySelector("[data-embed-element-label]")).toBeNull();
   });
 
-  it("hides the tag label while hovering the element that is already selected", () => {
+  it("never renders a tag label while hovering the element that is already selected", () => {
     mountEmbedDom();
     stubRects(rect(0, 0, 400, 300), rect(20, 10, 60, 24));
 
@@ -131,7 +140,7 @@ describe("<EmbedElementHighlight />", () => {
     expect(container.querySelector("[data-embed-element-label]")).toBeNull();
   });
 
-  it("still labels a hovered element that is not the selected one", () => {
+  it("never renders a tag label for a hovered element that is not the selected one", () => {
     mountEmbedDom();
     stubRects(rect(0, 0, 400, 300), rect(20, 10, 60, 24));
 
@@ -148,7 +157,7 @@ describe("<EmbedElementHighlight />", () => {
 
     const { container } = render(<EmbedElementHighlight />);
 
-    expect(container.querySelector("[data-embed-element-label]")?.textContent).toBe("button");
+    expect(container.querySelector("[data-embed-element-label]")).toBeNull();
   });
 
   it("draws a 1px selection box with no label once an element is picked", () => {
@@ -405,9 +414,19 @@ describe("<EmbedElementHighlight />", () => {
 
     const { container } = render(<EmbedElementHighlight />);
 
-    const badge = container.querySelector("[data-embed-element-size-badge]");
+    const badge = container.querySelector("[data-embed-element-size-badge]") as HTMLElement;
     expect(badge).toBeTruthy();
-    expect(badge?.textContent).toBe("123 × 45");
+    expect(badge.textContent).toBe("123 × 45");
+
+    // Must match the native Pixi-drawn size label 1:1 (SIZE_LABEL_* in
+    // src/pixi/selectionOverlay/constants.ts + drawSizeLabel): 11px
+    // system-ui text, 17px total badge height (11 + 3*2 padding), 6px
+    // horizontal / 3px vertical padding — not the app's inherited font or a
+    // 14px line-height, which would make the badge 20px tall instead.
+    expect(badge.style.fontSize).toBe("11px");
+    expect(badge.style.lineHeight).toBe("11px");
+    expect(badge.style.fontFamily).toContain("system-ui");
+    expect(badge.style.padding).toBe("3px 6px");
   });
 
   it("does not draw a size badge on the hover box", () => {
@@ -530,5 +549,129 @@ describe("<EmbedElementHighlight />", () => {
 
     box = container.querySelector('[data-embed-element-box][data-kind="hover"]') as HTMLElement;
     expect(box.style.top).toBe("-40px");
+  });
+
+  it("shows an agent button next to a selected embed element", () => {
+    mountEmbedDom();
+    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
+
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "embed1",
+      path: "div:nth-of-type(1) > button:nth-of-type(1)",
+      tagName: "button",
+      classes: [],
+      textPreview: "Buy",
+      outerHtml: "<button>Buy</button>",
+    });
+
+    const { getByLabelText } = render(<EmbedElementHighlight />);
+    expect(getByLabelText("Ask agent")).toBeTruthy();
+  });
+
+  // The trigger anchors on the EMBED's right edge, not the element's own —
+  // anchoring inside the embed would put a click target (and a 288px
+  // composer) on top of the live HTML the picker exists to click.
+  it("anchors the agent button at the embed host's right edge, at the element's top", () => {
+    const { canvas } = mountEmbedDom();
+    // Host and element share a stubbed rect here, so the host's right edge is
+    // the element rect's right edge, measured from the canvas origin.
+    stubRects(rect(10, 20, 400, 300), rect(50, 60, 40, 20));
+
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "embed1",
+      path: "div:nth-of-type(1) > button:nth-of-type(1)",
+      tagName: "button",
+      classes: [],
+      textPreview: "Buy",
+      outerHtml: "<button>Buy</button>",
+    });
+
+    const { getByLabelText } = render(<EmbedElementHighlight />);
+    const wrapper = getByLabelText("Ask agent").closest("div.absolute") as HTMLElement;
+    expect(wrapper.style.left).toBe(`${50 + 40 - 10}px`);
+    expect(wrapper.style.top).toBe(`${60 - 20}px`);
+    expect(canvas).toBeTruthy();
+  });
+
+  // PixiCanvas suppresses the embed-level agent button on this flag, not on
+  // the picker selection — the two disagree whenever the picked element has
+  // left the live shadow DOM with htmlContent untouched, and suppressing on
+  // the selection alone left such an embed with no agent affordance at all.
+  it("reports the element affordance as visible only while it is actually mounted", () => {
+    mountEmbedDom();
+    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
+
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "embed1",
+      path: "div:nth-of-type(1) > button:nth-of-type(1)",
+      tagName: "button",
+      classes: [],
+      textPreview: "Buy",
+      outerHtml: "<button>Buy</button>",
+    });
+
+    const { unmount } = render(<EmbedElementHighlight />);
+    expect(useEmbedPickerStore.getState().elementAffordanceVisible).toBe(true);
+
+    unmount();
+    expect(useEmbedPickerStore.getState().elementAffordanceVisible).toBe(false);
+  });
+
+  it("reports no affordance when the picked element can't be resolved in the live DOM", () => {
+    mountEmbedDom();
+    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
+
+    // A path that matches nothing — the element the user picked is gone from
+    // the shadow DOM even though the selection (and htmlContent) survive.
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "embed1",
+      path: "div:nth-of-type(1) > section:nth-of-type(9)",
+      tagName: "section",
+      classes: [],
+      textPreview: "",
+      outerHtml: "<section></section>",
+    });
+
+    const { queryByLabelText } = render(<EmbedElementHighlight />);
+    expect(queryByLabelText("Ask agent")).toBeNull();
+    expect(useEmbedPickerStore.getState().elementAffordanceVisible).toBe(false);
+  });
+
+  it("does not show an agent button while only hovering (no selection)", () => {
+    mountEmbedDom();
+    stubRects(rect(0, 0, 400, 300), rect(20, 10, 60, 24));
+
+    useEmbedPickerStore.getState().startPicking("embed1");
+    useEmbedPickerStore.getState().setHoveredPath("div:nth-of-type(1) > button:nth-of-type(1)");
+
+    const { queryByLabelText } = render(<EmbedElementHighlight />);
+    expect(queryByLabelText("Ask agent")).toBeNull();
+  });
+
+  it("opens the composer and sends through launchEmbedElementAgentChat with the embed id and text", () => {
+    mountEmbedDom();
+    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
+
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "embed1",
+      path: "div:nth-of-type(1) > button:nth-of-type(1)",
+      tagName: "button",
+      classes: [],
+      textPreview: "Buy",
+      outerHtml: "<button>Buy</button>",
+    });
+
+    const { getByLabelText, getByRole } = render(<EmbedElementHighlight />);
+    fireEvent.click(getByLabelText("Ask agent"));
+
+    const textarea = getByRole("textbox") as HTMLTextAreaElement;
+    expect(textarea.placeholder).toBe("Ask the agent about this element…");
+    fireEvent.change(textarea, { target: { value: "Make this bigger" } });
+    fireEvent.click(getByLabelText("Send"));
+
+    expect(launchEmbedElementAgentChat).toHaveBeenCalledTimes(1);
+    const [selectionArg, textArg] = vi.mocked(launchEmbedElementAgentChat).mock.calls[0];
+    expect(selectionArg.embedId).toBe("embed1");
+    expect(textArg).toBe("Make this bigger");
   });
 });

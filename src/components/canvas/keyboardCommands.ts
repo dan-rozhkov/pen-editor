@@ -718,6 +718,27 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
         cancelDrawing();
         return;
       }
+      // Escape inside the on-canvas agent composer means "close the
+      // composer", nothing more. That component can't stop this handler by
+      // propagation — it is registered on `window` in the CAPTURE phase at
+      // app mount — so without this guard, dismissing the composer also ran
+      // `exitContainer()`, dropping the user out of embed element-pick mode
+      // as a side effect of closing a text box (and a second Escape then
+      // cleared the picked element entirely).
+      //
+      // Scoped to that composer rather than to `isTyping` at large: typing
+      // in the properties panel or the chat composer must NOT change what
+      // Escape means on the canvas — leaving element-pick mode with focus in
+      // an element-property field is a normal thing to want, and the picker
+      // is what surfaced that panel in the first place.
+      const composerTarget = e.target;
+      if (
+        isTyping &&
+        composerTarget instanceof Element &&
+        composerTarget.closest("[data-agent-composer]")
+      ) {
+        return;
+      }
       if (useSelectionStore.getState().exitContainer()) return;
       clearSelection();
     }
