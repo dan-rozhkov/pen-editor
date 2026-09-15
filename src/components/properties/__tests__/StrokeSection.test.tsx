@@ -23,21 +23,14 @@ function makeNode(extra: Partial<SceneNode> = {}): SceneNode {
   } as SceneNode;
 }
 
-// Shared no-op overrides plumbing — most tests don't exercise component
-// instances, so override detection is off and resetOverride is never called.
-const noOverride = <T,>(_a: T | undefined, _b: T | undefined) => false;
-
 function renderSection(node: SceneNode, props: Partial<React.ComponentProps<typeof StrokeSection>> = {}) {
   const onUpdate = props.onUpdate ?? vi.fn();
   render(
     <StrokeSection
       node={node}
       onUpdate={onUpdate}
-      component={props.component ?? null}
       colorVariables={props.colorVariables ?? []}
       activeTheme={props.activeTheme ?? "light"}
-      isOverridden={props.isOverridden ?? noOverride}
-      resetOverride={props.resetOverride ?? vi.fn()}
       mixedKeys={props.mixedKeys}
     />,
   );
@@ -257,28 +250,6 @@ describe("<StrokeSection />", () => {
       expect(inputs[0].value).toBe(""); // opacity mixed
       expect(inputs[0].placeholder).toBe("Mixed");
       expect(inputs[1].value).toBe(""); // weight mixed
-    });
-  });
-
-  describe("component overrides", () => {
-    it("renders a reset control when stroke is overridden and calls resetOverride", () => {
-      const resetOverride = vi.fn();
-      const component = makeNode({ stroke: "#0000ff" });
-      render(
-        <StrokeSection
-          node={makeNode({ stroke: "#ff0000", strokeWidth: 4 })}
-          onUpdate={vi.fn()}
-          component={component}
-          colorVariables={[]}
-          activeTheme="light"
-          // Mark only the `stroke` property as overridden.
-          isOverridden={(instanceVal) => instanceVal === "#ff0000"}
-          resetOverride={resetOverride}
-        />,
-      );
-      const resetBtn = screen.getByTitle("Reset to component value");
-      fireEvent.click(resetBtn);
-      expect(resetOverride).toHaveBeenCalledWith("stroke");
     });
   });
 

@@ -29,9 +29,7 @@ import type { EmbedNode, FlatSceneNode } from "@/types/scene";
 export interface ProgressiveEmbedHtmlSession {
   nodeId: string;
   /** Pristine `htmlContent` at the first usable frame — also the re-derivation base for every
-   * frame, restored before the strict path / on abandon. (Component-backed screens, whose
-   * authoring text lives in `sourceTemplate`, never get a session at all — see the WHY comment
-   * where sessions are created.) */
+   * frame, restored before the strict path / on abandon. */
   originalHtmlContent: string;
   /** `nodesById` reference last written by this session, for the whole-store foreign-mutation
    * guard used to decide whether streaming should keep applying further frames. */
@@ -105,18 +103,6 @@ export function applyStreamingEmbedHtmlEdits({
       const node = live.nodesById[nodeId];
       if (!isEmbedNode(node)) return;
       const embed = node as unknown as EmbedNode;
-
-      // Component-backed screens author against `sourceTemplate` (unexpanded
-      // `<c-*>` tags); the renderable `htmlContent` only exists after running
-      // `normalizeEmbedHtmlForStorage` against the whole document's component
-      // tag map, the same machinery `editEmbedHtml.ts`'s final handler uses.
-      // That's too expensive to redo on every streamed keystroke frame, and
-      // writing the raw, unexpanded template straight to `htmlContent` would
-      // flash literal `<c-*>` tags on screen for every frame in between.
-      // Rather than ship that visibly-broken middle state, skip progressive
-      // application entirely for these nodes — the final (non-streaming)
-      // handler still applies the whole edit atomically, exactly as today.
-      if (typeof embed.sourceTemplate === "string" && embed.sourceTemplate.length > 0) return;
 
       session = {
         nodeId,

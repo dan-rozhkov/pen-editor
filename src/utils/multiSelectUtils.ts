@@ -93,7 +93,6 @@ const SECTION_MAP: Record<SceneNode["type"], SharedSection[]> = {
   line: ["position", "size", "appearance", "stroke", "effects"],
   polygon: ["position", "size", "appearance", "fill", "stroke", "effects"],
   embed: ["position", "size", "appearance", "effects"],
-  ref: ["position", "size", "appearance", "fill", "stroke", "effects"],
   connector: ["position", "size", "stroke"],
 };
 

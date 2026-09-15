@@ -84,12 +84,11 @@ All global state lives in `src/store/`. Key stores:
 
 ### Scene Graph & Layout
 
-Nodes are stored as a flat map (`nodesById`) with parent-child references (`parentById`, `childrenById`, `rootIds`). The layout engine computes absolute positions/sizes from the tree. Node types: frames, text, rectangles, ellipses, paths, groups, lines, polygons, embeds, refs (component instances).
+Nodes are stored as a flat map (`nodesById`) with parent-child references (`parentById`, `childrenById`, `rootIds`). The layout engine computes absolute positions/sizes from the tree. Node types: frames, text, rectangles, ellipses, paths, groups, lines, polygons, embeds, connectors.
 
 `sceneStore` is split into modules:
 - `src/store/sceneStore/index.ts` — main store
 - `src/store/sceneStore/complexOperations.ts` — multi-step mutations
-- `src/store/sceneStore/instanceOperations.ts` — component instance logic
 - `src/store/sceneStore/helpers/` — history, textSync, flatStoreHelpers, treeCache
 
 ### HTML → Design Conversion
@@ -302,7 +301,7 @@ of its entry bundle, and this module statically imports all of it.
   link can write instructions into a document that a stranger's agent will
   read. The rule is provenance — an agent must see what the victim's screen
   can show — so hidden nodes keep only id/type/name (the layers panel shows
-  those anyway) and embed/component source HTML is removed, since it is never
+  those anyway) and embed source HTML is removed, since it is never
   rendered as text and is the densest hiding place in the format. Redaction is
   marked, never silent, or the agent would describe an embed as empty. **Its
   honest limit: it removes the invisible channels, not the inattentive ones** —

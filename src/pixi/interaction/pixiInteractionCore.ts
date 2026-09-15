@@ -44,17 +44,13 @@ import { createTextPathOffsetController } from "./textPathOffsetController";
 import { createPathEditController } from "./pathEditController";
 import { enterPathEditMode } from "./pathEditMode";
 import { createConnectorController } from "./connectorController";
-import { createDragController, DRAG_CLICK_THRESHOLD } from "./dragController";
+import { createDragController } from "./dragController";
 import { createMarqueeController } from "./marqueeController";
 import { createMeasurementController } from "./measurementController";
 import { createMeasureToolController } from "./measureToolController";
 import { createCommentToolController } from "./commentToolController";
-import { resolveRefToTree, findNodeByPath } from "@/utils/instanceRuntime";
-import type { SceneNode, RefNode, TextNode } from "@/types/scene";
+import type { SceneNode, TextNode } from "@/types/scene";
 import { resolveTextHandleReset } from "./textResize";
-import { findSlotContext } from "@/utils/componentUtils";
-import { saveHistory } from "@/store/sceneStore/helpers/history";
-import { createSnapshot } from "@/store/sceneStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 
 const EMPTY_POINTER_EVENT = {} as PointerEvent;
@@ -162,19 +158,6 @@ export function setupPixiInteraction(
     bounds: ReturnType<typeof calculateNodesBounds>;
   } | null = null;
 
-  // Descendant drag state (for dragging nodes inside slot overrides)
-  let descendantDrag: {
-    instanceId: string;
-    descendantPath: string;
-    slotPath: string;
-    relativePath: string;
-    startWorldX: number;
-    startWorldY: number;
-    startNodeX: number;
-    startNodeY: number;
-    hasMoved: boolean;
-  } | null = null;
-
   // Create interaction context
   const context: InteractionContext = {
     canvas,
@@ -206,10 +189,6 @@ export function setupPixiInteraction(
       });
       if (!hitTarget) {
         useSelectionStore.getState().clearSelection();
-      } else if (hitTarget.kind === "instance-descendant") {
-        useSelectionStore
-          .getState()
-          .selectDescendant(hitTarget.instanceId, hitTarget.descendantPath);
       } else {
         useSelectionStore.getState().select(hitTarget.nodeId);
       }
@@ -262,26 +241,15 @@ export function setupPixiInteraction(
       : findCanvasHitTargetAtPoint(world.x, world.y, { deepSelect: true });
     if (!hitTarget) {
       useHoverStore.getState().clearHovered();
-    } else if (hitTarget.kind === "node") {
-      useHoverStore.getState().setHoveredNode(hitTarget.nodeId);
     } else {
-      useHoverStore
-        .getState()
-        .setHoveredDescendant(hitTarget.instanceId, hitTarget.descendantPath);
+      useHoverStore.getState().setHoveredNode(hitTarget.nodeId);
     }
 
     // Measurement (Alt+hover)
     measurement.handlePointerMove(
       EMPTY_POINTER_EVENT,
       world,
-      hitTarget?.kind === "node"
-        ? hitTarget.nodeId
-        : hitTarget?.kind === "instance-descendant"
-          ? hitTarget.instanceId
-          : null,
-      hitTarget?.kind === "instance-descendant"
-        ? { instanceId: hitTarget.instanceId, descendantPath: hitTarget.descendantPath }
-        : undefined,
+      hitTarget?.kind === "node" ? hitTarget.nodeId : null,
     );
 
     // Update cursor for transform handles
@@ -409,41 +377,6 @@ export function setupPixiInteraction(
         devModeActive,
       });
       const hitId = hitTarget?.kind === "node" ? hitTarget.nodeId : null;
-      if (hitTarget?.kind === "instance-descendant") {
-        useSelectionStore
-          .getState()
-          .selectDescendant(hitTarget.instanceId, hitTarget.descendantPath);
-
-        // Check if this descendant is inside a replaced slot — allow drag (edit only,
-        // never in dev/inspect mode).
-        if (!e.metaKey && !e.ctrlKey && canEditScene(mode) && !useDevModeStore.getState().active) {
-          const scState = useSceneStore.getState();
-          const inst = scState.nodesById[hitTarget.instanceId] as RefNode | undefined;
-          if (inst?.type === "ref") {
-            const sc = findSlotContext(hitTarget.descendantPath, inst.overrides);
-            if (sc) {
-              const resolved = resolveRefToTree(inst, scState.nodesById, scState.childrenById);
-              if (resolved) {
-                const descNode = findNodeByPath(resolved.children, hitTarget.descendantPath, scState.nodesById, scState.childrenById);
-                if (descNode) {
-                  descendantDrag = {
-                    instanceId: hitTarget.instanceId,
-                    descendantPath: hitTarget.descendantPath,
-                    slotPath: sc.slotPath,
-                    relativePath: sc.relativePath,
-                    startWorldX: world.x,
-                    startWorldY: world.y,
-                    startNodeX: descNode.x,
-                    startNodeY: descNode.y,
-                    hasMoved: false,
-                  };
-                }
-              }
-            }
-          }
-        }
-        return;
-      }
 
       // Group drag targeting intentionally promotes a child hit back to its
       // selected group in edit mode. Inspect mode never drags, so preserving
@@ -483,34 +416,6 @@ export function setupPixiInteraction(
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
     const world = screenToWorld(screenX, screenY);
-
-    // Handle descendant drag (slot child). Belt-and-braces: descendantDrag is
-    // only ever set in handlePointerDown, which already excludes dev mode, but
-    // an in-flight drag started just before Shift+D toggled dev mode on must
-    // not keep mutating the scene either.
-    if (descendantDrag && !useDevModeStore.getState().active) {
-      const dx = world.x - descendantDrag.startWorldX;
-      const dy = world.y - descendantDrag.startWorldY;
-      if (
-        !descendantDrag.hasMoved &&
-        Math.abs(dx) < DRAG_CLICK_THRESHOLD &&
-        Math.abs(dy) < DRAG_CLICK_THRESHOLD
-      ) {
-        return;
-      }
-      if (!descendantDrag.hasMoved) {
-        descendantDrag.hasMoved = true;
-      }
-      const newX = Math.round(descendantDrag.startNodeX + dx);
-      const newY = Math.round(descendantDrag.startNodeY + dy);
-      useSceneStore.getState().updateSlotChildWithoutHistory(
-        descendantDrag.instanceId,
-        descendantDrag.slotPath,
-        descendantDrag.relativePath,
-        { x: newX, y: newY },
-      );
-      return;
-    }
 
     // Handle active interactions
     if (pan.handlePointerMove(e)) return;
@@ -607,25 +512,6 @@ export function setupPixiInteraction(
   function processPointerUp(e: PointerEvent, screenX: number, screenY: number): void {
     const world = screenToWorld(screenX, screenY);
 
-    // Finalize descendant drag
-    if (descendantDrag) {
-      if (descendantDrag.hasMoved) {
-        // Save history by re-applying current state with history
-        const state = useSceneStore.getState();
-        const inst = state.nodesById[descendantDrag.instanceId] as RefNode | undefined;
-        if (inst?.type === "ref") {
-          const override = inst.overrides?.[descendantDrag.slotPath];
-          if (override?.kind === "replace") {
-            // Save history then re-set to current (position already updated via WithoutHistory)
-            saveHistory(createSnapshot(state));
-            useSceneStore.setState({ nodesById: { ...state.nodesById }, _cachedTree: null });
-          }
-        }
-      }
-      descendantDrag = null;
-      return;
-    }
-
     // Handle interaction cleanup in order
     if (pan.handlePointerUp(e)) return;
     if (measureTool.handlePointerUp(e, world)) return;
@@ -663,7 +549,7 @@ export function setupPixiInteraction(
     // (side → auto-width, bottom/top → auto-height, corner → auto-width). The
     // mode change runs through updateNode → syncTextDimensions to snap dims.
     const handleHit = hitTestTransformHandle(world.x, world.y);
-    if (handleHit && !handleHit.slotContext) {
+    if (handleHit) {
       const hitNode = useSceneStore.getState().nodesById[handleHit.nodeId] as
         | TextNode
         | undefined;
@@ -685,66 +571,9 @@ export function setupPixiInteraction(
       return;
     }
 
-    // Handle double-click within an entered ref instance
-    const selState = useSelectionStore.getState();
-    if (selState.instanceContext) {
-      const scState = useSceneStore.getState();
-      const refNode = scState.nodesById[selState.instanceContext.instanceId];
-      if (refNode?.type === "ref") {
-        const resolved = resolveRefToTree(refNode as RefNode, scState.nodesById, scState.childrenById);
-        if (resolved) {
-          const descNode = findNodeByPath(resolved.children, selState.instanceContext.descendantPath, scState.nodesById, scState.childrenById);
-          if (descNode?.type === "text") {
-            // Enter text editing for descendant
-            useSelectionStore.getState().startEditing(selState.instanceContext.descendantPath);
-            return;
-          }
-          if (descNode && (descNode.type === "frame" || descNode.type === "group" || descNode.type === "ref")) {
-            // Drill deeper within instance (frames, groups, and nested refs)
-            useSelectionStore.getState().enterInstanceDescendant(selState.instanceContext.descendantPath);
-            // Re-hit-test now that enteredInstanceDescendantPath is updated
-            const hitTarget = findCanvasHitTargetAtPoint(world.x, world.y);
-            if (hitTarget?.kind === "instance-descendant") {
-              useSelectionStore.getState().selectDescendant(hitTarget.instanceId, hitTarget.descendantPath);
-
-              // Start inline editing if the deeper descendant is text/embed
-              const deepDesc = findNodeByPath(resolved.children, hitTarget.descendantPath, scState.nodesById, scState.childrenById);
-              if (deepDesc?.type === "text") {
-                useSelectionStore.getState().startEditing(hitTarget.descendantPath);
-              } else if (deepDesc?.type === "embed") {
-                useSelectionStore.getState().startEditing(hitTarget.descendantPath, "embed");
-              }
-            }
-            return;
-          }
-        }
-      }
-    }
-
     // Match Konva behavior: drill down from currently selected container.
     if (currentSelectedIds.length === 1) {
       const selectedNode = findNodeById(currentNodes, currentSelectedIds[0]);
-      if (selectedNode && selectedNode.type === "ref") {
-        useSelectionStore.getState().enterContainer(selectedNode.id);
-        // Hit test to find which first-level child was hit
-        const hitTarget = findCanvasHitTargetAtPoint(world.x, world.y);
-        if (hitTarget?.kind === "instance-descendant") {
-          useSelectionStore.getState().selectDescendant(hitTarget.instanceId, hitTarget.descendantPath);
-
-          // Start inline editing immediately if the descendant is text/embed
-          const scState = useSceneStore.getState();
-          const resolved = resolveRefToTree(selectedNode as RefNode, scState.nodesById, scState.childrenById);
-          if (resolved) {
-            const descNode = findNodeByPath(resolved.children, hitTarget.descendantPath, scState.nodesById, scState.childrenById);
-            if (descNode?.type === "text") {
-              useSelectionStore.getState().startEditing(hitTarget.descendantPath);
-            } else if (descNode?.type === "embed") {
-              useSelectionStore.getState().startEditing(hitTarget.descendantPath, "embed");
-            }
-          }
-        }
-        return;
-      }
       if (selectedNode && (selectedNode.type === "frame" || selectedNode.type === "group")) {
         useSelectionStore.getState().enterContainer(selectedNode.id);
         const childId = resolveDrillChild(

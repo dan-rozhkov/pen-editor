@@ -1,5 +1,4 @@
 import type {
-  ComponentArtifact,
   FlatSceneNode,
   HistorySnapshot,
   SelectionSnapshot,
@@ -12,7 +11,6 @@ export interface SnapshotSceneSlice {
   parentById: Record<string, string | null>;
   childrenById: Record<string, string[]>;
   rootIds: string[];
-  componentArtifactsById?: Record<string, ComponentArtifact>;
 }
 
 /**
@@ -21,19 +19,16 @@ export interface SnapshotSceneSlice {
  * history (selectionStore.ts) delegate here; adding a snapshot field means
  * editing exactly this function.
  *
- * componentArtifactsById is always carried (empty object when the slice has
- * none): restoreSnapshot replaces the artifact map with
- * `snapshot.componentArtifactsById ?? {}`, so omitting it would wipe component
- * sync-state on undo. guides is likewise always carried (current page's
- * persistent ruler guides) so guide create/move/delete round-trips through
- * undo/redo. textStyles is carried the same way (named reusable text styles)
- * so text-style add/update/delete round-trips through undo/redo too.
- * fillStyles/effectStyles (shared fill/effect styles) are carried the same
- * way so their create/update/delete/apply/detach round-trips through
- * undo/redo too. slideOrder (persistent slide presentation order) is
- * likewise always carried so `reorderSlide` round-trips through undo/redo.
- * measurements (persistent pinned distance measurements) are carried the
- * same way so measurement add/delete round-trips through undo/redo too.
+ * guides is always carried (current page's persistent ruler guides) so guide
+ * create/move/delete round-trips through undo/redo. textStyles is carried
+ * the same way (named reusable text styles) so text-style add/update/delete
+ * round-trips through undo/redo too. fillStyles/effectStyles (shared fill/
+ * effect styles) are carried the same way so their create/update/delete/
+ * apply/detach round-trips through undo/redo too. slideOrder (persistent
+ * slide presentation order) is likewise always carried so `reorderSlide`
+ * round-trips through undo/redo. measurements (persistent pinned distance
+ * measurements) are carried the same way so measurement add/delete
+ * round-trips through undo/redo too.
  */
 export function buildHistorySnapshot(
   scene: SnapshotSceneSlice,
@@ -51,7 +46,6 @@ export function buildHistorySnapshot(
     parentById: { ...scene.parentById },
     childrenById: { ...scene.childrenById },
     rootIds: [...scene.rootIds],
-    componentArtifactsById: { ...(scene.componentArtifactsById ?? {}) },
     variables: [...(variables ?? [])],
     guides: [...(guides ?? [])],
     textStyles: [...(textStyles ?? [])],

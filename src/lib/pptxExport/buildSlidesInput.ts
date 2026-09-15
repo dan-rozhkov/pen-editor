@@ -12,7 +12,6 @@ import type {
   EllipseNode,
   TextNode,
   LineNode,
-  RefNode,
   Paint,
   SolidPaint,
   GradientPaint,
@@ -50,8 +49,6 @@ export interface ColorLookup {
 export interface BuildDeps {
   /** Auto-layout-resolved children of a frame (identity for non-auto-layout). Wire to layoutStore.calculateLayoutForFrame. */
   layoutChildren: (frame: FrameNode) => SceneNode[];
-  /** Resolve a ref instance to its expanded tree, or null. Wire to instanceRuntime.resolveRefToTree. */
-  resolveRef: (ref: RefNode) => SceneNode | null;
   /** Visible paint stack with legacy fallback + style/variable resolution. Wire to fillUtils.getFills + resolveFillStylePaint. */
   getNodeFills: (node: SceneNode) => Paint[];
   /**
@@ -431,13 +428,6 @@ function isSkipped(node: SceneNode): boolean {
 
 async function walkNode(node: SceneNode, parentAbsX: number, parentAbsY: number, ctx: WalkCtx): Promise<void> {
   if (isSkipped(node)) return;
-
-  if (node.type === "ref") {
-    const resolved = ctx.deps.resolveRef(node);
-    if (!resolved) return;
-    await walkNode(resolved, parentAbsX, parentAbsY, ctx);
-    return;
-  }
 
   const absX = parentAbsX + node.x;
   const absY = parentAbsY + node.y;

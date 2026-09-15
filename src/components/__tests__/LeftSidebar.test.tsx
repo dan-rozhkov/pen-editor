@@ -9,9 +9,9 @@ import { useSharedViewStore } from "@/store/sharedViewStore";
 /**
  * LeftSidebar is a layout container composing the Toolbar, an editable file
  * name, and a body whose content is driven by the active rail section
- * (pages | agents | components). We mock the heavy child panels to identifiable
- * shims so these tests assert *composition* (which regions render for a given
- * state), not the children's own behaviour.
+ * (pages | agents | slides | ...). We mock the heavy child panels to
+ * identifiable shims so these tests assert *composition* (which regions
+ * render for a given state), not the children's own behaviour.
  */
 
 vi.mock("../Toolbar", () => ({
@@ -19,9 +19,6 @@ vi.mock("../Toolbar", () => ({
 }));
 vi.mock("../layers", () => ({
   LayersPanel: () => <div data-testid="layers-shim" />,
-}));
-vi.mock("../ComponentsPanel", () => ({
-  ComponentsPanel: () => <div data-testid="components-shim" />,
 }));
 vi.mock("../SlidesPanel", () => ({
   SlidesPanel: () => <div data-testid="slides-shim" />,
@@ -99,8 +96,6 @@ describe("<LeftSidebar />", () => {
     // Pages section shows the pages list and the layer tree together.
     expect(screen.getByTestId("pages-shim")).toBeTruthy();
     expect(screen.getByTestId("layers-shim")).toBeTruthy();
-    // Components content is not mounted in the pages section.
-    expect(screen.queryByTestId("components-shim")).toBeNull();
   });
 
   it("renders the PagesPanel section when there are pages", () => {
@@ -137,15 +132,6 @@ describe("<LeftSidebar />", () => {
     // Pages/layers content is not mounted while slides is active.
     expect(screen.queryByTestId("layers-shim")).toBeNull();
     expect(screen.queryByTestId("pages-shim")).toBeNull();
-  });
-
-  it("renders the Components section when it is active", () => {
-    useLeftSidebarStore.setState({ activeSection: "components" });
-    render(<LeftSidebar />);
-    expect(screen.getByTestId("components-shim")).toBeTruthy();
-    expect(screen.getByText("Components").parentElement?.className).toContain("h-[49px]");
-    // Pages section content is not mounted while components is active.
-    expect(screen.queryByTestId("layers-shim")).toBeNull();
   });
 
   it("renders the Variables section when it is active", () => {

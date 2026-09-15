@@ -559,26 +559,4 @@ describe("buildInspectData", () => {
     const padding = layoutSection!.rows.find((r) => r.label === "Padding");
     expect(padding?.value).toBe("8px 16px");
   });
-
-  it("builds header.componentInfo for a ref (component instance) node without crashing", () => {
-    const ref: FlatSceneNode = {
-      id: "ref1",
-      type: "ref",
-      name: "Button Instance",
-      x: 0,
-      y: 0,
-      width: 100,
-      height: 40,
-      componentId: "comp1",
-      propertyValues: { variant: "primary", disabled: false },
-    };
-    const nodesById = { ref1: ref };
-    const data = buildInspectData(baseArgs(nodesById, "ref1"));
-
-    expect(data).not.toBeNull();
-    expect(data!.header.componentInfo).toEqual({
-      componentId: "comp1",
-      propertyValues: { variant: "primary", disabled: false },
-    });
-  });
 });

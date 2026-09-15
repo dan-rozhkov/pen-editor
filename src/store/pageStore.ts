@@ -1,9 +1,7 @@
 import { create } from "zustand";
 import type {
   FlatSceneNode,
-  FlatFrameNode,
   HistorySnapshot,
-  ComponentArtifact,
 } from "../types/scene";
 import { generateId, buildTree } from "../types/scene";
 import { loadGoogleFontsFromNodes } from "../utils/fontUtils";
@@ -43,8 +41,6 @@ export interface PageData {
 interface PageStoreState {
   pages: PageData[];
   activePageId: string;
-  componentArtifactsById: Record<string, ComponentArtifact>;
-  _injectedComponentIds: Set<string>;
 
   addPage: (name?: string) => string;
   deletePage: (pageId: string) => void;
@@ -53,11 +49,7 @@ interface PageStoreState {
   reorderPages: (fromIndex: number, toIndex: number) => void;
   switchToPage: (pageId: string) => void;
   saveCurrentPageState: () => void;
-  initFromDocument: (
-    pages: PageData[],
-    componentArtifacts: Record<string, ComponentArtifact>,
-  ) => void;
-  getAllComponents: () => FlatFrameNode[];
+  initFromDocument: (pages: PageData[]) => void;
 }
 
 function createEmptyPage(name: string): PageData {
@@ -79,33 +71,11 @@ function createEmptyPage(name: string): PageData {
   };
 }
 
-/** Collect a component and all its descendants from flat storage */
-function collectSubtreeIds(
-  rootId: string,
-  childrenById: Record<string, string[]>,
-): string[] {
-  const ids: string[] = [rootId];
-  const queue = [rootId];
-  while (queue.length > 0) {
-    const id = queue.pop()!;
-    const children = childrenById[id];
-    if (children) {
-      for (const childId of children) {
-        ids.push(childId);
-        queue.push(childId);
-      }
-    }
-  }
-  return ids;
-}
-
 const defaultPage = createEmptyPage("Page 1");
 
 export const usePageStore = create<PageStoreState>((set, get) => ({
   pages: [defaultPage],
   activePageId: defaultPage.id,
-  componentArtifactsById: {},
-  _injectedComponentIds: new Set<string>(),
 
   addPage: (name?: string) => {
     get().saveCurrentPageState();
@@ -198,7 +168,7 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
   },
 
   saveCurrentPageState: () => {
-    const { activePageId, pages, _injectedComponentIds } = get();
+    const { activePageId, pages } = get();
     const pageIndex = pages.findIndex((p) => p.id === activePageId);
     if (pageIndex < 0) return;
 
@@ -206,22 +176,12 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
     const viewport = useViewportStore.getState();
     const history = useHistoryStore.getState();
 
-    // Strip injected cross-page component IDs from scene data
-    const nodesById = { ...scene.nodesById };
-    const parentById = { ...scene.parentById };
-    const childrenById = { ...scene.childrenById };
-    for (const id of _injectedComponentIds) {
-      delete nodesById[id];
-      delete parentById[id];
-      delete childrenById[id];
-    }
-
     const updatedPages = [...pages];
     updatedPages[pageIndex] = {
       ...updatedPages[pageIndex],
-      nodesById,
-      parentById,
-      childrenById,
+      nodesById: { ...scene.nodesById },
+      parentById: { ...scene.parentById },
+      childrenById: { ...scene.childrenById },
       rootIds: [...scene.rootIds],
       pageBackground: scene.pageBackground,
       expandedFrameIds: new Set(scene.expandedFrameIds),
@@ -233,11 +193,7 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
       comments: useCommentsStore.getState().threads,
     };
 
-    // Sync componentArtifactsById from sceneStore
-    set({
-      pages: updatedPages,
-      componentArtifactsById: { ...scene.componentArtifactsById },
-    });
+    set({ pages: updatedPages });
   },
 
   switchToPage: (pageId: string) => {
@@ -253,46 +209,14 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
     const targetPage = freshState.pages.find((p) => p.id === pageId);
     if (!targetPage) return;
 
-    // Inject cross-page component subtrees
-    const injectedIds = new Set<string>();
-    const nodesById = { ...targetPage.nodesById };
-    const parentById = { ...targetPage.parentById };
-    const childrenById = { ...targetPage.childrenById };
-
-    for (const page of freshState.pages) {
-      if (page.id === pageId) continue;
-      for (const [id, node] of Object.entries(page.nodesById)) {
-        if (
-          node.type === "frame" &&
-          (node as FlatFrameNode).reusable
-        ) {
-          // This is a reusable component on another page — inject its subtree
-          // so that instances (RefNodes) on the target page can resolve it.
-          const subtreeIds = collectSubtreeIds(id, page.childrenById);
-          for (const sid of subtreeIds) {
-            if (!(sid in nodesById)) {
-              nodesById[sid] = page.nodesById[sid];
-              parentById[sid] =
-                sid === id ? null : page.parentById[sid];
-              if (page.childrenById[sid]) {
-                childrenById[sid] = page.childrenById[sid];
-              }
-              injectedIds.add(sid);
-            }
-          }
-        }
-      }
-    }
-
     // Load into sceneStore
     useSceneStore.setState({
-      nodesById,
-      parentById,
-      childrenById,
+      nodesById: { ...targetPage.nodesById },
+      parentById: { ...targetPage.parentById },
+      childrenById: { ...targetPage.childrenById },
       rootIds: [...targetPage.rootIds],
       pageBackground: targetPage.pageBackground,
       expandedFrameIds: new Set(targetPage.expandedFrameIds),
-      componentArtifactsById: { ...freshState.componentArtifactsById },
       slideOrder: [...targetPage.slideOrder],
       _cachedTree: null,
     });
@@ -300,8 +224,8 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
     // Load Google Fonts for this page's nodes
     const tree = buildTree(
       targetPage.rootIds,
-      nodesById,
-      childrenById,
+      targetPage.nodesById,
+      targetPage.childrenById,
     );
     loadGoogleFontsFromNodes(tree);
 
@@ -327,49 +251,25 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
       selectedIds: [],
       editingNodeId: null,
       editingMode: null,
-      editingInstanceId: null,
-      instanceContext: null,
       enteredContainerId: null,
-      enteredInstanceDescendantPath: null,
       lastSelectedId: null,
       activeEmbedId: null,
     });
 
-    set({
-      activePageId: pageId,
-      _injectedComponentIds: injectedIds,
-    });
+    set({ activePageId: pageId });
 
     // Show loading overlay until PixiJS finishes rendering
     useLoadingStore.getState().showLoadingUntilRendered();
   },
 
-  initFromDocument: (
-    pages: PageData[],
-    componentArtifacts: Record<string, ComponentArtifact>,
-  ) => {
+  initFromDocument: (pages: PageData[]) => {
     if (pages.length === 0) return;
     set({
       pages,
       activePageId: "",
-      componentArtifactsById: componentArtifacts,
-      _injectedComponentIds: new Set<string>(),
     });
 
     // Switch to the first page (this loads it into sceneStore)
     get().switchToPage(pages[0].id);
-  },
-
-  getAllComponents: () => {
-    const { pages } = get();
-    const components: FlatFrameNode[] = [];
-    for (const page of pages) {
-      for (const node of Object.values(page.nodesById)) {
-        if (node.type === "frame" && (node as FlatFrameNode).reusable) {
-          components.push(node as FlatFrameNode);
-        }
-      }
-    }
-    return components;
   },
 }));

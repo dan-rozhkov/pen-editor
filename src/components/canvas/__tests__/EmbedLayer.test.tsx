@@ -18,7 +18,7 @@ function seedEmbed(): void {
     parentById: { e1: null },
     childrenById: {},
     rootIds: ["e1"],
-    componentArtifactsById: {},
+
     _cachedTree: null,
   });
 }
@@ -57,7 +57,7 @@ describe("<EmbedLayer />", () => {
       parentById: { vis: null, hid: null, dis: null },
       childrenById: {},
       rootIds: ["vis", "hid", "dis"],
-      componentArtifactsById: {},
+
       _cachedTree: null,
     });
     const { container } = render(<EmbedLayer />);
@@ -79,7 +79,7 @@ describe("<EmbedLayer />", () => {
       parentById: { wrap: null, inner: "wrap" },
       childrenById: { wrap: ["inner"] },
       rootIds: ["wrap"],
-      componentArtifactsById: {},
+
       _cachedTree: null,
     });
     const { container } = render(<EmbedLayer />);
@@ -95,7 +95,7 @@ describe("<EmbedLayer />", () => {
       parentById: { wrap: null, inner: "wrap" },
       childrenById: { wrap: ["inner"] },
       rootIds: ["wrap"],
-      componentArtifactsById: {},
+
       _cachedTree: null,
     });
     const { container } = render(<EmbedLayer />);
@@ -111,7 +111,7 @@ describe("<EmbedLayer />", () => {
       parentById: { wrap: null, inner: "wrap" },
       childrenById: { wrap: ["inner"] },
       rootIds: ["wrap"],
-      componentArtifactsById: {},
+
       _cachedTree: null,
     });
     const { container } = render(<EmbedLayer />);
@@ -124,7 +124,7 @@ describe("<EmbedLayer />", () => {
     act(() => {
       useSceneStore.setState({
         nodesById: {}, parentById: {}, childrenById: {}, rootIds: [],
-        componentArtifactsById: {}, _cachedTree: null,
+ _cachedTree: null,
       });
     });
     expect(container.querySelector('[data-embed-id="e1"]')).toBeNull();

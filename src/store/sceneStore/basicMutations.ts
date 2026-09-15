@@ -2,7 +2,6 @@ import type {
   FlatSceneNode,
   FlatSnapshot,
   HistorySnapshot,
-  FlatFrameNode,
   SceneNode,
 } from "../../types/scene";
 import {
@@ -31,7 +30,7 @@ import {
   removeNodeAndDescendants,
   removeOrphanedConnectors,
 } from "./helpers/flatStoreHelpers";
-import { markComponentArtifactsStaleFromNative } from "./componentArtifacts";
+import { flattenRefNodes } from "../migrations/flattenRefNodes";
 import { markNodesDirty } from "./dirtyTracking";
 import type { SceneState } from "./types";
 import type { StoreApi } from "zustand";
@@ -76,11 +75,7 @@ function applySingleNodeUpdate(
 ) {
   const updated = computeUpdatedNode(existing, updates);
   const newNodesById = { ...state.nodesById, [id]: updated };
-  const componentArtifactsById = markComponentArtifactsStaleFromNative(
-    state.componentArtifactsById,
-    [existing],
-  );
-  return { newNodesById, componentArtifactsById };
+  return { newNodesById };
 }
 
 function applyNodeUpdatesById(
@@ -89,17 +84,11 @@ function applyNodeUpdatesById(
   updatesById: Record<string, Partial<SceneNode>>,
 ) {
   const newNodesById = { ...state.nodesById };
-  const staleSources: FlatSceneNode[] = [];
   for (const id of ids) {
     const existing = state.nodesById[id];
     newNodesById[id] = computeUpdatedNode(existing, updatesById[id]);
-    staleSources.push(existing);
   }
-  const componentArtifactsById = markComponentArtifactsStaleFromNative(
-    state.componentArtifactsById,
-    staleSources,
-  );
-  return { newNodesById, componentArtifactsById };
+  return { newNodesById };
 }
 
 function applySameUpdateToNodes(
@@ -139,7 +128,6 @@ export function createBasicMutations(set: SetState, get: GetState) {
           parentById: newParentById,
           childrenById: newChildrenById,
           rootIds: newRootIds,
-          componentArtifactsById: state.componentArtifactsById,
           _cachedTree: null,
         };
       });
@@ -164,7 +152,6 @@ export function createBasicMutations(set: SetState, get: GetState) {
           nodesById: newNodesById,
           parentById: newParentById,
           childrenById: newChildrenById,
-          componentArtifactsById: state.componentArtifactsById,
           _cachedTree: null,
         };
       });
@@ -177,7 +164,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
         if (!existing) return state;
         saveHistory(state);
 
-        const { newNodesById, componentArtifactsById } = applySingleNodeUpdate(
+        const { newNodesById } = applySingleNodeUpdate(
           state,
           id,
           existing,
@@ -190,7 +177,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
         // check), which would leave `armed` stuck true and wrongly bless the
         // next, unrelated mutation as tracked.
         markNodesDirty([id]);
-        return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
+        return { nodesById: newNodesById, _cachedTree: null };
       }),
 
     updateMultipleNodes: (ids: string[], updates: Partial<SceneNode>) => {
@@ -199,12 +186,8 @@ export function createBasicMutations(set: SetState, get: GetState) {
         saveHistory(state);
         const newNodesById = { ...state.nodesById };
         applySameUpdateToNodes(newNodesById, ids, updates);
-        const componentArtifactsById = markComponentArtifactsStaleFromNative(
-          state.componentArtifactsById,
-          ids.map((id) => state.nodesById[id]),
-        );
 
-        return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
+        return { nodesById: newNodesById, _cachedTree: null };
       });
     },
 
@@ -218,12 +201,8 @@ export function createBasicMutations(set: SetState, get: GetState) {
         saveHistory(state);
         const newNodesById = { ...state.nodesById };
         applySameUpdateToNodes(newNodesById, ids, updates, deepMergeKeys);
-        const componentArtifactsById = markComponentArtifactsStaleFromNative(
-          state.componentArtifactsById,
-          ids.map((id) => state.nodesById[id]),
-        );
 
-        return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
+        return { nodesById: newNodesById, _cachedTree: null };
       });
     },
 
@@ -232,7 +211,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
         const existing = state.nodesById[id];
         if (!existing) return state;
 
-        const { newNodesById, componentArtifactsById } = applySingleNodeUpdate(
+        const { newNodesById } = applySingleNodeUpdate(
           state,
           id,
           existing,
@@ -240,7 +219,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
         );
 
         markNodesDirty([id]);
-        return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
+        return { nodesById: newNodesById, _cachedTree: null };
       }),
 
     updateNodesWithoutHistory: (updatesById: Record<string, Partial<SceneNode>>) =>
@@ -248,14 +227,14 @@ export function createBasicMutations(set: SetState, get: GetState) {
         const ids = Object.keys(updatesById).filter((id) => state.nodesById[id]);
         if (ids.length === 0) return state;
 
-        const { newNodesById, componentArtifactsById } = applyNodeUpdatesById(
+        const { newNodesById } = applyNodeUpdatesById(
           state,
           ids,
           updatesById,
         );
 
         markNodesDirty(ids);
-        return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
+        return { nodesById: newNodesById, _cachedTree: null };
       }),
 
     updateNodesById: (updatesById: Record<string, Partial<SceneNode>>) =>
@@ -264,14 +243,14 @@ export function createBasicMutations(set: SetState, get: GetState) {
         if (ids.length === 0) return state;
         saveHistory(state);
 
-        const { newNodesById, componentArtifactsById } = applyNodeUpdatesById(
+        const { newNodesById } = applyNodeUpdatesById(
           state,
           ids,
           updatesById,
         );
 
         markNodesDirty(ids);
-        return { nodesById: newNodesById, componentArtifactsById, _cachedTree: null };
+        return { nodesById: newNodesById, _cachedTree: null };
       }),
 
     deleteNode: (id: string) =>
@@ -329,12 +308,6 @@ export function createBasicMutations(set: SetState, get: GetState) {
           parentById: newParentById,
           childrenById: newChildrenById,
           rootIds: newRootIds,
-          componentArtifactsById:
-            id in state.componentArtifactsById
-              ? Object.fromEntries(
-                  Object.entries(state.componentArtifactsById).filter(([artifactId]) => artifactId !== id),
-                )
-              : state.componentArtifactsById,
           _cachedTree: null,
         };
       }),
@@ -345,31 +318,13 @@ export function createBasicMutations(set: SetState, get: GetState) {
         parentById: {},
         childrenById: {},
         rootIds: [],
-        componentArtifactsById: {},
         _cachedTree: null,
       }),
 
     setNodes: (nodes: SceneNode[]) => {
       const state = get();
       saveHistory(state);
-      const flat = flattenTree(nodes);
-
-      // Migration: convert old slot: string[] on parent to isSlot: true on children
-      type FrameWithOldSlot = FlatFrameNode & { slot?: string[] };
-      for (const id of Object.keys(flat.nodesById)) {
-        const node = flat.nodesById[id];
-        if (node.type !== "frame") continue;
-        const frame = node as FrameWithOldSlot;
-        if (!Array.isArray(frame.slot)) continue;
-        for (const slotChildId of frame.slot) {
-          const child = flat.nodesById[slotChildId];
-          if (child?.type === "frame") {
-            flat.nodesById[slotChildId] = { ...child, isSlot: true } as FlatSceneNode;
-          }
-        }
-        const { slot: _, ...rest } = frame;
-        flat.nodesById[id] = rest as FlatSceneNode;
-      }
+      const flat = flattenRefNodes(flattenTree(nodes));
 
       const synced = syncAllTextDimensionsFlat(flat.nodesById);
       set({
@@ -377,7 +332,6 @@ export function createBasicMutations(set: SetState, get: GetState) {
         parentById: flat.parentById,
         childrenById: flat.childrenById,
         rootIds: flat.rootIds,
-        componentArtifactsById: state.componentArtifactsById,
         _cachedTree: null,
       });
       loadGoogleFontsFromNodes(nodes);
@@ -397,7 +351,6 @@ export function createBasicMutations(set: SetState, get: GetState) {
         parentById: flat.parentById,
         childrenById: flat.childrenById,
         rootIds: flat.rootIds,
-        componentArtifactsById: get().componentArtifactsById,
         _cachedTree: null,
       });
     },
@@ -410,7 +363,6 @@ export function createBasicMutations(set: SetState, get: GetState) {
         parentById: snapshot.parentById,
         childrenById: snapshot.childrenById,
         rootIds: snapshot.rootIds,
-        componentArtifactsById: { ...(snapshot.componentArtifactsById ?? {}) },
         slideOrder: snapshot.slideOrder ?? [],
         _cachedTree: null,
       });
@@ -450,8 +402,6 @@ export function createBasicMutations(set: SetState, get: GetState) {
       if (!historySelection) return;
       useSelectionStore.setState({
         selectedIds: historySelection.selectedIds.filter((id) => validIds.has(id)),
-        editingInstanceId: null,
-        instanceContext: null,
         enteredContainerId:
           historySelection.enteredContainerId &&
           validIds.has(historySelection.enteredContainerId)

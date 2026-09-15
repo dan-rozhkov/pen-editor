@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FlatSceneNode, RefNode } from "@/types/scene";
+import type { FlatSceneNode } from "@/types/scene";
 import { getEffects, getFills, getRenderableStrokes } from "@/utils/fillUtils";
 import { extractNodeStyle, pickStyleUpdatesForNode } from "@/utils/styleClipboard";
 
@@ -314,63 +314,6 @@ describe("pickStyleUpdatesForNode", () => {
       expect("effects" in updates).toBe(false);
       expect("effect" in updates).toBe(false);
       expect(updates.opacity).toBe(0.5);
-    });
-  });
-
-  // Regression: pasting style properties onto a component instance (`ref`
-  // node) used to write COMMON_STYLE_KEYS verbatim — including `fills`,
-  // `effects`, `opacity` — even though `resolveRefToTree`
-  // (`@/utils/instanceRuntime`) only ever forwards `fill`/`stroke`/
-  // `strokeWidth`/`fillBinding`/`strokeBinding` from the ref node to the
-  // resolved render tree. Writing the rest mutated data (and created an undo
-  // entry) but rendered nothing, i.e. a silent no-op paste.
-  describe("pasting onto a component instance (ref)", () => {
-    const refTarget: RefNode = {
-      id: "ref1",
-      type: "ref",
-      x: 0,
-      y: 0,
-      width: 100,
-      height: 50,
-      componentId: "comp1",
-      fill: "#ffffff",
-    } as RefNode;
-
-    it("only carries over the properties resolveRefToTree actually forwards", () => {
-      const style = extractNodeStyle(rectSource);
-      const updates = pickStyleUpdatesForNode(refTarget as unknown as FlatSceneNode, style) as Record<
-        string,
-        unknown
-      >;
-
-      expect(updates.fill).toBe("#ff0000");
-      expect(updates.stroke).toBe("#000000");
-      expect(updates.strokeWidth).toBe(2);
-
-      // Not honored by resolveRefToTree — must never be written as dead data.
-      expect("fills" in updates).toBe(false);
-      expect("strokes" in updates).toBe(false);
-      expect("effects" in updates).toBe(false);
-      expect("effect" in updates).toBe(false);
-      expect("opacity" in updates).toBe(false);
-      expect("fillOpacity" in updates).toBe(false);
-      expect("cornerRadius" in updates).toBe(false);
-    });
-
-    it("carries fillBinding/strokeBinding, which resolveRefToTree also forwards", () => {
-      const boundSource = {
-        ...rectSource,
-        fillBinding: { variableId: "var1" },
-        strokeBinding: { variableId: "var2" },
-      } as FlatSceneNode;
-      const style = extractNodeStyle(boundSource);
-      const updates = pickStyleUpdatesForNode(refTarget as unknown as FlatSceneNode, style) as Record<
-        string,
-        unknown
-      >;
-
-      expect(updates.fillBinding).toEqual({ variableId: "var1" });
-      expect(updates.strokeBinding).toEqual({ variableId: "var2" });
     });
   });
 

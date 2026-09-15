@@ -1,5 +1,4 @@
 import type { FlatSceneNode } from "@/types/scene";
-import type { DocumentComponentDefinition } from "@/lib/documentComponents";
 
 export type OpType = "I" | "C" | "U" | "R" | "M" | "D" | "G";
 
@@ -26,8 +25,6 @@ export interface ExecutionContext {
   rootIds: string[];
   createdNodeIds: string[];
   issues: string[];
-  /** Document component tag map for expanding c-* tags in embed HTML */
-  componentTagMap: Map<string, DocumentComponentDefinition>;
   /**
    * Ids removed (via R()/D()) during execution whose pinned measurements
    * need cleanup — collected here rather than mutated live, since `ctx` is a

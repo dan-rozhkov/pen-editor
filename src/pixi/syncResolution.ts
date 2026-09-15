@@ -39,9 +39,8 @@ export function createResolutionManager(ctx: SyncContext) {
   const embedsAtTargetRes = new Set<string>();
   let embedUpgradeGeneration = 0;
 
-  // --- Text/ref node tracking for fast resolution updates ---
+  // --- Text node tracking for fast resolution updates ---
   const textNodeIds = new Set<string>();
-  const refNodeIds = new Set<string>();
   let trackingInitialized = false;
 
   // --- Text resolution ---
@@ -59,8 +58,8 @@ export function createResolutionManager(ctx: SyncContext) {
   }
 
   /**
-   * Fast text resolution update using tracked text/ref node IDs
-   * instead of walking the entire PixiJS tree.
+   * Fast text resolution update using tracked text node IDs instead of
+   * walking the entire PixiJS tree.
    */
   function applyTextResolutionFast(resolution: number): void {
     // Direct text nodes — update their text-content child directly
@@ -71,12 +70,6 @@ export function createResolutionManager(ctx: SyncContext) {
       if (textObj && textObj.resolution !== resolution) {
         textObj.resolution = resolution;
       }
-    }
-    // Ref containers may contain embedded text — walk only their subtrees
-    for (const id of refNodeIds) {
-      const entry = ctx.registry.get(id);
-      if (!entry) continue;
-      applyTextResolutionRecursive(entry.container, resolution);
     }
   }
 
@@ -289,21 +282,17 @@ export function createResolutionManager(ctx: SyncContext) {
     resetResolutions,
     cleanup,
 
-    // Phase 6: Text/ref node tracking for fast resolution updates
+    // Phase 6: Text node tracking for fast resolution updates
     trackNodeAdded(id: string, node: FlatSceneNode): void {
       if (node.type === "text") textNodeIds.add(id);
-      else if (node.type === "ref") refNodeIds.add(id);
     },
     trackNodeRemoved(id: string): void {
       textNodeIds.delete(id);
-      refNodeIds.delete(id);
     },
     rebuildTracking(): void {
       textNodeIds.clear();
-      refNodeIds.clear();
       for (const [id, entry] of ctx.registry) {
         if (entry.node.type === "text") textNodeIds.add(id);
-        else if (entry.node.type === "ref") refNodeIds.add(id);
       }
       trackingInitialized = true;
     },

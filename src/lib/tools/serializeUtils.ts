@@ -1,4 +1,4 @@
-import type { FrameNode, FlatSceneNode, EmbedNode, Paint, SceneNode } from "@/types/scene";
+import type { FrameNode, FlatSceneNode, Paint, SceneNode } from "@/types/scene";
 import { useSceneStore } from "@/store/sceneStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize } from "@/utils/nodeUtils";
@@ -6,7 +6,6 @@ import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize } from "@/utils
 type SerializeOptions = {
   resolveVars?: boolean;
   variableLookup?: Record<string, string>;
-  preferSourceTemplate?: boolean;
 };
 
 // Per-document context shared across an entire serializeNodeToDepth call
@@ -134,23 +133,13 @@ function serializeNodeInternal(
       // since state.getNodes()/state.parentById above are read from the real
       // store and simply won't know about such a node. Anything that throws
       // for a node the live store DOES know about is a genuine regression in
-      // layout resolution, so surface it in dev builds (mirrors
-      // instanceRuntime.ts's resolveRefToTree DEV-only warn).
+      // layout resolution, so surface it in dev builds.
       if (import.meta.env.DEV && state.nodesById[nodeId]) {
         console.warn(
           `[serializeNodeToDepth] layout resolution failed for node ${nodeId}, falling back to raw stored fields:`,
           err,
         );
       }
-    }
-  }
-
-  // When preferSourceTemplate is set, replace htmlContent with sourceTemplate
-  // for embed nodes that have authoring templates
-  if (options?.preferSourceTemplate && node.type === "embed") {
-    const embed = node as EmbedNode;
-    if (embed.sourceTemplate) {
-      result.htmlContent = embed.sourceTemplate;
     }
   }
 

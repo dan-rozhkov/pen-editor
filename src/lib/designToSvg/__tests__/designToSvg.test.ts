@@ -566,15 +566,6 @@ describe("convertDesignNodesToSvg", () => {
     expect(warnings.some((w) => w.includes("Embed node"))).toBe(true);
   });
 
-  it("replaces a component instance (ref) node with a placeholder and records a warning", () => {
-    const nodesById: Record<string, FlatSceneNode> = {
-      frame1: frame("frame1"),
-      ref1: { id: "ref1", type: "ref", x: 0, y: 0, width: 50, height: 50, componentId: "comp1" },
-    };
-    const { warnings } = convertDesignNodesToSvg("frame1", nodesById, { frame1: ["ref1"] });
-    expect(warnings.some((w) => w.includes("Component instance"))).toBe(true);
-  });
-
   it("warns when a node carries a shader but still renders its base fill", () => {
     const nodesById: Record<string, FlatSceneNode> = {
       rect1: rect("rect1", {

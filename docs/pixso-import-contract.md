@@ -51,7 +51,7 @@ Any of these is accepted:
 
 Multiple roots are supported: the dialog imports every root it finds and selects
 them all. `id`s are only used for logging; the importer generates fresh scene
-ids, so they need not be stable (component instances are flattened — see below).
+ids, so they need not be stable (instances are flattened — see below).
 
 ## Node object
 
@@ -142,8 +142,8 @@ interface PixsoNode {
 | Pixso `type` | Imported as | Notes |
 |---|---|---|
 | `FRAME`, `SECTION` | frame | |
-| `COMPONENT`, `COMPONENT_SET` | frame (`reusable: true`) | variants not preserved as properties |
-| `INSTANCE` | frame | **flattened** — emit the resolved child tree (see components) |
+| `COMPONENT`, `COMPONENT_SET` | frame | variants not preserved |
+| `INSTANCE` | frame | **flattened** — emit the resolved child tree |
 | `GROUP` | group | |
 | `RECTANGLE` | rect | + corner radius / smoothing |
 | `ELLIPSE` | ellipse | + `arcData` → arc/pie/donut |
@@ -321,15 +321,15 @@ interface LayoutGrid {
 
 ## Components
 
-The importer does **not** reconstruct component/instance relationships (a pasted
-frame has no library to bind to). For each `INSTANCE`, emit the **resolved**
-child tree as a normal `FRAME` with its actual rendered content (apply overrides/
-variant selections before export). Reusable-component authoring belongs to the
-full-document path, not this dialog.
+The importer does **not** reconstruct component/instance relationships — the
+editor has no native component concept for a pasted selection to bind to.
+`COMPONENT`/`COMPONENT_SET` import as plain frames. For each `INSTANCE`, emit
+the **resolved** child tree as a normal `FRAME` with its actual rendered
+content (apply overrides/variant selections before export).
 
 ## What is approximated or dropped
 
-- Component instances are flattened (no `ref`).
+- Component instances are flattened to plain frames.
 - Connectors, and any unknown leaf type, become a rectangle placeholder.
 - Angular/diamond gradients → radial; rotated gradients approximate direction.
 - Gradient/dashed/variable-width strokes → outline as a `VECTOR` for fidelity.
@@ -349,8 +349,8 @@ full-document path, not this dialog.
 
 ## Full-document alternative (File → Open)
 
-If you'd rather import an entire multi-page document (with reusable components,
-variables, and named styles) instead of pasting selected nodes, generate the
+If you'd rather import an entire multi-page document (with variables and named
+styles) instead of pasting selected nodes, generate the
 editor's **native** document JSON (`version: "1.1"`, lowercase node types,
 loaded by `deserializeDocument()`) and open it via **File → Open**. That is a
 different, higher-effort contract for the plugin and is out of scope here; ask

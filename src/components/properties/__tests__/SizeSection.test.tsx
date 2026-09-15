@@ -279,7 +279,6 @@ describe("<SizeSection />", () => {
       parentById: { autoFrame: null, childA: "autoFrame" },
       childrenById: { autoFrame: ["childA"] },
       rootIds: ["autoFrame"],
-      componentArtifactsById: {},
       _cachedTree: null,
     });
 
@@ -369,7 +368,6 @@ describe("<SizeSection />", () => {
         },
         childrenById: { autoFitFrame: ["autoFitChildA", "autoFitChildB"] },
         rootIds: ["autoFitFrame"],
-        componentArtifactsById: {},
         _cachedTree: null,
       });
     }

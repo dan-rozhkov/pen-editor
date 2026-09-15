@@ -10,7 +10,6 @@ import {
 import { IconButton } from "@/components/ui/IconButton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ArrowDown, ArrowUp, PlusIcon, MinusIcon } from "@phosphor-icons/react";
-import { OverrideIndicator } from "@/components/properties/OverrideIndicator";
 import { GradientEditor } from "@/components/properties/GradientEditor";
 import {
   BlendModeDropdown,
@@ -64,11 +63,8 @@ function getStrokeMode(node: SceneNode): StrokeMode {
 export function StrokeSection({
   node,
   onUpdate,
-  component,
   colorVariables,
   activeTheme,
-  isOverridden,
-  resetOverride,
   mixedKeys,
 }: StrokeSectionProps) {
   const pathStroke: PathStroke | undefined = node.type === "path" ? node.pathStroke : undefined;
@@ -111,7 +107,7 @@ export function StrokeSection({
   const legacyStrokePaint: Paint = {
     id: "legacy-stroke",
     type: "solid",
-    color: node.stroke ?? pathStroke?.fill ?? component?.stroke ?? "#000000",
+    color: node.stroke ?? pathStroke?.fill ?? "#000000",
     opacity: node.strokeOpacity,
   };
 
@@ -267,7 +263,7 @@ export function StrokeSection({
                   }}
                 />
                 <ColorInput
-                  value={node.stroke ?? pathStroke?.fill ?? component?.stroke ?? "#000000"}
+                  value={node.stroke ?? pathStroke?.fill ?? "#000000"}
                   onChange={(v) => effectiveOnUpdate({ stroke: v || undefined })}
                   variableId={node.strokeBinding?.variableId}
                   onVariableChange={handleStrokeVariableChange}
@@ -289,10 +285,6 @@ export function StrokeSection({
                 />
               </PopoverContent>
             </Popover>
-            <OverrideIndicator
-              isOverridden={isOverridden(node.stroke, component?.stroke)}
-              onReset={() => resetOverride("stroke")}
-            />
           </div>
           )}
 
@@ -342,20 +334,13 @@ export function StrokeSection({
                 <NumberInput
                   label="Weight"
                   labelOutside={true}
-                  value={node.strokeWidth ?? pathStroke?.thickness ?? component?.strokeWidth ?? 1}
+                  value={node.strokeWidth ?? pathStroke?.thickness ?? 1}
                   onChange={(v) => effectiveOnUpdate({ strokeWidth: v })}
                   min={0}
                   step={0.5}
                   isMixed={mixedKeys?.has("strokeWidth")}
                 />
               </div>
-              <OverrideIndicator
-                isOverridden={isOverridden(
-                  node.strokeWidth,
-                  component?.strokeWidth
-                )}
-                onReset={() => resetOverride("strokeWidth")}
-              />
             </div>
           )}
 

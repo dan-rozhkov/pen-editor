@@ -53,7 +53,6 @@ function seedDrillScene(): void {
     parentById: { frameA: null, frameB: "frameA", rect1: "frameB" },
     childrenById: { frameA: ["frameB"], frameB: ["rect1"] },
     rootIds: ["frameA"],
-    componentArtifactsById: {},
     _cachedTree: null,
   });
 }

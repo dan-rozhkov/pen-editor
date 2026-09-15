@@ -3,11 +3,10 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { usePageStore } from "@/store/pageStore";
 import { useDocumentStore } from "@/store/documentStore";
-import { collectDocumentComponents } from "@/lib/documentComponents";
 import type { ToolHandler } from "../toolRegistry";
 
 export const getEditorState: ToolHandler = async () => {
-  const { rootIds, nodesById, childrenById, componentArtifactsById } = useSceneStore.getState();
+  const { rootIds, nodesById } = useSceneStore.getState();
   const { selectedIds } = useSelectionStore.getState();
   const { scale, x, y } = useViewportStore.getState();
 
@@ -16,26 +15,6 @@ export const getEditorState: ToolHandler = async () => {
     if (!n) return { id };
     return { id: n.id, type: n.type, name: n.name };
   });
-
-  // Single pass: collect document components, then derive both response shapes
-  const docComponents = collectDocumentComponents(nodesById, componentArtifactsById, childrenById);
-
-  const reusableComponents = docComponents.map((c) => ({
-    id: c.id,
-    type: "frame" as const,
-    name: c.name,
-    htmlContent: c.templateHtml,
-    syncState: componentArtifactsById[c.id]?.syncState ?? "missing",
-  }));
-
-  const documentComponents = docComponents.map((c) => ({
-    id: c.id,
-    name: c.name,
-    tag: c.tag,
-    width: c.width,
-    height: c.height,
-    slots: c.slots,
-  }));
 
   const selectedNodes = selectedIds.map((id) => {
     const n = nodesById[id];
@@ -69,8 +48,6 @@ export const getEditorState: ToolHandler = async () => {
     roots,
     selectedIds,
     selectedNodes,
-    reusableComponents,
-    documentComponents,
     viewport: { scale, x, y },
   });
 };

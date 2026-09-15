@@ -85,18 +85,6 @@ describe("editEmbedHtml", () => {
     expect(html("e1").htmlContent).toBe("a-b");
   });
 
-  it("edits sourceTemplate rather than the expanded htmlContent", async () => {
-    seedEmbed("e1", "<div>EXPANDED</div>", { sourceTemplate: "<div>TEMPLATE</div>" });
-    const result = JSON.parse(await editEmbedHtml({
-      nodeId: "e1",
-      edits: [{ oldString: "TEMPLATE", newString: "EDITED" }],
-    }));
-    expect(result.targetedSourceTemplate).toBe(true);
-    // No document components exist in this scene, so nothing expands and the
-    // edited template becomes the stored html; the stale template is dropped.
-    expect(html("e1").htmlContent).toBe("<div>EDITED</div>");
-  });
-
   it("rejects a non-embed node with an actionable message", async () => {
     const state = useSceneStore.getState();
     useSceneStore.setState({
@@ -167,46 +155,6 @@ describe("editEmbedHtml", () => {
     const before = useHistoryStore.getState().past.length;
     await editEmbedHtml({ nodeId: "e1", edits: [{ oldString: "a", newString: "b" }] });
     expect(useHistoryStore.getState().past.length).toBe(before + 1);
-  });
-});
-
-describe("editEmbedHtml and document component tags", () => {
-  beforeEach(() => resetStores());
-
-  it("refuses the edit when a component tag in the template no longer resolves", async () => {
-    // The component was renamed or deleted, so <c-user-card/> expands to nothing.
-    // Storing the unexpanded template would wipe the card's rendered markup.
-    seedEmbed("e1", "<div><span>card markup</span></div>", {
-      sourceTemplate: "<div><c-user-card/></div>",
-    });
-    const result = JSON.parse(
-      await editEmbedHtml({
-        nodeId: "e1",
-        edits: [{ oldString: "<div>", newString: '<div class="wrap">' }],
-      }),
-    );
-    expect(result.error).toMatch(/no longer resolve/);
-    expect(html("e1").htmlContent).toBe("<div><span>card markup</span></div>");
-    expect(
-      (useSceneStore.getState().nodesById.e1 as unknown as { sourceTemplate?: string }).sourceTemplate,
-    ).toBe("<div><c-user-card/></div>");
-  });
-
-  it("drops the template when the edit removes the last component tag", async () => {
-    seedEmbed("e1", "<div><span>card markup</span></div>", {
-      sourceTemplate: "<div><c-user-card/></div>",
-    });
-    const result = JSON.parse(
-      await editEmbedHtml({
-        nodeId: "e1",
-        edits: [{ oldString: "<c-user-card/>", newString: "<p>plain</p>" }],
-      }),
-    );
-    expect(result.error).toBeUndefined();
-    expect(html("e1").htmlContent).toBe("<div><p>plain</p></div>");
-    expect(
-      (useSceneStore.getState().nodesById.e1 as unknown as { sourceTemplate?: string }).sourceTemplate,
-    ).toBeUndefined();
   });
 });
 

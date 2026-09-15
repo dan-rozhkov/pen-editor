@@ -1,6 +1,6 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
-import type { ComponentArtifact, FlatSceneNode } from "@/types/scene";
+import type { FlatSceneNode } from "@/types/scene";
 import type { InteractionContext, TransformHandle } from "./types";
 import { hitTestTransformHandle, getResizeCursor } from "./hitTesting";
 import { computeScaleUpdates } from "@/store/sceneStore/scaleOperations";
@@ -68,7 +68,6 @@ interface ScaleState {
   originalChildrenById: Record<string, string[]> | null;
   originalParentById: Record<string, string | null> | null;
   originalRootIds: string[] | null;
-  originalComponentArtifactsById: Record<string, ComponentArtifact> | null;
 }
 
 /** Fixed anchor corner (in absolute/world space) opposite the dragged handle. */
@@ -132,7 +131,6 @@ export function createScaleController(context: InteractionContext): ScaleControl
     originalChildrenById: null,
     originalParentById: null,
     originalRootIds: null,
-    originalComponentArtifactsById: null,
   };
 
   function reset(): void {
@@ -143,7 +141,6 @@ export function createScaleController(context: InteractionContext): ScaleControl
     state.originalChildrenById = null;
     state.originalParentById = null;
     state.originalRootIds = null;
-    state.originalComponentArtifactsById = null;
     activeScaleCancel = null;
     context.canvas.style.cursor = "";
   }
@@ -185,7 +182,7 @@ export function createScaleController(context: InteractionContext): ScaleControl
       if (useDrawModeStore.getState().activeTool !== "scale") return false;
 
       const handleHit = hitTestTransformHandle(world.x, world.y);
-      if (!handleHit || handleHit.slotContext) return false;
+      if (!handleHit) return false;
 
       const sceneState = useSceneStore.getState();
       const node = sceneState.nodesById[handleHit.nodeId];
@@ -199,7 +196,6 @@ export function createScaleController(context: InteractionContext): ScaleControl
       state.originalChildrenById = sceneState.childrenById;
       state.originalParentById = sceneState.parentById;
       state.originalRootIds = sceneState.rootIds;
-      state.originalComponentArtifactsById = sceneState.componentArtifactsById;
       activeScaleCancel = cancel;
       context.canvas.style.cursor = getResizeCursor(handleHit.corner);
       return true;
@@ -257,7 +253,6 @@ export function createScaleController(context: InteractionContext): ScaleControl
         parentById: state.originalParentById!,
         childrenById: state.originalChildrenById,
         rootIds: state.originalRootIds!,
-        componentArtifactsById: state.originalComponentArtifactsById ?? undefined,
       });
       const newNodesById = { ...state.originalNodesById };
       const updatedIds = Object.keys(updates);

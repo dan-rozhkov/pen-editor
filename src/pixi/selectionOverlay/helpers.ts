@@ -4,16 +4,12 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize } from "@/utils/nodeUtils";
 import type {
-  FlatFrameNode,
   FlatSceneNode,
-  RefNode,
-  SceneNode,
   TextNode,
 } from "@/types/scene";
 import { applyTextTransform, wrapTextToLines } from "@/utils/textMeasure";
 import { buildTextStyle } from "@/pixi/renderers/textRenderer";
-import { findResolvedDescendantByPath } from "@/utils/instanceRuntime";
-import { COMPONENT_SELECTION_COLOR, HATCH_SPACING, SELECTION_COLOR } from "./constants";
+import { HATCH_SPACING, SELECTION_COLOR } from "./constants";
 
 export type Rect = { x: number; y: number; width: number; height: number };
 
@@ -106,41 +102,7 @@ export function createOverlayHelpers(sceneRoot: Container) {
     return { width: node.width, height: node.height };
   }
 
-  function isComponentOrInstance(nodeId: string): boolean {
-    const state = useSceneStore.getState();
-    const node = state.nodesById[nodeId];
-    return (
-      (node?.type === "frame" && !!(node as FlatFrameNode).reusable) ||
-      node?.type === "ref"
-    );
-  }
-
-  function isInComponentContext(nodeId: string): boolean {
-    const state = useSceneStore.getState();
-    let currentId: string | null = nodeId;
-
-    while (currentId) {
-      if (isComponentOrInstance(currentId)) {
-        return true;
-      }
-      currentId = state.parentById[currentId] ?? null;
-    }
-
-    return false;
-  }
-
-  function getSelectionColor(nodeId: string): number {
-    if (isInComponentContext(nodeId)) {
-      return COMPONENT_SELECTION_COLOR;
-    }
-    const state = useSceneStore.getState();
-    const node = state.nodesById[nodeId];
-    if (
-      (node?.type === "frame" && (node as FlatFrameNode).reusable) ||
-      node?.type === "ref"
-    ) {
-      return COMPONENT_SELECTION_COLOR;
-    }
+  function getSelectionColor(): number {
     return SELECTION_COLOR;
   }
 
@@ -158,60 +120,12 @@ export function createOverlayHelpers(sceneRoot: Container) {
     return getDrawRect(node, absPos, { width, height });
   }
 
-  function getInstanceDescendantTarget(
-    instanceId: string,
-    descendantPath: string,
-  ): {
-    instance: RefNode;
-    node: SceneNode;
-    drawRect: Rect;
-  } | null {
-    const state = useSceneStore.getState();
-    const instance = state.nodesById[instanceId];
-    if (!instance || instance.type !== "ref") return null;
-
-    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-    // Use layout-computed size so fill_container refs resolve inner children correctly
-    const effectiveSize = getEffectiveSize(instanceId);
-    const refWithLayout: RefNode = effectiveSize
-      ? { ...(instance as RefNode), width: effectiveSize.width, height: effectiveSize.height }
-      : (instance as RefNode);
-    const resolved = findResolvedDescendantByPath(
-      refWithLayout,
-      descendantPath,
-      state.nodesById,
-      state.childrenById,
-      state.parentById,
-      calculateLayoutForFrame,
-    );
-    if (!resolved) return null;
-
-    const drawRect =
-      resolved.node.type === "embed"
-        ? {
-            x: Math.round(resolved.absX),
-            y: Math.round(resolved.absY),
-            width: Math.max(1, Math.round(resolved.width)),
-            height: Math.max(1, Math.round(resolved.height)),
-          }
-        : {
-            x: resolved.absX,
-            y: resolved.absY,
-            width: resolved.width,
-            height: resolved.height,
-          };
-
-    return { instance: instance as RefNode, node: resolved.node, drawRect };
-  }
-
   return {
     getAbsolutePosition,
     getEffectiveSize,
     getSelectionColor,
     getDrawRect,
     getNodeDrawRect,
-    isInComponentContext,
-    getInstanceDescendantTarget,
   };
 }
 

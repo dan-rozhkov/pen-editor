@@ -37,7 +37,6 @@ function mockBrHandle() {
     height: 300,
     absX: 100,
     absY: 100,
-    slotContext: null,
   });
 }
 

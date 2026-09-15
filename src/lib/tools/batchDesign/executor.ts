@@ -5,7 +5,6 @@ import type {
   EmbedNode,
   ImageFill,
   Paint,
-  RefNode,
   ParagraphAttrs,
 } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
@@ -30,9 +29,7 @@ import {
   createSolidPaint,
   getFills,
 } from "@/utils/fillUtils";
-import { normalizeEmbedHtmlForStorage } from "@/utils/embedTemplateUtils";
 import { inspectEmbedHtml } from "@/lib/embedHtmlLint/inspectEmbedHtml";
-import { getPropertyValuesUpdateError } from "@/utils/componentProperties";
 import { repairGeneratedImageUrls } from "../generateImage/repairImageUrls";
 import { getIssuedImageUrls } from "../generateImage/registry";
 import type { ParsedArg, ParsedOperation, ExecutionContext } from "./types";
@@ -43,14 +40,6 @@ import {
 import { serializeNodeToDepth } from "../serializeUtils";
 
 const DOCUMENT_BINDING = "__document__";
-
-/** Strip slash-separated paths to get the root parent ID. */
-function resolveActualParentId(parentResolved: string | null): string | null {
-  if (parentResolved && parentResolved.includes("/")) {
-    return parentResolved.split("/")[0];
-  }
-  return parentResolved;
-}
 
 function resolveInheritedTheme(
   parentId: string | null,
@@ -78,19 +67,10 @@ function resolveInheritedTheme(
 
 /**
  * If the node is an embed: repair any mistyped generate_image/generate_frame_image
- * URL found in its htmlContent, then expand any document component tags (set
- * sourceTemplate accordingly). This is the single place htmlContent is
+ * URL found in its htmlContent. This is the single place htmlContent is
  * finalized for created (I/R) and updated (U, when the op actually carries
- * htmlContent) embeds, so it's the one choke point for both fixes rather
- * than sprinkling them across executeInsert/executeUpdate/executeReplace.
- *
- * Repair must run BEFORE component-tag expansion: `normalizeEmbedHtmlForStorage`
- * stores the pre-expansion HTML verbatim as `sourceTemplate`, and
- * `propagateComponentChanges` (batchDesign/index.ts step 4) later re-expands
- * from that template on every future component edit. Repairing after
- * expansion would fix the rendered `htmlContent` once but leave the typo'd
- * url sitting in `sourceTemplate`, silently reintroducing it on the next
- * propagation.
+ * htmlContent) embeds, so it's the one choke point for the fix rather
+ * than sprinkling it across executeInsert/executeUpdate/executeReplace.
  *
  * `htmlTouched` says whether this operation actually supplied htmlContent —
  * false for a U() that only changes unrelated fields (e.g. `{x: 10}`), so an
@@ -126,20 +106,6 @@ function normalizeEmbedNode(
           `Embed "${embed.id}" references "${url}", which looks like a generated image url but doesn't match any url generate_image/generate_frame_image actually returned — it will 403. Re-check it or regenerate the image.`,
         );
       }
-    }
-  }
-
-  if (ctx.componentTagMap.size > 0) {
-    const { htmlContent, sourceTemplate, issues } = normalizeEmbedHtmlForStorage(
-      embed.htmlContent,
-      ctx.componentTagMap,
-    );
-    embed.htmlContent = htmlContent;
-    if (sourceTemplate) {
-      embed.sourceTemplate = sourceTemplate;
-    }
-    for (const issue of issues) {
-      ctx.issues.push(issue);
     }
   }
 
@@ -242,12 +208,16 @@ function resolveParent(
   const resolved = resolveArg(arg, ctx);
   if (resolved === DOCUMENT_BINDING) return null;
 
-  // Verify parent exists (could be a path like "instanceId/slotId")
-  const baseId = resolved.includes("/") ? resolved.split("/")[0] : resolved;
-  if (!ctx.nodesById[baseId]) {
-    throw new Error(`Parent node not found: "${resolved}"`);
+  // A parent may be written as a path (`I(card+"/body", {...})`) — the tool
+  // description still teaches that form. Only the first segment names a real
+  // node; the rest was always advisory, so drop it rather than failing the
+  // whole batch on a lookup for an id that never existed.
+  const parentId = resolved.includes("/") ? resolved.split("/")[0] : resolved;
+
+  if (!ctx.nodesById[parentId]) {
+    throw new Error(`Parent node not found: "${parentId}"`);
   }
-  return resolved;
+  return parentId;
 }
 
 /**
@@ -259,11 +229,8 @@ function executeInsert(op: ParsedOperation, ctx: ExecutionContext): void {
     throw new Error(`Line ${op.line}: I() requires at least 2 arguments (parent, nodeData)`);
   }
 
-  const parentResolved = resolveParent(op.args[0], ctx);
+  const actualParentId = resolveParent(op.args[0], ctx);
   const nodeData = resolveJsonArg(op.args[1]);
-
-  // Handle parent paths with "/" for slot insertion
-  const actualParentId = resolveActualParentId(parentResolved);
 
   const inheritedTheme = resolveInheritedTheme(
     actualParentId,
@@ -313,11 +280,8 @@ function executeCopy(op: ParsedOperation, ctx: ExecutionContext): void {
   }
 
   const sourceId = resolveArg(op.args[0], ctx);
-  const parentResolved = resolveParent(op.args[1], ctx);
+  const actualParentId = resolveParent(op.args[1], ctx);
   const copyData = op.args.length >= 3 ? resolveJsonArg(op.args[2]) : {};
-
-  // Resolve actual parent (strip "/" paths)
-  const actualParentId = resolveActualParentId(parentResolved);
 
   // Build source subtree
   const sourceNode = ctx.nodesById[sourceId];
@@ -535,57 +499,6 @@ function reconcileLegacyFillUpdate(
 }
 
 /**
- * Enforce the same component-property rules the sceneStore actions
- * (`setComponentProperties` / `setInstancePropertyValue`) apply, on the AI
- * batch_design path — which merges node data directly into ctx and commits
- * via a raw setState, bypassing those store actions. Throws (surfaced as a
- * batch_design error string) instead of silently no-oping so the model gets
- * actionable feedback.
- */
-function assertValidComponentPropertyUpdate(
-  mapped: Record<string, unknown>,
-  node: FlatSceneNode,
-  ctx: ExecutionContext,
-  line: number,
-): void {
-  if (mapped.properties !== undefined) {
-    if (node.type !== "frame" || !(node as FlatFrameNode).reusable) {
-      throw new Error(
-        `Line ${line}: 'properties' can only be declared on a reusable component frame — node "${node.id}" is a ${node.type}${
-          node.type === "frame" ? " without reusable: true" : ""
-        }`,
-      );
-    }
-  }
-
-  if (mapped.propertyValues !== undefined) {
-    if (node.type !== "ref") {
-      throw new Error(
-        `Line ${line}: 'propertyValues' can only be set on a component instance (type "ref") — node "${node.id}" is a ${node.type}`,
-      );
-    }
-    const componentId = (node as RefNode).componentId;
-    const component = ctx.nodesById[componentId];
-    if (!component || component.type !== "frame" || !(component as FlatFrameNode).reusable) {
-      throw new Error(
-        `Line ${line}: instance "${node.id}" references component "${componentId}" which is not a reusable frame`,
-      );
-    }
-    const values = mapped.propertyValues;
-    if (!values || typeof values !== "object" || Array.isArray(values)) {
-      throw new Error(`Line ${line}: 'propertyValues' must be an object keyed by property id`);
-    }
-    const error = getPropertyValuesUpdateError(
-      (component as FlatFrameNode).properties,
-      values as Record<string, unknown>,
-    );
-    if (error) {
-      throw new Error(`Line ${line}: ${error}`);
-    }
-  }
-}
-
-/**
  * Execute an Update operation.
  * U(nodeId, updateData)
  */
@@ -615,8 +528,6 @@ function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
     ctx.issues.push(...mapped._warnings);
     delete (mapped as Record<string, unknown>)._warnings;
   }
-
-  assertValidComponentPropertyUpdate(mapped as Record<string, unknown>, node, ctx, op.line);
 
   // The AI commonly sends `{text}` alone to edit a text node's content. If it
   // changes the line count without also supplying `paragraphs`, the existing

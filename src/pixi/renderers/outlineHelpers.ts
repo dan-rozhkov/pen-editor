@@ -1,8 +1,7 @@
 import type { Graphics } from "pixi.js";
-import type { FlatFrameNode } from "@/types/scene";
 import { useRenderModeStore } from "@/store/renderModeStore";
 import { useViewportStore } from "@/store/viewportStore";
-import { COMPONENT_SELECTION_COLOR, SELECTION_COLOR } from "@/pixi/selectionOverlay/constants";
+import { SELECTION_COLOR } from "@/pixi/selectionOverlay/constants";
 
 /**
  * Outline-mode wireframe stroke color — the same accent blue the selection
@@ -12,8 +11,8 @@ import { COMPONENT_SELECTION_COLOR, SELECTION_COLOR } from "@/pixi/selectionOver
 export const OUTLINE_STROKE_COLOR = SELECTION_COLOR;
 
 /** Return the outline color for a node whose geometry is being drawn. */
-export function getOutlineStrokeColor(node?: Pick<FlatFrameNode, "reusable">): number {
-  return node?.reusable ? COMPONENT_SELECTION_COLOR : OUTLINE_STROKE_COLOR;
+export function getOutlineStrokeColor(): number {
+  return OUTLINE_STROKE_COLOR;
 }
 
 /**

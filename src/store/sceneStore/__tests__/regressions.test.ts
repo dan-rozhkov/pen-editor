@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
-import { useSelectionStore } from "@/store/selectionStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { resetStores, seedScene } from "@/test/fixtures";
@@ -50,23 +49,6 @@ describe("history/scene regressions", () => {
   beforeEach(() => {
     resetStores();
     seedScene();
-  });
-
-  // S1: selection-change snapshots used to omit componentArtifactsById, so
-  // restoreSnapshot's `?? {}` fallback wiped all component sync-state on undo.
-  describe("component artifacts survive undo of a selection change (S1)", () => {
-    it("preserves the artifact map after undo", () => {
-      const artifact = { revision: 1, syncState: "in_sync" as const };
-      useSceneStore.setState({ componentArtifactsById: { frame1: artifact } });
-
-      // A selection change records a history snapshot of the current scene.
-      useSelectionStore.getState().setSelectedIds(["rect1"]);
-      expect(useHistoryStore.getState().past.length).toBeGreaterThan(0);
-
-      undo();
-
-      expect(scene().componentArtifactsById["frame1"]).toEqual(artifact);
-    });
   });
 
   // S2: moveNode had no cycle guard, so dropping a node into its own descendant

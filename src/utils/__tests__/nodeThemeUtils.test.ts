@@ -17,7 +17,6 @@ describe("getEffectiveThemeForNode", () => {
       parentById: { e1: null },
       childrenById: {},
       rootIds: ["e1"],
-      componentArtifactsById: {},
       _cachedTree: null,
     });
     expect(getEffectiveThemeForNode("e1")).toBe("light");
@@ -33,7 +32,6 @@ describe("getEffectiveThemeForNode", () => {
       parentById: { f1: null, e1: "f1" },
       childrenById: { f1: ["e1"] },
       rootIds: ["f1"],
-      componentArtifactsById: {},
       _cachedTree: null,
     });
     expect(getEffectiveThemeForNode("e1")).toBe("dark");

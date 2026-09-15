@@ -474,48 +474,6 @@ describe("editEmbedHtmlProgressive", () => {
     expect(htmlOf("e1")).toBe("<div>Foreign edit</div>");
   });
 
-  // --- Regression: finding 3 -------------------------------------------
-  // Component-backed screens (sourceTemplate present) must never show raw
-  // `<c-*>` tags mid-stream: progressive application is skipped entirely for
-  // them, and the final handler still applies the edit atomically.
-
-  it("skips progressive application for a component-backed (sourceTemplate) embed", async () => {
-    seedEmbed("e1", "<div><span>User Card</span></div>", {
-      sourceTemplate: "<c-user-card />",
-    });
-
-    applyStreamingEmbedHtmlEdits({
-      sessionId: "s1",
-      toolCallId: "t-template",
-      input: { nodeId: "e1", edits: [{ oldString: "<c-user-card />", newString: "<c-user-card variant=\"b\" />" }] },
-    });
-
-    // No session was ever created, so no mid-stream write happened at all —
-    // in particular, the raw (unexpanded) template was never written to
-    // `htmlContent`.
-    expect(htmlOf("e1")).toBe("<div><span>User Card</span></div>");
-    expect(takeProgressiveEmbedHtmlSession("s1", "t-template")).toBeUndefined();
-
-    // The final (non-streaming) handler still runs its normal path — with no
-    // session, there is nothing to take/restore — producing the exact same
-    // result a non-streamed call against the same node would.
-    seedEmbed("e2", "<div><span>User Card</span></div>", {
-      sourceTemplate: "<c-user-card />",
-    });
-    const streamed = await editEmbedHtml(
-      {
-        nodeId: "e1",
-        edits: [{ oldString: "<c-user-card />", newString: "<c-user-card />" }],
-      },
-      { sessionId: "s1", toolCallId: "t-template" },
-    );
-    const unstreamed = await editEmbedHtml({
-      nodeId: "e2",
-      edits: [{ oldString: "<c-user-card />", newString: "<c-user-card />" }],
-    });
-    expect(JSON.parse(streamed)).toEqual(JSON.parse(unstreamed));
-  });
-
   // --- Regression: finding 4 -------------------------------------------
   // `abandonProgressiveEmbedHtmlSession` / `clearProgressiveEmbedHtmlSessions`
   // are `StreamingToolAdapter#onAbandon`/`onSessionClear` — they must never

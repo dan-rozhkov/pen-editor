@@ -125,22 +125,6 @@ const INNER_RADIUS_RATIO_KEYS = [
   "innerRadiusRatio",
 ] as const satisfies readonly (keyof NodeStyleSnapshot)[];
 
-/**
- * `resolveRefToTree` (`@/utils/instanceRuntime`) only ever forwards these
- * fields from a `ref` (component instance) node onto the resolved render
- * tree — everything else in `NodeStyleSnapshot` (fills/effects stacks,
- * opacity, corner radius, ...) has nowhere to render for a `ref` target, so
- * writing it would mutate data and create an undo entry that silently does
- * nothing visually. Keep this in sync with the fields `resolveRefToTree`
- * actually reads off `refNode`.
- */
-const REF_HONORED_KEYS = [
-  "fill",
-  "stroke",
-  "strokeWidth",
-  "fillBinding",
-  "strokeBinding",
-] as const satisfies readonly (keyof NodeStyleSnapshot)[];
 
 const TEXT_STYLE_KEYS = [
   "fontSize",
@@ -283,15 +267,6 @@ export function pickStyleUpdatesForNode(
   style: NodeStyleSnapshot,
 ): Partial<SceneNode> {
   const styleSource = style as unknown as Record<string, unknown>;
-
-  // Component instances (`ref` nodes) resolve to their render tree via
-  // `resolveRefToTree`, which only forwards a handful of fields from the ref
-  // node itself (see `REF_HONORED_KEYS`). Every other style key is dead data
-  // on a `ref` — restrict the paste to what actually renders instead of
-  // silently no-op'ing.
-  if (target.type === "ref") {
-    return pickDefined(styleSource, REF_HONORED_KEYS as readonly string[]) as Partial<SceneNode>;
-  }
 
   const updatesBase: Record<string, unknown> = pickDefined(styleSource, COMMON_STYLE_KEYS as readonly string[]);
   normalizeDualRepresentations(updatesBase, styleSource);

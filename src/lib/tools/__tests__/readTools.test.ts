@@ -7,7 +7,6 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { resetStores, seedScene, seedVariables } from "@/test/fixtures";
-import type { FlatFrameNode } from "@/types/scene";
 
 beforeEach(() => {
   resetStores();
@@ -120,33 +119,6 @@ describe("get_editor_state", () => {
     expect(Array.isArray(state.pages)).toBe(true);
     expect(state.pages.length).toBeGreaterThan(0);
     expect(typeof state.activePageId).toBe("string");
-  });
-
-  it("lists reusable frames as document components", async () => {
-    useSceneStore.setState((state) => ({
-      nodesById: {
-        ...state.nodesById,
-        frame1: {
-          ...(state.nodesById["frame1"] as FlatFrameNode),
-          reusable: true,
-        },
-      },
-    }));
-
-    const state = JSON.parse(await getEditorState({}));
-    expect(state.documentComponents).toEqual([
-      expect.objectContaining({
-        id: "frame1",
-        name: "Screen",
-        tag: "c-screen",
-        width: 400,
-        height: 300,
-      }),
-    ]);
-    expect(state.reusableComponents[0]).toMatchObject({
-      id: "frame1",
-      syncState: "missing",
-    });
   });
 });
 

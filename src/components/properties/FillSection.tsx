@@ -16,7 +16,6 @@ import { GradientEditor } from "@/components/properties/GradientEditor";
 import { ImageFillEditor } from "@/components/properties/ImageFillSection";
 import { PatternFillEditor } from "@/components/properties/PatternFillSection";
 import { VideoFillEditor } from "@/components/properties/VideoFillSection";
-import { OverrideIndicator } from "@/components/properties/OverrideIndicator";
 import { StylePicker } from "@/components/properties/StylePicker";
 import { useStyleStore } from "@/store/styleStore";
 import { getFills, clearLegacyFillProps } from "@/utils/fillUtils";
@@ -45,11 +44,8 @@ const FILL_TYPE_OPTIONS = [
 export function FillSection({
   node,
   onUpdate,
-  component,
   colorVariables,
   activeTheme,
-  isOverridden,
-  resetOverride,
   mixedKeys,
 }: FillSectionProps) {
   const fills = getFills(node);
@@ -92,7 +88,7 @@ export function FillSection({
           {fills
             .map((paint, arrayIndex) => ({ paint, arrayIndex }))
             .reverse()
-            .map(({ paint, arrayIndex }, rowIndex) => {
+            .map(({ paint, arrayIndex }) => {
               const kind = getFillKind(paint);
               const isVisible = paint.visible !== false;
               // arrayIndex toward end = top of stack. Up arrow moves toward top.
@@ -128,14 +124,6 @@ export function FillSection({
                     </>
                   }
                   popoverTitle={<span className="text-[11px] font-semibold text-text-primary">Fill</span>}
-                  trailing={
-                    rowIndex === 0 && (
-                      <OverrideIndicator
-                        isOverridden={isOverridden(node.fill, component?.fill)}
-                        onReset={() => resetOverride("fill")}
-                      />
-                    )
-                  }
                 >
                   {/* Type + reorder */}
                   <div className="flex items-center gap-1">

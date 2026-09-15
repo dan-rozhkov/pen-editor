@@ -1,5 +1,4 @@
-import type { FlatSceneNode, FrameNode, GroupNode, RefNode, SceneNode } from "@/types/scene";
-import { resolveRefToTree } from "@/utils/instanceRuntime";
+import type { FlatSceneNode, FrameNode, GroupNode, SceneNode } from "@/types/scene";
 
 function getNodeChildren(
   node: SceneNode,
@@ -24,19 +23,6 @@ function materializeNode(
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
 ): SceneNode {
-  if (node.type === "ref") {
-    const resolved = resolveRefToTree(node as RefNode, nodesById, childrenById);
-    if (!resolved) return node;
-
-    return {
-      ...resolved,
-      id: node.id,
-      children: getNodeChildren(resolved, nodesById, childrenById).map((child) =>
-        materializeNode(child, nodesById, childrenById),
-      ),
-    } as FrameNode;
-  }
-
   if (node.type === "frame") {
     return {
       ...(node as FrameNode),

@@ -19,7 +19,6 @@ import { useVariableStore } from "@/store/variableStore";
 import { useRepoContextStore } from "@/store/repoContextStore";
 import { useChatStore, NO_QUEUED_MESSAGES } from "@/store/chatStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
-import type { EmbedNode } from "@/types/scene";
 import { toolHandlers, type ToolExecutionContext } from "@/lib/toolRegistry";
 import { runToolCall } from "@/lib/toolCallQueue";
 import type { ChatLaunchPayload } from "@/types/chat";
@@ -129,7 +128,6 @@ export function buildCanvasContext(sessionId?: string): object {
     pickerSelection && nodesById[pickerSelection.embedId]
       ? {
           ...pickerSelection,
-          hasSourceTemplate: !!(nodesById[pickerSelection.embedId] as EmbedNode).sourceTemplate,
           hint:
             `The user pointed at this element inside embed ${pickerSelection.embedId}. ` +
             "Locate it with read_embed_html (mode 'grep') to get a byte-exact anchor before " +

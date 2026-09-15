@@ -59,7 +59,6 @@ describe("pixiSync: mask dirty-tracking", () => {
       parentById: { maskShape: null, content: null },
       childrenById: {},
       rootIds: ["maskShape", "content"],
-      componentArtifactsById: {},
       _cachedTree: null,
     });
 
@@ -95,7 +94,6 @@ describe("pixiSync: mask dirty-tracking", () => {
       parentById: { maskShape: null, content: null },
       childrenById: {},
       rootIds: ["maskShape", "content"],
-      componentArtifactsById: {},
       _cachedTree: null,
     });
 
@@ -141,7 +139,6 @@ describe("pixiSync: mask dirty-tracking", () => {
       parentById: { frame: null, maskShape: "frame", content: "frame" },
       childrenById: { frame: ["maskShape", "content"] },
       rootIds: ["frame"],
-      componentArtifactsById: {},
       _cachedTree: null,
     });
 

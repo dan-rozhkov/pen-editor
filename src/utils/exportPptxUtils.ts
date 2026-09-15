@@ -6,14 +6,13 @@ import { useVariableStore } from "@/store/variableStore";
 import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
 import { resolveColor } from "@/utils/colorUtils";
 import { getFills, getRenderableStrokes, resolveFillStylePaint, resolveEffectStack } from "@/utils/fillUtils";
-import { resolveRefToTree } from "@/utils/instanceRuntime";
-import { getTopLevelFramesFlat } from "@/utils/componentUtils";
+import { getTopLevelFramesFlat } from "@/utils/nodeUtils";
 import { resolveSlideOrder } from "@/utils/slideOrder";
 import { findContainerByLabel, extractImageBytes, downloadBlob, nodeContainsEmbed } from "@/utils/exportUtils";
 import { sanitizeExportBaseName } from "@/utils/exportSettingsUtils";
 import { buildSlidesInput, type BuildDeps } from "@/lib/pptxExport/buildSlidesInput";
 import { assemblePptx } from "@/lib/pptxExport/assemblePptx";
-import type { FrameNode, RefNode, SceneNode } from "@/types/scene";
+import type { FrameNode } from "@/types/scene";
 
 /**
  * Export the Slides view (top-level frames, in SlidesPanel order) as an
@@ -43,10 +42,6 @@ export async function exportSlidesToPptx(pixiRefs: PixiExportRefs): Promise<bool
 
   const deps: BuildDeps = {
     layoutChildren: (frame) => calculateLayoutForFrame(frame),
-    resolveRef: (ref: RefNode): SceneNode | null => {
-      const { nodesById: flat, childrenById } = useSceneStore.getState();
-      return resolveRefToTree(ref, flat, childrenById);
-    },
     getNodeFills: (node) => {
       const { fillStyles } = useStyleStore.getState();
       return getFills(node).map((paint) => resolveFillStylePaint(paint, fillStyles));
@@ -65,9 +60,9 @@ export async function exportSlidesToPptx(pixiRefs: PixiExportRefs): Promise<bool
       return resolveColor(lookup.color, lookup.binding, variables, theme);
     },
     // `container` missing is a benign "node vanished from the canvas mid-export"
-    // case — skip the shape. An `extractImageBytes` failure whose node (or a
-    // ref-resolved descendant) is an `embed` (FIR-63: no content, or a tainted
-    // cross-origin canvas) is NOT caught here — it propagates through
+    // case — skip the shape. An `extractImageBytes` failure whose node is an
+    // `embed` (FIR-63: no content, or a tainted cross-origin canvas) is NOT
+    // caught here — it propagates through
     // `buildSlidesInput` and fails the whole PPTX export (see
     // `exportSlidesToPptx`'s try/catch below) rather than silently dropping
     // that shape from the slide. Any other rasterization failure (a

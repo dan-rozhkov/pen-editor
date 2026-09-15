@@ -1,9 +1,7 @@
-import { useSceneStore } from "@/store/sceneStore";
-import type { EmbedNode, FlatFrameNode } from "@/types/scene";
+import type { EmbedNode } from "@/types/scene";
 import { useEmbedScreenRect } from "./useEmbedScreenRect";
 
 const SELECTION_COLOR = "#0d99ff";
-const COMPONENT_SELECTION_COLOR = "#8b5cf6";
 // Mirror the Pixi overlay (drawSelection.ts): an 8px white handle fill with a
 // 1px stroke that is *centered* on the perimeter (Pixi's default stroke
 // alignment). A centered CSS outline stroke straddles the node edge, so we
@@ -22,23 +20,6 @@ interface EmbedSelectionFrameProps {
   absoluteY: number;
   outlineStrokeWidth?: number;
   showHandles?: boolean;
-}
-
-/** Walk ancestors to detect whether the node lives inside a component/instance. */
-function isInComponentContext(nodeId: string): boolean {
-  const { nodesById, parentById } = useSceneStore.getState();
-  let currentId: string | null = nodeId;
-  while (currentId) {
-    const node = nodesById[currentId];
-    if (
-      (node?.type === "frame" && !!(node as FlatFrameNode).reusable) ||
-      node?.type === "ref"
-    ) {
-      return true;
-    }
-    currentId = parentById[currentId] ?? null;
-  }
-  return false;
 }
 
 /**
@@ -60,9 +41,7 @@ export function EmbedSelectionFrame({
 }: EmbedSelectionFrameProps) {
   const rect = useEmbedScreenRect(absoluteX, absoluteY, node.width, node.height);
 
-  const color = isInComponentContext(node.id)
-    ? COMPONENT_SELECTION_COLOR
-    : SELECTION_COLOR;
+  const color = SELECTION_COLOR;
 
   const outlineStrokeHalf = outlineStrokeWidth / 2;
 

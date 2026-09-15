@@ -1,18 +1,12 @@
 import {
-  buildTree,
   type SceneNode,
   type HistorySnapshot,
-  type FrameNode,
-  type FlatFrameNode,
-  type RefNode,
 } from "@/types/scene";
 import { useClipboardStore } from "@/store/clipboardStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useVariableStore } from "@/store/variableStore";
-import { cloneNodeWithNewId, deepCloneNode } from "@/utils/cloneNode";
-import { createRefFromComponent } from "@/utils/componentUtils";
-import { findNodeByPath } from "@/utils/instanceRuntime";
+import { cloneNodeWithNewId } from "@/utils/cloneNode";
 import { parseSvgToNodes } from "@/utils/svgUtils";
 import { convertFigmaClipboardHtml, isFigmaClipboardHtml } from "@/lib/figmaPaste";
 import { convertH2dClipboardHtml, isH2dClipboardHtml } from "@/lib/h2dPaste";
@@ -71,58 +65,6 @@ export function createClipboardActions(deps: ClipboardActionDeps) {
   const pasteInternalNodes = (sourceNodes: SceneNode[]): void => {
     const selectionState = useSelectionStore.getState();
 
-    // Paste into slot inside instance
-    if (selectionState.instanceContext) {
-      const { instanceId, descendantPath } = selectionState.instanceContext;
-      const state = useSceneStore.getState();
-      const instance = state.nodesById[instanceId] as RefNode | undefined;
-      if (instance?.type === "ref") {
-        // Use fresh state to build component tree (avoids stale closure)
-        const compNode = state.nodesById[instance.componentId];
-        if (compNode?.type === "frame" && (compNode as FlatFrameNode).reusable) {
-          const componentTree = buildTree([instance.componentId], state.nodesById, state.childrenById)[0] as FrameNode;
-
-          // Walk up the descendant path to find the nearest slot ancestor
-          // (handles selecting both the slot itself and children inside a slot)
-          const segments = descendantPath.split("/");
-          let slotPath: string | null = null;
-          let slotFrame: FrameNode | null = null;
-          for (let i = segments.length; i >= 1; i--) {
-            const candidatePath = segments.slice(0, i).join("/");
-            const candidateNode = findNodeByPath(componentTree.children, candidatePath);
-            if (candidateNode?.type === "frame" && (candidateNode as FrameNode).isSlot) {
-              slotPath = candidatePath;
-              slotFrame = candidateNode as FrameNode;
-              break;
-            }
-          }
-
-          if (slotPath && slotFrame) {
-            const clonedNodes = sourceNodes.map((srcNode) => {
-              // Reusable components → create a ref, don't flatten
-              if (srcNode.type === "frame" && (srcNode as FrameNode).reusable) {
-                return createRefFromComponent(srcNode.id, srcNode.width, srcNode.height) as SceneNode;
-              }
-              const cloned = deepCloneNode(srcNode);
-              cloned.x = 0;
-              cloned.y = 0;
-              return cloned;
-            });
-            const currentOverride = instance.overrides?.[slotPath];
-            const baseFrame = currentOverride?.kind === "replace"
-              ? currentOverride.node as FrameNode
-              : slotFrame;
-            const replacement: FrameNode = {
-              ...baseFrame,
-              children: [...baseFrame.children, ...clonedNodes],
-            };
-            state.replaceInstanceNode(instanceId, slotPath, replacement);
-            return;
-          }
-        }
-      }
-    }
-
     const clonedNodes = sourceNodes.map((node) => cloneNodeWithNewId(node));
     const nodes = useSceneStore.getState().getNodes();
     const targetContainerId = resolvePasteTargetContainerId(nodes, selectionState);
@@ -168,15 +110,11 @@ export function createClipboardActions(deps: ClipboardActionDeps) {
     const nodesToCut = resolveNodesToCopy(selState, nodes);
     if (nodesToCut.length > 0) {
       copyNodes(nodesToCut);
-      // Only delete for non-instance-descendant selections
-      // (descendants inside instances are virtual and can't be deleted directly)
-      if (!selState.instanceContext) {
-        saveHistory(createSnapshot(useSceneStore.getState()));
-        for (const id of selState.selectedIds) {
-          deleteNode(id);
-        }
-        clearSelection();
+      saveHistory(createSnapshot(useSceneStore.getState()));
+      for (const id of selState.selectedIds) {
+        deleteNode(id);
       }
+      clearSelection();
     }
   };
 

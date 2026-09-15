@@ -2,12 +2,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import type { SceneState } from "@/store/sceneStore";
 import { useMeasurementsStore } from "@/store/measurementsStore";
 import { createSnapshot, saveHistory } from "@/store/sceneStore/helpers/history";
-import type { EmbedNode, HistorySnapshot } from "@/types/scene";
-import {
-  collectDocumentComponents,
-  buildDocumentComponentTagMap,
-} from "@/lib/documentComponents";
-import { propagateComponentChanges } from "@/utils/embedTemplateUtils";
+import type { HistorySnapshot } from "@/types/scene";
 import type { ToolHandler } from "../../toolRegistry";
 import type { ExecutionContext, ParsedOperation } from "./types";
 import { parseOperations, MAX_OPERATIONS } from "./parser";
@@ -74,22 +69,6 @@ function finalizeAndRespond(params: {
 }): string {
   const { ctx, historySnapshot, operationsExecuted, truncated, operationsSubmitted, remaining } =
     params;
-
-  // Propagate component changes to dependent embeds. `ctx.componentTagMap`'s
-  // values are exactly the docComponents list as it stood before any
-  // operation in this ctx's lifetime ran (the map itself is never mutated
-  // by executeOperation — only `ctx.nodesById` entries are), so this is the
-  // same "compare templateHtml to the current node" check the non-streaming
-  // path always did.
-  const docComponents = [...ctx.componentTagMap.values()];
-  const anyComponentChanged = docComponents.some((comp) => {
-    const current = ctx.nodesById[comp.id];
-    return current && current.type === "embed" &&
-      (current as EmbedNode).htmlContent !== comp.templateHtml;
-  });
-  if (anyComponentChanged) {
-    propagateComponentChanges(ctx.nodesById);
-  }
 
   // Save history first (one undo entry for the entire batch, streamed part
   // included — `historySnapshot` is the state from before the FIRST
@@ -373,9 +352,6 @@ function runFreshFromLive(
   const state: SceneState = useSceneStore.getState();
   const originalSnapshot = createSnapshot(state);
 
-  const docComponents = collectDocumentComponents(state.nodesById, undefined, state.childrenById);
-  const componentTagMap = buildDocumentComponentTagMap(docComponents);
-
   const ctx: ExecutionContext = {
     bindings: new Map([["document", "__document__"]]),
     nodesById: { ...state.nodesById },
@@ -391,7 +367,6 @@ function runFreshFromLive(
     rootIds: [...state.rootIds],
     createdNodeIds: [],
     issues: [],
-    componentTagMap,
     removedIdsForMeasurementCleanup: new Set(),
     imageUrlRepairCount: 0,
   };

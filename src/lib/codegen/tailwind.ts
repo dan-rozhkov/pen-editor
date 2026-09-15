@@ -48,12 +48,11 @@ function tokenNamesForIds(variableIds: Set<string>): string[] {
   return variables.filter((v) => variableIds.has(v.id)).map((v) => v.name);
 }
 
-/** Node types with no dedicated Tailwind/React renderer today (instances, vectors, embeds — `childrenById` only tracks `frame`/`group` subtrees). Rendered as an empty placeholder div, flagged via `warnings`. */
-export const UNSUPPORTED_NODE_TYPES = new Set(["ref", "embed", "path", "line", "polygon", "connector"]);
+/** Node types with no dedicated Tailwind/React renderer today (vectors, embeds — `childrenById` only tracks `frame`/`group` subtrees). Rendered as an empty placeholder div, flagged via `warnings`. */
+export const UNSUPPORTED_NODE_TYPES = new Set(["embed", "path", "line", "polygon", "connector"]);
 
 /** Human label per unsupported node type, used in the placeholder warning message. */
 const TYPE_LABELS: Record<string, string> = {
-  ref: "Component instance",
   embed: "Embed",
   path: "Vector",
   line: "Line",
@@ -65,7 +64,7 @@ const TYPE_LABELS: Record<string, string> = {
 export function unsupportedNodeWarning(node: FlatSceneNode): string {
   const label = TYPE_LABELS[node.type] ?? node.type;
   const name = node.name ? ` '${node.name}'` : "";
-  return `${label}${name} rendered as empty placeholder — instances/vectors/embeds are not yet supported in Tailwind/React output.`;
+  return `${label}${name} rendered as empty placeholder — vectors/embeds are not yet supported in Tailwind/React output.`;
 }
 
 /** Warning pushed once per video-fill node, which also renders as an empty placeholder div (no dedicated `<video>` output yet). */

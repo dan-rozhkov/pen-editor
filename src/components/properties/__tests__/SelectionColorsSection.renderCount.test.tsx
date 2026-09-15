@@ -51,7 +51,6 @@ function seedSelectedNodeAndUnrelatedNode(): void {
     parentById: { selectedNode: null, unrelatedNode: null },
     childrenById: {},
     rootIds: ["selectedNode", "unrelatedNode"],
-    componentArtifactsById: {},
     _cachedTree: null,
   });
 }

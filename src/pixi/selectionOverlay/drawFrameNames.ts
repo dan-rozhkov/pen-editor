@@ -6,13 +6,11 @@ import { useViewportStore } from "@/store/viewportStore";
 import { useDevModeStore } from "@/store/devModeStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { getViewportBounds } from "@/utils/viewportUtils";
-import type { FlatFrameNode, FlatSceneNode } from "@/types/scene";
+import type { FlatSceneNode } from "@/types/scene";
 import { truncateLabelToWidth } from "@/pixi/frameLabelUtils";
 import {
-  FRAME_NAME_STYLE_COMPONENT,
   FRAME_NAME_STYLE_NORMAL,
   FRAME_NAME_STYLE_SELECTED,
-  LABEL_COLOR_COMPONENT,
   LABEL_COLOR_NORMAL,
   LABEL_COLOR_SELECTED,
   LABEL_FONT_SIZE,
@@ -120,13 +118,9 @@ export function createFrameNameRenderer(): FrameNameRenderer {
       // drawSelection, so omit the regular name to prevent a duplicate label.
       if (isDevMode && isSelected) continue;
       const isHovered = hoveredNodeId === rootId;
-      const isComponentNode =
-        node.type === "frame" && (node as FlatFrameNode).reusable;
-      const labelColor = isComponentNode
-        ? LABEL_COLOR_COMPONENT
-        : isSelected || isHovered
-          ? LABEL_COLOR_SELECTED
-          : LABEL_COLOR_NORMAL;
+      const labelColor = isSelected || isHovered
+        ? LABEL_COLOR_SELECTED
+        : LABEL_COLOR_NORMAL;
 
       const defaultName =
         node.type === "group" ? "Group" : node.type === "embed" ? "Embed" : "Frame";
@@ -135,11 +129,9 @@ export function createFrameNameRenderer(): FrameNameRenderer {
       const worldOffsetY = (LABEL_FONT_SIZE + LABEL_OFFSET_Y) / scale;
 
       const style =
-        labelColor === LABEL_COLOR_COMPONENT
-          ? FRAME_NAME_STYLE_COMPONENT
-          : labelColor === LABEL_COLOR_SELECTED
-            ? FRAME_NAME_STYLE_SELECTED
-            : FRAME_NAME_STYLE_NORMAL;
+        labelColor === LABEL_COLOR_SELECTED
+          ? FRAME_NAME_STYLE_SELECTED
+          : FRAME_NAME_STYLE_NORMAL;
       const maxLabelWidthPx = Math.max(0, node.width * scale);
       const displayName = truncateLabelToWidth(fullName, maxLabelWidthPx, style);
       if (!displayName) continue;

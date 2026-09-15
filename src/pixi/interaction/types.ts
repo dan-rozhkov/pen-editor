@@ -85,8 +85,6 @@ export interface TransformState {
   parentOffsetY: number;
   /** Original line points at drag start (for scaling during resize) */
   startLinePoints: number[] | null;
-  /** Instance slot context (when resizing a slot inside an instance) */
-  slotContext: { instanceId: string; descendantPath: string } | null;
   /**
    * Snapshot of direct children (with their constraints) of a non-auto-layout
    * frame being resized, captured at pointer-down. Null when the resized node

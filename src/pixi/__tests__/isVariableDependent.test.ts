@@ -6,10 +6,6 @@ const node = (props: Record<string, unknown>): FlatSceneNode =>
   props as unknown as FlatSceneNode;
 
 describe("isVariableDependent", () => {
-  it("treats ref nodes as variable-dependent (subtree may contain bindings)", () => {
-    expect(isVariableDependent(node({ type: "ref" }))).toBe(true);
-  });
-
   it("treats embed nodes as variable-dependent (variables injected as CSS)", () => {
     expect(isVariableDependent(node({ type: "embed" }))).toBe(true);
   });

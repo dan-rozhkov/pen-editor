@@ -3,9 +3,7 @@ import { batchDesign } from "@/lib/tools/batchDesign";
 import { useSceneStore } from "@/store/sceneStore";
 import { resetStores, seedScene } from "@/test/fixtures";
 import { recordIssuedImageUrl, resetIssuedImageUrls } from "@/lib/tools/generateImage/registry";
-import { generateComponentTag } from "@/lib/documentComponents";
-import { propagateComponentChanges } from "@/utils/embedTemplateUtils";
-import type { EmbedNode, FlatSceneNode } from "@/types/scene";
+import type { EmbedNode } from "@/types/scene";
 
 const BASE = "https://s3.example.com/bucket/pen-editor";
 const ISSUED = `${BASE}/dbfc34e2-504b-406f-9ad1-e860af50a7f4.jpg`;
@@ -169,50 +167,5 @@ describe("batch_design image url repair", () => {
     expect(updated.success).toBe(true);
     expect(updated.imageUrlRepair).toBe("repaired 1 mistyped image url(s)");
     expect(embedHtml(id)).toBe(`<img src="${ISSUED}">`);
-  });
-
-  it("repairs the url in sourceTemplate too, so a later component-tag propagation can't reintroduce the typo", async () => {
-    // Real reusable frame component, referenced from the embed via its
-    // generated document-component tag (<c-widget/>). templateHtml is ""
-    // here (no ComponentArtifact authored) — irrelevant to this test, which
-    // only cares that the corrected url, not the typo, survives re-expansion.
-    const compSetup = JSON.parse(
-      await batchDesign({
-        operations:
-          'comp=I(document, {type: "frame", name: "Widget", reusable: true, width: 10, height: 10})',
-      }),
-    );
-    expect(compSetup.success).toBe(true);
-    const tag = generateComponentTag("Widget");
-
-    recordIssuedImageUrl(ISSUED);
-
-    const embedResult = JSON.parse(
-      await batchDesign({
-        operations:
-          'e=I(document, {type: "embed", name: "Home", width: 100, height: 100, ' +
-          `htmlContent: "<${tag}/><img src="${TYPO}">"})`,
-      }),
-    );
-    expect(embedResult.success).toBe(true);
-    const embedId = embedResult.createdNodes[0].id;
-
-    const embedNode = sceneState().nodesById[embedId] as EmbedNode;
-    // Component tag expanded (to "" — empty templateHtml) and the url repaired.
-    expect(embedNode.htmlContent).toBe(`<img src="${ISSUED}">`);
-    // The crux of the fix: the AUTHORING template (what propagation re-expands
-    // from) must carry the corrected url too, not the pre-repair typo.
-    expect(embedNode.sourceTemplate).toBeDefined();
-    expect(embedNode.sourceTemplate).not.toContain(TYPO);
-    expect(embedNode.sourceTemplate).toContain(ISSUED);
-
-    // Simulate a later component edit triggering re-expansion (the same
-    // function batchDesign/index.ts calls when a component's htmlContent
-    // changes) — it must re-derive the corrected html again, not the typo.
-    const nodesById: Record<string, FlatSceneNode> = { ...sceneState().nodesById };
-    propagateComponentChanges(nodesById);
-    const propagated = nodesById[embedId] as EmbedNode;
-    expect(propagated.htmlContent).not.toContain(TYPO);
-    expect(propagated.htmlContent).toContain(ISSUED);
   });
 });

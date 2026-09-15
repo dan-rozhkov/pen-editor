@@ -298,9 +298,8 @@ export function createComplexOperations(
       const node = state.nodesById[id];
       if (!node) return false;
       // Bail out before saving history on no-op conversions (non-frame/group
-      // nodes, or reusable component frames) so we don't push empty undo steps.
+      // nodes) so we don't push empty undo steps.
       if (node.type !== "group" && node.type !== "frame") return false;
-      if (node.type === "frame" && (node as FlatFrameNode).reusable) return false;
 
       saveHistory(state);
 
@@ -322,15 +321,11 @@ export function createComplexOperations(
         // Frame -> Group: spread the source node so modern fields (fills,
         // gradientFill, effects, cornerRadius*, shader, etc.) survive, and
         // drop only the frame-only fields that are meaningless/invalid on a
-        // GroupNode (layout, component/slot metadata, layout grids, theme
-        // override, clip). cornerRadius* is intentionally kept even though
-        // groups don't render it, so a later group -> frame conversion
-        // doesn't lose it.
+        // GroupNode (layout, layout grids, theme override, clip).
+        // cornerRadius* is intentionally kept even though groups don't
+        // render it, so a later group -> frame conversion doesn't lose it.
         const group = { ...node, type: "group" as const };
         delete (group as unknown as Partial<FlatFrameNode>).layout;
-        delete (group as unknown as Partial<FlatFrameNode>).reusable;
-        delete (group as unknown as Partial<FlatFrameNode>).properties;
-        delete (group as unknown as Partial<FlatFrameNode>).isSlot;
         delete (group as unknown as Partial<FlatFrameNode>).layoutGrids;
         delete (group as unknown as Partial<FlatFrameNode>).themeOverride;
         delete (group as unknown as Partial<FlatFrameNode>).clip;

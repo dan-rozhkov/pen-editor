@@ -1131,7 +1131,6 @@ function buildFrame(
   if (sizing) frame.sizing = sizing;
   const grids = mapLayoutGrids(node.layoutGrids);
   if (grids) frame.layoutGrids = grids;
-  if (node.type === "COMPONENT" || node.type === "COMPONENT_SET") frame.reusable = true;
   return frame;
 }
 

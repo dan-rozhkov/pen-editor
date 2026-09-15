@@ -247,7 +247,6 @@ describe("complexOperations", () => {
       expect(group.effects).toEqual(effects);
       expect((group as unknown as FlatFrameNode).cornerRadius).toBe(12);
       expect((group as unknown as FlatFrameNode).layout).toBeUndefined();
-      expect((group as unknown as FlatFrameNode).reusable).toBeUndefined();
 
       expect(scene().convertNodeType("frame1")).toBe(true);
       const frame = scene().nodesById["frame1"] as FlatFrameNode;
@@ -255,20 +254,6 @@ describe("complexOperations", () => {
       expect(frame.fills).toEqual(fills);
       expect(frame.effects).toEqual(effects);
       expect(frame.cornerRadius).toBe(12);
-    });
-
-    it("refuses to convert a reusable (component) frame without pushing history", () => {
-      const s = scene();
-      s.nodesById["frame1"] = {
-        ...(s.nodesById["frame1"] as FlatFrameNode),
-        reusable: true,
-      } as FlatSceneNode;
-      useSceneStore.setState({ nodesById: { ...s.nodesById } });
-
-      const before = pastLen();
-      expect(scene().convertNodeType("frame1")).toBe(false);
-      expect(scene().nodesById["frame1"].type).toBe("frame");
-      expect(pastLen()).toBe(before);
     });
 
     it("returns false for a non-frame/group node and for a missing id without pushing history", () => {

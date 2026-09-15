@@ -1,9 +1,8 @@
 import { memo, useCallback, useMemo, type ReactNode } from "react";
-import type { SceneNode, FlatFrameNode, FrameNode } from "@/types/scene";
+import type { SceneNode, FrameNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import type { FlatParentContext, ParentContext } from "@/utils/nodeUtils";
 import { useSceneStore } from "@/store/sceneStore";
-import { isInsideReusableComponent } from "@/utils/componentUtils";
 import { TypeSection } from "@/components/properties/TypeSection";
 import { PositionSection } from "@/components/properties/PositionSection";
 import { AlignmentControls } from "@/components/properties/AlignmentSection";
@@ -20,8 +19,6 @@ import { ThemeSection } from "@/components/properties/ThemeSection";
 import { TypographySection } from "@/components/properties/TypographySection";
 import { EmbedContentSection } from "@/components/properties/EmbedContentSection";
 import { FrameActionsSection } from "@/components/properties/FrameActionsSection";
-import { ComponentPropertiesSection } from "@/components/properties/ComponentPropertiesSection";
-import { InstancePropertiesSection } from "@/components/properties/InstancePropertiesSection";
 import { SelectionColorsSection } from "@/components/properties/SelectionColorsSection";
 import { ExportSettingsSection } from "@/components/properties/ExportSettingsSection";
 
@@ -42,39 +39,7 @@ export const PropertyEditor = memo(function PropertyEditor({
   activeTheme,
   beforeExport,
 }: PropertyEditorProps) {
-  // O(1) flat lookup of the reusable component frame. Sections never read
-  // `children` off `component`, so the flat node is safe (cast at the boundary).
-  const component = useSceneStore((s): FrameNode | null => {
-    if (node.type !== "ref") return null;
-    const c = s.nodesById[node.componentId];
-    return c && c.type === "frame" && c.reusable
-      ? (c as unknown as FrameNode)
-      : null;
-  });
   const frameNode = node.type === "frame" ? (node as FrameNode) : null;
-
-  const isOverridden = useCallback(
-    <T,>(instanceVal: T | undefined, componentVal: T | undefined): boolean => {
-      if (!component) return false;
-      return instanceVal !== undefined && instanceVal !== componentVal;
-    },
-    [component],
-  );
-
-  const resetOverride = useCallback(
-    (property: keyof SceneNode) => {
-      onUpdate({ [property]: undefined } as Partial<SceneNode>);
-    },
-    [onUpdate],
-  );
-
-  const slotFlatNode = useSceneStore((s) => {
-    if (node.type !== "frame") return null;
-    const hasChildren = (s.childrenById[node.id] ?? []).length > 0;
-    if (hasChildren && !(node as unknown as FlatFrameNode).isSlot) return null;
-    if (!isInsideReusableComponent(node.id, s.nodesById, s.parentById)) return null;
-    return s.nodesById[node.id] as FlatFrameNode;
-  });
 
   const colorVariables = useMemo(
     () => variables.filter((v) => v.type === "color"),
@@ -90,19 +55,7 @@ export const PropertyEditor = memo(function PropertyEditor({
 
   return (
     <div className="flex flex-col">
-      <TypeSection
-        node={node}
-        onUpdate={onUpdate}
-        typeLabelOverride={
-          node.type === "ref"
-            ? `Instance of ${component?.name || "Component"}`
-            : undefined
-        }
-        slotNode={slotFlatNode}
-      />
-      {frameNode?.reusable && (
-        <ComponentPropertiesSection node={frameNode} />
-      )}
+      <TypeSection node={node} onUpdate={onUpdate} />
       <PositionSection
         node={node}
         onUpdate={onUpdate}
@@ -137,20 +90,14 @@ export const PropertyEditor = memo(function PropertyEditor({
       <FillSection
         node={node}
         onUpdate={onUpdate}
-        component={component}
         colorVariables={colorVariables}
         activeTheme={activeTheme}
-        isOverridden={isOverridden}
-        resetOverride={resetOverride}
       />
       <StrokeSection
         node={node}
         onUpdate={onUpdate}
-        component={component}
         colorVariables={colorVariables}
         activeTheme={activeTheme}
-        isOverridden={isOverridden}
-        resetOverride={resetOverride}
       />
       <EffectsSection node={node} onUpdate={onUpdate} />
       <ShaderSection node={node} onUpdate={onUpdate} />
@@ -159,9 +106,6 @@ export const PropertyEditor = memo(function PropertyEditor({
       )}
       {node.type === "text" && (
         <TypographySection node={node} onUpdate={onUpdate} />
-      )}
-      {node.type === "ref" && (
-        <InstancePropertiesSection node={node} component={component} />
       )}
       {(node.type === "frame" || node.type === "group") && (
         <FrameActionsSection node={node} />

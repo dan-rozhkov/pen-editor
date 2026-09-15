@@ -52,13 +52,6 @@ describe("readEmbedHtml", () => {
     expect(result.warning).toMatch(/grep/);
   });
 
-  it("reads sourceTemplate when present, since that is what edits target", async () => {
-    seedEmbed("e1", "<div>EXPANDED</div>", { sourceTemplate: "<div>TEMPLATE</div>" });
-    const result = JSON.parse(await readEmbedHtml({ nodeId: "e1", mode: "full" }));
-    expect(result.html).toBe("<div>TEMPLATE</div>");
-    expect(result.targetedSourceTemplate).toBe(true);
-  });
-
   it("rejects a non-embed node", async () => {
     const state = useSceneStore.getState();
     useSceneStore.setState({

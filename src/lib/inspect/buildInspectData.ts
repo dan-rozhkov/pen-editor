@@ -41,7 +41,6 @@ export interface InspectData {
   header: {
     name: string;
     type: string;
-    componentInfo?: { componentId: string; propertyValues?: Record<string, string | boolean> };
   };
   box: {
     width: number;
@@ -427,9 +426,6 @@ export function buildInspectData(input: BuildInspectDataInput): InspectData | nu
     name: node.name ?? node.type,
     type: node.type,
   };
-  if (node.type === "ref") {
-    header.componentInfo = { componentId: node.componentId, propertyValues: node.propertyValues };
-  }
 
   const sections: InspectSection[] = [];
   const layoutSection = buildLayoutSection(node, units, remBase);

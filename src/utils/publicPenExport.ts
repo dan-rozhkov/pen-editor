@@ -125,7 +125,6 @@ interface PenBaseNode {
   rotation?: number;
   flipX?: boolean;
   flipY?: boolean;
-  reusable?: boolean;
   theme?: PenTheme;
   shader?: ShaderConfig;
   // Figma-style layer mask: clips siblings rendered above this node within
@@ -569,7 +568,6 @@ function exportNodeBase(node: SceneNode, context: ExportContext, parentUsesLayou
     ...(node.rotation != null && node.rotation !== 0 ? { rotation: node.rotation } : {}),
     ...(node.flipX ? { flipX: true } : {}),
     ...(node.flipY ? { flipY: true } : {}),
-    ...(node.type === "frame" && node.reusable ? { reusable: true } : {}),
     ...(node.type === "frame" && node.themeOverride
       ? { theme: { [THEME_AXIS]: node.themeOverride } }
       : {}),
@@ -681,7 +679,6 @@ function exportFrameNode(
         }
       : { layout: "none" }),
     ...(node.type === "frame" && node.clip ? { clip: true } : {}),
-    ...(node.type === "frame" && node.isSlot ? { isSlot: true } : {}),
     ...(node.type === "frame" && node.cornerRadius != null ? { cornerRadius: node.cornerRadius } : {}),
     ...(node.type === "frame" && node.cornerRadiusPerCorner != null ? { cornerRadiusPerCorner: node.cornerRadiusPerCorner } : {}),
     ...(node.type === "frame" && node.cornerSmoothing != null ? { cornerSmoothing: node.cornerSmoothing } : {}),
@@ -728,8 +725,17 @@ function exportNode(node: SceneNode, context: ExportContext, parentUsesLayout: b
         geometry: pointsToPath(node.points, true),
       };
     case "embed":
-    case "ref":
     case "connector":
+      return {
+        ...exportNodeBase(node, context, parentUsesLayout),
+        type: "frame",
+        layout: "none",
+        children: [],
+      };
+    // Unreachable for any node the editor can produce, but a legacy document
+    // that slipped past the load-time migration (e.g. a stray `ref`) must not
+    // put `undefined` into a `children` array of the public .pen output.
+    default:
       return {
         ...exportNodeBase(node, context, parentUsesLayout),
         type: "frame",

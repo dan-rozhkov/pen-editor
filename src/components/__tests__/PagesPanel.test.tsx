@@ -46,8 +46,6 @@ describe("<PagesPanel />", () => {
     usePageStore.setState({
       pages: [emptyPage("p1", "Page 1"), emptyPage("p2", "Page 2")],
       activePageId: "p1",
-      componentArtifactsById: {},
-      _injectedComponentIds: new Set<string>(),
     });
   });
 
@@ -56,8 +54,6 @@ describe("<PagesPanel />", () => {
     usePageStore.setState({
       pages: baseline.pages,
       activePageId: baseline.activePageId,
-      componentArtifactsById: baseline.componentArtifactsById,
-      _injectedComponentIds: baseline._injectedComponentIds,
     });
   });
 

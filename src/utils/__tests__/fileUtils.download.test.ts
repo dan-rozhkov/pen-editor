@@ -55,7 +55,6 @@ describe("document download (downloadDocument / downloadPublicPen)", () => {
       [{ id: "page-1", name: "Page 1", nodes: [], pageBackground: "#f5f5f5" }],
       [],
       "light",
-      {},
       "my-doc.json",
     );
   }

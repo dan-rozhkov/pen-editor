@@ -24,10 +24,7 @@ export const readEmbedHtml: ToolHandler = async (args) => {
   }
 
   const embed = node as unknown as EmbedNode;
-  // Read what edit_embed_html will write to, so anchors copied from here match.
-  const targetedSourceTemplate =
-    typeof embed.sourceTemplate === "string" && embed.sourceTemplate.length > 0;
-  const html = targetedSourceTemplate ? (embed.sourceTemplate as string) : embed.htmlContent;
+  const html = embed.htmlContent;
 
   const mode = args.mode === "grep" || args.mode === "full" ? args.mode : "outline";
 
@@ -37,14 +34,13 @@ export const readEmbedHtml: ToolHandler = async (args) => {
       return JSON.stringify({ error: "pattern is required when mode is 'grep'" });
     }
     const grep = grepHtml(html, pattern, intArg(args.contextLines, 2, 0, 20));
-    return JSON.stringify({ nodeId, mode, targetedSourceTemplate, ...grep });
+    return JSON.stringify({ nodeId, mode, ...grep });
   }
 
   if (mode === "full") {
     return JSON.stringify({
       nodeId,
       mode,
-      targetedSourceTemplate,
       html,
       ...(html.length > FULL_WARN_THRESHOLD
         ? {
@@ -59,7 +55,6 @@ export const readEmbedHtml: ToolHandler = async (args) => {
   return JSON.stringify({
     nodeId,
     mode,
-    targetedSourceTemplate,
     outline: buildOutline(html, intArg(args.maxDepth, 4, 1, 12)),
   });
 };

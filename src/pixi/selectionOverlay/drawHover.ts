@@ -9,7 +9,6 @@ import { resolveContentInsets } from "@/utils/strokeInsets";
 import type { OverlayHelpers, Rect } from "./helpers";
 import { drawTextBaselines, drawDashedRect, drawHatchedRect } from "./helpers";
 import {
-  COMPONENT_SELECTION_COLOR,
   FLOATING_LABEL_FONT_SIZE,
   FLOATING_LABEL_PADDING_X,
   FLOATING_LABEL_PADDING_Y,
@@ -89,54 +88,10 @@ export function redrawHover(
     group.visible = false;
   }
 
-  const { hoveredNodeId, hoveredInstanceId, hoveredDescendantPath } =
-    useHoverStore.getState();
-  const { selectedIds, instanceContext } = useSelectionStore.getState();
+  const { hoveredNodeId } = useHoverStore.getState();
+  const { selectedIds } = useSelectionStore.getState();
   const devModeActive = useDevModeStore.getState().active;
   const hasDevModeComparison = devModeActive && selectedIds.length === 1;
-
-  // Instance descendant hover
-  if (hoveredDescendantPath && hoveredInstanceId) {
-    if (
-      instanceContext &&
-      instanceContext.instanceId === hoveredInstanceId &&
-      instanceContext.descendantPath === hoveredDescendantPath
-    ) {
-      return;
-    }
-
-    const target = helpers.getInstanceDescendantTarget(
-      hoveredInstanceId,
-      hoveredDescendantPath,
-    );
-    if (!target) return;
-
-    const scale = useViewportStore.getState().scale;
-    const strokeWidth = HOVER_STROKE_WIDTH / scale;
-    hovOutline.rect(
-      target.drawRect.x,
-      target.drawRect.y,
-      target.drawRect.width,
-      target.drawRect.height,
-    );
-    const outlineColor = hasDevModeComparison
-      ? MEASURE_COLOR
-      : COMPONENT_SELECTION_COLOR;
-    hovOutline.stroke({ color: outlineColor, width: strokeWidth });
-
-    if (target.node.type === "text") {
-      drawTextBaselines(
-        hoverTextBaselines,
-        target.node as TextNode,
-        target.drawRect.x,
-        target.drawRect.y,
-        target.drawRect.width,
-        scale,
-        COMPONENT_SELECTION_COLOR,
-      );
-    }
-    return;
-  }
 
   const state = useSceneStore.getState();
   const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
@@ -163,7 +118,7 @@ export function redrawHover(
     // Precompute child rects (used by both dashed outlines and spacing overlays)
     const childRectMap = new Map<string, Rect>();
     if (children && children.length > 0) {
-      const color = helpers.getSelectionColor(selectedTargetId);
+      const color = helpers.getSelectionColor();
       for (const childId of children) {
         const childNode = state.nodesById[childId];
         if (!childNode || childNode.visible === false) continue;
@@ -201,11 +156,7 @@ export function redrawHover(
   if (!drawRect) return;
 
   const scale = useViewportStore.getState().scale;
-  const hoverColor = hasDevModeComparison
-    ? MEASURE_COLOR
-    : helpers.isInComponentContext(hoveredNodeId)
-      ? COMPONENT_SELECTION_COLOR
-      : HOVER_COLOR;
+  const hoverColor = hasDevModeComparison ? MEASURE_COLOR : HOVER_COLOR;
   hovOutline.rect(drawRect.x, drawRect.y, drawRect.width, drawRect.height);
   hovOutline.stroke({
     color: hoverColor,
@@ -213,9 +164,7 @@ export function redrawHover(
   });
 
   if (node.type === "text") {
-    const hoverBaselineColor = helpers.isInComponentContext(hoveredNodeId)
-      ? COMPONENT_SELECTION_COLOR
-      : TEXT_BASELINE_COLOR;
+    const hoverBaselineColor = TEXT_BASELINE_COLOR;
     drawTextBaselines(
       hoverTextBaselines,
       node as TextNode,

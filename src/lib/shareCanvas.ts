@@ -208,7 +208,6 @@ export async function shareCurrentCanvas(): Promise<ShareResult> {
     doc.pages,
     doc.variables,
     doc.activeTheme,
-    doc.componentArtifacts,
     doc.textStyles,
     doc.fillStyles,
     doc.effectStyles,

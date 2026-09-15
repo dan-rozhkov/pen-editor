@@ -9,7 +9,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useRenderModeStore } from "@/store/renderModeStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import type { FlatSceneNode } from "@/types/scene";
-import { isFlatFrameNode, isRefNode, isConnectorNode } from "@/types/scene";
+import { isFlatFrameNode, isConnectorNode } from "@/types/scene";
 import { isActiveMasker } from "@/lib/masks/maskResolution";
 import { updateNodeContainer } from "./renderers";
 import { applySiblingMasks } from "./renderers/maskHelpers";
@@ -17,8 +17,6 @@ import { isOutlineRenderMode } from "./renderers/outlineHelpers";
 import { requestCanvasRender } from "./renderScheduler";
 import {
   type RegistryEntry,
-  ComponentIdIndex,
-  collectAffectedInstanceIds,
   withAncestorThemes,
   getChildrenHost,
 } from "./syncHelpers";
@@ -80,7 +78,6 @@ const rasterCacheEnabled = localStorage.getItem("pen.rasterCache") !== "off";
 /**
  * A node is "variable-dependent" if its rendering can change when a design
  * variable / theme changes:
- * - `ref`: the resolved component subtree may contain bindings anywhere;
  * - `embed`: variables are injected as a CSS block into the HTML;
  * - any node with a `fillBinding` or `strokeBinding`;
  * - any node whose `fills` stack contains a solid paint with a `colorBinding`;
@@ -95,7 +92,6 @@ const rasterCacheEnabled = localStorage.getItem("pen.rasterCache") !== "off";
  */
 export function isVariableDependent(node: FlatSceneNode): boolean {
   return (
-    node.type === "ref" || // resolved subtree may contain bindings anywhere
     node.type === "embed" || // variables are injected as CSS into the HTML
     node.fillBinding != null ||
     node.strokeBinding != null ||
@@ -142,9 +138,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
     () => resolutionMgr.getAppliedTextResolution(),
     (id) => resolutionMgr.clearEmbedCache(id),
   );
-
-  // Phase 3: Index for fast componentId → refNodeId lookups
-  const componentIndex = new ComponentIdIndex();
 
   // Connector index + geometry recomputation when connected nodes move/resize.
   const connectorMgr = createConnectorManager();
@@ -193,9 +186,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
 
     // Build all nodes
     nodeTreeMgr.buildNodeTree(state.rootIds, state.nodesById, state.childrenById, sceneRoot);
-
-    // Phase 3: Rebuild componentId index
-    componentIndex.buildFrom(state.nodesById);
 
     // Rebuild connector index
     buildConnectorIndex(state.nodesById);
@@ -260,7 +250,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
           state.nodesById,
           state.childrenById,
           true, // skipPosition — positions haven't changed
-          entry.node.type === "ref", // forceRebuild only for refs (re-resolve internal colors)
         );
       });
     }
@@ -336,9 +325,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
       // Phase 3 + 6: Update indexes for new nodes
       const node = state.nodesById[id];
       if (node) {
-        if (isRefNode(node)) {
-          componentIndex.add(id, node.componentId);
-        }
         if (isConnectorNode(node)) {
           addToConnectorIndex(id, node);
         }
@@ -349,17 +335,11 @@ export function createPixiSync(sceneRoot: Container): () => void {
       }
     }
 
-    // Phase 3: Use componentId index for fast instance lookup
-    const affectedInstanceIds = collectAffectedInstanceIds(state, prev, changedIds, componentIndex);
-
     // Handle removed nodes
     for (const id of diff.removedIds) {
-      // Phase 3 + 6: Update indexes for removed nodes
+      // Phase 6: Update indexes for removed nodes
       const prevNode = prev.nodesById[id];
       if (prevNode) {
-        if (isRefNode(prevNode)) {
-          componentIndex.remove(id, prevNode.componentId);
-        }
         if (isConnectorNode(prevNode)) {
           removeFromConnectorIndex(id, prevNode);
         }
@@ -416,7 +396,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
               state.nodesById,
               state.childrenById,
               isInAutoLayout, // skipPosition for auto-layout children
-              false,
             );
           });
           entry.node = node;
@@ -427,43 +406,8 @@ export function createPixiSync(sceneRoot: Container): () => void {
           } else {
             variableDependentIds.delete(id);
           }
-
-          // Phase 3: Update componentId index if ref's componentId changed
-          if (isRefNode(node) && isRefNode(prevNode)) {
-            const prevCompId = prevNode.componentId;
-            const newCompId = node.componentId;
-            if (prevCompId !== newCompId) {
-              componentIndex.remove(id, prevCompId);
-              componentIndex.add(id, newCompId);
-            }
-          }
         }
       }
-    }
-
-    // Rebuild instance render trees when their source component changed,
-    // even if the ref node itself is unchanged.
-    for (const id of affectedInstanceIds) {
-      if (changedIds.has(id)) continue;
-      const node = state.nodesById[id];
-      const prevNode = prev.nodesById[id];
-      const entry = registry.get(id);
-      if (!node || !prevNode || !entry || node.type !== "ref" || prevNode.type !== "ref") {
-        continue;
-      }
-      withAncestorThemes(id, state.parentById, state.nodesById, () => {
-        updateNodeContainer(
-          entry.container,
-          node,
-          prevNode,
-          state.nodesById,
-          state.childrenById,
-          false,
-          true,
-        );
-      });
-      entry.node = node;
-      changedIds.add(id);
     }
 
     // Targeted theme refresh: re-resolve variable-bound colors for descendants
@@ -498,7 +442,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
         if (changedIds.has(id)) continue; // already updated with its fresh node
         const node = state.nodesById[id];
         if (!node) continue;
-        if (!variableDependentIds.has(id) && node.type !== "ref") continue;
+        if (!variableDependentIds.has(id)) continue;
         const entry = registry.get(id);
         if (!entry) continue;
         withAncestorThemes(id, state.parentById, state.nodesById, () => {
@@ -509,7 +453,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
             state.nodesById,
             state.childrenById,
             true, // skipPosition — positions haven't changed
-            entry.node.type === "ref", // forceRebuild refs to re-resolve internal colors
           );
         });
       }
@@ -883,7 +826,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
     }
     registry.clear();
     variableDependentIds.clear();
-    componentIndex.clear();
     connectorMgr.clear();
     sceneRoot.removeChildren();
     registryAccessor = null;

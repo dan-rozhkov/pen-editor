@@ -54,8 +54,6 @@ function realDeps(): TouchControllerDeps {
       });
       if (!hitTarget) {
         useSelectionStore.getState().clearSelection();
-      } else if (hitTarget.kind === "instance-descendant") {
-        useSelectionStore.getState().selectDescendant(hitTarget.instanceId, hitTarget.descendantPath);
       } else {
         useSelectionStore.getState().select(hitTarget.nodeId);
       }

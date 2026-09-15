@@ -1,4 +1,4 @@
-import type { ComponentArtifact, FlatSceneNode, HistorySnapshot } from "../../../types/scene";
+import type { FlatSceneNode, HistorySnapshot } from "../../../types/scene";
 import { buildHistorySnapshot } from "../../historySnapshot";
 import { useGuidesStore } from "../../guidesStore";
 import { useHistoryStore } from "../../historyStore";
@@ -14,7 +14,6 @@ export function createSnapshot(state: {
   parentById: Record<string, string | null>;
   childrenById: Record<string, string[]>;
   rootIds: string[];
-  componentArtifactsById?: Record<string, ComponentArtifact>;
   slideOrder?: string[];
 }): HistorySnapshot {
   const selection = useSelectionStore.getState();
@@ -41,7 +40,6 @@ export function saveHistory(state: {
   parentById: Record<string, string | null>;
   childrenById: Record<string, string[]>;
   rootIds: string[];
-  componentArtifactsById?: Record<string, ComponentArtifact>;
   slideOrder?: string[];
 }): void {
   useHistoryStore.getState().saveHistory(createSnapshot(state));

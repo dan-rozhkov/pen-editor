@@ -394,7 +394,7 @@ export interface ShaderConfig {
 
 export interface BaseNode {
   id: string
-  type: 'frame' | 'group' | 'rect' | 'ellipse' | 'text' | 'path' | 'line' | 'polygon' | 'embed' | 'ref' | 'connector'
+  type: 'frame' | 'group' | 'rect' | 'ellipse' | 'text' | 'path' | 'line' | 'polygon' | 'embed' | 'connector'
   name?: string
   x: number
   y: number
@@ -408,7 +408,7 @@ export interface BaseNode {
   // Per-side stroke widths (takes precedence over strokeWidth when set)
   strokeWidthPerSide?: PerSideStroke
   visible?: boolean // defaults to true
-  enabled?: boolean // defaults to true, false hides node (used for instance overrides)
+  enabled?: boolean // defaults to true, false hides node
   // Sizing mode (used when node is inside auto-layout container)
   sizing?: SizingProperties
   // Variable bindings for colors
@@ -600,18 +600,8 @@ export interface FrameNode extends BaseNode {
   layout?: LayoutProperties
   // Theme override (light/dark) - if set, overrides global theme for this frame
   themeOverride?: ThemeName
-  // Reusable component flag - when true, this frame is a component that can be instantiated
-  reusable?: boolean
-  // When true, this frame is a slot (replaceable in instances)
-  isSlot?: boolean
   // Layout grid overlays (visual design aid, not part of exported design)
   layoutGrids?: LayoutGridConfig[]
-  /**
-   * Component properties declaration (only meaningful when `reusable` is true).
-   * Each property is a typed axis (Figma-style component-set variant) that a
-   * RefNode instance can select a value for via `RefNode.propertyValues`.
-   */
-  properties?: ComponentPropertyDef[]
   /**
    * Speaker/presenter notes for this slide, edited in the Slides section of
    * the left sidebar (see `SpeakerNotesCard`). Not rendered on the canvas,
@@ -620,36 +610,6 @@ export interface FrameNode extends BaseNode {
    * documents.
    */
   speakerNotes?: string
-}
-
-/** Property types a reusable component can declare (variant enum, boolean, text). */
-export type ComponentPropertyType = 'variant' | 'boolean' | 'text'
-
-/**
- * Declares one switchable property on a reusable component. `bindingPath` is
- * the path of a descendant node (same addressing scheme as
- * `InstanceOverrides` keys — the child's id, or `parentId/childId` for nested
- * descendants) whose `bindingProp` the property controls. Resolving a
- * property's current value produces an "update" override at that path, so
- * property switching reuses the exact override-application machinery
- * instances already use (see `resolveRefToTree` / `@/utils/componentProperties`).
- */
-export interface ComponentPropertyDef {
-  id: string
-  name: string
-  type: ComponentPropertyType
-  /** Allowed values for a `variant` property (required when type === 'variant'). */
-  variantOptions?: string[]
-  defaultValue: string | boolean
-  bindingPath: string
-  /**
-   * Name of the node property at `bindingPath` this property controls (e.g.
-   * `"text"`, `"visible"`, `"fill"`). Loosely typed (not `keyof
-   * InstanceOverrideUpdateProps`) because that alias only exposes fields
-   * common to every node type (an artifact of `keyof` over a union) — this
-   * needs to reach type-specific fields like `TextNode.text` too.
-   */
-  bindingProp: string
 }
 
 export interface RectNode extends BaseNode {
@@ -805,7 +765,7 @@ export interface TextNode extends BaseNode {
   textStyleId?: string
   // Typography property keys (a subset of `TEXT_STYLE_PROPERTY_KEYS`) that have
   // been locally edited since the style was applied. Centralized style edits skip
-  // these keys for this node ("local override", mirrors ref-instance overrides).
+  // these keys for this node ("local override").
   textStyleOverrides?: string[]
   /**
    * Text-on-a-path: when set, glyphs are laid out along a curve instead of a
@@ -933,35 +893,9 @@ export interface PolygonNode extends BaseNode {
 export interface EmbedNode extends BaseNode {
   type: 'embed'
   htmlContent: string
-  sourceTemplate?: string
 }
 
-export type InstanceOverrideUpdateProps = Partial<Omit<FlatSceneNode, 'id' | 'type'>>
-
-export type InstanceOverride =
-  | {
-      kind: 'update'
-      props: InstanceOverrideUpdateProps
-    }
-  | {
-      kind: 'replace'
-      node: SceneNode
-    }
-
-export type InstanceOverrides = {
-  [path: string]: InstanceOverride
-}
-
-// Reference to a component definition (instance)
-export interface RefNode extends BaseNode {
-  type: 'ref'
-  componentId: string
-  overrides?: InstanceOverrides
-  /** Selected values for the component's declared `properties`, keyed by property id. */
-  propertyValues?: Record<string, string | boolean>
-}
-
-export type SceneNode = FrameNode | GroupNode | RectNode | EllipseNode | TextNode | PathNode | LineNode | PolygonNode | EmbedNode | RefNode | ConnectorNode
+export type SceneNode = FrameNode | GroupNode | RectNode | EllipseNode | TextNode | PathNode | LineNode | PolygonNode | EmbedNode | ConnectorNode
 
 // --- Flat node types (no children arrays - structure lives in store indices) ---
 
@@ -972,7 +906,7 @@ export type FlatFrameNode = Omit<FrameNode, 'children'>
 export type FlatGroupNode = Omit<GroupNode, 'children'>
 
 /** Union of all node types in flat storage (containers have no children property) */
-export type FlatSceneNode = FlatFrameNode | FlatGroupNode | RectNode | EllipseNode | TextNode | PathNode | LineNode | PolygonNode | EmbedNode | RefNode | ConnectorNode
+export type FlatSceneNode = FlatFrameNode | FlatGroupNode | RectNode | EllipseNode | TextNode | PathNode | LineNode | PolygonNode | EmbedNode | ConnectorNode
 
 /** Check if a node is a container (has children array) */
 export function isContainerNode(node: SceneNode): node is FrameNode | GroupNode {
@@ -987,11 +921,6 @@ export function isFlatContainerType(node: FlatSceneNode): node is FlatFrameNode 
 /** Check if a flat node is a frame */
 export function isFlatFrameNode(node: FlatSceneNode): node is FlatFrameNode {
   return node.type === 'frame'
-}
-
-/** Check if a flat node is a component instance (ref) */
-export function isRefNode(node: FlatSceneNode): node is RefNode {
-  return node.type === 'ref'
 }
 
 /** Check if a flat node is a connector */
@@ -1125,7 +1054,6 @@ export interface FlatSnapshot {
   parentById: Record<string, string | null>
   childrenById: Record<string, string[]>
   rootIds: string[]
-  componentArtifactsById?: Record<string, ComponentArtifact>
   variables?: Variable[]
   /** Persistent ruler guides for the current page, at the time of the snapshot. */
   guides?: Guide[]
@@ -1139,13 +1067,6 @@ export interface FlatSnapshot {
   slideOrder?: string[]
   /** Persistent pinned distance measurements, at the time of the snapshot. */
   measurements?: PersistedMeasurement[]
-}
-
-export interface ComponentArtifact {
-  authoringHtml?: string
-  sourceTemplate?: string
-  revision: number
-  syncState: 'in_sync' | 'stale_from_native' | 'stale_from_html' | 'missing' | 'failed'
 }
 
 /** Selection state snapshot (used by history) */

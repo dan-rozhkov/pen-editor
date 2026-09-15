@@ -90,7 +90,6 @@ describe("resolveTargetFrame", () => {
       parentById: { frame1: null, frame2: null, group1: "frame2", rectA: "group1" },
       childrenById: { frame2: ["group1"], group1: ["rectA"] },
       rootIds: ["frame1", "frame2"],
-      componentArtifactsById: {},
       _cachedTree: null,
     });
 
@@ -144,7 +143,6 @@ describe("resolveTargetFrame", () => {
       parentById: { frame1: null, frame2: null, rect1: "frame1" },
       childrenById: { frame1: ["rect1"], frame2: [] },
       rootIds: ["frame1", "frame2"],
-      componentArtifactsById: {},
       _cachedTree: null,
     });
 

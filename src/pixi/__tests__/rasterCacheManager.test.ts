@@ -30,7 +30,6 @@ function makeState(ids: string[] = ["f1"], overrides: Partial<SceneState> = {}):
     parentById,
     childrenById: {},
     rootIds: [...ids],
-    componentArtifactsById: {},
     _cachedTree: null,
     expandedFrameIds: new Set(),
     pageBackground: "#fff",

@@ -42,8 +42,7 @@ describe("collectHiddenNodeIds", () => {
     expect(collectHiddenNodeIds().size).toBe(0);
   });
 
-  // `enabled: false` is how a `ref` instance's overrides hide a
-  // component-internal node — the same containment rule as `visible: false`
+  // `enabled: false` is the same containment rule as `visible: false`
   // (see `findHiddenSelfOrAncestor` in utils/nodeUtils.ts).
   it("finds nodes disabled via `enabled: false`", () => {
     seed({ a: {}, b: { enabled: false } });
@@ -66,7 +65,7 @@ describe("redactForSharedView", () => {
 
     const result = redactForSharedView({
       roots: [{ id: "n1", type: "embed", name: "Hero", htmlContent: "<b>secret</b>" }],
-      reusableComponents: [{ id: "c1", templateHtml: "<div>tpl</div>" }],
+      other: [{ id: "c1", templateHtml: "<div>tpl</div>" }],
       nested: { sourceTemplate: "<p>src</p>" },
     }) as Record<string, never>;
 
@@ -108,9 +107,8 @@ describe("redactForSharedView", () => {
     expect(redactForSharedView(input)).toEqual(input);
   });
 
-  // `enabled: false` (typically a `ref` instance override) hides a node the
-  // same way `visible: false` does — same containment rule, see
-  // `findHiddenSelfOrAncestor` in utils/nodeUtils.ts.
+  // `enabled: false` hides a node the same way `visible: false` does — same
+  // containment rule, see `findHiddenSelfOrAncestor` in utils/nodeUtils.ts.
   it("strips the content of a node disabled via `enabled: false`", () => {
     seed({ n1: { enabled: false } });
 

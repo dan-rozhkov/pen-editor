@@ -79,10 +79,6 @@ export function MultiSelectPropertyEditor({
     [selectedNodes],
   );
 
-  // Neutral overrides for FillSection/StrokeSection
-  const noopIsOverridden = () => false;
-  const noopResetOverride = () => {};
-
   // For stroke: show section as "has stroke" if any node has it
   const anyHasStroke = selectedNodes.some(
     (n) =>
@@ -243,11 +239,8 @@ export function MultiSelectPropertyEditor({
         <FillSection
           node={merged.node}
           onUpdate={handleUpdate}
-          component={null}
           colorVariables={colorVariables}
           activeTheme={activeTheme}
-          isOverridden={noopIsOverridden}
-          resetOverride={noopResetOverride}
           mixedKeys={merged.mixedKeys}
         />
       )}
@@ -255,11 +248,8 @@ export function MultiSelectPropertyEditor({
         <StrokeSection
           node={strokeNode}
           onUpdate={handleUpdate}
-          component={null}
           colorVariables={colorVariables}
           activeTheme={activeTheme}
-          isOverridden={noopIsOverridden}
-          resetOverride={noopResetOverride}
           mixedKeys={merged.mixedKeys}
         />
       )}

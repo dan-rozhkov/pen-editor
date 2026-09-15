@@ -26,8 +26,7 @@ import { resetStores } from "@/test/fixtures";
  * via a fresh `getNodes()` call after the same mutation picks it up (140).
  * If the guard is ever deleted, this file would not catch it; a unit test
  * against the guard would need a scenario where `materializeLayoutRefs`
- * reads live `nodesById` off a stale frame object (e.g. a `ref` node,
- * resolved via `resolveRefToTree(node, nodesById, ...)` on every call).
+ * reads live `nodesById` off a stale frame object.
  */
 
 function seedRow(): void {
@@ -57,7 +56,6 @@ function seedRow(): void {
     parentById: { row: null, a: "row" },
     childrenById: { row: ["a"] },
     rootIds: ["row"],
-    componentArtifactsById: {},
     _cachedTree: null,
   });
 }

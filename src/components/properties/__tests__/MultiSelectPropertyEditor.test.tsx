@@ -210,49 +210,4 @@ describe("<MultiSelectPropertyEditor />", () => {
     expect(nodeById("text2").textWidthMode).toBe("auto");
   });
 
-  // Regression: the auto-layout diff-merge used to bypass sceneStore's
-  // markComponentArtifactsStaleFromNative, leaving a reusable component's HTML
-  // export artifact marked in_sync after a native edit via multi-select.
-  it("marks a reusable auto-layout frame's component artifact stale on a multi-select gap change, without disturbing other frames' flexDirection", () => {
-    useSceneStore.setState((s) => ({
-      nodesById: {
-        ...s.nodesById,
-        frame1: {
-          ...s.nodesById.frame1,
-          reusable: true,
-          layout: {
-            ...(s.nodesById.frame1 as unknown as { layout: Record<string, unknown> }).layout,
-            autoLayout: true,
-            flexDirection: "column",
-            gap: 8,
-          },
-        } as unknown as FlatSceneNode,
-        rect2: {
-          ...s.nodesById.rect2,
-          type: "frame",
-          layout: { autoLayout: true, flexDirection: "row", gap: 8 },
-        } as unknown as FlatSceneNode,
-      },
-    }));
-
-    renderEditor(["frame1", "rect2"]);
-
-    const gapLabel = screen.getByText("Gap");
-    const gapInput = gapLabel.parentElement?.querySelector("input") as HTMLInputElement;
-    fireEvent.focus(gapInput);
-    fireEvent.change(gapInput, { target: { value: "24" } });
-    fireEvent.blur(gapInput);
-
-    const artifact = useSceneStore.getState().componentArtifactsById.frame1;
-    expect(artifact).toBeDefined();
-    expect(artifact?.syncState).not.toBe("in_sync");
-
-    const frame1Layout = (nodeById("frame1") as unknown as { layout: Record<string, unknown> }).layout;
-    const rect2Layout = (nodeById("rect2") as unknown as { layout: Record<string, unknown> }).layout;
-    expect(frame1Layout.gap).toBe(24);
-    expect(rect2Layout.gap).toBe(24);
-    // Only gap changed — each frame's own flexDirection survived the merge.
-    expect(frame1Layout.flexDirection).toBe("column");
-    expect(rect2Layout.flexDirection).toBe("row");
-  });
 });

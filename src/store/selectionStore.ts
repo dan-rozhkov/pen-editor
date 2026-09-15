@@ -12,21 +12,12 @@ import { useEmbedPickerStore } from './embedPickerStore'
 
 export type EditingMode = 'text' | 'name' | 'embed' | 'path' | 'text-path' | null
 
-export interface InstanceContext {
-  instanceId: string
-  descendantPath: string
-}
-
 interface SelectionState {
   selectedIds: string[]
   editingNodeId: string | null
   editingMode: EditingMode
-  editingInstanceId: string | null
-  instanceContext: InstanceContext | null
   // Nested selection: the container the user has drilled into via double-click
   enteredContainerId: string | null
-  // Depth within an entered ref instance (e.g. "childId/grandchildId")
-  enteredInstanceDescendantPath: string | null
   // Last selected node ID for range selection
   lastSelectedId: string | null
   // The embed currently "entered" for live interaction (pointer-events: auto)
@@ -42,13 +33,8 @@ interface SelectionState {
   selectRange: (fromId: string, toId: string, flatIds: string[]) => void
   startEditing: (id: string, mode?: EditingMode) => void
   stopEditing: () => void
-  enterInstanceEditMode: (instanceId: string) => void
-  exitInstanceEditMode: () => void
-  selectDescendant: (instanceId: string, descendantPath: string) => void
-  clearDescendantSelection: () => void
   // Nested selection methods
   enterContainer: (containerId: string) => void
-  enterInstanceDescendant: (path: string) => void
   exitContainer: () => boolean
   resetContainerContext: () => void
 }
@@ -99,10 +85,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   selectedIds: [],
   editingNodeId: null,
   editingMode: null,
-  editingInstanceId: null,
-  instanceContext: null,
   enteredContainerId: null,
-  enteredInstanceDescendantPath: null,
   lastSelectedId: null,
   activeEmbedId: null,
 
@@ -118,8 +101,6 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       selectedIds: [id],
       editingNodeId: null,
       editingMode: null,
-      editingInstanceId: null,
-      instanceContext: null,
       lastSelectedId: id,
       activeEmbedId: null,
     })
@@ -137,8 +118,6 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       selectedIds: ids,
       editingNodeId: null,
       editingMode: null,
-      editingInstanceId: null,
-      instanceContext: null,
       lastSelectedId: ids.length > 0 ? ids[ids.length - 1] : null,
       activeEmbedId: null,
     })
@@ -180,10 +159,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       selectedIds: [],
       editingNodeId: null,
       editingMode: null,
-      editingInstanceId: null,
-      instanceContext: null,
       enteredContainerId: null,
-      enteredInstanceDescendantPath: null,
       activeEmbedId: null,
     })
   },
@@ -225,8 +201,6 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       selectedIds: rangeIds,
       editingNodeId: null,
       editingMode: null,
-      editingInstanceId: null,
-      instanceContext: null,
       lastSelectedId: toId,
       activeEmbedId: null,
     })
@@ -234,47 +208,13 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
 
   startEditing: (id: string, mode: EditingMode = 'text') => {
     const state = get()
-    // Allow editing for regular selected nodes or instance descendants
-    if (state.selectedIds.includes(id) || (state.instanceContext && state.instanceContext.descendantPath === id)) {
+    if (state.selectedIds.includes(id)) {
       set({ editingNodeId: id, editingMode: mode })
     }
   },
 
   stopEditing: () => {
     set({ editingNodeId: null, editingMode: null, activeEmbedId: null })
-  },
-
-  enterInstanceEditMode: (instanceId: string) => {
-    set({
-      editingInstanceId: instanceId,
-      instanceContext: null,
-      selectedIds: [instanceId],
-      editingNodeId: null,
-      editingMode: null,
-    })
-  },
-
-  exitInstanceEditMode: () => {
-    const { editingInstanceId } = get()
-    set({
-      editingInstanceId: null,
-      instanceContext: null,
-      selectedIds: editingInstanceId ? [editingInstanceId] : [],
-    })
-  },
-
-  selectDescendant: (instanceId: string, descendantPath: string) => {
-    set({
-      selectedIds: [instanceId],
-      editingInstanceId: instanceId,
-      instanceContext: { instanceId, descendantPath },
-      editingNodeId: null,
-      editingMode: null,
-    })
-  },
-
-  clearDescendantSelection: () => {
-    set({ instanceContext: null })
   },
 
   // Nested selection methods
@@ -285,15 +225,11 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       enteredContainerId: containerId,
     }
     saveSelectionHistoryIfChanged(current, next)
-    set({ enteredContainerId: containerId, enteredInstanceDescendantPath: null })
-  },
-
-  enterInstanceDescendant: (path: string) => {
-    set({ enteredInstanceDescendantPath: path })
+    set({ enteredContainerId: containerId })
   },
 
   exitContainer: () => {
-    const { enteredContainerId, instanceContext, editingNodeId, enteredInstanceDescendantPath, activeEmbedId } = get()
+    const { enteredContainerId, editingNodeId, activeEmbedId } = get()
     // Step -1: Exit element-picking mode first — the user is mid-pick inside
     // an embed, which takes priority over every other back-out step below.
     if (useEmbedPickerStore.getState().pickingEmbedId) {
@@ -310,26 +246,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       set({ editingNodeId: null, editingMode: null })
       return true
     }
-    // Step 2: Exit descendant selection within instance
-    if (instanceContext) {
-      set({
-        instanceContext: null,
-        editingInstanceId: null,
-        selectedIds: enteredContainerId ? [enteredContainerId] : [],
-      })
-      return true
-    }
-    // Step 3: Exit one level within entered instance
-    if (enteredInstanceDescendantPath) {
-      const lastSlash = enteredInstanceDescendantPath.lastIndexOf("/")
-      set({
-        enteredInstanceDescendantPath: lastSlash >= 0
-          ? enteredInstanceDescendantPath.slice(0, lastSlash)
-          : null,
-      })
-      return true
-    }
-    // Step 4: Exit entered container
+    // Step 2: Exit entered container
     if (enteredContainerId) {
       const current = getSelectionSnapshot(get())
       const next = { ...current, enteredContainerId: null }
@@ -347,6 +264,6 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       enteredContainerId: null,
     }
     saveSelectionHistoryIfChanged(current, next)
-    set({ enteredContainerId: null, enteredInstanceDescendantPath: null })
+    set({ enteredContainerId: null })
   },
 }))

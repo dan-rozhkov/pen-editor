@@ -15,19 +15,7 @@ export function createNodeTreeManager(
   onNodeRemoved?: (id: string) => void,
 ) {
   const { sceneRoot, registry } = ctx;
-  let hiddenInstanceContainer: Container | null = null;
   let lastOverriddenIds = new Set<string>();
-
-  function findContainerByLabel(parent: Container, label: string): Container | null {
-    for (const child of parent.children) {
-      if (child instanceof Container) {
-        if (child.label === label) return child;
-        const found = findContainerByLabel(child, label);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
 
   /**
    * The set of ids whose container visibility is currently overridden away
@@ -74,29 +62,9 @@ export function createNodeTreeManager(
    * of an override transition.
    */
   function applyTextEditingVisibility(affectedIds?: Iterable<string>): void {
-    const { editingMode, editingNodeId, instanceContext } = useSelectionStore.getState();
+    const { editingMode, editingNodeId } = useSelectionStore.getState();
     const isTextEditing = editingMode === "text" && editingNodeId != null;
     const isEmbedEditing = editingMode === "embed" && editingNodeId != null;
-
-    // Restore previously hidden instance container
-    if (hiddenInstanceContainer) {
-      hiddenInstanceContainer.visible = true;
-      hiddenInstanceContainer = null;
-    }
-
-    // Handle instance descendant editing (ref children aren't in the registry)
-    if ((isTextEditing || isEmbedEditing) && instanceContext) {
-      const refEntry = registry.get(instanceContext.instanceId);
-      if (refEntry) {
-        const segments = editingNodeId!.split("/");
-        const targetId = segments[segments.length - 1];
-        const found = findContainerByLabel(refEntry.container, targetId);
-        if (found) {
-          found.visible = false;
-          hiddenInstanceContainer = found;
-        }
-      }
-    }
 
     const overrides = computeOverrides();
     const targets = affectedIds == null

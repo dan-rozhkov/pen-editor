@@ -10,10 +10,8 @@ import type {
   PolygonNode,
   PathNode,
   EmbedNode,
-  RefNode,
   PerCornerRadius,
 } from "@/types/scene";
-import { flattenTree } from "@/types/scene";
 import { getResolvedRenderableEffects } from "./colorHelpers";
 import { applyShadows } from "./shadowHelpers";
 import { applyLayerBlur } from "./blurHelpers";
@@ -40,17 +38,6 @@ import { applyVideoFills, applyVideoFillsEllipse } from "./videoFillHelpers";
 import { drawOutlineBBox, isOutlineRenderMode } from "./outlineHelpers";
 import type { ConnectorNode } from "@/types/scene";
 import type { ShadowShape } from "./shadowHelpers";
-import { resolveRefToTree } from "@/utils/instanceRuntime";
-import { useSceneStore } from "@/store/sceneStore";
-import { useLayoutStore } from "@/store/layoutStore";
-import { applyAutoLayoutRecursively } from "@/utils/autoLayoutUtils";
-
-// --- Ref context tracking for slot indicator rendering ---
-let refContextDepth = 0;
-
-export function pushRefContext(): void { refContextDepth++; }
-export function popRefContext(): void { refContextDepth = Math.max(0, refContextDepth - 1); }
-export function isInsideRef(): boolean { return refContextDepth > 0; }
 
 function getNodeCornerRadius(node: FlatSceneNode): number | undefined {
   if (node.type === "frame" || node.type === "rect") {
@@ -93,243 +80,6 @@ function getNodeShadowSize(node: FlatSceneNode, container: Container): { width: 
 function getSnappedNodePosition(node: FlatSceneNode): { x: number; y: number } {
   if (node.type !== "embed") return { x: node.x, y: node.y };
   return { x: Math.round(node.x), y: Math.round(node.y) };
-}
-
-/**
- * Snapshot of the flat tree that a resolved ref subtree was last built/updated
- * from. Cached per ref container so in-place updates can diff against the
- * previous resolved state without re-resolving twice.
- */
-interface FlatTreeSnapshot {
-  nodesById: Record<string, FlatSceneNode>;
-  childrenById: Record<string, string[]>;
-  rootId: string;
-}
-
-const refFlatTreeByContainer = new WeakMap<Container, FlatTreeSnapshot>();
-
-/**
- * Resolve a ref node to its laid-out flat tree (resolve → auto-layout → flatten).
- * Shared by createRefContainer and the in-place update path so they stay in sync.
- */
-function resolveRefToFlatTree(
-  node: RefNode,
-): { flat: FlatTreeSnapshot; root: FlatFrameNode } | null {
-  const globalState = useSceneStore.getState();
-  const resolved = resolveRefToTree(node, globalState.nodesById, globalState.childrenById);
-  if (!resolved) return null;
-  const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-  const laidOutResolved = applyAutoLayoutRecursively(
-    resolved,
-    calculateLayoutForFrame,
-  );
-  const flat = flattenTree([laidOutResolved]);
-  const root = flat.nodesById[laidOutResolved.id] as FlatFrameNode | undefined;
-  if (!root) return null;
-  return {
-    flat: {
-      nodesById: flat.nodesById,
-      childrenById: flat.childrenById,
-      rootId: laidOutResolved.id,
-    },
-    root,
-  };
-}
-
-function createRefContainer(
-  node: RefNode,
-  nodesById: Record<string, FlatSceneNode>,
-  childrenById: Record<string, string[]>,
-): Container {
-  // Use global store for resolution — the passed-in maps may be a private
-  // flat store (from flattenTree) that doesn't contain component definitions.
-  void nodesById; void childrenById;
-  const resolved = resolveRefToFlatTree(node);
-  if (!resolved) return new Container();
-
-  pushRefContext();
-  try {
-    const container = createFrameContainer(
-      resolved.root,
-      resolved.flat.nodesById,
-      resolved.flat.childrenById,
-    );
-    refFlatTreeByContainer.set(container, resolved.flat);
-    return container;
-  } finally {
-    popRefContext();
-  }
-}
-
-/**
- * Classify what kind of change happened between two RefNode states, to decide
- * how the resolved subtree should be updated.
- *
- * - "structural": componentId/overrides changed (or forceRebuild) → the resolved
- *   tree shape can differ (overrides can add/remove slot children), so the whole
- *   subtree must be destroyed and recreated. `overrides` is compared by reference,
- *   so a new object with equal contents still counts as structural (conservative).
- * - "resize": only width/height changed → re-run layout + targeted in-place updates.
- * - "cosmetic": only fill/stroke/binding/strokeWidth changed → in-place updates.
- * - "none": nothing relevant changed.
- *
- * If both resize and cosmetic apply, "resize" is returned — the in-place path
- * handles both anyway (it re-resolves the whole subtree and reconciles every node).
- * `forceRebuild` wins over everything.
- */
-export function classifyRefChange(
-  node: RefNode,
-  prev: RefNode,
-  forceRebuild = false,
-): "structural" | "resize" | "cosmetic" | "none" {
-  if (
-    forceRebuild ||
-    node.componentId !== prev.componentId ||
-    node.overrides !== prev.overrides
-  ) {
-    return "structural";
-  }
-
-  const sizeChanged = node.width !== prev.width || node.height !== prev.height;
-  if (sizeChanged) return "resize";
-
-  const cosmeticChanged =
-    node.fill !== prev.fill ||
-    node.fillBinding !== prev.fillBinding ||
-    node.stroke !== prev.stroke ||
-    node.strokeBinding !== prev.strokeBinding ||
-    node.strokeWidth !== prev.strokeWidth;
-  if (cosmeticChanged) return "cosmetic";
-
-  return "none";
-}
-
-function rebuildRefContainer(
-  container: Container,
-  node: RefNode,
-  nodesById: Record<string, FlatSceneNode>,
-  childrenById: Record<string, string[]>,
-): void {
-  container.removeChildren().forEach((child) => child.destroy());
-  // createRefContainer caches its flat-tree snapshot on the temporary `next`
-  // container; transfer it to the long-lived `container` so later in-place
-  // updates can diff against it.
-  const next = createRefContainer(node, nodesById, childrenById);
-  const snapshot = refFlatTreeByContainer.get(next);
-  while (next.children.length > 0) {
-    container.addChild(next.children[0]);
-  }
-  next.destroy();
-  if (snapshot) {
-    refFlatTreeByContainer.set(container, snapshot);
-  } else {
-    refFlatTreeByContainer.delete(container);
-  }
-}
-
-function updateRefContainer(
-  container: Container,
-  node: RefNode,
-  prev: RefNode,
-  nodesById: Record<string, FlatSceneNode>,
-  childrenById: Record<string, string[]>,
-  forceRebuild = false,
-): void {
-  const change = classifyRefChange(node, prev, forceRebuild);
-  if (change === "none") return;
-  if (change === "structural") {
-    rebuildRefContainer(container, node, nodesById, childrenById);
-    return;
-  }
-  // "resize" / "cosmetic": diff against a freshly resolved tree in place.
-  updateRefContainerInPlace(container, node, nodesById, childrenById);
-}
-
-/**
- * In-place update of a resolved ref subtree for size/cosmetic changes.
- *
- * Re-resolves the ref to a fresh laid-out flat tree, then walks the existing
- * Pixi subtree and the new flat tree in parallel by node-id label, calling the
- * per-type updaters (which do minimal in-place work). This avoids destroying
- * and recreating the subtree — embeds keep their sprites/textures, text is not
- * re-rasterized unless its own props changed, etc.
- *
- * Bails out to a full rebuild if:
- * - the ref can't be resolved,
- * - there is no cached prev snapshot to diff against (after computing one
- *   from `prev`-less state is not possible here — we fall back to rebuild),
- * - the id sets of the existing subtree and the new tree differ (a node exists
- *   in one but not the other). With componentId/overrides unchanged this should
- *   not happen; it is the safety net, not the common path.
- */
-function updateRefContainerInPlace(
-  container: Container,
-  node: RefNode,
-  nodesById: Record<string, FlatSceneNode>,
-  childrenById: Record<string, string[]>,
-): void {
-  const prevSnapshot = refFlatTreeByContainer.get(container);
-  const resolved = resolveRefToFlatTree(node);
-
-  // Without a fresh resolution or a prev snapshot we cannot diff safely.
-  if (!resolved || !prevSnapshot) {
-    rebuildRefContainer(container, node, nodesById, childrenById);
-    return;
-  }
-
-  const { flat: nextFlat } = resolved;
-
-  // The id sets must match exactly for a safe in-place reconcile.
-  const nextIds = Object.keys(nextFlat.nodesById);
-  const prevIds = Object.keys(prevSnapshot.nodesById);
-  if (nextIds.length !== prevIds.length) {
-    rebuildRefContainer(container, node, nodesById, childrenById);
-    return;
-  }
-
-  pushRefContext();
-  try {
-    // The long-lived `container` represents the resolved root frame (its own
-    // graphics — frame-bg/frame-children/... — are direct children). Reconcile
-    // the root against the container itself, then each descendant by label.
-    // Root id must be stable (it is the ref's id, preserved by resolveRefToTree).
-    if (prevSnapshot.rootId !== nextFlat.rootId) {
-      rebuildRefContainer(container, node, nodesById, childrenById);
-      return;
-    }
-
-    // Update every node by id. Root → container; descendants → deep label lookup.
-    for (const id of nextIds) {
-      const nextNode = nextFlat.nodesById[id];
-      const prevNode = prevSnapshot.nodesById[id];
-      if (!prevNode) {
-        // id present in new tree but not old → structural drift; bail out.
-        rebuildRefContainer(container, node, nodesById, childrenById);
-        return;
-      }
-      const isRoot = id === nextFlat.rootId;
-      const target = isRoot ? container : container.getChildByLabel(id, true);
-      if (!target) {
-        // Existing container missing for this id → bail out.
-        rebuildRefContainer(container, node, nodesById, childrenById);
-        return;
-      }
-      // The root container's position is owned by pixiSync (applyAutoLayoutPositions);
-      // skip repositioning it from the resolved tree.
-      updateNodeContainer(
-        target,
-        nextNode,
-        prevNode,
-        nextFlat.nodesById,
-        nextFlat.childrenById,
-        isRoot,
-      );
-    }
-
-    refFlatTreeByContainer.set(container, nextFlat);
-  } finally {
-    popRefContext();
-  }
 }
 
 /**
@@ -378,9 +128,6 @@ export function createNodeContainer(
       break;
     case "embed":
       container = createEmbedContainer(node as EmbedNode);
-      break;
-    case "ref":
-      container = createRefContainer(node as RefNode, nodesById, childrenById);
       break;
     case "connector":
       container = createConnectorContainer(node as ConnectorNode);
@@ -478,7 +225,6 @@ export function updateNodeContainer(
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
   skipPosition?: boolean,
-  forceRebuild?: boolean,
 ): void {
   // Position - skip for auto-layout children (handled by applyAutoLayoutPositions)
   if (!skipPosition && (node.x !== prev.x || node.y !== prev.y)) {
@@ -550,16 +296,6 @@ export function updateNodeContainer(
       break;
     case "embed":
       updateEmbedContainer(container, node as EmbedNode, prev as EmbedNode);
-      break;
-    case "ref":
-      updateRefContainer(
-        container,
-        node as RefNode,
-        prev as RefNode,
-        nodesById,
-        childrenById,
-        forceRebuild,
-      );
       break;
     case "connector":
       updateConnectorContainer(
@@ -636,8 +372,6 @@ export function applyLayoutSize(
   node: FlatSceneNode,
   layoutWidth: number,
   layoutHeight: number,
-  nodesById?: Record<string, FlatSceneNode>,
-  childrenById?: Record<string, string[]>,
 ): void {
   // Skip if size hasn't changed — but compare against the size the container was
   // ACTUALLY last drawn at, not the stored node.width/height. For fit_content
@@ -776,20 +510,6 @@ export function applyLayoutSize(
           drawOutlineBBox(gfx, layoutWidth, layoutHeight);
         }
       }
-      break;
-    }
-    case "ref": {
-      if (!nodesById || !childrenById) break;
-      // Route through the in-place reconcile (re-resolve + diff-by-label),
-      // which keeps embed sprites/textures and avoids subtree churn during
-      // auto-layout resize passes. Falls back to a rebuild internally if the
-      // tree shape drifts or no prev snapshot exists.
-      updateRefContainerInPlace(
-        container,
-        { ...node, width: layoutWidth, height: layoutHeight } as RefNode,
-        nodesById,
-        childrenById,
-      );
       break;
     }
     // Text and other types don't need size updates for layout

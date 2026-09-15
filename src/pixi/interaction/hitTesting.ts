@@ -4,27 +4,23 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { getCullingIndex } from "@/pixi/pixiSync";
-import type { SceneNode, FrameNode, FlatSceneNode, RefNode, ConnectorNode, LineNode } from "@/types/scene";
+import type { SceneNode, FrameNode, FlatSceneNode, ConnectorNode, LineNode } from "@/types/scene";
 import { isFitContentFrame } from "@/types/scene";
 import {
   getPreparedNodeEffectiveSize,
   prepareFrameNode,
 } from "@/utils/instanceUtils";
-import { getNodeEffectiveSize } from "@/utils/nodeUtils";
 import { buildCapPrimitive, capPrimitiveBounds } from "@/utils/lineCapUtils";
 import { distanceToSegment } from "@/utils/geometryUtils";
 import type { TransformHandle } from "./types";
 import { measureLabelTextWidth, truncateLabelToWidth } from "@/pixi/frameLabelUtils";
-import { resolveRefToTree, findResolvedDescendantByPath } from "@/utils/instanceRuntime";
 import { resolveMasking } from "@/lib/masks/maskResolution";
 import {
   LABEL_FONT_SIZE,
   LABEL_OFFSET_Y,
 } from "@/pixi/selectionOverlay/constants";
 
-export type CanvasHitTarget =
-  | { kind: "node"; nodeId: string }
-  | { kind: "instance-descendant"; instanceId: string; descendantPath: string };
+export type CanvasHitTarget = { kind: "node"; nodeId: string };
 
 const LABEL_HIT_PADDING = 2;
 
@@ -79,24 +75,7 @@ function getHitNodeEffectiveSize(
   node: SceneNode,
   sceneNodes: SceneNode[],
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
-  nodesById: Record<string, FlatSceneNode>,
-  childrenById: Record<string, string[]>,
 ): { width: number; height: number } {
-  if (node.type === "ref") {
-    const resolved = resolveRefToTree(
-      node as RefNode,
-      nodesById,
-      childrenById,
-    );
-    if (resolved) {
-      return getPreparedNodeEffectiveSize(
-        resolved,
-        sceneNodes,
-        calculateLayoutForFrame,
-      );
-    }
-  }
-
   return getPreparedNodeEffectiveSize(node, sceneNodes, calculateLayoutForFrame);
 }
 
@@ -213,7 +192,6 @@ export function findCanvasHitTargetAtPoint(
     ? new Set(selectionState.selectedIds)
     : null;
   const enteredContainerId = selectionState?.enteredContainerId ?? null;
-  const enteredInstanceDescendantPath = selectionState?.enteredInstanceDescendantPath ?? null;
 
   // Figma-style drill scope: the entered container and its ancestors, plus
   // the ancestors of every selected node. A hit resolved inside this chain
@@ -288,8 +266,6 @@ export function findCanvasHitTargetAtPoint(
       node,
       sceneNodes,
       calculateLayoutForFrame,
-      state.nodesById,
-      state.childrenById,
     );
 
     if (
@@ -317,105 +293,6 @@ export function findCanvasHitTargetAtPoint(
         }
         return null;
       }
-    }
-
-    if (node.type === "ref") {
-      // Default: ref is opaque unless deep-selecting or entered
-      if (!deepSelect && enteredContainerId !== node.id) {
-        return { kind: "node", nodeId: node.id };
-      }
-
-      const resolved = resolveRefToTree(
-        node as RefNode,
-        state.nodesById,
-        state.childrenById,
-      );
-      if (!resolved) return { kind: "node", nodeId: node.id };
-
-      // Unified recursive hit test — returns deepest matching path
-      const hitResolvedPath = (
-        resolvedNode: SceneNode,
-        resolvedAbsX: number,
-        resolvedAbsY: number,
-        resolvedPath: string,
-      ): string | null => {
-        if (resolvedNode.visible === false || resolvedNode.enabled === false) return null;
-
-        const { width: resolvedWidth, height: resolvedHeight } =
-          getPreparedNodeEffectiveSize(resolvedNode, [], calculateLayoutForFrame);
-        if (
-          worldX < resolvedAbsX ||
-          worldX > resolvedAbsX + resolvedWidth ||
-          worldY < resolvedAbsY ||
-          worldY > resolvedAbsY + resolvedHeight
-        ) {
-          return null;
-        }
-
-        let resolvedChildren: SceneNode[];
-        if (resolvedNode.type === "ref") {
-          const nestedResolved = resolveRefToTree(
-            resolvedNode as RefNode, state.nodesById, state.childrenById,
-          );
-          if (nestedResolved) {
-            resolvedChildren = nestedResolved.layout?.autoLayout
-              ? prepareFrameNode(nestedResolved, calculateLayoutForFrame).layoutChildren
-              : nestedResolved.children;
-          } else {
-            resolvedChildren = [];
-          }
-        } else if (resolvedNode.type === "frame" && resolvedNode.layout?.autoLayout) {
-          resolvedChildren = prepareFrameNode(resolvedNode, calculateLayoutForFrame).layoutChildren;
-        } else if (resolvedNode.type === "frame" || resolvedNode.type === "group") {
-          resolvedChildren = resolvedNode.children;
-        } else {
-          resolvedChildren = [];
-        }
-
-        for (let i = resolvedChildren.length - 1; i >= 0; i--) {
-          const child = resolvedChildren[i];
-          const childHit = hitResolvedPath(
-            child,
-            resolvedAbsX + child.x,
-            resolvedAbsY + child.y,
-            `${resolvedPath}/${child.id}`,
-          );
-          if (childHit) return childHit;
-        }
-
-        return resolvedPath;
-      };
-
-      // Find deepest hit path (apply auto-layout at root level, matching renderer)
-      const rootChildren = resolved.layout?.autoLayout
-        ? prepareFrameNode(resolved, calculateLayoutForFrame).layoutChildren
-        : resolved.children;
-      let deepHitPath: string | null = null;
-      for (let i = rootChildren.length - 1; i >= 0; i--) {
-        const child = rootChildren[i];
-        deepHitPath = hitResolvedPath(child, absX + child.x, absY + child.y, child.id);
-        if (deepHitPath) break;
-      }
-
-      if (!deepHitPath) return { kind: "node", nodeId: node.id };
-
-      // Deep select: return full deep path
-      if (deepSelect) {
-        return { kind: "instance-descendant", instanceId: node.id, descendantPath: deepHitPath };
-      }
-
-      // Entered ref: truncate to first child below entered level
-      const prefix = enteredInstanceDescendantPath ? enteredInstanceDescendantPath + "/" : "";
-      if (deepHitPath.startsWith(prefix)) {
-        const remaining = deepHitPath.slice(prefix.length);
-        const firstChild = remaining.split("/")[0];
-        const resultPath = enteredInstanceDescendantPath
-          ? `${enteredInstanceDescendantPath}/${firstChild}`
-          : firstChild;
-        return { kind: "instance-descendant", instanceId: node.id, descendantPath: resultPath };
-      }
-
-      return { kind: "node", nodeId: node.id };
     }
 
     const childNodes =
@@ -464,7 +341,6 @@ export function findCanvasHitTargetAtPoint(
       if (!childHit) continue;
 
       if (deepSelect) return childHit;
-      if (childHit.kind === "instance-descendant") return childHit;
       if (selectedSet?.has(childHit.nodeId)) return childHit;
       if (scopeSet.has(node.id)) return childHit;
       return { kind: "node", nodeId: node.id };
@@ -541,43 +417,11 @@ export function hitTestTransformHandle(worldX: number, worldY: number): {
   absY: number;
   width: number;
   height: number;
-  slotContext?: { instanceId: string; descendantPath: string };
 } | null {
-  const { selectedIds, instanceContext } = useSelectionStore.getState();
+  const { selectedIds } = useSelectionStore.getState();
 
   const state = useSceneStore.getState();
   const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-
-  // Instance descendant: only allow transform for slot frames
-  if (instanceContext) {
-    if (selectedIds.length !== 1) return null;
-    const instance = state.nodesById[instanceContext.instanceId];
-    if (!instance || instance.type !== "ref") return null;
-    const effectiveSize = getEffectiveSizeForHit(instanceContext.instanceId, state, calculateLayoutForFrame);
-    const refWithLayout: RefNode = effectiveSize
-      ? { ...(instance as RefNode), width: effectiveSize.width, height: effectiveSize.height }
-      : (instance as RefNode);
-    const resolved = findResolvedDescendantByPath(
-      refWithLayout,
-      instanceContext.descendantPath,
-      state.nodesById,
-      state.childrenById,
-      state.parentById,
-      calculateLayoutForFrame,
-    );
-    if (!resolved) return null;
-    if (resolved.node.type !== "frame" || !(resolved.node as FrameNode).isSlot) return null;
-
-    const absX = resolved.absX;
-    const absY = resolved.absY;
-    const width = resolved.width;
-    const height = resolved.height;
-
-    return hitTestHandlesAt(worldX, worldY, absX, absY, width, height, instanceContext.instanceId, {
-      instanceId: instanceContext.instanceId,
-      descendantPath: instanceContext.descendantPath,
-    });
-  }
 
   if (selectedIds.length !== 1) return null;
 
@@ -597,8 +441,6 @@ export function hitTestTransformHandle(worldX: number, worldY: number): {
         n,
         treeNodes,
         calculateLayoutForFrame,
-        state.nodesById,
-        state.childrenById,
       );
       if (n.id === nodeId) {
         bounds = { x: absX, y: absY, width, height };
@@ -622,18 +464,6 @@ export function hitTestTransformHandle(worldX: number, worldY: number): {
   return hitTestHandlesAt(worldX, worldY, absX, absY, width, height, nodeId);
 }
 
-/** Get effective (layout-computed) size for a node during hit testing. */
-function getEffectiveSizeForHit(
-  nodeId: string,
-  state: { nodesById: Record<string, FlatSceneNode>; getNodes: () => SceneNode[] },
-  calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
-): { width: number; height: number } | null {
-  const node = state.nodesById[nodeId];
-  if (!node) return null;
-  const treeNodes = state.getNodes();
-  return getNodeEffectiveSize(treeNodes, nodeId, calculateLayoutForFrame) ?? { width: node.width, height: node.height };
-}
-
 /** Shared handle hit-testing logic against a known bounding rect. */
 function hitTestHandlesAt(
   worldX: number,
@@ -643,7 +473,6 @@ function hitTestHandlesAt(
   width: number,
   height: number,
   nodeId: string,
-  slotContext?: { instanceId: string; descendantPath: string },
 ): {
   corner: TransformHandle;
   nodeId: string;
@@ -651,7 +480,6 @@ function hitTestHandlesAt(
   absY: number;
   width: number;
   height: number;
-  slotContext?: { instanceId: string; descendantPath: string };
 } | null {
   const scale = useViewportStore.getState().scale;
   const handleRadius = 6 / scale;
@@ -667,7 +495,7 @@ function hitTestHandlesAt(
     const dx = worldX - cx;
     const dy = worldY - cy;
     if (Math.abs(dx) <= handleRadius && Math.abs(dy) <= handleRadius) {
-      return { corner, nodeId, absX, absY, width, height, slotContext };
+      return { corner, nodeId, absX, absY, width, height };
     }
   }
 
@@ -687,28 +515,28 @@ function hitTestHandlesAt(
     worldY >= absY + vCornerExclusion &&
     worldY <= absY + height - vCornerExclusion
   ) {
-    return { corner: "l", nodeId, absX, absY, width, height, slotContext };
+    return { corner: "l", nodeId, absX, absY, width, height };
   }
   if (
     distRight <= sideTolerance &&
     worldY >= absY + vCornerExclusion &&
     worldY <= absY + height - vCornerExclusion
   ) {
-    return { corner: "r", nodeId, absX, absY, width, height, slotContext };
+    return { corner: "r", nodeId, absX, absY, width, height };
   }
   if (
     distTop <= sideTolerance &&
     worldX >= absX + hCornerExclusion &&
     worldX <= absX + width - hCornerExclusion
   ) {
-    return { corner: "t", nodeId, absX, absY, width, height, slotContext };
+    return { corner: "t", nodeId, absX, absY, width, height };
   }
   if (
     distBottom <= sideTolerance &&
     worldX >= absX + hCornerExclusion &&
     worldX <= absX + width - hCornerExclusion
   ) {
-    return { corner: "b", nodeId, absX, absY, width, height, slotContext };
+    return { corner: "b", nodeId, absX, absY, width, height };
   }
 
   return null;

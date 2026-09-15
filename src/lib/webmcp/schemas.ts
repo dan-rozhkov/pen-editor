@@ -85,7 +85,6 @@ const NODE_TYPES = [
   "path",
   "text",
   "embed",
-  "ref",
   "connector",
 ] as const;
 
@@ -106,7 +105,7 @@ export const WEBMCP_TOOL_SPECS: readonly WebMcpToolSpec[] = [
   {
     name: "get_editor_state",
     description:
-      "Get the current editor state: active .pen file, user selection, top-level nodes, and available components. Call this first — Figma's metadata-first pattern.",
+      "Get the current editor state: active .pen file, user selection, and top-level nodes. Call this first — Figma's metadata-first pattern.",
     inputSchema: {
       type: "object",
       properties: {
@@ -238,7 +237,7 @@ export const WEBMCP_TOOL_SPECS: readonly WebMcpToolSpec[] = [
   {
     name: "batch_design",
     description:
-      "Create, update, and delete nodes on the canvas by running a batch operations script. Call get_guidelines(topic: \"design-system\") first for auto-layout and component-usage rules. Changes are applied to the open document and can be undone by the user.",
+      "Create, update, and delete nodes on the canvas by running a batch operations script. Call get_guidelines(topic: \"design-system\") first for auto-layout rules. Changes are applied to the open document and can be undone by the user.",
     inputSchema: {
       type: "object",
       properties: {

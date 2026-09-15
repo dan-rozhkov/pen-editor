@@ -16,7 +16,7 @@ vi.mock("@/utils/pixiUtils", () => ({
 
 /**
  * SlidesPanel lists top-level frames (rootIds order) as one-per-row preview
- * cards. Like ComponentsPanel, `useNodeThumbnails` returns an empty Map with
+ * cards. `useNodeThumbnails` returns an empty Map with
  * no Pixi refs in the unit env, so every slide renders the placeholder icon —
  * no WebGL/Pixi is initialised here.
  */
@@ -68,7 +68,6 @@ function seedNodes(nodes: FlatSceneNode[]): void {
     parentById,
     childrenById,
     rootIds,
-    componentArtifactsById: {},
     _cachedTree: null,
   });
 }

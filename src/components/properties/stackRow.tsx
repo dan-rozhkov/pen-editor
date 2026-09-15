@@ -212,7 +212,7 @@ interface StackRowShellProps {
   /** Override for FILL_ROW_TRIGGER_CLASS — only when the visual result must differ. */
   triggerClassName?: string;
   popoverTitle: ReactNode; // dragHandleContent
-  trailing?: ReactNode; // OverrideIndicator slot
+  trailing?: ReactNode;
   children: ReactNode; // popover body (per-section)
 }
 

@@ -23,16 +23,16 @@ import type { PaletteCommand } from "./types";
  */
 
 /**
- * Gathers the live document state (all pages, variables, styles, theme,
- * component artifacts) into the shape `serializeDocument`/`applyOpenedDocument`
- * expect. This is the single source of truth for "what is the current
- * document" — both `exportAsJson()` below and canvas sharing
- * (`src/lib/shareCanvas.ts`) call it, so a `.json` export and a shared link
- * can never drift apart by gathering the live document two different ways.
+ * Gathers the live document state (all pages, variables, styles, theme) into
+ * the shape `serializeDocument`/`applyOpenedDocument` expect. This is the
+ * single source of truth for "what is the current document" — both
+ * `exportAsJson()` below and canvas sharing (`src/lib/shareCanvas.ts`) call
+ * it, so a `.json` export and a shared link can never drift apart by
+ * gathering the live document two different ways.
  */
 export function collectDocumentData(): DocumentData {
   usePageStore.getState().saveCurrentPageState();
-  const { pages, componentArtifactsById } = usePageStore.getState();
+  const { pages } = usePageStore.getState();
   return {
     pages: pages.map((page) => ({
       id: page.id,
@@ -49,19 +49,17 @@ export function collectDocumentData(): DocumentData {
     fillStyles: useStyleStore.getState().fillStyles,
     effectStyles: useStyleStore.getState().effectStyles,
     activeTheme: useThemeStore.getState().activeTheme,
-    componentArtifacts: componentArtifactsById,
   };
 }
 
 export function exportAsJson(): void {
-  const { pages, variables, textStyles, fillStyles, effectStyles, activeTheme, componentArtifacts } =
+  const { pages, variables, textStyles, fillStyles, effectStyles, activeTheme } =
     collectDocumentData();
   const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
   downloadDocument(
     pages,
     variables,
     activeTheme,
-    componentArtifacts,
     `${name}.json`,
     textStyles,
     fillStyles,

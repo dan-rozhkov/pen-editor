@@ -68,7 +68,6 @@ describe("redrawHover dev-mode spacing", () => {
       parentById: { frame: null, first: "frame", second: "frame" },
       childrenById: { frame: ["first", "second"], first: [], second: [] },
       rootIds: ["frame"],
-      componentArtifactsById: {},
       _cachedTree: null,
     });
     useHoverStore.getState().setHoveredNode("frame");
@@ -90,7 +89,6 @@ describe("redrawHover dev-mode spacing", () => {
     const helpers = {
       getNodeDrawRect: (id: string) => rects[id] ?? null,
       getSelectionColor: () => 0x0d99ff,
-      isInComponentContext: () => false,
     } as unknown as OverlayHelpers;
     const hoverOutline = new Graphics();
     const childOutlines = new Graphics();
@@ -122,7 +120,6 @@ describe("redrawHover dev-mode spacing", () => {
         first: { x: 108, y: 108, width: 80, height: 84 },
         second: { x: 198, y: 108, width: 80, height: 84 },
       })[id] ?? null,
-      isInComponentContext: () => false,
     } as unknown as OverlayHelpers;
     const hoverOutline = new Graphics();
 
@@ -153,8 +150,7 @@ describe("redrawHover dev-mode spacing", () => {
       new Container(),
       {
         getNodeDrawRect: () => ({ x: 198, y: 108, width: 80, height: 84 }),
-        isInComponentContext: () => false,
-      } as unknown as OverlayHelpers,
+        } as unknown as OverlayHelpers,
     );
 
     const stroke = hoverOutline.context.instructions.find(
@@ -178,8 +174,7 @@ describe("redrawHover dev-mode spacing", () => {
       new Container(),
       {
         getNodeDrawRect: () => ({ x: 198, y: 108, width: 80, height: 84 }),
-        isInComponentContext: () => false,
-      } as unknown as OverlayHelpers,
+        } as unknown as OverlayHelpers,
     );
 
     expect(hoverOutline.context.instructions.find(
@@ -211,7 +206,6 @@ describe("redrawHover dev-mode spacing", () => {
     const helpers = {
       getNodeDrawRect: (id: string) => rects[id] ?? null,
       getSelectionColor: () => 0x0d99ff,
-      isInComponentContext: () => false,
     } as unknown as OverlayHelpers;
     const spacingOverlay = new Container();
     const spacingLabel = new Container();
@@ -245,33 +239,5 @@ describe("redrawHover dev-mode spacing", () => {
     const rectData = path.instructions[0].data;
     // gfx.rect(x, y, width, height, ...) — height is index 3.
     expect(rectData[3]).toBe(18);
-  });
-
-  it("keeps the component-descendant hover outline at two screen pixels when zoomed", () => {
-    useDevModeStore.setState({ active: false });
-    useViewportStore.setState({ scale: 2 });
-    useHoverStore.getState().setHoveredDescendant("instance", "child");
-    const hoverOutline = new Graphics();
-
-    redrawHover(
-      hoverOutline,
-      new Graphics(),
-      new Graphics(),
-      new Container(),
-      new Container(),
-      {
-        getInstanceDescendantTarget: () => ({
-          instance: { id: "instance", type: "ref" },
-          node: { id: "child", type: "rect" },
-          drawRect: { x: 20, y: 30, width: 40, height: 50 },
-        }),
-      } as unknown as OverlayHelpers,
-    );
-
-    const stroke = hoverOutline.context.instructions.find(
-      (item) => item.action === "stroke",
-    )?.data.style;
-    expect(stroke?.color).toBe(0x8b5cf6);
-    expect(stroke?.width).toBe(1);
   });
 });

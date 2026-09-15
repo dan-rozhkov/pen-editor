@@ -100,7 +100,7 @@ export function buildWebMcpManifest(base = "/"): WebMcpManifest {
         (spec) => spec.mutating || spec.withheldOnSharedView
       )
         .map((spec) => spec.name)
-        .join(", ")}) are not published at all — the ones that write to the document, plus a couple of read tools whose output can't be safely narrowed to what the viewer can see — and the read tools that remain have their output narrowed to what the viewer can actually see (hidden nodes are reduced to id/type/name; embed and component source HTML is stripped).`,
+        .join(", ")}) are not published at all — the ones that write to the document, plus a couple of read tools whose output can't be safely narrowed to what the viewer can see — and the read tools that remain have their output narrowed to what the viewer can actually see (hidden nodes are reduced to id/type/name; embed source HTML is stripped).`,
     },
     readiness: {
       note: 'getTools() can legitimately return an empty array right after the page loads — the editor that registers tools is a lazily loaded chunk that has not run its first effect yet. An empty list means "not yet, ask again shortly", not "this page has no tools." There is no readiness event; poll getTools() for a second or two rather than sampling once.',

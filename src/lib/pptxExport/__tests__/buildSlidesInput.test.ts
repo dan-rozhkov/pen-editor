@@ -11,13 +11,11 @@ import type {
   TextNode,
   LineNode,
   GroupNode,
-  RefNode,
   SceneNode,
 } from "@/types/scene";
 
 const deps: BuildDeps = {
   layoutChildren: (f) => f.children,
-  resolveRef: () => null,
   getNodeFills: (n) => n.fills ?? [],
   getNodeStrokes: (n) => getRenderableStrokes(n),
   getNodeEffects: (n) => n.effects ?? [],
@@ -264,33 +262,6 @@ describe("buildSlidesInput", () => {
     const shape = input.slides[0].shapes[0];
     assertField(shape, "kind", "rect");
     expect(shape.rect).toMatchObject({ x: 15, y: 25 });
-  });
-
-  it("ref nodes are resolved via deps.resolveRef and walked at the ref position", async () => {
-    // Mirrors resolveRefToTree: the resolved tree carries the ref's own x/y/width/height.
-    const target = rect({ id: "resolved", x: 30, y: 30, width: 40, height: 40 });
-    const refNode: RefNode = {
-      id: "ref1",
-      type: "ref",
-      componentId: "comp1",
-      x: 30,
-      y: 30,
-      width: 40,
-      height: 40,
-    };
-    const input = await buildSlidesInput(
-      [frame({ children: [refNode] })],
-      { ...deps, resolveRef: () => target },
-    );
-    const shape = input.slides[0].shapes[0];
-    assertField(shape, "kind", "rect");
-    expect(shape.rect).toMatchObject({ x: 30, y: 30 });
-  });
-
-  it("ref resolving to null is skipped without crashing", async () => {
-    const refNode: RefNode = { id: "ref1", type: "ref", componentId: "comp1", x: 0, y: 0, width: 10, height: 10 };
-    const input = await buildSlidesInput([frame({ children: [refNode] })], { ...deps, resolveRef: () => null });
-    expect(input.slides[0].shapes).toHaveLength(0);
   });
 
   it("skips invisible/disabled/zero-opacity/connector nodes", async () => {

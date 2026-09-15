@@ -32,7 +32,7 @@ import { CommentLayer } from "@/components/comments/CommentLayer";
 import { FrameAgentButton } from "@/components/canvas/FrameAgentButton";
 import { Layers3DOverlay } from "@/components/canvas/Layers3DOverlay";
 import { useLayers3DStore } from "@/store/layers3dStore";
-import type { EmbedNode, FrameNode, TextNode, InstanceOverrideUpdateProps } from "@/types/scene";
+import type { EmbedNode, FrameNode, TextNode } from "@/types/scene";
 import { useCanvasKeyboardShortcuts } from "@/components/canvas/useCanvasKeyboardShortcuts";
 import { useCanvasFileDrop } from "@/components/canvas/useCanvasFileDrop";
 import {
@@ -48,7 +48,7 @@ import { useLayoutStore } from "@/store/layoutStore";
 import { useLoadingStore } from "@/store/loadingStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
-import type { EditingMode, InstanceContext } from "@/store/selectionStore";
+import type { EditingMode } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
@@ -57,9 +57,6 @@ import {
   getNodeAbsolutePositionWithLayout,
   getThemeFromAncestorFrames,
 } from "@/utils/nodeUtils";
-import { findResolvedDescendantByPath } from "@/utils/instanceRuntime";
-import type { RefNode } from "@/types/scene";
-import { findSlotContext } from "@/utils/componentUtils";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
 import { saveShareCredentials } from "@/lib/shareCanvas";
 import { createPixiSync } from "./pixiSync";
@@ -87,40 +84,16 @@ import { perfStats } from "./perfStats";
 export function usePixiCanvasState({
   editingNodeId,
   editingMode,
-  instanceContext,
   selectedIds,
 }: {
   editingNodeId: string | null;
   editingMode: EditingMode;
-  instanceContext: InstanceContext | null;
   selectedIds: string[];
 }) {
-  // Resolve instance descendant if editing within a component instance.
-  // Reads the store imperatively (getState()) — recomputes only when
-  // editingNodeId/instanceContext change, not on unrelated mutations.
-  const resolvedDescendant = useMemo(() => {
-    if (!editingNodeId || !instanceContext) return null;
-    const state = useSceneStore.getState();
-    const refNode = state.nodesById[instanceContext.instanceId];
-    if (!refNode || refNode.type !== "ref") return null;
-    const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
-    return findResolvedDescendantByPath(
-      refNode as RefNode,
-      instanceContext.descendantPath,
-      state.nodesById,
-      state.childrenById,
-      state.parentById,
-      calculateLayoutForFrame,
-    );
-  }, [editingNodeId, instanceContext]);
-
   // Node-scoped: identity changes only when THIS node changes.
-  const editingNodeFromStore = useSceneStore((s) =>
+  const editingNode = useSceneStore((s) =>
     editingNodeId ? (s.nodesById[editingNodeId] ?? null) : null,
   );
-  const editingNode = editingNodeId
-    ? (resolvedDescendant?.node ?? editingNodeFromStore)
-    : null;
 
   // Calculate editing positions in world coordinates.
   // Inline editors apply viewport transform internally.
@@ -149,9 +122,6 @@ export function usePixiCanvasState({
   const editingPosition = useSceneStore(
     useShallow((s) => {
       if (!editingNodeId) return null;
-      if (resolvedDescendant) {
-        return { x: resolvedDescendant.absX, y: resolvedDescendant.absY };
-      }
       const calculateLayoutForFrame = useLayoutStore.getState().calculateLayoutForFrame;
       const pos = getNodeAbsolutePositionWithLayout(s.getNodes(), editingNodeId, calculateLayoutForFrame);
       return pos ? { x: pos.x, y: pos.y } : null;
@@ -164,21 +134,16 @@ export function usePixiCanvasState({
   // resolved theme itself actually changes.
   const editingTextTheme = useSceneStore((s) => {
     if (!editingNodeId || editingMode !== "text") return null;
-    const themeNodeId = resolvedDescendant
-      ? instanceContext!.instanceId
-      : editingNodeId;
-    return getThemeFromAncestorFrames(s.parentById, s.nodesById, themeNodeId, 'light');
+    return getThemeFromAncestorFrames(s.parentById, s.nodesById, editingNodeId, 'light');
   });
 
   // Already imperative (getState()) — recomputes only on
-  // editingMode/editingNodeId/resolvedDescendant changes, not on unrelated
-  // scene mutations.
+  // editingMode/editingNodeId changes, not on unrelated scene mutations.
   const editingTextIsInsideAutoLayout = useMemo(() => {
     if (editingMode !== "text" || !editingNodeId) return false;
-    if (resolvedDescendant) return false;
     const nodes = useSceneStore.getState().getNodes();
     return findParentFrame(nodes, editingNodeId).isInsideAutoLayout;
-  }, [editingMode, editingNodeId, resolvedDescendant]);
+  }, [editingMode, editingNodeId]);
 
   // Node-scoped: a single subscription serves both the embed and frame
   // derivations below — its identity changes only when the selected node
@@ -197,8 +162,8 @@ export function usePixiCanvasState({
   }, [selectedEmbedNode, getEditingPosition]);
 
   const selectedFrameNode =
-    singleSelectedNode?.type === "frame" || singleSelectedNode?.type === "ref"
-      ? (singleSelectedNode as FrameNode | RefNode)
+    singleSelectedNode?.type === "frame"
+      ? (singleSelectedNode as FrameNode)
       : null;
 
   const selectedFramePosition = useMemo(() => {
@@ -207,7 +172,6 @@ export function usePixiCanvasState({
   }, [selectedFrameNode, getEditingPosition]);
 
   return {
-    resolvedDescendant,
     editingNode,
     editingPosition,
     editingTextTheme,
@@ -262,9 +226,6 @@ export function PixiCanvas() {
   const is3DActive = useLayers3DStore((s) => s.active);
   const exit3D = useLayers3DStore((s) => s.exit);
 
-  // Selection data for inline editors
-  const instanceContext = useSelectionStore((s) => s.instanceContext);
-
   const {
     editingNode,
     editingPosition,
@@ -274,7 +235,7 @@ export function PixiCanvas() {
     selectedEmbedPosition,
     selectedFrameNode,
     selectedFramePosition,
-  } = usePixiCanvasState({ editingNodeId, editingMode, instanceContext, selectedIds });
+  } = usePixiCanvasState({ editingNodeId, editingMode, selectedIds });
   const hoveredNodeId = useHoverStore((s) => s.hoveredNodeId);
   const hoveredEmbedNode = useSceneStore((s) =>
     hoveredNodeId && s.nodesById[hoveredNodeId]?.type === "embed"
@@ -595,17 +556,6 @@ export function PixiCanvas() {
           absoluteY={editingPosition.y}
           effectiveTheme={editingTextTheme ?? undefined}
           isInsideAutoLayoutParent={editingTextIsInsideAutoLayout}
-          onUpdateText={instanceContext ? (text, paragraphs) => {
-            const store = useSceneStore.getState();
-            const inst = store.nodesById[instanceContext.instanceId] as RefNode | undefined;
-            const sc = inst?.type === "ref" ? findSlotContext(instanceContext.descendantPath, inst.overrides) : null;
-            const updates: Partial<TextNode> = paragraphs !== undefined ? { text, paragraphs } : { text };
-            if (sc) {
-              store.updateSlotChildWithoutHistory(instanceContext.instanceId, sc.slotPath, sc.relativePath, updates);
-            } else {
-              store.updateInstanceOverride(instanceContext.instanceId, instanceContext.descendantPath, updates satisfies Partial<TextNode> as InstanceOverrideUpdateProps);
-            }
-          } : undefined}
         />
       )}
       {/* Inline embed editor overlay */}

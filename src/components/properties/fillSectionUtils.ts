@@ -22,11 +22,8 @@ export type FillKind = "solid" | "linear" | "radial" | "image" | "pattern" | "vi
 export interface PaintSectionProps {
   node: SceneNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
-  component: SceneNode | null;
   colorVariables: Variable[];
   activeTheme: ThemeName;
-  isOverridden: <T>(instanceVal: T | undefined, componentVal: T | undefined) => boolean;
-  resetOverride: (property: keyof SceneNode) => void;
   mixedKeys?: Set<string>;
 }
 

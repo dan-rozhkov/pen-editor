@@ -23,7 +23,6 @@ A canvas-based design editor with an AI design agent, built with React, TypeScri
 ### Layout & structure
 - **Auto-layout** (Yoga): direction, gap, padding, alignment, **wrap**, and **min/max sizing**
 - **Constraints** — fixed / scale / stretch for responsive frames
-- **Components & variants** — reusable frames with instances, overrides, and property values (variant / boolean / text)
 - Groups, masks, and **boolean operations** (union, subtract, intersect, exclude, flatten)
 - **Tidy up** — auto-arrange a selection into an even row / column / grid
 

@@ -3,9 +3,6 @@ import type {
   FlatSceneNode,
   FlatSnapshot,
   HistorySnapshot,
-  ComponentArtifact,
-  ComponentPropertyDef,
-  InstanceOverrideUpdateProps,
 } from "../../types/scene";
 import type { BooleanOpKind } from "../../lib/booleanOps";
 
@@ -17,7 +14,6 @@ export interface SceneState {
   parentById: Record<string, string | null>;
   childrenById: Record<string, string[]>;
   rootIds: string[];
-  componentArtifactsById: Record<string, ComponentArtifact>;
 
   // Backward compat: lazily cached tree
   _cachedTree: SceneNode[] | null;
@@ -128,16 +124,6 @@ export interface SceneState {
   booleanOperation: (ids: string[], op: BooleanOpKind) => string | null;
   convertEmbedToDesign: (id: string) => Promise<string | null>;
   convertDesignToEmbed: (id: string) => string | null;
-  updateInstanceOverride: (instanceId: string, path: string, updates: InstanceOverrideUpdateProps) => void;
-  updateInstanceOverrideWithoutHistory: (instanceId: string, path: string, updates: InstanceOverrideUpdateProps) => void;
-  replaceInstanceNode: (instanceId: string, path: string, newNode: SceneNode) => void;
-  updateSlotChildWithoutHistory: (instanceId: string, slotPath: string, relativePath: string, updates: Partial<SceneNode>) => void;
-  resetInstanceOverride: (instanceId: string, path: string, property?: keyof InstanceOverrideUpdateProps) => void;
-  toggleSlot: (frameId: string) => void;
-  detachInstance: (instanceId: string) => string | null;
-  setComponentProperties: (componentId: string, properties: ComponentPropertyDef[]) => void;
-  setInstancePropertyValue: (instanceId: string, propertyId: string, value: string | boolean) => void;
-  syncComponentToHtml: (componentId: string) => void;
   setPageBackground: (color: string) => void;
 }
 

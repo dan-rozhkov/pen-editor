@@ -48,7 +48,6 @@ function seedEmbedScene(): void {
     parentById: { embed1: null },
     childrenById: {},
     rootIds: ["embed1"],
-    componentArtifactsById: {},
     _cachedTree: null,
   });
 }

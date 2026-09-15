@@ -32,16 +32,6 @@ describe("getLayerKey", () => {
     expect(getLayerKey(layer)).toBe("n1");
   });
 
-  it("returns instanceId:path for ref-descendant layers", () => {
-    const layer: FlattenedLayer = {
-      node: node("child", "rect"),
-      depth: 1,
-      parentId: null,
-      instanceId: "ref1",
-      descendantPath: "a/b",
-    };
-    expect(getLayerKey(layer)).toBe("ref1:a/b");
-  });
 });
 
 describe("flattenLayers", () => {

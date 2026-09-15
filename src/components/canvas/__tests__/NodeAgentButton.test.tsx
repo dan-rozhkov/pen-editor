@@ -41,20 +41,6 @@ describe("<NodeAgentButton />", () => {
     expect(screen.queryByLabelText("Ask agent")).toBeNull();
   });
 
-  it("uses the component accent when requested", () => {
-    render(
-      <NodeAgentButton
-        node={node}
-        absoluteX={0}
-        absoluteY={0}
-        placeholder="Ask about this node…"
-        isComponentContext
-        launch={launch}
-      />,
-    );
-    expect(screen.getByLabelText("Ask agent").classList.contains("bg-[#8b5cf6]")).toBe(true);
-  });
-
   it("opens the composer with the given placeholder", () => {
     renderButton();
     fireEvent.click(screen.getByLabelText("Ask agent"));

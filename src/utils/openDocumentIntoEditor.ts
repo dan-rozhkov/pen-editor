@@ -12,6 +12,7 @@ import { useStyleStore } from "@/store/styleStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { usePageStore } from "@/store/pageStore";
 import type { PageData } from "@/store/pageStore";
+import { flattenRefNodesAcrossPages } from "@/store/migrations/flattenRefNodes";
 
 interface ApplyOpenedDocumentOptions {
   viewportWidth: number;
@@ -29,9 +30,17 @@ export function applyOpenedDocument(
   // Show loading overlay immediately
   useLoadingStore.getState().setCanvasLoading(true);
 
-  // Convert document pages into PageData format (flat storage)
-  const pageDataList: PageData[] = data.pages.map((page) => {
-    const flat = flattenTree(page.nodes);
+  // Convert document pages into PageData format (flat storage). Documents
+  // written before components/instances were removed may still carry `ref`
+  // nodes and `reusable`/`isSlot`/`properties` frames; migrate the WHOLE
+  // document up front (one pass, all pages) so a `ref` whose component master
+  // lives on another page still resolves into real content instead of an
+  // empty box. This is the only place a `.pen` document enters the editor.
+  const migrated = flattenRefNodesAcrossPages(
+    data.pages.map((page) => flattenTree(page.nodes)),
+  );
+  const pageDataList: PageData[] = data.pages.map((page, index) => {
+    const flat = migrated[index];
     return {
       id: page.id,
       name: page.name,
@@ -74,7 +83,7 @@ export function applyOpenedDocument(
   // Initialize pageStore with all pages (this also loads the first page into sceneStore)
   usePageStore
     .getState()
-    .initFromDocument(pageDataList, data.componentArtifacts ?? {});
+    .initFromDocument(pageDataList);
 
   // Fit viewport to first page content
   const firstPageNodes = data.pages[0]?.nodes ?? [];

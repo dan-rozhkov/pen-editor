@@ -1,4 +1,4 @@
-import type { ComponentArtifact, SceneNode } from '../types/scene'
+import type { SceneNode } from '../types/scene'
 import type { Variable, ThemeName } from '../types/variable'
 import { ensureThemeValues } from '../types/variable'
 import type { TextStyle } from '../types/textStyle'
@@ -34,7 +34,6 @@ export interface PenDocument {
   fillStyles?: FillStyle[]
   effectStyles?: EffectStyle[]
   activeTheme?: ThemeName
-  componentArtifacts?: Record<string, ComponentArtifact>
 }
 
 export interface DocumentPageData {
@@ -55,7 +54,6 @@ export interface DocumentData {
   fillStyles: FillStyle[]
   effectStyles: EffectStyle[]
   activeTheme: ThemeName
-  componentArtifacts: Record<string, ComponentArtifact>
 }
 
 const CURRENT_VERSION = '1.1'
@@ -66,7 +64,6 @@ export function serializeDocument(
   pages: PenPageInput[],
   variables: Variable[],
   activeTheme: ThemeName,
-  componentArtifacts: Record<string, ComponentArtifact> = {},
   textStyles: TextStyle[] = [],
   fillStyles: FillStyle[] = [],
   effectStyles: EffectStyle[] = [],
@@ -88,7 +85,6 @@ export function serializeDocument(
     fillStyles,
     effectStyles,
     activeTheme,
-    componentArtifacts,
   }
   return JSON.stringify(doc, null, 2)
 }
@@ -131,7 +127,6 @@ export function deserializeDocument(json: string): DocumentData {
     fillStyles: doc.fillStyles ?? [],
     effectStyles: doc.effectStyles ?? [],
     activeTheme: doc.activeTheme ?? 'light',
-    componentArtifacts: doc.componentArtifacts ?? {},
   }
 }
 
@@ -139,7 +134,6 @@ export function downloadDocument(
   pages: PenPageInput[],
   variables: Variable[],
   activeTheme: ThemeName,
-  componentArtifacts: Record<string, ComponentArtifact> = {},
   filename = 'document.json',
   textStyles: TextStyle[] = [],
   fillStyles: FillStyle[] = [],
@@ -149,7 +143,6 @@ export function downloadDocument(
     pages,
     variables,
     activeTheme,
-    componentArtifacts,
     textStyles,
     fillStyles,
     effectStyles,

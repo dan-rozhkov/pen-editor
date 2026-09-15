@@ -8,13 +8,12 @@ import { usePixiCanvasState } from "@/pixi/PixiCanvas";
 // This hook holds exactly the subscription+memo block that used to live
 // inline in <PixiCanvas>, keyed on the current selection/editing state from
 // useSelectionStore. It exercises it the same way PixiCanvas would: reading
-// editingNodeId/editingMode/instanceContext/selectedIds fresh on every call.
+// editingNodeId/editingMode/selectedIds fresh on every call.
 function useHarness() {
   const editingNodeId = useSelectionStore((s) => s.editingNodeId);
   const editingMode = useSelectionStore((s) => s.editingMode);
-  const instanceContext = useSelectionStore((s) => s.instanceContext);
   const selectedIds = useSelectionStore((s) => s.selectedIds);
-  return usePixiCanvasState({ editingNodeId, editingMode, instanceContext, selectedIds });
+  return usePixiCanvasState({ editingNodeId, editingMode, selectedIds });
 }
 
 describe("usePixiCanvasState (PixiCanvas node-scoped subscriptions)", () => {

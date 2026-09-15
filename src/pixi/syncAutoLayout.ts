@@ -300,8 +300,6 @@ export function createAutoLayoutManager(ctx: SyncContext, cullingEviction?: Cull
                   frameEntry.node,
                   frameWidth,
                   frameHeight,
-                  state.nodesById,
-                  state.childrenById,
                 );
               },
             );
@@ -332,8 +330,6 @@ export function createAutoLayoutManager(ctx: SyncContext, cullingEviction?: Cull
                     childEntry.node,
                     layoutChild.width,
                     layoutChild.height,
-                    state.nodesById,
-                    state.childrenById,
                   );
                 },
               );
@@ -417,8 +413,6 @@ export function createAutoLayoutManager(ctx: SyncContext, cullingEviction?: Cull
             childNode,
             childNode.width,
             childNode.height,
-            state.nodesById,
-            state.childrenById,
           );
         });
       }

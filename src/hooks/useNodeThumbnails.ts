@@ -3,7 +3,6 @@ import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { useSceneStore } from "@/store/sceneStore";
 import type { SceneState } from "@/store/sceneStore";
 import { findPixiChild } from "@/utils/pixiUtils";
-import type { FlatFrameNode } from "@/types/scene";
 
 const EMPTY_THUMBNAILS: Map<string, string> = new Map();
 
@@ -48,9 +47,9 @@ function findRequestedAncestor(
 /**
  * Generic Pixi-extract thumbnail generator for any list of nodes with an
  * `id` that resolves to a Pixi container in the scene (frames, in practice).
- * Shared by ComponentsPanel (reusable components) and SlidesPanel (top-level
- * frames). The initial list is captured once; later scene changes are mapped
- * to the nearest requested ancestor so only dirty thumbnails are regenerated.
+ * Used by SlidesPanel for top-level frames. The initial list is captured
+ * once; later scene changes are mapped to the nearest requested ancestor so
+ * only dirty thumbnails are regenerated.
  */
 export function useNodeThumbnails(nodes: { id: string }[]) {
   const pixiRefs = useCanvasRefStore((s) => s.pixiRefs);
@@ -152,8 +151,4 @@ export function useNodeThumbnails(nodes: { id: string }[]) {
   // (same behavior as before, without setState inside the effect body).
   if (!pixiRefs || nodes.length === 0) return EMPTY_THUMBNAILS;
   return thumbnails ?? EMPTY_THUMBNAILS;
-}
-
-export function useComponentThumbnails(components: FlatFrameNode[]) {
-  return useNodeThumbnails(components);
 }

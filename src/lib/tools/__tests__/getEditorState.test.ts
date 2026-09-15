@@ -43,8 +43,6 @@ describe("get_editor_state — document identity", () => {
     expect(Array.isArray(state.pages)).toBe(true);
     expect(Array.isArray(state.selectedIds)).toBe(true);
     expect(Array.isArray(state.selectedNodes)).toBe(true);
-    expect(Array.isArray(state.reusableComponents)).toBe(true);
-    expect(Array.isArray(state.documentComponents)).toBe(true);
     expect(state.viewport).toEqual({ scale: 1, x: 0, y: 0 });
   });
 });

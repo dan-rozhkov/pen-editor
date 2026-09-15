@@ -19,7 +19,6 @@ describe("<LeftRail />", () => {
     expect(screen.getByTestId("rail-pages")).toBeTruthy();
     expect(screen.getByTestId("rail-slides")).toBeTruthy();
     expect(screen.getByTestId("rail-agents")).toBeTruthy();
-    expect(screen.getByTestId("rail-components")).toBeTruthy();
     expect(screen.getByTestId("rail-variables")).toBeTruthy();
     expect(screen.getByTestId("rail-text-styles")).toBeTruthy();
     expect(screen.getByTestId("rail-styles")).toBeTruthy();

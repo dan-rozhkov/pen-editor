@@ -91,7 +91,6 @@ function seedHitScene(): void {
     childrenById: { frameA: ["rect1"], frameB: [], rectTop: [] },
     // rectTop added last -> highest z-order (walked first in reverse).
     rootIds: ["frameA", "frameB", "rectTop"],
-    componentArtifactsById: {},
     _cachedTree: null,
   });
 }
@@ -234,7 +233,6 @@ describe("auto-layout child z-order", () => {
       // Bottom-to-top: the absolute frame is behind the regular child.
       childrenById: { autoFrame: ["absoluteFrame", "topRect"] },
       rootIds: ["autoFrame"],
-      componentArtifactsById: {},
       _cachedTree: null,
     });
   });
@@ -343,7 +341,6 @@ function seedDrillScopeScene(): void {
       d1: [],
     },
     rootIds: ["frameA", "frameC"],
-    componentArtifactsById: {},
     _cachedTree: null,
   });
 }
@@ -411,7 +408,6 @@ function seedCappedLineScene(): void {
     parentById: { line1: null },
     childrenById: { line1: [] },
     rootIds: ["line1"],
-    componentArtifactsById: {},
     _cachedTree: null,
   });
 }
@@ -486,7 +482,6 @@ function seedMaskedHitScene(): void {
     // Bottom-to-top: maskShape first, so it masks `content` above it.
     childrenById: { frameA: ["maskShape", "content"] },
     rootIds: ["frameA"],
-    componentArtifactsById: {},
     _cachedTree: null,
   });
 }
@@ -582,7 +577,6 @@ describe("Task 11: hit-testing pruned by the culling index", () => {
       parentById: { conn1: null },
       childrenById: { conn1: [] },
       rootIds: ["conn1"],
-      componentArtifactsById: {},
       _cachedTree: null,
     });
     // Index is built (fullRebuild) synchronously here, from the far-away position.
@@ -652,7 +646,6 @@ describe("Task 11: hit-testing pruned by the culling index", () => {
       parentById,
       childrenById,
       rootIds,
-      componentArtifactsById: {},
       _cachedTree: null,
     });
     dispose = createPixiSync(new Container());
@@ -707,7 +700,6 @@ describe("Task 11: hit-testing pruned by the culling index", () => {
       parentById: { bigFrame: null },
       childrenById: { bigFrame: [] },
       rootIds: ["bigFrame"],
-      componentArtifactsById: {},
       _cachedTree: null,
     });
     dispose = createPixiSync(new Container());

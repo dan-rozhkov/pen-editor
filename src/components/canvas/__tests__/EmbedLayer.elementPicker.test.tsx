@@ -25,7 +25,7 @@ function seedEmbed(htmlContent = "<div><button id='cta'>Buy</button></div>"): vo
     parentById: { e1: null },
     childrenById: {},
     rootIds: ["e1"],
-    componentArtifactsById: {},
+
     _cachedTree: null,
   });
 }

@@ -87,34 +87,4 @@ describe("<EmbedSelectionFrame />", () => {
     expect(container.querySelectorAll("[data-embed-selection-handle]")).toHaveLength(0);
   });
 
-  it("uses the component selection color when the embed is inside a component", () => {
-    const reusableFrame = {
-      id: "comp",
-      type: "frame",
-      name: "Component",
-      x: 0,
-      y: 0,
-      width: 300,
-      height: 200,
-      reusable: true,
-    } as unknown as FlatSceneNode;
-    useSceneStore.setState({
-      nodesById: { comp: reusableFrame, e1: embed as unknown as FlatSceneNode },
-      parentById: { comp: null, e1: "comp" },
-      childrenById: { comp: ["e1"], e1: [] },
-      rootIds: ["comp"],
-    });
-
-    const { container } = render(
-      <EmbedSelectionFrame node={embed} absoluteX={0} absoluteY={0} />,
-    );
-    const frame = container.querySelector(
-      "[data-embed-selection-frame]",
-    ) as HTMLElement;
-    // component selection color (rendered on the outline border)
-    const outline = frame.querySelector(
-      "[data-embed-selection-outline]",
-    ) as HTMLElement;
-    expect(outline.style.borderColor).toBe("#8b5cf6");
-  });
 });

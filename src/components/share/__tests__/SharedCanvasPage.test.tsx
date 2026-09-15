@@ -57,7 +57,6 @@ function minimalDocument(): DocumentData {
     fillStyles: [],
     effectStyles: [],
     activeTheme: "light",
-    componentArtifacts: {},
   };
 }
 

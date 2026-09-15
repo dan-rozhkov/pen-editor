@@ -34,9 +34,6 @@ vi.mock("@/components/properties/MultiSelectPropertyEditor", () => ({
     <div data-testid="multi-select-editor" data-count={selectedNodes.length} />
   ),
 }));
-vi.mock("@/components/properties/DescendantPropertyEditor", () => ({
-  DescendantPropertyEditor: () => <div data-testid="descendant-editor" />,
-}));
 vi.mock("@/components/properties/PageProperties", () => ({
   PageProperties: () => <div data-testid="page-properties" />,
 }));
@@ -181,23 +178,6 @@ describe("<PropertiesPanel /> (orchestration)", () => {
       // Multi-select must NOT render the single-node editor or page props.
       expect(screen.queryByTestId("property-editor")).toBeNull();
       expect(screen.queryByTestId("page-properties")).toBeNull();
-    });
-  });
-
-  describe("instance context", () => {
-    it("routes to the DescendantPropertyEditor when an instance context is active", () => {
-      select(["rect1"]);
-      useSelectionStore.setState({
-        instanceContext: {
-          instanceId: "rect1",
-          descendantPath: "rect1",
-        },
-      });
-      render(<PropertiesPanel />);
-
-      expect(screen.getByTestId("descendant-editor")).toBeTruthy();
-      // The normal single-node editor is suppressed while an instance context exists.
-      expect(screen.queryByTestId("property-editor")).toBeNull();
     });
   });
 

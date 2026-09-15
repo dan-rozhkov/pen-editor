@@ -56,7 +56,6 @@ function seedFlatColumn(): void {
     parentById: { col: null, r1: "col", r2: "col", r3: "col" },
     childrenById: { col: ["r1", "r2", "r3"] },
     rootIds: ["col"],
-    componentArtifactsById: {},
     _cachedTree: null,
   });
 }
@@ -135,7 +134,6 @@ function seedNestedColumn(): void {
     },
     childrenById: { outer: ["inner", "sibling"], inner: ["n1", "n2"] },
     rootIds: ["outer"],
-    componentArtifactsById: {},
     _cachedTree: null,
   });
 }

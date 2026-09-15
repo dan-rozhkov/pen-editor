@@ -42,7 +42,6 @@ function seedFitWidthFrame(): void {
     parentById: { fit: null, a: "fit" },
     childrenById: { fit: ["a"] },
     rootIds: ["fit"],
-    componentArtifactsById: {},
     _cachedTree: null,
   });
 }

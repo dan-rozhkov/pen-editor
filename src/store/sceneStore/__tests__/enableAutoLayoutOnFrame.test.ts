@@ -45,7 +45,6 @@ function seedFrameWithChildren(
     parentById,
     childrenById: { frame1: children.map((c) => c.id) },
     rootIds: ["frame1"],
-    componentArtifactsById: {},
     _cachedTree: null,
   });
 }

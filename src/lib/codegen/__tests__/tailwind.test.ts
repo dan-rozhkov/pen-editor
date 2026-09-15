@@ -255,26 +255,23 @@ describe("buildTailwindCode", () => {
     expect(warnings.some((w) => w.includes("--primary"))).toBe(true);
   });
 
-  it("warns once for an unsupported node type (ref) rendered as an empty placeholder", () => {
+  it("warns once for an unsupported node type (path) rendered as an empty placeholder", () => {
     const frame = frameNode({ layout: undefined });
-    const ref = {
-      id: "ref1",
-      type: "ref",
-      name: "Button",
+    const path = {
+      id: "path1",
+      type: "path",
+      name: "Icon",
       x: 0,
       y: 0,
       width: 50,
       height: 20,
-      componentId: "comp1",
-      overrides: {},
-      propertyValues: {},
     } as unknown as RectNode;
-    const nodesById = { frame1: frame, ref1: ref };
-    const childrenById = { frame1: ["ref1"] };
+    const nodesById = { frame1: frame, path1: path };
+    const childrenById = { frame1: ["path1"] };
 
     const { code, warnings } = buildTailwindCode("frame1", nodesById, childrenById, { units: "px", remBase: 16 });
 
     expect(code).toContain("<div");
-    expect(warnings.some((w) => w.includes("instance") || w.includes("Instance"))).toBe(true);
+    expect(warnings.some((w) => w.includes("vector") || w.includes("Vector"))).toBe(true);
   });
 });

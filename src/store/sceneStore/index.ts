@@ -3,8 +3,6 @@ import { registerFontLoadCallback } from "../../utils/fontUtils";
 import { resyncAllTextNodeDimensionsInStore } from "./helpers/textSync";
 import { getCachedTree } from "./helpers/treeCache";
 import { createBasicMutations } from "./basicMutations";
-import { createInstanceOperations } from "./instanceOperations";
-import { createComponentArtifactOperations } from "./componentArtifacts";
 import { createComplexOperations } from "./complexOperations";
 import { noteSceneSetState } from "./dirtyTracking";
 import type { SceneState } from "./types";
@@ -20,7 +18,6 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   parentById: {},
   childrenById: {},
   rootIds: [],
-  componentArtifactsById: {},
   _cachedTree: null,
   expandedFrameIds: new Set<string>(),
   pageBackground: "#f5f5f5",
@@ -31,12 +28,6 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
   // ----- Basic Mutations (CRUD / tree / visibility / move) -----
   ...createBasicMutations(set, get),
-
-  // ----- Component Instance Operations (ref overrides / slots / detach) -----
-  ...createInstanceOperations(set, get),
-
-  // ----- Component Artifact Sync -----
-  ...createComponentArtifactOperations(set),
 
   // ----- Complex Operations (Group/Ungroup/Convert/Wrap) -----
   ...createComplexOperations(get, (partial) => set(partial)),

@@ -25,7 +25,6 @@ import {
 } from "@/utils/nodeUtils";
 import { getCanvasViewportMetrics } from "@/utils/canvasViewport";
 import { BooleanOperationsSection } from "@/components/properties/BooleanOperationsSection";
-import { DescendantPropertyEditor } from "@/components/properties/DescendantPropertyEditor";
 import { MultiSelectPropertyEditor } from "@/components/properties/MultiSelectPropertyEditor";
 import { PageProperties } from "@/components/properties/PageProperties";
 import { PencilToolProperties } from "@/components/properties/PencilToolProperties";
@@ -208,7 +207,6 @@ const EMPTY_SHOWCASE_SCREENS: ShowcaseScreenCandidate[] = [];
 
 export function PropertiesPanel() {
   const selectedIds = useSelectionStore((s) => s.selectedIds);
-  const instanceContext = useSelectionStore((s) => s.instanceContext);
   const updateNode = useSceneStore((s) => s.updateNode);
   const variables = useVariableStore((s) => s.variables);
   const activeTool = useDrawModeStore((s) => s.activeTool);
@@ -379,21 +377,14 @@ export function PropertiesPanel() {
               })}
             />
           )}
-        {instanceContext && !presetsToolActive && (
-          <DescendantPropertyEditor
-            instanceContext={instanceContext}
-            variables={variables}
-            activeTheme={effectiveTheme}
-          />
-        )}
         {/* An element picked inside this embed's HTML takes over the panel
             instead of the embed node's own (HTML-opaque) PropertyEditor —
             see EmbedElementProperties's doc comment. */}
-        {selectedNode && !instanceContext && !presetsToolActive && showEmbedElementProperties && (
+        {selectedNode && !presetsToolActive && showEmbedElementProperties && (
           <EmbedElementProperties />
         )}
         {/* Show normal property editor */}
-        {selectedNode && !instanceContext && !presetsToolActive && !showEmbedElementProperties && (
+        {selectedNode && !presetsToolActive && !showEmbedElementProperties && (
           <PropertyEditor
             // Flat node: sections must not rely on `node.children` (subtree
             // access goes through nodesById/childrenById + materializeLayoutRefs).
@@ -405,7 +396,7 @@ export function PropertiesPanel() {
             beforeExport={showcaseSection}
           />
         )}
-        {(selectedNodes.length > 1 || instanceContext) && showcaseSection}
+        {selectedNodes.length > 1 && showcaseSection}
       </div>
     </div>
   );

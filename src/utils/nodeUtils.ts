@@ -2,15 +2,13 @@ import type {
   SceneNode,
   FrameNode,
   GroupNode,
-  RefNode,
   FlatFrameNode,
   FlatGroupNode,
   FlatSceneNode,
 } from "../types/scene";
 import type { ThemeName } from "../types/variable";
-import { flattenTree, isContainerNode } from "../types/scene";
+import { isContainerNode } from "../types/scene";
 import { getPreparedNodeEffectiveSize, prepareFrameNode } from "@/utils/instanceUtils";
-import { resolveRefToTree } from "@/utils/instanceRuntime";
 import { rectsIntersect } from "@/utils/dragUtils";
 
 export interface ParentContext {
@@ -106,38 +104,18 @@ export function findNodeById(nodes: SceneNode[], id: string): SceneNode | null {
   return null;
 }
 
-export function findComponentById(
-  nodes: SceneNode[],
-  id: string,
-): FrameNode | null {
-  for (const node of nodes) {
-    if (node.type === "frame" && node.id === id && node.reusable) {
-      return node;
-    }
-    if (isContainerNode(node)) {
-      const found = findComponentById(node.children, id);
-      if (found) return found;
-    }
-  }
-  return null;
-}
-
-export function getAllComponents(nodes: SceneNode[]): FrameNode[] {
-  const components: FrameNode[] = [];
-
-  function collect(searchNodes: SceneNode[]) {
-    for (const node of searchNodes) {
-      if (node.type === "frame") {
-        if (node.reusable) components.push(node);
-        collect(node.children);
-      } else if (node.type === "group") {
-        collect(node.children);
-      }
-    }
-  }
-
-  collect(nodes);
-  return components;
+/**
+ * "Slides" = top-level frames, in canvas order (rootIds order — not sorted by
+ * position). Non-frame root nodes (rectangles, text, etc.) and nested frames
+ * are excluded.
+ */
+export function getTopLevelFramesFlat(
+  nodesById: Record<string, FlatSceneNode>,
+  rootIds: string[],
+): FlatFrameNode[] {
+  return rootIds
+    .map((id) => nodesById[id])
+    .filter((node): node is FlatFrameNode => !!node && node.type === "frame");
 }
 
 /**
@@ -436,26 +414,6 @@ export function getNodeAbsolutePositionWithLayout(
   return findWithPath(nodes, 0, 0, null);
 }
 
-// Memoized flattenTree: keyed on the `nodes` array reference. The scene's
-// tree cache (store/sceneStore/helpers/treeCache.ts) hands back the SAME
-// array reference for `state.getNodes()` as long as nodesById/rootIds/
-// childrenById haven't changed identity, so a WeakMap keyed on that
-// reference gives an exact, always-fresh cache: any real mutation produces a
-// new tree array (new key, cache miss), while repeated calls against an
-// unchanged tree (e.g. every node in a single serialize pass) reuse the same
-// flattened maps instead of re-walking the whole document each time. Callers
-// that build ad-hoc subtree arrays simply miss the cache every time (still
-// correct, just uncached) since those arrays are fresh objects.
-const flattenTreeCache = new WeakMap<SceneNode[], ReturnType<typeof flattenTree>>();
-
-function getFlattenedTreeCached(nodes: SceneNode[]): ReturnType<typeof flattenTree> {
-  const cached = flattenTreeCache.get(nodes);
-  if (cached) return cached;
-  const flat = flattenTree(nodes);
-  flattenTreeCache.set(nodes, flat);
-  return flat;
-}
-
 /**
  * Get effective size of a node, taking into account Yoga layout calculations.
  * For nodes inside auto-layout frames, width/height may be computed by Yoga.
@@ -466,8 +424,6 @@ export function getNodeEffectiveSize(
   targetId: string,
   calculateLayoutForFrame: (frame: FrameNode) => SceneNode[],
 ): { width: number; height: number } | null {
-  const flatTree = getFlattenedTreeCached(nodes);
-
   function findWithPath(
     searchNodes: SceneNode[],
     parentFrame: FrameNode | null,
@@ -480,20 +436,6 @@ export function getNodeEffectiveSize(
 
     for (const node of effectiveNodes) {
       if (node.id === targetId) {
-        if (node.type === "ref") {
-          const resolved = resolveRefToTree(
-            node as RefNode,
-            flatTree.nodesById,
-            flatTree.childrenById,
-          );
-          if (resolved) {
-            return getPreparedNodeEffectiveSize(
-              resolved,
-              nodes,
-              calculateLayoutForFrame,
-            );
-          }
-        }
         return getPreparedNodeEffectiveSize(node, nodes, calculateLayoutForFrame);
       }
       if (isContainerNode(node)) {

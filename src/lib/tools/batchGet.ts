@@ -9,7 +9,6 @@ import { compileNamePattern } from "./namePattern";
 interface SearchPattern {
   type?: string;
   name?: string;
-  reusable?: boolean;
 }
 
 /**
@@ -39,10 +38,6 @@ function matchesPattern(node: FlatSceneNode, pattern: SearchPattern): boolean {
     // the handler below), so reaching here with one is not possible.
     const compiled = compileNamePattern(pattern.name);
     if (!compiled.ok || !compiled.regex.test(node.name ?? "")) return false;
-  }
-  if (pattern.reusable !== undefined) {
-    const isReusable = node.type === "frame" && node.reusable === true;
-    if (pattern.reusable !== isReusable) return false;
   }
   return true;
 }
@@ -93,7 +88,6 @@ export const batchGet: ToolHandler = async (args) => {
   const readDepth = (args.readDepth as number) ?? 1;
   const searchDepth = args.searchDepth as number | undefined;
   const resolveVariables = args.resolveVariables as boolean | undefined;
-  const preferSourceTemplate = args.preferSourceTemplate as boolean | undefined;
 
   // Compile every search pattern before touching the scene: an unsafe or
   // malformed regex has to come back as a message the caller can act on,
@@ -147,7 +141,6 @@ export const batchGet: ToolHandler = async (args) => {
       serializeNodeToDepth(id, nodesById, childrenById, readDepth, {
         resolveVars: !!resolveVariables,
         variableLookup,
-        preferSourceTemplate: !!preferSourceTemplate,
       })
     )
     .filter(Boolean);

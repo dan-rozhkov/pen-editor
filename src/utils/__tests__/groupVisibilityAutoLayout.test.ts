@@ -251,7 +251,6 @@ function seedFrameWithGroup(): void {
     parentById: { col: null, r1: "col", r2: "col", r3: "col" },
     childrenById: { col: ["r1", "r2", "r3"] },
     rootIds: ["col"],
-    componentArtifactsById: {},
     _cachedTree: null,
   });
 }

@@ -9,12 +9,6 @@ import { StackIcon } from "@phosphor-icons/react";
 import { useSceneStore } from "../../store/sceneStore";
 import { useSelectionStore } from "../../store/selectionStore";
 import { getAncestorIds } from "../../utils/nodeUtils";
-import { findNodeByPath } from "../../utils/instanceRuntime";
-import { findComponentById } from "../../utils/nodeUtils";
-import type { FlatFrameNode, FrameNode, RefNode, SceneNode } from "../../types/scene";
-import { buildTree } from "../../types/scene";
-import { createRefFromComponent } from "../../utils/componentUtils";
-import { deepCloneNode } from "../../utils/cloneNode";
 import { PanelEmptyState } from "../PanelEmptyState";
 import { LayerItem } from "./LayerItem";
 import {
@@ -36,7 +30,6 @@ export function LayersPanel() {
   const childrenById = useSceneStore((state) => state.childrenById);
   const nodesById = useSceneStore((state) => state.nodesById);
   const selectedIds = useSelectionStore((state) => state.selectedIds);
-  const instanceContext = useSelectionStore((state) => state.instanceContext);
   const select = useSelectionStore((state) => state.select);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -59,39 +52,17 @@ export function LayersPanel() {
       }
     }
 
-    // Auto-expand ref node and its descendant containers when instanceContext is active
-    if (instanceContext) {
-      const { instanceId, descendantPath } = instanceContext;
-      if (!expandedFrameIds.has(instanceId)) {
-        idsToExpand.push(instanceId);
-      }
-      // Expand intermediate containers within the ref tree
-      const segments = descendantPath.split("/");
-      for (let i = 1; i < segments.length; i++) {
-        const partialPath = segments.slice(0, i).join("/");
-        const expandKey = `${instanceId}:${partialPath}`;
-        if (!expandedFrameIds.has(expandKey)) {
-          idsToExpand.push(expandKey);
-        }
-      }
-    }
-
     if (idsToExpand.length > 0) {
       expandAncestors(idsToExpand);
     }
 
     // Scroll first selected node into view after DOM updates
     requestAnimationFrame(() => {
-      let selector: string;
-      if (instanceContext) {
-        selector = `[data-layer-key="${instanceContext.instanceId}:${instanceContext.descendantPath}"]`;
-      } else {
-        selector = `[data-node-id="${selectedIds[0]}"]`;
-      }
+      const selector = `[data-node-id="${selectedIds[0]}"]`;
       const el = scrollRef.current?.querySelector(selector);
       el?.scrollIntoView({ block: "nearest", inline: "nearest" });
     });
-  }, [selectedIds, instanceContext, parentById, expandedFrameIds, expandAncestors]);
+  }, [selectedIds, parentById, expandedFrameIds, expandAncestors]);
 
   const [dragState, setDragState] = useState<DragState>({
     draggedId: null,
@@ -115,14 +86,12 @@ export function LayersPanel() {
   );
 
   const handleDragOver = useCallback(
-    (nodeId: string, position: DropPosition, parentId: string | null, instanceId?: string, descendantPath?: string) => {
+    (nodeId: string, position: DropPosition, parentId: string | null) => {
       setDragState((prev) => ({
         ...prev,
         dropTargetId: nodeId,
         dropPosition: position,
         dropParentId: parentId,
-        dropInstanceId: instanceId ?? null,
-        dropDescendantPath: descendantPath ?? null,
       }));
     },
     [],
@@ -137,11 +106,8 @@ export function LayersPanel() {
     });
   }, []);
 
-  const replaceInstanceNode = useSceneStore((state) => state.replaceInstanceNode);
-  const deleteNode = useSceneStore((state) => state.deleteNode);
-
   const handleDrop = useCallback(() => {
-    const { draggedId, dropTargetId, dropPosition, dropParentId, dropInstanceId, dropDescendantPath } = dragState;
+    const { draggedId, dropTargetId, dropPosition, dropParentId } = dragState;
 
     if (!draggedId || !dropTargetId || !dropPosition) {
       handleDragEnd();
@@ -149,50 +115,6 @@ export function LayersPanel() {
     }
 
     if (draggedId === dropTargetId) {
-      handleDragEnd();
-      return;
-    }
-
-    // Drop into a slot inside an instance — create a replace override
-    if (dropInstanceId && dropDescendantPath && dropPosition === "inside") {
-      const state = useSceneStore.getState();
-      const instance = state.nodesById[dropInstanceId] as RefNode | undefined;
-      const draggedNode = state.nodesById[draggedId];
-      if (instance?.type === "ref" && draggedNode) {
-        const allNodes = state.getNodes();
-        const component = findComponentById(allNodes, instance.componentId);
-        if (component) {
-          const slotFrame = findNodeByPath(component.children, dropDescendantPath);
-          if (slotFrame?.type === "frame") {
-            // If dragging a reusable component, create a ref to it (don't clone the definition)
-            let nodeToInsert: SceneNode;
-            let shouldDelete = true;
-            if (draggedNode.type === "frame" && (draggedNode as FlatFrameNode).reusable) {
-              nodeToInsert = createRefFromComponent(draggedId, draggedNode.width, draggedNode.height);
-              shouldDelete = false; // Don't delete the component definition
-            } else {
-              const draggedTree = buildTree([draggedId], state.nodesById, state.childrenById)[0];
-              if (!draggedTree) { handleDragEnd(); return; }
-              nodeToInsert = deepCloneNode(draggedTree);
-              nodeToInsert.x = 0;
-              nodeToInsert.y = 0;
-            }
-            // Preserve existing override children
-            const currentOverride = instance.overrides?.[dropDescendantPath];
-            const baseFrame = currentOverride?.kind === "replace"
-              ? currentOverride.node as FrameNode
-              : slotFrame as FrameNode;
-            const replacement: FrameNode = {
-              ...baseFrame,
-              children: [...baseFrame.children, nodeToInsert],
-            };
-            replaceInstanceNode(dropInstanceId, dropDescendantPath, replacement);
-            if (shouldDelete) deleteNode(draggedId);
-            handleDragEnd();
-            return;
-          }
-        }
-      }
       handleDragEnd();
       return;
     }
@@ -220,7 +142,7 @@ export function LayersPanel() {
 
     moveNode(draggedId, newParentId, newIndex);
     handleDragEnd();
-  }, [dragState, childrenById, moveNode, setFrameExpanded, handleDragEnd, replaceInstanceNode, deleteNode]);
+  }, [dragState, childrenById, moveNode, setFrameExpanded, handleDragEnd]);
 
   // Reverse the nodes array so that top items in the list appear on top visually (higher z-index)
   const reversedNodes = useMemo(() => [...nodes].reverse(), [nodes]);
@@ -315,8 +237,6 @@ export function LayersPanel() {
                   onDragOver={handleDragOver}
                   onDrop={handleDrop}
                   selectableFlatIds={selectableFlatIds}
-                  instanceId={item.instanceId}
-                  descendantPath={item.descendantPath}
                 />
               ))}
             </div>

@@ -111,7 +111,7 @@ export async function captureNodeScreenshot(
 
     const raw = await pixiRefs.app.renderer.extract.base64(target);
     // extract.base64 may or may not include the data URI prefix depending on
-    // the PixiJS version — normalize either way (mirrors useComponentThumbnails).
+    // the PixiJS version — normalize either way (mirrors useNodeThumbnails).
     const dataUrl = raw.startsWith("data:") ? raw : `data:image/png;base64,${raw}`;
     return await downscaleImageDataUrl(dataUrl);
   } catch {

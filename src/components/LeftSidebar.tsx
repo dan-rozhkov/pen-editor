@@ -4,7 +4,6 @@ import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { OFFLINE_DOCUMENT_TITLE } from "@/lib/apiBase";
 import { EditableText } from "@/components/ui/EditableText";
 import { LayersPanel } from "./layers";
-import { ComponentsPanel } from "./ComponentsPanel";
 import { PluginsPanel } from "./PluginsPanel";
 import { SlidesPanel } from "./SlidesPanel";
 import { PagesPanel } from "./PagesPanel";
@@ -67,20 +66,12 @@ export function LeftSidebar() {
     >
       {!isMobile && <LeftSidebarResizer />}
       {/* Pages and Slides share the document header; Agents has its own header
-          (inside the chat); Components gets a titled header styled like the
-          chat's. */}
+          (inside the chat). */}
       {(activeSection === "pages" || activeSection === "slides") && (
         <div className="flex flex-row items-center gap-0 pr-1">
           <div className="flex-1 min-w-0">
             <Toolbar />
           </div>
-        </div>
-      )}
-      {activeSection === "components" && (
-        <div className="flex h-[49px] items-center gap-2 px-4 py-3 border-b border-border-default shrink-0">
-          <span className="text-sm font-medium text-text-primary flex-1">
-            Components
-          </span>
         </div>
       )}
       {(activeSection === "pages" || activeSection === "slides") && (
@@ -129,13 +120,6 @@ export function LeftSidebar() {
             <div className="flex-1 overflow-hidden">
               <LayersPanel />
             </div>
-          </div>
-        )}
-
-        {/* Components section */}
-        {activeSection === "components" && (
-          <div className="absolute inset-0 flex flex-col overflow-hidden">
-            <ComponentsPanel />
           </div>
         )}
 

@@ -151,8 +151,6 @@ export async function importShowcaseScreensFromHandoff(): Promise<boolean> {
     lastSelectedId: createdIds[createdIds.length - 1] ?? null,
     editingNodeId: null,
     editingMode: null,
-    editingInstanceId: null,
-    instanceContext: null,
   });
 
   const { width, height } = getCanvasViewportMetrics();

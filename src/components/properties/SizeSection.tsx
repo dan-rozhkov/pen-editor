@@ -483,7 +483,6 @@ export function SizeSection({
     <PropertySection title="Size">
       {(parentContext.isInsideAutoLayout ||
         node.type === "frame" ||
-        node.type === "ref" ||
         showSizingModes) && (
         <>
           <div className="flex items-center gap-1">

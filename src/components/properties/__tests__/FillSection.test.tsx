@@ -38,8 +38,6 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenuRadioItem: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
-const noop = vi.fn();
-
 function solid(id: string, color: string, extra: Partial<Paint> = {}): Paint {
   return { id, type: "solid", color, ...extra } as Paint;
 }
@@ -52,11 +50,8 @@ function baseProps(node: SceneNode, onUpdate = vi.fn()) {
   return {
     node,
     onUpdate,
-    component: null,
     colorVariables: [],
     activeTheme: "light" as const,
-    isOverridden: () => false,
-    resetOverride: noop,
   };
 }
 
@@ -222,21 +217,6 @@ describe("<FillSection />", () => {
     expect(screen.getByText("Mixed")).toBeTruthy();
     // No editable rows are rendered in mixed mode.
     expect(screen.queryByPlaceholderText("#000000")).toBeNull();
-  });
-
-  it("shows the override reset control for the top solid row when overridden", () => {
-    const onReset = vi.fn();
-    render(
-      <FillSection
-        {...baseProps(makeNode([solid("a", "#ff0000")]))}
-        component={{ id: "c", type: "rect", fill: "#0000ff" } as SceneNode}
-        isOverridden={() => true}
-        resetOverride={onReset}
-      />,
-    );
-    const reset = screen.getByTitle("Reset to component value");
-    fireEvent.click(reset);
-    expect(onReset).toHaveBeenCalledWith("fill");
   });
 
   it("renders solid rows on non-image-capable nodes (e.g. line)", () => {

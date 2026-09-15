@@ -4,15 +4,9 @@ import {
   getOutlineStrokeColor,
   getOutlineStrokeWidth,
 } from "../outlineHelpers";
-import { COMPONENT_SELECTION_COLOR } from "@/pixi/selectionOverlay/constants";
 
 describe("outline helpers", () => {
-  it("uses the component palette color for reusable frame outlines", () => {
-    expect(getOutlineStrokeColor({ reusable: true })).toBe(COMPONENT_SELECTION_COLOR);
-  });
-
-  it("keeps regular node outlines on the default palette color", () => {
-    expect(getOutlineStrokeColor({ reusable: false })).toBe(OUTLINE_STROKE_COLOR);
+  it("returns the default palette color for node outlines", () => {
     expect(getOutlineStrokeColor()).toBe(OUTLINE_STROKE_COLOR);
   });
 

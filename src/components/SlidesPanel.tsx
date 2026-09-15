@@ -12,7 +12,7 @@ import {
   type SlideNode,
 } from "../utils/slideOrder";
 import { getCanvasViewportMetrics } from "../utils/canvasViewport";
-import { useNodeThumbnails } from "../hooks/useComponentThumbnails";
+import { useNodeThumbnails } from "../hooks/useNodeThumbnails";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { PanelEmptyState } from "./PanelEmptyState";
 import { EmbedSlideThumbnail } from "./EmbedSlideThumbnail";

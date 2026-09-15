@@ -17,7 +17,7 @@ import {
 import { applyImageFills } from "./imageFillHelpers";
 import { applyVideoFills } from "./videoFillHelpers";
 import { pushRenderTheme, popRenderTheme } from "./colorHelpers";
-import { createNodeContainer, isInsideRef } from "./index";
+import { createNodeContainer } from "./index";
 import { drawLayoutGrids } from "./layoutGridRenderer";
 import { applySiblingMasks } from "./maskHelpers";
 import { getOutlineStrokeColor, isOutlineRenderMode, strokeOutlinePath } from "./outlineHelpers";
@@ -108,16 +108,6 @@ export function createFrameContainer(
   container.addChild(bg);
 
   const outlineMode = isOutlineRenderMode();
-
-  // Slot indicator (pink overlay — only in component definition, not in
-  // instances). Skipped in outline mode: a colored fill overlay has no place
-  // in a wireframe view.
-  if (node.isSlot && !isInsideRef() && !outlineMode) {
-    const slotGfx = new Graphics();
-    slotGfx.label = "frame-slot-indicator";
-    drawSlotIndicator(slotGfx, effectiveWidth, effectiveHeight);
-    container.addChild(slotGfx);
-  }
 
   if (!outlineMode) {
     // Image fill stack
@@ -303,25 +293,6 @@ export function updateFrameContainer(
     }
   }
 
-  // Update slot indicator
-  if (node.isSlot !== prev.isSlot || node.width !== prev.width || node.height !== prev.height) {
-    const existingSlot = container.getChildByLabel("frame-slot-indicator") as Graphics;
-    if (node.isSlot && !isInsideRef() && !isOutlineRenderMode()) {
-      const slotGfx = existingSlot ?? new Graphics();
-      slotGfx.label = "frame-slot-indicator";
-      slotGfx.clear();
-      drawSlotIndicator(slotGfx, effectiveWidth, effectiveHeight);
-      if (!existingSlot) {
-        // Insert after background
-        const bgIndex = container.children.indexOf(container.getChildByLabel("frame-bg")!);
-        container.addChildAt(slotGfx, bgIndex + 1);
-      }
-    } else if (existingSlot) {
-      container.removeChild(existingSlot);
-      existingSlot.destroy();
-    }
-  }
-
   // Update clip mask
   if (
     node.clip !== prev.clip ||
@@ -361,66 +332,6 @@ export function updateFrameContainer(
   }
 }
 
-function drawSlotIndicator(gfx: Graphics, width: number, height: number): void {
-  const pink = 0xEC4899;
-  // Semi-transparent pink fill
-  gfx.rect(0, 0, width, height);
-  gfx.fill({ color: pink, alpha: 0.15 });
-
-  // Pink dashed border — build entire path, stroke once
-  const dashLen = 6;
-  const gapLen = 4;
-  addDashedLineSegments(gfx, 0, 0, width, 0, dashLen, gapLen);
-  addDashedLineSegments(gfx, width, 0, width, height, dashLen, gapLen);
-  addDashedLineSegments(gfx, width, height, 0, height, dashLen, gapLen);
-  addDashedLineSegments(gfx, 0, height, 0, 0, dashLen, gapLen);
-  gfx.stroke({ width: 1, color: pink, alpha: 0.6 });
-
-  // Rounded pink square with "+" icon centered
-  const boxSize = Math.min(24, width * 0.5, height * 0.5);
-  if (boxSize >= 8) {
-    const cx = width / 2;
-    const cy = height / 2;
-    const halfBox = boxSize / 2;
-    const radius = Math.min(4, boxSize * 0.2);
-    gfx.roundRect(cx - halfBox, cy - halfBox, boxSize, boxSize, radius);
-    gfx.fill({ color: 0xff44b4 });
-
-    const plusHalf = boxSize * 0.3;
-    gfx.moveTo(cx - plusHalf, cy);
-    gfx.lineTo(cx + plusHalf, cy);
-    gfx.moveTo(cx, cy - plusHalf);
-    gfx.lineTo(cx, cy + plusHalf);
-    gfx.stroke({ width: 1.5, color: 0xffffff });
-  }
-}
-
-function addDashedLineSegments(
-  gfx: Graphics,
-  x1: number, y1: number,
-  x2: number, y2: number,
-  dashLen: number, gapLen: number,
-): void {
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const length = Math.sqrt(dx * dx + dy * dy);
-  if (length === 0) return;
-  const nx = dx / length;
-  const ny = dy / length;
-  let dist = 0;
-  let drawing = true;
-  while (dist < length) {
-    const segLen = drawing ? dashLen : gapLen;
-    const end = Math.min(dist + segLen, length);
-    if (drawing) {
-      gfx.moveTo(x1 + nx * dist, y1 + ny * dist);
-      gfx.lineTo(x1 + nx * end, y1 + ny * end);
-    }
-    dist = end;
-    drawing = !drawing;
-  }
-}
-
 export function drawFrameBackground(
   gfx: Graphics,
   node: FlatFrameNode,
@@ -434,7 +345,7 @@ export function drawFrameBackground(
     drawRoundedShape(target, width, height, node.cornerRadius, node.cornerRadiusPerCorner, node.cornerSmoothing);
   if (isOutlineRenderMode()) {
     drawShape(gfx);
-    strokeOutlinePath(gfx, getOutlineStrokeColor(node));
+    strokeOutlinePath(gfx, getOutlineStrokeColor());
     return;
   }
   const pathReady = applyFills(gfx, node, width, height, drawShape);

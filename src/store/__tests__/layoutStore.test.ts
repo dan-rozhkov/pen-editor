@@ -58,7 +58,6 @@ function seedAutoLayoutScene(): void {
     parentById: { autoFrame: null, childA: "autoFrame", childB: "autoFrame" },
     childrenById: { autoFrame: ["childA", "childB"] },
     rootIds: ["autoFrame"],
-    componentArtifactsById: {},
     _cachedTree: null,
   });
 }

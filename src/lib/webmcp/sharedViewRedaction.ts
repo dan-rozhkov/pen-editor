@@ -22,7 +22,7 @@ import { useSceneStore } from "@/store/sceneStore";
  *   the layers panel, so those names are already on the victim's screen — but
  *   lose their content. Dropping them outright would be stricter than the UI
  *   and would misreport the document's structure.
- * - *Embed and component source HTML* is removed entirely. It is never
+ * - *Embed source HTML* is removed entirely. It is never
  *   rendered as text anywhere in the viewer: comments, `display: none`
  *   blocks and off-screen markup all survive in it, which makes it the
  *   densest hiding place in the format.
@@ -54,8 +54,7 @@ export const REDACTED_HIDDEN = "[redacted: this layer is hidden and is not drawn
  *
  * `visible === false` and `enabled === false` are the same containment rule —
  * see `findHiddenSelfOrAncestor` in `utils/nodeUtils.ts`, which documents why
- * both flags matter (`enabled` is how a `ref` instance's overrides hide a
- * component-internal node) and is the per-node, bottom-up counterpart of the
+ * both flags matter, and is the per-node, bottom-up counterpart of the
  * top-down sweep below. Not reused here: that helper walks one node's
  * ancestor chain via `parentById` per call, which would mean re-walking to
  * the root for every node in the document; this sweep instead flags hidden

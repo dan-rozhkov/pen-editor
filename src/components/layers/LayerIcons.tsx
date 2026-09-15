@@ -1,7 +1,4 @@
 import {
-  DiamondIcon,
-  DiamondsFourIcon,
-  PlusSquareIcon,
   RectangleIcon,
   CircleIcon,
   TextTIcon,
@@ -105,14 +102,10 @@ const AutoLayoutIcon = ({ layout }: { layout: LayoutProperties }) => {
 
 export const NodeIcon = ({
   type,
-  isComponent,
-  isSlot,
   isMask,
   layout,
 }: {
   type: SceneNode["type"];
-  isComponent?: boolean;
-  isSlot?: boolean;
   isMask?: boolean;
   layout?: LayoutProperties;
 }) => {
@@ -132,12 +125,6 @@ export const NodeIcon = ({
 
   switch (type) {
     case "frame":
-      if (isComponent) {
-        return <DiamondsFourIcon size={16} className={iconClass} weight="regular" />;
-      }
-      if (isSlot) {
-        return <PlusSquareIcon size={16} className={iconClass} weight="regular" />;
-      }
       if (layout?.autoLayout) {
         return <AutoLayoutIcon layout={layout} />;
       }
@@ -157,12 +144,7 @@ export const NodeIcon = ({
     case "polygon":
       return <HexagonIcon size={16} className={iconClass} weight="regular" />;
     case "embed":
-      if (isComponent) {
-        return <DiamondsFourIcon size={16} className={iconClass} weight="regular" />;
-      }
       return <CodeIcon size={16} className={iconClass} weight="regular" />;
-    case "ref":
-      return <DiamondIcon size={16} className={iconClass} weight="regular" />;
     case "connector":
       return <FlowArrow size={16} className={iconClass} weight="regular" />;
     default:

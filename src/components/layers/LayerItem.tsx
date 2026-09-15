@@ -14,10 +14,6 @@ import {
   TooltipContent,
 } from "@/components/ui/tooltip";
 
-function isSlotFrame(node: SceneNode): boolean {
-  return node.type === "frame" && !!(node as FrameNode).isSlot;
-}
-
 export interface LayerItemProps {
   node: SceneNode;
   depth: number;
@@ -28,13 +24,9 @@ export interface LayerItemProps {
     nodeId: string,
     position: DropPosition,
     parentId: string | null,
-    instanceId?: string,
-    descendantPath?: string,
   ) => void;
   onDrop: () => void;
   selectableFlatIds: string[];
-  instanceId?: string;
-  descendantPath?: string;
 }
 
 export const LayerItem = memo(function LayerItem({
@@ -46,20 +38,9 @@ export const LayerItem = memo(function LayerItem({
   onDragOver,
   onDrop,
   selectableFlatIds,
-  instanceId,
-  descendantPath,
 }: LayerItemProps) {
-  const isRefDescendant = !!(instanceId && descendantPath);
   const readOnly = useReadOnly();
-  const isSelected = useSelectionStore((s) => {
-    if (isRefDescendant) {
-      return (
-        s.instanceContext?.instanceId === instanceId &&
-        s.instanceContext?.descendantPath === descendantPath
-      );
-    }
-    return s.selectedIds.includes(node.id);
-  });
+  const isSelected = useSelectionStore((s) => s.selectedIds.includes(node.id));
   const toggleVisibility = useSceneStore((state) => state.toggleVisibility);
   const expandedFrameIds = useSceneStore((state) => state.expandedFrameIds);
   const toggleFrameExpanded = useSceneStore(
@@ -82,23 +63,15 @@ export const LayerItem = memo(function LayerItem({
 
   const isVisible = node.visible !== false;
   const isFrame = node.type === "frame" || node.type === "group";
-  const isRef = node.type === "ref";
-  const hasChildren = isRefDescendant
-    ? isRef || (isFrame && (node as FrameNode | GroupNode).children.length > 0)
-    : isRef || (isFrame && (node as FrameNode | GroupNode).children.length > 0);
-  const expandKey = isRefDescendant ? `${instanceId}:${descendantPath}` : node.id;
+  const hasChildren = isFrame && (node as FrameNode | GroupNode).children.length > 0;
+  const expandKey = node.id;
   const isExpanded = expandedFrameIds.has(expandKey);
-  const isSlotDropTarget = isRefDescendant && isSlotFrame(node);
-  const isDragging = !isRefDescendant && dragState.draggedId === node.id;
-  const isDropTarget = (!isRefDescendant || isSlotDropTarget) && dragState.dropTargetId === node.id;
+  const isDragging = dragState.draggedId === node.id;
+  const isDropTarget = dragState.dropTargetId === node.id;
 
   const handleClick = (e: React.MouseEvent) => {
     selectionFromLayersRef.current = true;
     const selState = useSelectionStore.getState();
-    if (isRefDescendant) {
-      selState.selectDescendant(instanceId, descendantPath);
-      return;
-    }
     if (e.shiftKey && selState.lastSelectedId) {
       selState.selectRange(selState.lastSelectedId, node.id, selectableFlatIds);
     } else if (e.shiftKey) {
@@ -111,16 +84,7 @@ export const LayerItem = memo(function LayerItem({
   const handleVisibilityClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (readOnly) return;
-    if (isRefDescendant) {
-      const store = useSceneStore.getState();
-      if (isVisible) {
-        store.updateInstanceOverride(instanceId, descendantPath, { visible: false });
-      } else {
-        store.updateInstanceOverride(instanceId, descendantPath, { visible: true });
-      }
-    } else {
-      toggleVisibility(node.id);
-    }
+    toggleVisibility(node.id);
   };
 
   const handleChevronClick = (e: React.MouseEvent) => {
@@ -129,7 +93,7 @@ export const LayerItem = memo(function LayerItem({
   };
 
   const handleDoubleClick = (e: React.MouseEvent) => {
-    if (isRefDescendant || readOnly) return;
+    if (readOnly) return;
     e.stopPropagation();
     setEditName(getDisplayName(node));
     setIsEditing(true);
@@ -158,19 +122,11 @@ export const LayerItem = memo(function LayerItem({
   };
 
   const handleMouseEnter = () => {
-    if (isRefDescendant) {
-      useHoverStore.getState().setHoveredDescendant(instanceId, descendantPath);
-    } else {
-      useHoverStore.getState().setHoveredNode(node.id);
-    }
+    useHoverStore.getState().setHoveredNode(node.id);
   };
 
   const handleMouseLeave = () => {
-    if (isRefDescendant) {
-      useHoverStore.getState().setHoveredDescendant(null, null);
-    } else {
-      useHoverStore.getState().setHoveredNode(null);
-    }
+    useHoverStore.getState().setHoveredNode(null);
   };
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -182,12 +138,6 @@ export const LayerItem = memo(function LayerItem({
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-
-    // Slot frames inside instances only accept "inside" drops
-    if (isSlotDropTarget) {
-      onDragOver(node.id, "inside", parentId, instanceId, descendantPath);
-      return;
-    }
 
     const rect = e.currentTarget.getBoundingClientRect();
     const y = e.clientY - rect.top;
@@ -237,10 +187,10 @@ export const LayerItem = memo(function LayerItem({
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        draggable={!isRefDescendant && !readOnly}
-        onDragStart={isRefDescendant || readOnly ? undefined : handleDragStart}
-        onDragOver={(!isRefDescendant || isSlotDropTarget) && !readOnly ? handleDragOver : undefined}
-        onDrop={(!isRefDescendant || isSlotDropTarget) && !readOnly ? handleDrop : undefined}
+        draggable={!readOnly}
+        onDragStart={readOnly ? undefined : handleDragStart}
+        onDragOver={readOnly ? undefined : handleDragOver}
+        onDrop={readOnly ? undefined : handleDrop}
       >
         <div className="flex items-center gap-1 flex-1">
           {hasChildren ? (
@@ -265,12 +215,6 @@ export const LayerItem = memo(function LayerItem({
           )}
           <NodeIcon
             type={node.type}
-            isComponent={
-              !isRefDescendant &&
-              node.type === "frame" &&
-              (node as FrameNode).reusable === true
-            }
-            isSlot={node.type === "frame" && (node as FrameNode).isSlot === true}
             isMask={node.isMask === true}
             layout={
               node.type === "frame" ? (node as FrameNode).layout : undefined

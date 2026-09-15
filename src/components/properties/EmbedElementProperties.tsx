@@ -157,14 +157,9 @@ export function EmbedElementProperties() {
     // the snapshot update lands after the scene write, that check fires
     // first and this very selection (and thus this panel) disappears mid-edit.
     useEmbedPickerStore.getState().noteSelectionEdit(result.html, result.outerHtml);
-    // Written to `htmlContent`, never `sourceTemplate`: the picker path was
-    // built by walking the RENDERED shadow DOM, and only `htmlContent` is
-    // guaranteed to describe that same tree. An embed's `sourceTemplate` (if
-    // present) is a pre-expansion template that a later `batch_design` re-run
-    // can regenerate `htmlContent` from — a component-expansion pass after
-    // this edit could then overwrite it. That's a known, accepted gap: there
-    // is no reliable way to replay a rendered-DOM edit against the template
-    // that produced it.
+    // The picker path was built by walking the RENDERED shadow DOM, so
+    // `htmlContent` (the only source of truth for an embed's markup) is the
+    // right field to write the edit back to.
     useSceneStore.getState().updateNode(embedId, { htmlContent: result.html });
   };
 

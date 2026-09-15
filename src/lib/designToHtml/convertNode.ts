@@ -21,7 +21,6 @@ export interface ConversionContext {
   nodesById: Record<string, FlatSceneNode>;
   childrenById: Record<string, string[]>;
   allNodes: SceneNode[];
-  isComponent?: boolean;
 }
 
 function lookupNode(ctx: ConversionContext, id: string): FlatSceneNode | undefined {
@@ -30,43 +29,6 @@ function lookupNode(ctx: ConversionContext, id: string): FlatSceneNode | undefin
 
 function lookupChildren(ctx: ConversionContext, id: string): string[] {
   return ctx.childrenById[id] ?? [];
-}
-
-/**
- * Parse a node name for slot convention.
- * - "slot" → default slot (name: null)
- * - "slot:title" → named slot (name: "title")
- * - anything else → null (not a slot)
- */
-function parseSlotName(name?: string): { name: string | null } | null {
-  if (!name) return null;
-  const lower = name.toLowerCase().trim();
-  if (lower === "slot") return { name: null };
-  if (lower.startsWith("slot:")) return { name: lower.slice(5).trim() || null };
-  return null;
-}
-
-/**
- * Wrap HTML in a `<slot>` element if the node name matches slot convention.
- * Only applies when converting a component (ctx.isComponent is true).
- */
-function wrapWithSlotIfNeeded(html: string, node: FlatSceneNode, ctx: ConversionContext): string {
-  if (!ctx.isComponent) return html;
-  // Check isSlot flag on frame nodes
-  if (node.type === "frame" && (node as FlatFrameNode).isSlot) {
-    const slotName = node.name?.toLowerCase().trim();
-    if (slotName && slotName !== "slot") {
-      return `<slot name="${escapeAttr(slotName)}">${html}</slot>`;
-    }
-    return `<slot>${html}</slot>`;
-  }
-  // Fall back to naming convention
-  const slotInfo = parseSlotName(node.name);
-  if (!slotInfo) return html;
-  if (slotInfo.name) {
-    return `<slot name="${escapeAttr(slotInfo.name)}">${html}</slot>`;
-  }
-  return `<slot>${html}</slot>`;
 }
 
 /**
@@ -125,11 +87,6 @@ export function convertNodeToHtml(
     default:
       html = "";
       break;
-  }
-
-  // Wrap with <slot> if node name matches slot convention and we're converting a component
-  if (!isRoot && html) {
-    html = wrapWithSlotIfNeeded(html, node, ctx);
   }
 
   return html;

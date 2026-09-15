@@ -74,10 +74,9 @@ describe("convertPixsoNode — node types", () => {
     expect(n.children).toHaveLength(1);
   });
 
-  it("COMPONENT → reusable frame", () => {
+  it("COMPONENT → plain frame", () => {
     const n = convertPixsoNode({ ...base, type: "COMPONENT", children: [] }) as FrameNode;
     expect(n.type).toBe("frame");
-    expect(n.reusable).toBe(true);
   });
 
   it("COMPONENT_SET → frame (variant container)", () => {

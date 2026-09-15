@@ -75,7 +75,6 @@ function seedFitContentFrameAndUnrelatedNode(): void {
     parentById: { autoFitFrame: null, autoFitChild: "autoFitFrame", unrelatedNode: null },
     childrenById: { autoFitFrame: ["autoFitChild"] },
     rootIds: ["autoFitFrame", "unrelatedNode"],
-    componentArtifactsById: {},
     _cachedTree: null,
   });
 }

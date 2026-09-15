@@ -1,9 +1,9 @@
-import type { FrameNode, RefNode } from "@/types/scene";
+import type { FrameNode } from "@/types/scene";
 import { NodeAgentButton } from "@/components/canvas/NodeAgentButton";
 import { launchFrameAgentChat } from "@/lib/launchFrameAgentChat";
 
 interface FrameAgentButtonProps {
-  node: FrameNode | RefNode;
+  node: FrameNode;
   absoluteX: number;
   absoluteY: number;
 }
@@ -20,7 +20,6 @@ export function FrameAgentButton({ node, absoluteX, absoluteY }: FrameAgentButto
       absoluteX={absoluteX}
       absoluteY={absoluteY}
       placeholder="Ask the agent about this frame…"
-      isComponentContext={node.type === "ref" || node.reusable === true}
       launch={launchFrameAgentChat}
     />
   );

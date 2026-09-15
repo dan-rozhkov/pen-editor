@@ -23,7 +23,6 @@ export function resetStores(): void {
     parentById: {},
     childrenById: {},
     rootIds: [],
-    componentArtifactsById: {},
     _cachedTree: null,
     expandedFrameIds: new Set<string>(),
     pageBackground: "#f5f5f5",
@@ -33,10 +32,7 @@ export function resetStores(): void {
     selectedIds: [],
     editingNodeId: null,
     editingMode: null,
-    editingInstanceId: null,
-    instanceContext: null,
     enteredContainerId: null,
-    enteredInstanceDescendantPath: null,
     lastSelectedId: null,
   });
   useHistoryStore.setState({ past: [], future: [], batchMode: false, batchDepth: 0 });
@@ -124,7 +120,6 @@ export function seedScene(): void {
     parentById: { frame1: null, rect1: "frame1", text1: "frame1", rect2: null },
     childrenById: { frame1: ["rect1", "text1"] },
     rootIds: ["frame1", "rect2"],
-    componentArtifactsById: {},
     _cachedTree: null,
   });
 }

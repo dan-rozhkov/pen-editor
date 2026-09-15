@@ -5,8 +5,7 @@ import { useSceneStore } from '@/store/sceneStore'
 import { useLayoutStore } from '@/store/layoutStore'
 import { getNodeEffectiveSize } from '@/utils/nodeUtils'
 import { captureEmbedCanvas } from '@/lib/embedScreenshot'
-import { resolveRefToTree } from '@/utils/instanceRuntime'
-import type { EmbedNode, FrameNode, GroupNode, RefNode, SceneNode } from '@/types/scene'
+import type { EmbedNode, FrameNode, GroupNode, SceneNode } from '@/types/scene'
 
 /**
  * Download a data URL as a file
@@ -172,19 +171,6 @@ function isExportSkipped(node: SceneNode): boolean {
 }
 
 /**
- * Resolve a `ref` (component instance) node to its expanded tree — overrides
- * applied, nested refs resolved recursively — or `null` if the component it
- * points at can no longer be found. Thin wrapper around
- * `instanceRuntime.resolveRefToTree` that pulls the flat `nodesById`/
- * `childrenById` straight from the store, matching how `exportPptxUtils.ts`'s
- * `resolveRef` dep is wired.
- */
-function resolveRefNode(node: RefNode): FrameNode | null {
-  const { nodesById, childrenById } = useSceneStore.getState()
-  return resolveRefToTree(node, nodesById, childrenById)
-}
-
-/**
  * Recursively collect every visible `embed` descendant under `root` (`root`
  * itself excluded — callers rasterize an embed root directly via
  * `captureEmbedCanvas`), with its position relative to `root`'s own top-left
@@ -195,10 +181,7 @@ function resolveRefNode(node: RefNode): FrameNode | null {
  * x/y. Note this is *not* guaranteed to be pixel-identical to the live
  * on-canvas overlay: `useOverlayHostRect.ts` currently positions the DOM
  * overlay from the node's raw stored `width`/`height`, not this same
- * layout-resolved size, for reasons unrelated to export — see that hook. A
- * `ref` (component instance) is expanded via `resolveRefToTree` and walked
- * like a frame, so an embed nested inside a component instance is composited
- * too instead of exporting as a transparent hole (FIR-63 review #1).
+ * layout-resolved size, for reasons unrelated to export — see that hook.
  */
 function collectEmbedTiles(
   root: SceneNode,
@@ -209,7 +192,6 @@ function collectEmbedTiles(
   function childrenOf(node: SceneNode): SceneNode[] | undefined {
     if (node.type === 'frame') return calculateLayoutForFrame(node as FrameNode)
     if (node.type === 'group') return (node as GroupNode).children
-    if (node.type === 'ref') return resolveRefNode(node as RefNode)?.children
     return undefined
   }
 
@@ -236,10 +218,9 @@ function collectEmbedTiles(
 
 /**
  * Whether `nodeId` is itself an `embed`, or has one anywhere in its subtree
- * (descending through `ref` instances via `resolveRefToTree`, matching
- * `collectEmbedTiles`'s walk). Used by PPTX export (FIR-63 review #2) to
- * decide whether a rasterization failure must hard-fail the whole export
- * (an embed with no content, or a tainted cross-origin canvas — both
+ * (matching `collectEmbedTiles`'s walk). Used by PPTX export (FIR-63 review
+ * #2) to decide whether a rasterization failure must hard-fail the whole
+ * export (an embed with no content, or a tainted cross-origin canvas — both
  * unrecoverable) rather than degrade gracefully to a skipped shape like any
  * other rasterization failure (WebGL context loss, an unexpected exception
  * in a fill/effect resolver, ...).
@@ -251,10 +232,6 @@ export function nodeContainsEmbed(nodeId: string): boolean {
 
 function subtreeContainsEmbed(node: SceneNode): boolean {
   if (node.type === 'embed') return true
-  if (node.type === 'ref') {
-    const resolved = resolveRefNode(node as RefNode)
-    return resolved ? subtreeContainsEmbed(resolved) : false
-  }
   if (node.type === 'frame' || node.type === 'group') {
     return (node as FrameNode | GroupNode).children.some(subtreeContainsEmbed)
   }
@@ -283,11 +260,10 @@ function findTreeNode(nodeId: string): SceneNode | null {
  * (`embedRenderer.ts`) — `renderer.extract.canvas` alone would silently
  * produce a blank/transparent bitmap for one. This renders the embed's own
  * HTML instead (`captureEmbedCanvas`, shared with `get_screenshot`), and for
- * a frame/group/ref container additionally composites every embed
- * descendant's HTML on top of the Pixi-rendered background at its resolved
- * absolute position — descending into `ref` (component instance) subtrees
- * via `resolveRefToTree` — so a page/frame/instance containing embeds
- * doesn't export with transparent "holes" where they sit.
+ * a frame/group container additionally composites every embed descendant's
+ * HTML on top of the Pixi-rendered background at its resolved absolute
+ * position, so a page/frame containing embeds doesn't export with
+ * transparent "holes" where they sit.
  *
  * Throws — never resolves a blank/partial canvas — when an embed can't be
  * rasterized: `captureEmbedCanvas` returns null (no content), or a later
@@ -333,7 +309,7 @@ export async function renderNodeToCanvas(
     }) as HTMLCanvasElement,
   )
 
-  if (node.type !== 'frame' && node.type !== 'group' && node.type !== 'ref') return canvas
+  if (node.type !== 'frame' && node.type !== 'group') return canvas
 
   const treeNode = findTreeNode(nodeId)
   if (!treeNode) return canvas

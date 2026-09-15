@@ -39,7 +39,6 @@ function mockHandle(
     height: opts.height,
     absX: opts.absX,
     absY: opts.absY,
-    slotContext: null,
   });
 }
 

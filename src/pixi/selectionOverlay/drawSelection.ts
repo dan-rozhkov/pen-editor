@@ -4,15 +4,13 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import { useDevModeStore } from "@/store/devModeStore";
-import type { FrameNode, TextNode } from "@/types/scene";
+import type { TextNode } from "@/types/scene";
 import type { OverlayHelpers } from "./helpers";
 import { drawTextBaselines } from "./helpers";
 import {
-  COMPONENT_SELECTION_COLOR,
   HANDLE_FILL,
   HANDLE_SIZE,
   SELECTION_COLOR,
-  SIZE_LABEL_BG_COMPONENT,
   SIZE_LABEL_BG_DEFAULT,
   SIZE_LABEL_CORNER_RADIUS,
   SIZE_LABEL_FONT_SIZE,
@@ -42,7 +40,6 @@ export function redrawSelection(
     selectedIds,
     editingNodeId,
     editingMode,
-    instanceContext,
   } = useSelectionStore.getState();
   const scale = useViewportStore.getState().scale;
   const strokeWidth = 1 / scale;
@@ -57,86 +54,7 @@ export function redrawSelection(
 
   const state = useSceneStore.getState();
   const isDevMode = useDevModeStore.getState().active;
-  const isInstanceDescendantSelection =
-    !!instanceContext &&
-    selectedIds.length === 1 &&
-    selectedIds[0] === instanceContext.instanceId;
-  const hasComponentSelection =
-    !isInstanceDescendantSelection &&
-    selectedIds.some((id) => helpers.isInComponentContext(id));
-  const selectionBaselineColor = hasComponentSelection
-    ? COMPONENT_SELECTION_COLOR
-    : TEXT_BASELINE_COLOR;
-
-  // Instance descendant selection — single outline + size label (+ handles for slots)
-  if (isInstanceDescendantSelection && instanceContext) {
-    const target = helpers.getInstanceDescendantTarget(
-      instanceContext.instanceId,
-      instanceContext.descendantPath,
-    );
-    if (target) {
-      const outline = new Graphics();
-      outline.rect(
-        target.drawRect.x,
-        target.drawRect.y,
-        target.drawRect.width,
-        target.drawRect.height,
-      );
-      outline.stroke({ color: COMPONENT_SELECTION_COLOR, width: strokeWidth });
-      outlinesContainer.addChild(outline);
-
-      if (target.node.type === "text") {
-        drawTextBaselines(
-          selectionTextBaselines,
-          target.node as TextNode,
-          target.drawRect.x,
-          target.drawRect.y,
-          target.drawRect.width,
-          scale,
-          COMPONENT_SELECTION_COLOR,
-        );
-      }
-
-      // Draw transform handles for slot frames
-      const isSlot = target.node.type === "frame" && !!(target.node as FrameNode).isSlot;
-      if (isSlot && !isDevMode) {
-        const handleSizeWorld = HANDLE_SIZE / scale;
-        const halfHandle = handleSizeWorld / 2;
-        const { x: rx, y: ry, width: rw, height: rh } = target.drawRect;
-        const slotCorners = [
-          { x: rx, y: ry },
-          { x: rx + rw, y: ry },
-          { x: rx, y: ry + rh },
-          { x: rx + rw, y: ry + rh },
-        ];
-        for (const corner of slotCorners) {
-          const handle = new Graphics();
-          handle.rect(
-            corner.x - halfHandle,
-            corner.y - halfHandle,
-            handleSizeWorld,
-            handleSizeWorld,
-          );
-          handle.fill(HANDLE_FILL);
-          handle.stroke({ color: COMPONENT_SELECTION_COLOR, width: strokeWidth });
-          handlesContainer.addChild(handle);
-        }
-      }
-
-      drawSizeLabel(
-        sizeLabelsContainer,
-        target.drawRect.x + target.drawRect.width / 2,
-        target.drawRect.y + target.drawRect.height,
-        target.drawRect.width,
-        target.drawRect.height,
-        scale,
-        true,
-        target.node.sizing?.widthMode,
-        target.node.sizing?.heightMode,
-      );
-    }
-    return;
-  }
+  const selectionBaselineColor = TEXT_BASELINE_COLOR;
 
   // A single selected embed gets its outline + handles rendered as DOM
   // (EmbedSelectionFrame, above the embed HTML layer) since the Pixi overlay
@@ -162,7 +80,7 @@ export function redrawSelection(
     if (!drawRect) continue;
 
     if (id !== singleEmbedId) {
-      const color = helpers.getSelectionColor(id);
+      const color = helpers.getSelectionColor();
       const outline = new Graphics();
       outline.rect(drawRect.x, drawRect.y, drawRect.width, drawRect.height);
       outline.stroke({ color, width: strokeWidth });
@@ -191,9 +109,7 @@ export function redrawSelection(
 
   const totalW = maxX - minX;
   const totalH = maxY - minY;
-  const transformerColor = hasComponentSelection
-    ? COMPONENT_SELECTION_COLOR
-    : SELECTION_COLOR;
+  const transformerColor = SELECTION_COLOR;
 
   // Multi-selection bounding box
   if (selectedIds.length > 1 && totalW > 0 && totalH > 0) {
@@ -237,8 +153,6 @@ export function redrawSelection(
 
   // Size label (hidden in point-edit mode — see isPathEditing above)
   if (totalW > 0 && totalH > 0 && !isPathEditing) {
-    const isComp = selectedIds.some((id) => helpers.isInComponentContext(id));
-
     let badgeWidthMode: string | undefined;
     let badgeHeightMode: string | undefined;
     if (selectedIds.length === 1) {
@@ -274,7 +188,6 @@ export function redrawSelection(
       totalW,
       totalH,
       scale,
-      isComp,
       badgeWidthMode,
       badgeHeightMode,
     );
@@ -331,7 +244,6 @@ function drawSizeLabel(
   width: number,
   height: number,
   scale: number,
-  isComponent: boolean,
   widthMode?: string,
   heightMode?: string,
 ): void {
@@ -345,7 +257,7 @@ function drawSizeLabel(
 
   const bgWidth = textWidth + SIZE_LABEL_PADDING_X * 2;
   const bgHeight = SIZE_LABEL_FONT_SIZE + SIZE_LABEL_PADDING_Y * 2;
-  const bgColor = isComponent ? SIZE_LABEL_BG_COMPONENT : SIZE_LABEL_BG_DEFAULT;
+  const bgColor = SIZE_LABEL_BG_DEFAULT;
 
   const group = new Container();
   group.position.set(centerX, bottomY + worldOffsetY);

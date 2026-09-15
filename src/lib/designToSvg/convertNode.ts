@@ -510,11 +510,6 @@ export function convertNodeToSvg(nodeId: string, ctx: SvgConversionContext, isRo
         `Embed node "${nodeLabel(node)}" cannot be rendered in SVG export and was replaced with a placeholder.`,
       );
       return convertPlaceholderToSvg(node, ctx, isRoot);
-    case "ref":
-      ctx.warnings.push(
-        `Component instance "${nodeLabel(node)}" cannot be rendered in SVG export and was replaced with a placeholder.`,
-      );
-      return convertPlaceholderToSvg(node, ctx, isRoot);
     default:
       return "";
   }

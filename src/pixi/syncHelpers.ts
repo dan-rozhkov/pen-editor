@@ -1,8 +1,7 @@
 import { Container } from "pixi.js";
 import type { FlatSceneNode, FlatFrameNode, FrameNode, SceneNode } from "@/types/scene";
-import { isFlatFrameNode, isRefNode } from "@/types/scene";
+import { isFlatFrameNode } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
-import type { SceneState } from "@/store/sceneStore";
 import type { createCullingIndex } from "./cullingIndex";
 import {
   pushRenderTheme,
@@ -51,102 +50,6 @@ export const TEXT_RESOLUTION_MAX_MULTIPLIER = 16;
 export const EMBED_RESOLUTION_STEP = 0.25;
 export const MIN_EMBED_RESOLUTION = 0.25;
 export const EMBED_VIEWPORT_MARGIN = 300;
-
-function collectAffectedComponentIds(
-  state: SceneState,
-  prev: SceneState,
-  changedIds: Set<string>,
-): Set<string> {
-  const affected = new Set<string>();
-
-  const markFromChain = (
-    startId: string,
-    nodesById: Record<string, FlatSceneNode>,
-    parentById: Record<string, string | null>,
-  ): void => {
-    let current: string | null = startId;
-    while (current != null) {
-      const node = nodesById[current];
-      if (node && isFlatFrameNode(node) && node.reusable) {
-        affected.add(current);
-      }
-      current = parentById[current] ?? null;
-    }
-  };
-
-  for (const id of changedIds) {
-    if (state.nodesById[id]) {
-      markFromChain(id, state.nodesById, state.parentById);
-    }
-    if (prev.nodesById[id]) {
-      markFromChain(id, prev.nodesById, prev.parentById);
-    }
-  }
-
-  return affected;
-}
-
-/**
- * Index mapping componentId → Set<refNodeId> for O(1) instance lookups.
- */
-export class ComponentIdIndex {
-  private index = new Map<string, Set<string>>();
-
-  add(refNodeId: string, componentId: string): void {
-    let set = this.index.get(componentId);
-    if (!set) {
-      set = new Set();
-      this.index.set(componentId, set);
-    }
-    set.add(refNodeId);
-  }
-
-  remove(refNodeId: string, componentId: string): void {
-    const set = this.index.get(componentId);
-    if (set) {
-      set.delete(refNodeId);
-      if (set.size === 0) this.index.delete(componentId);
-    }
-  }
-
-  getRefIds(componentId: string): ReadonlySet<string> {
-    return this.index.get(componentId) ?? EMPTY_SET;
-  }
-
-  clear(): void {
-    this.index.clear();
-  }
-
-  buildFrom(nodesById: Record<string, FlatSceneNode>): void {
-    this.index.clear();
-    for (const id of Object.keys(nodesById)) {
-      const node = nodesById[id];
-      if (isRefNode(node)) {
-        this.add(id, node.componentId);
-      }
-    }
-  }
-}
-
-const EMPTY_SET: ReadonlySet<string> = new Set();
-
-export function collectAffectedInstanceIds(
-  state: SceneState,
-  prev: SceneState,
-  changedIds: Set<string>,
-  componentIndex: ComponentIdIndex,
-): Set<string> {
-  const affectedComponentIds = collectAffectedComponentIds(state, prev, changedIds);
-  if (affectedComponentIds.size === 0) return new Set<string>();
-
-  const affectedInstances = new Set<string>();
-  for (const compId of affectedComponentIds) {
-    for (const refId of componentIndex.getRefIds(compId)) {
-      affectedInstances.add(refId);
-    }
-  }
-  return affectedInstances;
-}
 
 /**
  * Push ancestor theme overrides onto the render theme stack (outermost first).

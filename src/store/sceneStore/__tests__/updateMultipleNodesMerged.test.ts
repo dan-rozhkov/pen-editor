@@ -84,25 +84,6 @@ describe("sceneStore.updateMultipleNodesMerged", () => {
     );
   });
 
-  it("marks a reusable frame's component artifact stale", () => {
-    useSceneStore.setState((s) => ({
-      nodesById: {
-        ...s.nodesById,
-        frame1: { ...s.nodesById.frame1, reusable: true } as FlatSceneNode,
-      },
-    }));
-
-    scene().updateMultipleNodesMerged(
-      ["frame1"],
-      { layout: { gap: 20 } } as unknown as Partial<FlatSceneNode>,
-      ["layout"],
-    );
-
-    const artifact = scene().componentArtifactsById.frame1;
-    expect(artifact).toBeDefined();
-    expect(["stale_from_native", "missing"]).toContain(artifact.syncState);
-  });
-
   it("records exactly one history entry per call", () => {
     const before = pastLen();
     scene().updateMultipleNodesMerged(

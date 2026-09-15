@@ -29,20 +29,6 @@ describe("buildHistorySnapshot", () => {
     expect(snap.selection).toEqual(selection);
   });
 
-  it("always carries componentArtifactsById (empty object when absent)", () => {
-    expect(buildHistorySnapshot(scene, [], selection, [], [], [], []).componentArtifactsById).toEqual({});
-    const withArtifacts = buildHistorySnapshot(
-      { ...scene, componentArtifactsById: { c1: { componentId: "c1" } as never } },
-      [],
-      selection,
-      [],
-      [],
-      [],
-      [],
-    );
-    expect(withArtifacts.componentArtifactsById).toEqual({ c1: { componentId: "c1" } });
-  });
-
   it("clones the variables array", () => {
     const variables = [{ id: "v1" }] as never[];
     const snap = buildHistorySnapshot(scene, variables, selection, [], [], [], []);

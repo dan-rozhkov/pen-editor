@@ -20,10 +20,6 @@
 import { useSceneStore } from "@/store/sceneStore";
 import type { SceneState } from "@/store/sceneStore";
 import { createSnapshot } from "@/store/sceneStore/helpers/history";
-import {
-  collectDocumentComponents,
-  buildDocumentComponentTagMap,
-} from "@/lib/documentComponents";
 import type { FlatSceneNode, HistorySnapshot } from "@/types/scene";
 import { isStreamingMutationsEnabled } from "@/lib/streamingTools/types";
 import {
@@ -157,7 +153,6 @@ export function cloneChildrenById(childrenById: Record<string, string[]>): Recor
 }
 
 function buildContextFromLive(live: SceneState): ExecutionContext {
-  const docComponents = collectDocumentComponents(live.nodesById, undefined, live.childrenById);
   return {
     bindings: new Map([["document", DOCUMENT_BINDING]]),
     nodesById: { ...live.nodesById },
@@ -166,7 +161,6 @@ function buildContextFromLive(live: SceneState): ExecutionContext {
     rootIds: [...live.rootIds],
     createdNodeIds: [],
     issues: [],
-    componentTagMap: buildDocumentComponentTagMap(docComponents),
     removedIdsForMeasurementCleanup: new Set(),
     imageUrlRepairCount: 0,
   };
@@ -180,7 +174,6 @@ function buildContextFromLive(live: SceneState): ExecutionContext {
  * see the "detached" status above.
  */
 function forkContextFromLive(live: SceneState, prev: ExecutionContext): ExecutionContext {
-  const docComponents = collectDocumentComponents(live.nodesById, undefined, live.childrenById);
   return {
     bindings: new Map(prev.bindings),
     nodesById: { ...live.nodesById },
@@ -189,7 +182,6 @@ function forkContextFromLive(live: SceneState, prev: ExecutionContext): Executio
     rootIds: [...live.rootIds],
     createdNodeIds: [...prev.createdNodeIds],
     issues: [...prev.issues],
-    componentTagMap: buildDocumentComponentTagMap(docComponents),
     removedIdsForMeasurementCleanup: new Set(prev.removedIdsForMeasurementCleanup),
     imageUrlRepairCount: prev.imageUrlRepairCount,
   };
