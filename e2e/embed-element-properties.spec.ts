@@ -153,4 +153,47 @@ test("picked embed elements use the native inspector field layout", async ({ pag
   const textSidebar = sidebarFor(page, "h2");
   await expect(textSidebar).toBeVisible();
   await textSidebar.screenshot({ path: test.info().outputPath("text-element-properties.png") });
+
+  // Typography's trailing "Color" row (`TypographySection`'s `textColor`
+  // prop) — the one deliberate content difference from the native panel,
+  // since a real TextNode's color lives in FillSection instead. Present only
+  // here (the flex container's Fill section above has no such label), and a
+  // real edit must reach `htmlContent` as the `<h2>`'s own `color`, not the
+  // container's `background-color` or `border`.
+  const typographySection = page
+    .getByText("Typography", { exact: true })
+    .locator('xpath=ancestor::div[contains(@class, "relative") and contains(@class, "border-b")]');
+  await expect(typographySection.getByText("Color", { exact: true })).toBeVisible();
+  const textColorInput = typographySection.getByPlaceholder("#000000");
+  await expect(textColorInput).toBeVisible();
+  await textColorInput.fill("#ff00aa");
+  await textColorInput.blur();
+
+  await expect
+    .poll(() =>
+      page.evaluate((id) => {
+        const w = window as unknown as {
+          __sceneStore: { getState: () => { nodesById: Record<string, { htmlContent?: string }> } };
+        };
+        const html = w.__sceneStore.getState().nodesById[id]?.htmlContent ?? "";
+        const heading = new DOMParser().parseFromString(html, "text/html").querySelector("h2");
+        return heading?.style.color;
+      }, EMBED_ID),
+    )
+    .toBe("rgb(255, 0, 170)");
+  // The container's own background/border must be untouched by the h2's
+  // text-color edit — same invariant `embedElementNode.test.ts`'s
+  // "background fill vs. text color" describe block pins at the unit level.
+  await expect
+    .poll(() =>
+      page.evaluate((id) => {
+        const w = window as unknown as {
+          __sceneStore: { getState: () => { nodesById: Record<string, { htmlContent?: string }> } };
+        };
+        const html = w.__sceneStore.getState().nodesById[id]?.htmlContent ?? "";
+        const card = new DOMParser().parseFromString(html, "text/html").getElementById("fixture-card");
+        return card?.style.backgroundColor;
+      }, EMBED_ID),
+    )
+    .toBe("rgb(244, 244, 245)");
 });

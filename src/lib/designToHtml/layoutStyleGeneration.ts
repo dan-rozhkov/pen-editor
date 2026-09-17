@@ -149,7 +149,15 @@ function generateFlexChildStyles(
   return styles;
 }
 
-function generatePaddingCss(layout: LayoutProperties): string | null {
+/**
+ * Exported (not just used internally by `generateLayoutStyles`) so the
+ * embed-element bridge (`embedElementNode.ts`) can compute the same padding
+ * shorthand independently of the `layout.autoLayout` gate above — an
+ * arbitrary embed element's padding is a plain CSS property, not something
+ * that only exists while the element is flex-laid-out, unlike a real
+ * scene-graph frame's `layout.padding*` fields.
+ */
+export function generatePaddingCss(layout: LayoutProperties): string | null {
   const t = layout.paddingTop ?? 0;
   const r = layout.paddingRight ?? 0;
   const b = layout.paddingBottom ?? 0;

@@ -125,6 +125,109 @@ describe("embedElementToSyntheticNode", () => {
     });
   });
 
+  describe("background fill vs. text color (bug: text color clobbering the background)", () => {
+    it("keeps node.fill as the BACKGROUND color when the element also has an explicit text color", () => {
+      // happy-dom reports "" for an inherited `color` (never set explicitly),
+      // which is why this needs its own inline `color:` declaration to
+      // reproduce — a test relying on inheritance would pass even with the
+      // bug, since `applyTextProps` would then see an empty string and never
+      // overwrite `node.fill` at all.
+      const target = el("background-color: rgb(255, 0, 0); color: rgb(0, 0, 255);");
+      target.textContent = "hello";
+      const { node } = embedElementToSyntheticNode(target);
+      expect(node.fill).toBe("#ff0000");
+    });
+
+    it("has no fill at all when only a text color is set (no background)", () => {
+      const target = el("color: rgb(0, 0, 255);");
+      target.textContent = "hello";
+      const { node } = embedElementToSyntheticNode(target);
+      expect(node.fill).toBeUndefined();
+    });
+
+    it("Fill section CSS reflects the background, not the text color", () => {
+      const target = el("background-color: rgb(255, 0, 0); color: rgb(0, 0, 255);");
+      target.textContent = "hello";
+      const { node } = embedElementToSyntheticNode(target);
+      const css = syntheticNodeToCssDeclarations(node);
+      expect(css["background-color"]).toBe("#ff0000");
+    });
+
+    it("captures the text color into the dedicated textFill field instead of discarding it", () => {
+      const target = el("background-color: rgb(255, 0, 0); color: rgb(0, 0, 255);");
+      target.textContent = "hello";
+      const { node } = embedElementToSyntheticNode(target);
+      expect(node.textFill).toBe("#0000ff");
+      // Background stays on `fill`, unaffected by the snapshot/restore.
+      expect(node.fill).toBe("#ff0000");
+    });
+
+    it("writes the text color into `color`, not `background-color`, in the CSS declaration map", () => {
+      const target = el("background-color: rgb(255, 0, 0); color: rgb(0, 0, 255);");
+      target.textContent = "hello";
+      const { node } = embedElementToSyntheticNode(target);
+      const css = syntheticNodeToCssDeclarations(node);
+      expect(css.color).toBe("#0000ff");
+      expect(css["background-color"]).toBe("#ff0000");
+    });
+  });
+
+  describe("strokeAlign round trip", () => {
+    it("outline (no border) reads back as outside, with stroke populated from the outline", () => {
+      const target = el("outline: 3px solid rgb(0, 0, 0); outline-offset: 0;");
+      const { node } = embedElementToSyntheticNode(target);
+      expect(node.strokeAlign).toBe("outside");
+      expect(node.strokeWidth).toBe(3);
+      expect(node.stroke).toBe("#000000");
+    });
+
+    it("border + box-sizing: border-box reads back as inside", () => {
+      const target = el("border: 2px solid rgb(0, 0, 0); box-sizing: border-box;");
+      const { node } = embedElementToSyntheticNode(target);
+      expect(node.strokeAlign).toBe("inside");
+    });
+
+    it("border with content-box (default) reads back as center", () => {
+      const target = el("border: 2px solid rgb(0, 0, 0);");
+      const { node } = embedElementToSyntheticNode(target);
+      expect(node.strokeAlign).toBe("center");
+    });
+
+    it("no stroke at all leaves strokeAlign unset", () => {
+      const target = el("width: 10px;");
+      const { node } = embedElementToSyntheticNode(target);
+      expect(node.strokeAlign).toBeUndefined();
+    });
+  });
+
+  describe("flex-wrap and per-axis gap", () => {
+    it("flex-wrap: wrap reads back as node.layout.flexWrap", () => {
+      const target = el("display: flex; flex-wrap: wrap;");
+      const { node } = embedElementToSyntheticNode(target);
+      expect(node.layout?.flexWrap).toBe(true);
+    });
+
+    it("flex-wrap: nowrap (default) leaves flexWrap unset", () => {
+      const target = el("display: flex;");
+      const { node } = embedElementToSyntheticNode(target);
+      expect(node.layout?.flexWrap).toBeUndefined();
+    });
+
+    it("distinct row-gap/column-gap longhands round-trip as separate fields", () => {
+      const target = el("display: flex; row-gap: 10px; column-gap: 20px;");
+      const { node } = embedElementToSyntheticNode(target);
+      expect(node.layout?.rowGap).toBe(10);
+      expect(node.layout?.columnGap).toBe(20);
+    });
+
+    it("gap shorthand with two differing values ('row column') is not collapsed to the first number", () => {
+      const target = el("display: flex; gap: 10px 20px;");
+      const { node } = embedElementToSyntheticNode(target);
+      expect(node.layout?.rowGap).toBe(10);
+      expect(node.layout?.columnGap).toBe(20);
+    });
+  });
+
   describe("variable bindings", () => {
     it("var(--x) in inline background-color resolves to fillBinding", () => {
       const target = el("background-color: var(--primary);");
@@ -157,6 +260,16 @@ describe("embedElementToSyntheticNode", () => {
       ]);
       expect(node.fillBinding).toBeUndefined();
     });
+
+    it("var(--x) in inline color resolves to textFillBinding, not fillBinding", () => {
+      const target = el("color: var(--brand);");
+      target.textContent = "hello";
+      const { node } = embedElementToSyntheticNode(target, [
+        { id: "var-3", name: "--brand", type: "color", value: "#00ff00" },
+      ]);
+      expect(node.textFillBinding).toEqual({ variableId: "var-3" });
+      expect(node.fillBinding).toBeUndefined();
+    });
   });
 });
 
@@ -184,6 +297,23 @@ describe("syntheticNodeToCssDeclarations", () => {
     expect(css["align-items"]).toBe("center");
     expect(css["justify-content"]).toBe("flex-start");
     expect(css.padding).toBe("5px");
+  });
+
+  it("padding survives turning auto-layout off (bug: RESET_VALUES zeroed it)", () => {
+    // Mirrors `AutoLayoutSection`'s `disableAutoLayout`, which spreads
+    // `...node.layout` and only flips `autoLayout: false` — padding stays on
+    // the layout object even though the frame is no longer a flex container.
+    const target = el("display: flex; padding: 16px;");
+    const { node } = embedElementToSyntheticNode(target);
+    expect(node.layout?.paddingTop).toBe(16);
+
+    const disabled = { ...node, layout: { ...node.layout, autoLayout: false } };
+    const css = syntheticNodeToCssDeclarations(disabled);
+    // Before the fix, `generateLayoutStyles` only emits `padding` inside its
+    // `autoLayout` branch, so this key vanished entirely and
+    // `diffCssDeclarations` would have written back an explicit
+    // `padding: 0px` reset the moment auto-layout was turned off.
+    expect(css.padding).toBe("16px");
   });
 
   it("filters out box-sizing/position/width/height from the layout generator", () => {
@@ -221,6 +351,59 @@ describe("syntheticNodeToCssDeclarations", () => {
     node.fill = "#3366ff";
     const css = syntheticNodeToCssDeclarations(node);
     expect(css["background-color"]).toBe("var(--primary, #3366ff)");
+  });
+
+  it("emits `color` only when the node has text (typography-only gate)", () => {
+    const withText = el("color: rgb(0, 0, 255);");
+    withText.textContent = "hi";
+    const { node: textNode } = embedElementToSyntheticNode(withText);
+    expect(syntheticNodeToCssDeclarations(textNode).color).toBe("#0000ff");
+
+    const withoutText = el("color: rgb(0, 0, 255);", "<span>x</span>");
+    const { node: nonTextNode } = embedElementToSyntheticNode(withoutText);
+    expect(syntheticNodeToCssDeclarations(nonTextNode).color).toBeUndefined();
+  });
+
+  it("round-trips a text-color variable binding back into var(--x, fallback)", () => {
+    useVariableStore.setState({
+      variables: [{ id: "var-3", name: "--brand", type: "color", value: "#00ff00" }],
+    });
+    const target = el("color: var(--brand);");
+    target.textContent = "hi";
+    const { node } = embedElementToSyntheticNode(target, [
+      { id: "var-3", name: "--brand", type: "color", value: "#00ff00" },
+    ]);
+    // Same happy-dom limitation as the background-binding test above: seed
+    // the resolved fallback directly onto the dedicated text-color field.
+    node.textFill = "#00ff00";
+    const css = syntheticNodeToCssDeclarations(node);
+    expect(css.color).toBe("var(--brand, #00ff00)");
+  });
+
+  it("unbinding the text color writes the resolved literal, not var(...)", () => {
+    // `node.textFill` is always the CURRENTLY RESOLVED computed-style value
+    // (getComputedStyle resolves `var()` against whichever theme's custom
+    // properties are in scope), so clearing `textFillBinding` alone — with
+    // no other change — is enough to fall back to a plain literal that
+    // already reflects the effective theme, the same mechanism the
+    // background/`fillBinding` round trip already relies on.
+    useVariableStore.setState({
+      variables: [{ id: "var-3", name: "--brand", type: "color", value: "#00ff00" }],
+    });
+    const target = el("color: var(--brand);");
+    target.textContent = "hi";
+    const { node } = embedElementToSyntheticNode(target, [
+      { id: "var-3", name: "--brand", type: "color", value: "#00ff00" },
+    ]);
+    node.textFill = "#00ff00";
+    const bound = syntheticNodeToCssDeclarations(node);
+    expect(bound.color).toBe("var(--brand, #00ff00)");
+
+    const unbound = syntheticNodeToCssDeclarations({ ...node, textFillBinding: undefined });
+    expect(unbound.color).toBe("#00ff00");
+
+    const patch = diffCssDeclarations(bound, unbound);
+    expect(patch.color).toBe("#00ff00");
   });
 });
 

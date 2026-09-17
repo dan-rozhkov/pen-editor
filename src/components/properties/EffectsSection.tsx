@@ -116,8 +116,41 @@ export function EffectsSection({ node, onUpdate, mixedKeys, allowedEffectTypes, 
   const boundEffectStyleId = detachedNode ? undefined : node.effectStyleId;
   const hasEffectControls = effectStyles.length > 0 || effects.length > 0;
 
-  const commit = (next: Effect[]) => {
-    onUpdate({ effects: next, ...clearLegacyEffectProps() } as Partial<SceneNode>);
+  /**
+   * `nextAllowed` is shaped like `effects` (the ALLOWLIST-FILTERED view) —
+   * every caller below (`handleAdd`/`updateShadow`/`updateNoise`/
+   * `updateGlass`/reorder/toggle/remove) derives it from `effects` via
+   * `fillSectionUtils`. When `allowedEffectTypes` is set, that view omits
+   * whatever glass/noise effects the node already carries (no CSS analogue
+   * for this bridge), so committing `nextAllowed` as `node.effects` directly
+   * would silently delete them the moment ANY other effect on the same node
+   * is touched. Splice them back in at their original stack position instead
+   * of just appending them, since effect order is bottom-to-top render
+   * order and this section's own moveItem/reorder only ever reorders within
+   * the allowed subset — each original "allowed" slot maps 1:1 (in order) to
+   * one entry of `nextAllowed`; a shorter `nextAllowed` means a removal
+   * (slot dropped), a longer one means an addition (extra items appended at
+   * the very end, matching where `addEffect` inserts new effects today).
+   */
+  const isEffectTypeAllowed = (type: Effect["type"]) =>
+    !allowedEffectTypes || allowedEffectTypes.includes(type);
+
+  const commit = (nextAllowed: Effect[]) => {
+    if (!allowedEffectTypes) {
+      onUpdate({ effects: nextAllowed, ...clearLegacyEffectProps() } as Partial<SceneNode>);
+      return;
+    }
+    const merged: Effect[] = [];
+    let cursor = 0;
+    for (const effect of allEffects) {
+      if (isEffectTypeAllowed(effect.type)) {
+        if (cursor < nextAllowed.length) merged.push(nextAllowed[cursor++]);
+      } else {
+        merged.push(effect);
+      }
+    }
+    while (cursor < nextAllowed.length) merged.push(nextAllowed[cursor++]);
+    onUpdate({ effects: merged, ...clearLegacyEffectProps() } as Partial<SceneNode>);
   };
 
   const handleAdd = (effect: Effect) => {
@@ -141,8 +174,6 @@ export function EffectsSection({ node, onUpdate, mixedKeys, allowedEffectTypes, 
 
   const noiseCount = allEffects.filter((e) => e.type === "noise").length;
   const glassCount = allEffects.filter((e) => e.type === "glass").length;
-  const isEffectTypeAllowed = (type: Effect["type"]) =>
-    !allowedEffectTypes || allowedEffectTypes.includes(type);
 
   // Glass and background blur share one "material" slot (Figma parity): the
   // first visible one in bottom-to-top order wins. Used to flag every other

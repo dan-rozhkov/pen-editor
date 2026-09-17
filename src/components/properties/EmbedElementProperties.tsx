@@ -7,6 +7,8 @@ import {
   type SyntheticNodeShape,
 } from "@/lib/embedElementNode";
 import { findLiveEmbedElement, applyEmbedElementEdit } from "@/lib/embedElementStyle";
+import { BACKGROUND_STYLE_KEYS } from "@/lib/designToHtml/styleGeneration";
+import { getRenderableFills } from "@/utils/fillUtils";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -164,23 +166,42 @@ export function EmbedElementProperties() {
     };
   }, [embedId, path, htmlContent]);
 
-  // The single `onUpdate` every native section below is wired to. Merges the
-  // patch onto the current synthetic node, regenerates the node's full CSS
-  // declaration set before/after, and writes only what changed.
-  const onUpdate = useCallback(
-    (updates: Partial<SceneNode>) => {
+  // The single commit path every native section (via `onUpdate`) AND the
+  // text-color row (via `onTextColorChange`/`onTextColorVariableChange`
+  // below) funnel through. Merges the patch onto the current synthetic node,
+  // regenerates the node's full CSS declaration set before/after, and writes
+  // only what changed. Split out of `onUpdate` so the text-color row can pass
+  // a `Partial<SyntheticNodeShape>` patch directly (its fields —
+  // `textFill`/`textFillBinding` — don't exist on `SceneNode`, so routing
+  // them through the `Partial<SceneNode>`-typed `onUpdate` would need an
+  // unsafe cast at the call site instead of a plain, typed argument here).
+  const commitPatch = useCallback(
+    (patch: Partial<SyntheticNodeShape>) => {
       if (readOnly) return;
       // `embedId`/`path`/`htmlContent`/`node` are plain closure variables
       // (this function is recreated every render), so they're always current
       // as of the render that produced the event handler — no ref needed.
       if (!embedId || !path || htmlContent == null || !node) return;
 
-      const patch = updates as Partial<SyntheticNodeShape>;
       const nextNode: SyntheticNodeShape = { ...node, ...patch };
+
+      // "Remove fill" (FillSection's only path that empties the fill stack
+      // entirely) wants the class's own background to show back through —
+      // not `background-color: transparent` forced over it — so every
+      // background-related key gets `removeInsteadOfReset` for exactly this
+      // transition (had a renderable fill, now has none). Any other diff
+      // (recoloring, adding another fill, etc.) keeps the default explicit
+      // reset, same as every other property this bridge diffs.
+      const hadFill = getRenderableFills(node).length > 0;
+      const hasFillNow = getRenderableFills(nextNode).length > 0;
+      const diffOptions = hadFill && !hasFillNow
+        ? { removeInsteadOfReset: BACKGROUND_STYLE_KEYS }
+        : undefined;
 
       const styles = diffCssDeclarations(
         syntheticNodeToCssDeclarations(node),
         syntheticNodeToCssDeclarations(nextNode),
+        diffOptions,
       );
 
       // Width/height are DELIBERATELY excluded from
@@ -196,12 +217,23 @@ export function EmbedElementProperties() {
         styles.height = `${nextNode.height}px`;
       }
 
+      // Bail out BEFORE the optimistic `setNode` below when the patch has no
+      // CSS representation at all (e.g. `aspectRatioLocked`/`aspectRatio`,
+      // `sizing.*` on their own): nothing is actually written for those
+      // fields (there's no store-backed node to persist them on, only this
+      // bridge's own CSS round-trip), and the next rAF re-read
+      // (`embedElementToSyntheticNode`, triggered by any OTHER edit's
+      // `htmlContent` change) rebuilds the node straight from the DOM, which
+      // never populates them either — so an optimistic `setNode` here would
+      // show the control as "applied" only for it to silently revert on the
+      // very next unrelated edit. Only set local state for a patch that is
+      // about to be (or already was) actually persisted.
+      if (Object.keys(styles).length === 0) return;
+
       // Optimistic local update: every field in these sections commits on
       // every keystroke/click, and waiting for the rAF re-read above to
       // reflect it would make controls visibly lag/jump on each edit.
       setNode(nextNode);
-
-      if (Object.keys(styles).length === 0) return;
 
       const result = applyEmbedElementEdit(htmlContent, path, { styles });
       if (!result) return;
@@ -220,6 +252,27 @@ export function EmbedElementProperties() {
       useSceneStore.getState().updateNode(embedId, { htmlContent: result.html });
     },
     [readOnly, embedId, path, htmlContent, node],
+  );
+
+  // Every native section's `onUpdate` prop is typed `Partial<SceneNode>` —
+  // `commitPatch` above accepts the bridge's own `Partial<SyntheticNodeShape>`
+  // instead, so this is a thin, type-narrowing wrapper (safe: every field a
+  // native section ever sends already exists on `SceneNode`, which is a
+  // subset of `SyntheticNodeShape`'s merged fields).
+  const onUpdate = useCallback(
+    (updates: Partial<SceneNode>) => commitPatch(updates as Partial<SyntheticNodeShape>),
+    [commitPatch],
+  );
+
+  // `TypographySection`'s `textColor` row — see that prop's doc comment for
+  // why it bypasses `onUpdate` and calls `commitPatch` directly.
+  const onTextColorChange = useCallback(
+    (color: string) => commitPatch({ textFill: color }),
+    [commitPatch],
+  );
+  const onTextColorVariableChange = useCallback(
+    (variableId: string | undefined) => commitPatch({ textFillBinding: variableId ? { variableId } : undefined }),
+    [commitPatch],
   );
 
   // The Text section edits the element's literal text content, a dimension
@@ -329,6 +382,14 @@ export function EmbedElementProperties() {
               onUpdate={onUpdate}
               detachedNode
               hideStructuralText
+              textColor={{
+                value: node.textFill ?? "#000000",
+                onChange: onTextColorChange,
+                variableId: node.textFillBinding?.variableId,
+                onVariableChange: onTextColorVariableChange,
+                colorVariables,
+                activeTheme,
+              }}
             />
           )}
           {hasText && (

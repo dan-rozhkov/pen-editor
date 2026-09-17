@@ -404,11 +404,19 @@ export function SizeSection({
     let eh = node.height;
 
     // For fit_content frames: compute intrinsic size. Skip the synthetic merged
-    // multi-select node (see the comment in computeSizeForMode).
+    // multi-select node (see the comment in computeSizeForMode), and skip a
+    // `detachedNode` for the same reason the "Fit to content" button itself
+    // is gated on it (see this prop's doc comment): it looks up children by
+    // `node.id` in the REAL `childrenById`, which finds nothing for a
+    // synthetic id, materializing an empty frame and briefly reporting that
+    // empty frame's (0/1px) size as this element's H/W the moment
+    // `AutoLayoutSection`'s fallback `enableAutoLayout` sets
+    // `sizing.heightMode: "fit_content"`.
     if (
       node.type === "frame" &&
       (node as FrameNode).layout?.autoLayout &&
-      !isMultiSelect
+      !isMultiSelect &&
+      !detachedNode
     ) {
       const frame = node as FrameNode;
       const fitWidth = frame.sizing?.widthMode === "fit_content";
@@ -458,6 +466,7 @@ export function SizeSection({
     calculateLayoutForFrame,
     relevantSubtreeSnapshot,
     isMultiSelect,
+    detachedNode,
   ]);
 
   const canFitToContent = !isMultiSelect && (node.type === "frame" || node.type === "embed")

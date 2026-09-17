@@ -32,7 +32,9 @@ import {
   IconContext,
 } from "@phosphor-icons/react";
 import type { SceneNode, TextNode } from "@/types/scene";
+import type { ThemeName, Variable } from "@/types/variable";
 import {
+  ColorInput,
   NumberInput,
   PropertyRow,
   PropertySection,
@@ -105,6 +107,33 @@ interface TypographySectionProps {
    * panel.
    */
   hideStructuralText?: boolean;
+  /**
+   * Renders a trailing text-color row, wired exactly like `FillSection`'s/
+   * `StrokeSection`'s own solid-color rows (same `ColorInput`, same
+   * value/onChange/variable-binding shape). Absent by default, so the
+   * native panel — where a real `TextNode`'s color already lives in
+   * `FillSection`, and this section has no color control at all — renders
+   * byte-identical.
+   *
+   * This is the ONE deliberate content difference from the native panel,
+   * used solely by the embed-element properties panel: its synthetic node
+   * is always `type: "frame"` (`embedElementNode.ts`), so `FillSection`
+   * there means the element's BACKGROUND, leaving text color with nowhere
+   * else to go. Passed as a self-contained `{value, onChange, ...}` bundle —
+   * mirroring `ColorInput`'s own prop shape — rather than threaded through
+   * `onUpdate`/`node.fill`: `onUpdate` here is typed `Partial<SceneNode>`,
+   * and the underlying field (`SyntheticNodeShape.textFill`) doesn't exist
+   * on a real `SceneNode`, so routing it through `onUpdate` would need an
+   * unsafe cast at the call site instead of a plain, typed callback.
+   */
+  textColor?: {
+    value: string;
+    onChange: (value: string) => void;
+    variableId?: string;
+    onVariableChange: (variableId: string | undefined) => void;
+    colorVariables: Variable[];
+    activeTheme: ThemeName;
+  };
 }
 
 const STYLE_MANAGED_KEYS: readonly string[] = TEXT_STYLE_PROPERTY_KEYS;
@@ -657,6 +686,7 @@ export function TypographySection({
   onUpdate,
   detachedNode = false,
   hideStructuralText = false,
+  textColor,
 }: TypographySectionProps) {
   const detachStyleFromNode = useTextStyleStore((s) => s.detachStyleFromNode);
   const isEditingPath = useSelectionStore(
@@ -1361,6 +1391,21 @@ export function TypographySection({
               </div>
             </PropertyRow>
           )}
+        </div>
+      )}
+      {textColor && (
+        <div className="flex flex-col gap-1">
+          <div className="text-[10px] font-normal text-text-muted">
+            Color
+          </div>
+          <ColorInput
+            value={textColor.value}
+            onChange={textColor.onChange}
+            variableId={textColor.variableId}
+            onVariableChange={textColor.onVariableChange}
+            availableVariables={textColor.colorVariables}
+            activeTheme={textColor.activeTheme}
+          />
         </div>
       )}
       </PropertySection>

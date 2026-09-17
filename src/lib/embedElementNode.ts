@@ -15,6 +15,7 @@
 
 import type {
   AlignItems,
+  BaseNode,
   ColorBinding,
   FlexDirection,
   FrameNode,
@@ -23,6 +24,7 @@ import type {
 } from "@/types/scene";
 import { getVariableCssName, type Variable } from "@/types/variable";
 import { applyBaseProps, applyBasePropsToText, applyTextProps } from "@/lib/htmlToDesign/styleApplication";
+import { parseColorWithOpacity } from "@/lib/htmlToDesign/colorParsing";
 // Shared with `readEmbedElementSnapshot`'s own binding read: one parse of
 // `var(--name)` for the whole embed-element surface, so the two can never
 // disagree about what counts as a binding (and the duplication gate stays
@@ -31,7 +33,7 @@ import { applyBaseProps, applyBasePropsToText, applyTextProps } from "@/lib/html
 import { parseVarReference } from "@/lib/embedElementStyle";
 import { parsePadding } from "@/lib/htmlToDesign/elementChecks";
 import { generateVisualStyles, generateTextStyles } from "@/lib/designToHtml/styleGeneration";
-import { generateLayoutStyles } from "@/lib/designToHtml/layoutStyleGeneration";
+import { generateLayoutStyles, generatePaddingCss } from "@/lib/designToHtml/layoutStyleGeneration";
 
 /** Synthetic id given to the node built from a picked embed element. Chosen
  * to be obviously not a real scene-graph id (those are generated via
@@ -51,7 +53,27 @@ export const SYNTHETIC_EMBED_ELEMENT_ID = "embed-element";
  * would have. See `SyntheticEmbedElementNode`'s doc comment for why the
  * fields are merged onto one object instead of two.
  */
-export type SyntheticNodeShape = FrameNode & Partial<Omit<TextNode, "type">>;
+export type SyntheticNodeShape = FrameNode &
+  Partial<Omit<TextNode, "type">> & {
+    /**
+     * The element's TEXT color, tracked separately from `fill` — which this
+     * bridge always treats as the element's BACKGROUND (see
+     * `embedElementToSyntheticNode`'s doc comment on the fill/text-color
+     * snapshot-and-restore dance). A real `TextNode` has no such split
+     * (`fill` alone means glyph color), but this synthetic node is always
+     * `type: "frame"`, so `fill`/`fillBinding` already have a job. These
+     * three fields exist ONLY on the bridge's synthetic shape, never on a
+     * real `SceneNode` — `TypographySection`'s optional `textColor` prop is
+     * the only reader/writer, via its own `{value, onChange, ...}` bundle
+     * rather than the generic `onUpdate(Partial<SceneNode>)` path (adding a
+     * field absent from `SceneNode` to that path would need an unsafe cast
+     * at every call site). `syntheticNodeToCssDeclarations` turns these back
+     * into a `color` CSS declaration — see `generateTextColorCss`.
+     */
+    textFill?: string;
+    textFillOpacity?: number;
+    textFillBinding?: ColorBinding;
+  };
 
 /**
  * Result of reading a live element into scene-graph shape.
@@ -170,16 +192,93 @@ function mapJustifyContent(value: string): JustifyContent | undefined {
   }
 }
 
-/** Same gap-reading rule as `embedElementStyle.ts`'s `readEmbedElementSnapshot`:
- * prefer the `gap` shorthand getter (the only one happy-dom populates from an
- * inline `gap:` declaration), falling back to the longhands. "normal" (the
- * initial value) reads as 0, matching the padding/gap "unset" convention
- * used throughout this panel. */
-function parseGap(cs: CSSStyleDeclaration): number {
-  const raw = cs.gap || cs.columnGap || cs.rowGap;
-  if (!raw || raw === "normal") return 0;
-  const n = Number.parseFloat(raw);
+function parsePxOrZero(value: string | undefined | null): number {
+  if (!value || value === "normal") return 0;
+  const n = Number.parseFloat(value);
   return Number.isNaN(n) ? 0 : n;
+}
+
+/**
+ * Reads `gap`/`row-gap`/`column-gap` into the shape `LayoutProperties`
+ * distinguishes: a single `gap` when both axes agree (the common case, and
+ * what every existing caller of this bridge expects), or `rowGap`+`columnGap`
+ * when they differ.
+ *
+ * Two readers, because engines disagree on which getter an inline
+ * declaration populates (see `embedElementStyle.ts`'s `readEmbedElementSnapshot`,
+ * whose own comment this one used to duplicate before splitting axes out):
+ * the `row-gap`/`column-gap` LONGHANDS are preferred first — they're the only
+ * ones happy-dom (and, per spec, `getComputedStyle` in general) populates
+ * from an inline `row-gap:`/`column-gap:` declaration. Only when neither is
+ * set does this fall back to the `gap` SHORTHAND getter, which
+ * `getComputedStyle` instead reports as `"<row> [<column>]"` — a single
+ * `parseFloat` on that string (the previous implementation) silently dropped
+ * the column value whenever the two axes differed (`gap: 10px 20px` read
+ * back as `gap: 10`, losing the 20px column gap entirely).
+ */
+function parseGaps(cs: CSSStyleDeclaration): { gap: number; rowGap?: number; columnGap?: number } {
+  const rowLonghand = cs.rowGap;
+  const columnLonghand = cs.columnGap;
+  if ((rowLonghand && rowLonghand !== "normal") || (columnLonghand && columnLonghand !== "normal")) {
+    const row = parsePxOrZero(rowLonghand);
+    const column = parsePxOrZero(columnLonghand);
+    return row === column ? { gap: row } : { gap: row, rowGap: row, columnGap: column };
+  }
+
+  const shorthand = cs.gap;
+  if (!shorthand || shorthand === "normal") return { gap: 0 };
+  const parts = shorthand
+    .split(/\s+/)
+    .map((part) => Number.parseFloat(part))
+    .filter((n) => !Number.isNaN(n));
+  const row = parts[0] ?? 0;
+  const column = parts.length > 1 ? parts[1] : row;
+  return row === column ? { gap: row } : { gap: row, rowGap: row, columnGap: column };
+}
+
+/**
+ * Reads `strokeAlign` back from CSS, mirroring `generateVisualStyles`'s write
+ * side exactly (`designToHtml/styleGeneration.ts`):
+ * - `outside` is written as `outline` with NO `border` — so an outline
+ *   present at all means outside, and (since `applyBaseProps` only reads
+ *   `border-*`, never `outline`) this also has to populate `node.stroke`/
+ *   `strokeWidth` itself, or an outside stroke would round-trip as "no
+ *   stroke" the moment the panel re-reads the element.
+ * - `inside` is written as `border` PLUS `box-sizing: border-box`.
+ * - `center` is written as plain `border`, with `box-sizing` left alone.
+ * So: an outline means outside; a border with `box-sizing: border-box` means
+ * inside; a border with any other box-sizing means center (left as `undefined`,
+ * the section's own default) — the base case, not called out as a fixup.
+ *
+ * Known non-round-tripping combination: an outside stroke never round-trips
+ * back into a genuinely different width/color if the element's own CSS class
+ * (rather than this bridge) also declares a `border` — the class's border
+ * stays as class-level CSS (nothing here can distinguish "author's own
+ * border-in-a-class coexisting with our outline" from "stale border-in-class
+ * this bridge should shadow"), so the Stroke section would show only the
+ * outline while the class border keeps rendering underneath it unlabeled.
+ * Only reachable by hand-authoring both onto the same element outside this
+ * panel; flagged rather than hidden, since it isn't caused by anything this
+ * fix changes.
+ */
+function applyStrokeAlignFromCss(node: SyntheticNodeShape, cs: CSSStyleDeclaration): void {
+  const outlineWidth = parsePx(cs.outlineWidth);
+  const hasOutline = outlineWidth > 0 && cs.outlineStyle !== "none" && cs.outlineStyle !== "hidden";
+  if (hasOutline) {
+    const outlineColor = parseColorWithOpacity(cs.outlineColor);
+    if (outlineColor?.color) {
+      node.stroke = outlineColor.color;
+      if (outlineColor.opacity !== undefined) node.strokeOpacity = outlineColor.opacity;
+    }
+    node.strokeWidth = outlineWidth;
+    node.strokeWidthPerSide = undefined;
+    node.strokeAlign = "outside";
+    return;
+  }
+
+  if (node.strokeWidth !== undefined || node.strokeWidthPerSide !== undefined) {
+    node.strokeAlign = cs.boxSizing === "border-box" ? "inside" : "center";
+  }
 }
 
 /** Strip a leading `--` so a legacy binding can be matched loosely. */
@@ -260,8 +359,30 @@ export function embedElementToSyntheticNode(
   };
 
   applyBaseProps(node, cs);
+  // `applyBaseProps` just populated `node.fill`/`node.fillOpacity` from
+  // `background-color` — this synthetic node is always `type: "frame"`, so
+  // that's what `FillSection`/`generateFillCss` read as the element's
+  // BACKGROUND. `applyTextProps` below writes typography onto the very same
+  // shared field (by design, for a real `TextNode`, where `fill` means text
+  // color) — on this merged frame+text object that would silently clobber
+  // the background with the text color the moment the element has any text.
+  // Snapshot the background here, let `applyTextProps` write the text color
+  // onto `node.fill`/`node.fillOpacity` as it normally would for a real
+  // `TextNode`, capture THAT into the dedicated `textFill`/`textFillOpacity`
+  // fields (see `SyntheticNodeShape`'s doc comment), then restore the
+  // background — so the Fill section keeps showing the background and a
+  // background edit keeps writing `background-color`, never `color`, while
+  // the text color is no longer silently discarded.
+  const backgroundFill = node.fill;
+  const backgroundFillOpacity = node.fillOpacity;
   applyBasePropsToText(node as unknown as TextNode, cs);
   applyTextProps(node as unknown as TextNode, cs);
+  node.textFill = node.fill;
+  node.textFillOpacity = node.fillOpacity;
+  node.fill = backgroundFill;
+  node.fillOpacity = backgroundFillOpacity;
+
+  applyStrokeAlignFromCss(node, cs);
 
   const hasText = elementHasEditableText(el);
   if (hasText) {
@@ -270,10 +391,14 @@ export function embedElementToSyntheticNode(
 
   if (isFlexDisplay(cs.display)) {
     const padding = parsePadding(cs);
+    const gaps = parseGaps(cs);
     node.layout = {
       autoLayout: true,
       flexDirection: mapFlexDirection(cs.flexDirection),
-      gap: parseGap(cs),
+      gap: gaps.gap,
+      ...(gaps.rowGap !== undefined ? { rowGap: gaps.rowGap } : {}),
+      ...(gaps.columnGap !== undefined ? { columnGap: gaps.columnGap } : {}),
+      ...(cs.flexWrap === "wrap" || cs.flexWrap === "wrap-reverse" ? { flexWrap: true } : {}),
       alignItems: mapAlignItems(cs.alignItems),
       justifyContent: mapJustifyContent(cs.justifyContent),
       paddingTop: padding.paddingTop,
@@ -291,13 +416,10 @@ export function embedElementToSyntheticNode(
   // author-set declaration), not the resolved computed style — see
   // `parseVarReference`. `border-color` is preferred over `border-top-color`
   // when both resolve (the shorthand is what an author/panel would normally
-  // set); `color` binds the SAME `fillBinding` field `background-color`
-  // does, because `TextNode`/`FrameNode` share one `fillBinding` field and
-  // this bridge merges both node "halves" into one object (see the
-  // `SyntheticEmbedElementNode` doc comment). In practice an element is
-  // rarely both a colored container AND colored text via two DIFFERENT
-  // bound variables, so this collision is treated as out of scope; when both
-  // are set, `color`'s binding wins (typography is applied after fill above).
+  // set); `color` resolves into the DEDICATED `textFillBinding` field, not
+  // `fillBinding` — see `SyntheticNodeShape`'s doc comment for why a
+  // background binding and a text-color binding can no longer collide now
+  // that they live on separate fields.
   const inline = el instanceof HTMLElement ? el.style : undefined;
   // A `background` SHORTHAND holding a single `var()` is a
   // "pending-substitution value": the UA keeps it whole instead of expanding
@@ -319,7 +441,7 @@ export function embedElementToSyntheticNode(
   const strokeBinding = resolveVariableBinding(borderVar, variables);
   if (strokeBinding) node.strokeBinding = strokeBinding;
   const textFillBinding = resolveVariableBinding(textColorVar, variables);
-  if (textFillBinding) node.fillBinding = textFillBinding;
+  if (textFillBinding) node.textFillBinding = textFillBinding;
 
   return { node, hasText };
 }
@@ -365,6 +487,38 @@ const LAYOUT_STYLE_ALLOWLIST = new Set([
 ]);
 
 /**
+ * Derive the `color` CSS declaration for the synthetic node's dedicated text
+ * color (`textFill`/`textFillOpacity`/`textFillBinding` — see
+ * `SyntheticNodeShape`'s doc comment for why these are separate from
+ * `fill`/`fillOpacity`/`fillBinding`, which this bridge always treats as
+ * BACKGROUND).
+ *
+ * Reuses `generateVisualStyles` itself rather than re-deriving color +
+ * variable-binding CSS from scratch (`resolveBindingToCssVar`/
+ * `getVariableCssName` are private to `styleGeneration.ts`): a scratch
+ * `BaseNode` of `type: "text"` routes its internal `generateFillCss` into
+ * the ONE branch that resolves a solid paint + binding into `color` rather
+ * than `background-color`. `fills` is explicitly cleared on the scratch
+ * object — it may be set on `node` for the BACKGROUND paint stack, and
+ * `getFills()` would otherwise read it as the text's own paint stack.
+ * Everything else `generateVisualStyles` computes on the scratch node
+ * (stroke, radius, effects, transform, ...) is discarded; only `.color` is
+ * read back.
+ */
+function generateTextColorCss(node: SyntheticNodeShape): string | undefined {
+  if (node.textFill === undefined) return undefined;
+  const scratch: BaseNode = {
+    ...node,
+    type: "text",
+    fill: node.textFill,
+    fillOpacity: node.textFillOpacity,
+    fillBinding: node.textFillBinding,
+    fills: undefined,
+  };
+  return generateVisualStyles(scratch).color;
+}
+
+/**
  * Build the full CSS declaration map for a synthetic node — everything the
  * native properties sections (`FillSection`, `StrokeSection`,
  * `EffectsSection`, `TypographySection`, `AutoLayoutSection`) could have
@@ -380,6 +534,14 @@ export function syntheticNodeToCssDeclarations(node: SyntheticNodeShape): Record
 
   if (node.text !== undefined) {
     Object.assign(styles, generateTextStyles(node as unknown as TextNode));
+    // Text color is typography, not fill (this bridge's `fill` always means
+    // BACKGROUND) — gated on the same `node.text !== undefined` condition as
+    // every other typography declaration above, since `TypographySection`'s
+    // color row only renders when the element has editable text.
+    const textColor = generateTextColorCss(node);
+    if (textColor !== undefined) {
+      styles.color = textColor;
+    }
   }
 
   const layoutStyles = generateLayoutStyles(node, undefined, true);
@@ -387,6 +549,25 @@ export function syntheticNodeToCssDeclarations(node: SyntheticNodeShape): Record
     if (LAYOUT_STYLE_ALLOWLIST.has(key)) {
       styles[key] = value;
     }
+  }
+
+  // `generateLayoutStyles` only emits `padding` inside its `autoLayout`
+  // branch — correct for a REAL scene-graph frame, where `layout.padding*`
+  // has no meaning at all once auto-layout is off (there is no other
+  // "padding" concept for a non-auto-layout frame; its children are
+  // absolutely positioned). An embed element is different: `padding` is a
+  // plain CSS property on arbitrary HTML, independent of `display: flex`.
+  // Deriving it here too — straight from `node.layout`, not gated on
+  // `autoLayout` — means turning auto-layout off on an embed element no
+  // longer makes its padding vanish from this declaration map (which would
+  // otherwise read as "removed" by `diffCssDeclarations` and get written
+  // back as an explicit `padding: 0px` reset, permanently destroying a
+  // class-authored padding the very first time auto-layout is toggled).
+  const padding = node.layout ? generatePaddingCss(node.layout) : null;
+  if (padding !== null) {
+    styles.padding = padding;
+  } else {
+    delete styles.padding;
   }
 
   return styles;

@@ -669,6 +669,76 @@ describe("<TypographySection />", () => {
     });
   });
 
+  describe("textColor", () => {
+    it("renders no color row by default (regression: native panel must stay byte-identical)", () => {
+      render(<TypographySection node={textNode()} onUpdate={vi.fn()} />);
+      expect(screen.queryByText("Color")).toBeNull();
+    });
+
+    it("renders the color row with the given value when textColor is set", () => {
+      render(
+        <TypographySection
+          node={textNode()}
+          onUpdate={vi.fn()}
+          textColor={{
+            value: "#112233",
+            onChange: vi.fn(),
+            onVariableChange: vi.fn(),
+            colorVariables: [],
+            activeTheme: "light",
+          }}
+        />,
+      );
+      expect(screen.getByText("Color")).toBeTruthy();
+      expect(screen.getByDisplayValue("#112233")).toBeTruthy();
+    });
+
+    it("calls textColor.onChange (not the generic onUpdate) when the color input changes", () => {
+      const onUpdate = vi.fn();
+      const onChange = vi.fn();
+      render(
+        <TypographySection
+          node={textNode()}
+          onUpdate={onUpdate}
+          textColor={{
+            value: "#112233",
+            onChange,
+            onVariableChange: vi.fn(),
+            colorVariables: [],
+            activeTheme: "light",
+          }}
+        />,
+      );
+      const input = screen.getByDisplayValue("#112233");
+      fireEvent.change(input, { target: { value: "#445566" } });
+      expect(onChange).toHaveBeenCalledWith("#445566");
+      expect(onUpdate).not.toHaveBeenCalled();
+    });
+
+    it("shows the bound variable name and calls onVariableChange(undefined) on unbind", () => {
+      const onVariableChange = vi.fn();
+      render(
+        <TypographySection
+          node={textNode()}
+          onUpdate={vi.fn()}
+          textColor={{
+            value: "#112233",
+            onChange: vi.fn(),
+            variableId: "var-1",
+            onVariableChange,
+            colorVariables: [
+              { id: "var-1", name: "--brand", type: "color", value: "#00ff00" },
+            ],
+            activeTheme: "light",
+          }}
+        />,
+      );
+      expect(screen.getByText("--brand")).toBeTruthy();
+      fireEvent.click(screen.getByTitle("Unbind variable"));
+      expect(onVariableChange).toHaveBeenCalledWith(undefined);
+    });
+  });
+
   describe("hideStructuralText", () => {
     it("hides the List row when hideStructuralText is set", () => {
       render(<TypographySection node={textNode()} onUpdate={vi.fn()} hideStructuralText />);

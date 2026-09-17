@@ -594,6 +594,52 @@ describe("<EffectsSection />", () => {
       render(<EffectsSection node={makeNode([glassFx()])} onUpdate={vi.fn()} />);
       expect(screen.getAllByText("Glass").length).toBeGreaterThan(0);
     });
+
+    it("commit preserves a hidden (disallowed-type) effect instead of dropping it (data loss bug)", () => {
+      // Bug: `commit` wrote the ALLOWLIST-FILTERED `effects` array straight
+      // to `node.effects`. A node that already carries a `glass` effect
+      // (outside `allowedEffectTypes`) would silently lose it the moment any
+      // OTHER effect (a shadow here) is added/edited/reordered/toggled,
+      // since the filtered array this section works with never contained it.
+      const onUpdate = vi.fn();
+      const glass = glassFx();
+      render(
+        <EffectsSection
+          node={makeNode([glass])}
+          onUpdate={onUpdate}
+          allowedEffectTypes={["shadow", "blur", "background-blur"]}
+        />,
+      );
+      // Sanity: the hidden glass effect isn't rendered at all here.
+      expect(screen.queryByText("Glass")).toBeNull();
+
+      fireEvent.click(screen.getByText("Drop shadow"));
+
+      expect(onUpdate).toHaveBeenCalledTimes(1);
+      const committed = onUpdate.mock.calls[0][0].effects as Effect[];
+      expect(committed.some((e) => e.id === glass.id)).toBe(true);
+      expect(committed).toHaveLength(2);
+    });
+
+    it("commit keeps a hidden effect's stack position when the allowed effect above it is removed", () => {
+      const onUpdate = vi.fn();
+      const glass = glassFx();
+      const s = shadow();
+      // Bottom-to-top: glass, then shadow.
+      render(
+        <EffectsSection
+          node={makeNode([glass, s])}
+          onUpdate={onUpdate}
+          allowedEffectTypes={["shadow", "blur", "background-blur"]}
+        />,
+      );
+
+      fireEvent.click(screen.getByLabelText("Remove effect"));
+
+      expect(onUpdate).toHaveBeenCalledTimes(1);
+      const committed = onUpdate.mock.calls[0][0].effects as Effect[];
+      expect(committed).toEqual([glass]);
+    });
   });
 
   describe("detachedNode", () => {

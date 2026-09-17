@@ -364,6 +364,55 @@ describe("<EmbedElementProperties />", () => {
     expect(currentHtml()).toContain("padding: 0px");
   });
 
+  it("removing the last fill removes the inline declaration instead of forcing background-color: transparent", async () => {
+    // Bug: `onUpdate`'s `diffCssDeclarations` call never opts into
+    // `removeInsteadOfReset`, so removing the only fill (which empties
+    // `node.fills` entirely) reads as "background-color disappeared" and
+    // gets an explicit `RESET_VALUES` reset (`transparent`) written inline —
+    // permanently hiding whatever background the element's own CSS class
+    // would otherwise show through, instead of letting it show through.
+    const html = `<div class="card" style="background-color:#ff0000;">hi</div>`;
+    seedEmbedNode(html);
+    const { shadow } = mountEmbedHost(html);
+    const target = shadow.querySelector("div.card")!;
+    selectElement(target, shadow, html);
+
+    render(<EmbedElementProperties />);
+    await flushRaf();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove fill" }));
+
+    const lower = currentHtml().toLowerCase();
+    expect(lower).not.toContain("background-color");
+  });
+
+  it("a CSS-less field (aspect ratio lock) never shows as applied, since it can't actually be persisted here", async () => {
+    // Bug: `onUpdate` called `setNode(nextNode)` BEFORE checking whether the
+    // patch produced any CSS to write. `aspectRatioLocked` has no CSS
+    // representation at all, so nothing is ever persisted for it — but the
+    // optimistic `setNode` still flipped the local `node` state, making the
+    // button render as "locked" until the next unrelated real edit's rAF
+    // re-read silently discarded it again. Fixed by moving the "nothing to
+    // write" bail-out before `setNode`, so this field never shows a state
+    // that isn't backed by anything real.
+    const html = `<div class="card" style="background-color:#ff0000;">hi</div>`;
+    seedEmbedNode(html);
+    const { shadow } = mountEmbedHost(html);
+    const target = shadow.querySelector("div.card")!;
+    selectElement(target, shadow, html);
+
+    render(<EmbedElementProperties />);
+    await flushRaf();
+
+    fireEvent.click(screen.getByRole("button", { name: "Lock aspect ratio" }));
+
+    // Nothing was actually written...
+    expect(currentHtml()).toBe(html);
+    // ...so the control must not present a "locked" state that has nothing
+    // behind it.
+    expect(screen.queryByRole("button", { name: "Unlock aspect ratio" })).toBeNull();
+  });
+
   it("has its own 'Edit inline' button that opens InlineEmbedEditor without deselecting the element first", async () => {
     // Regression: after EmbedActionBar's removal, EmbedContentSection's
     // "Edit inline" button was the ONLY way to reach startEditing(id,
@@ -412,6 +461,78 @@ describe("<EmbedElementProperties />", () => {
 
     expect(screen.queryByText("Typography", { exact: true })).toBeNull();
     expect(screen.queryByText("Text", { exact: true })).toBeNull();
+  });
+
+  describe("text color (TypographySection's textColor row)", () => {
+    it("edits the text color and writes `color:` without touching `background-color:`", async () => {
+      const html = `<div class="card" style="background-color:#ff0000;color:#0000ff;">hi</div>`;
+      seedEmbedNode(html);
+      const { shadow } = mountEmbedHost(html);
+      const target = shadow.querySelector("div.card")!;
+      selectElement(target, shadow, html);
+
+      render(<EmbedElementProperties />);
+      await flushRaf();
+
+      const typographySection = getSection("Typography");
+      const colorInput = within(typographySection).getByPlaceholderText("#000000");
+      fireEvent.change(colorInput, { target: { value: "#112233" } });
+
+      const lower = currentHtml().toLowerCase();
+      expect(lower).toContain("color: #112233");
+      expect(lower).toContain("background-color: #ff0000");
+    });
+
+    it("binding the text color to a color variable writes color: var(--name)", async () => {
+      const variable: Variable = {
+        id: "var-brand",
+        name: "--brand-500",
+        type: "color",
+        value: "#112233",
+      };
+      useVariableStore.getState().setVariables([variable]);
+      const html = `<div class="card" style="color:#0000ff;">hi</div>`;
+      seedEmbedNode(html);
+      const { shadow } = mountEmbedHost(html);
+      const target = shadow.querySelector("div.card")!;
+      selectElement(target, shadow, html);
+
+      render(<EmbedElementProperties />);
+      await flushRaf();
+
+      const typographySection = getSection("Typography");
+      fireEvent.click(within(typographySection).getByTitle("Bind to variable"));
+      fireEvent.click(within(typographySection).getByText("--brand-500"));
+
+      expect(currentHtml()).toContain("color: var(--brand-500");
+    });
+
+    it("unbinding the text color writes the literal color resolved for the active theme", async () => {
+      const variable: Variable = {
+        id: "var-brand",
+        name: "--brand-500",
+        type: "color",
+        value: "#112233",
+      };
+      useVariableStore.getState().setVariables([variable]);
+      // Fallback is load-bearing here, same reason as the Fill unbind test
+      // above: happy-dom cannot resolve `var()` on its own.
+      const html = `<div class="card" style="color:var(--brand-500, #112233);">hi</div>`;
+      seedEmbedNode(html);
+      const { shadow } = mountEmbedHost(html);
+      const target = shadow.querySelector("div.card")!;
+      selectElement(target, shadow, html);
+
+      render(<EmbedElementProperties />);
+      await flushRaf();
+
+      const typographySection = getSection("Typography");
+      fireEvent.click(within(typographySection).getByTitle("Unbind variable"));
+
+      const lower = currentHtml().toLowerCase();
+      expect(lower).not.toContain("var(--brand-500");
+      expect(lower).toContain(variable.value.toLowerCase());
+    });
   });
 
   describe("variable binding", () => {

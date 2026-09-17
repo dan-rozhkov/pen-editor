@@ -485,5 +485,42 @@ describe("<SizeSection />", () => {
       fireEvent.click(screen.getByRole("checkbox"));
       expect(onUpdate).toHaveBeenCalledWith({ clip: true });
     });
+
+    it("reports the node's own measured height, not a real-tree fit-content recomputation, for a detached fit-content frame", () => {
+      // Bug: the fit-content `effectiveWidth`/`effectiveHeight` branch wasn't
+      // gated on `detachedNode` (unlike the "Fit to content" button above),
+      // so it materialized this synthetic node's id against the REAL
+      // `childrenById` — finding nothing, since a detached node (e.g. the
+      // embed-element bridge) was never in that tree. Because this bridge
+      // always sets `children: []` on its synthetic node too,
+      // `calculateFrameIntrinsicSize` then computes the intrinsic size of a
+      // genuinely EMPTY frame (padding only, here 0) instead of reporting
+      // this element's own measured height (120) — exactly what
+      // `AutoLayoutSection`'s fallback `enableAutoLayout` triggers by
+      // setting `sizing.heightMode: "fit_content"`.
+      const detachedFitContentFrame = {
+        id: "embed-element",
+        type: "frame",
+        name: "div",
+        x: 0,
+        y: 0,
+        width: 300,
+        height: 120,
+        children: [],
+        layout: { autoLayout: true, flexDirection: "row" },
+        sizing: { heightMode: "fit_content" },
+      } as unknown as SceneNode;
+
+      render(
+        <SizeSection
+          node={detachedFitContentFrame}
+          onUpdate={vi.fn()}
+          parentContext={ROOT_CONTEXT}
+          detachedNode
+        />,
+      );
+      const inputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+      expect(inputs[1].value).toBe("120"); // H
+    });
   });
 });
