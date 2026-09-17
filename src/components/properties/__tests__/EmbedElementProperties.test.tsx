@@ -465,6 +465,66 @@ describe("<EmbedElementProperties />", () => {
       expect(updatedHtml).not.toContain("var(");
     });
 
+    it("F1: resolves the swatch/unbind value from the embed's nearest ancestor themeOverride, not the global theme", async () => {
+      // Regression: this panel used to read the GLOBAL active theme
+      // (useThemeStore) directly, ignoring a frame's own themeOverride —
+      // the same effective-theme resolution the embed itself renders with
+      // (getEffectiveThemeForNode / EmbedLayer.tsx). Global theme is
+      // "light" here, but the embed sits inside a frame overridden to
+      // "dark" — both the swatch and the unbind write must reflect DARK.
+      seedColorVariable("var_brand", "--brand-500", "#112233", "#445566");
+      useThemeStore.getState().setActiveTheme("light");
+      const html = `<div class="card" style="background-color: var(--brand-500);">hi</div>`;
+      const embedNode: EmbedNode = {
+        id: EMBED_ID,
+        type: "embed",
+        x: 0,
+        y: 0,
+        width: 300,
+        height: 200,
+        htmlContent: html,
+      };
+      useSceneStore.setState({
+        nodesById: {
+          frame1: {
+            id: "frame1",
+            type: "frame",
+            name: "Screen",
+            x: 0,
+            y: 0,
+            width: 400,
+            height: 300,
+            themeOverride: "dark",
+          } as unknown as EmbedNode,
+          [EMBED_ID]: embedNode,
+        },
+        parentById: { frame1: null, [EMBED_ID]: "frame1" },
+        childrenById: { frame1: [EMBED_ID] },
+        rootIds: ["frame1"],
+        _cachedTree: null,
+      });
+      useSelectionStore.getState().select(EMBED_ID);
+      const { shadow } = mountEmbedHost(html);
+      const target = shadow.querySelector("div.card")!;
+      selectElement(target, shadow, html);
+
+      render(<EmbedElementProperties />);
+      await flushRaf();
+
+      const fillSection = getSection("Fill");
+      // Swatch: the bound row shows the variable's name regardless of theme,
+      // so assert via the underlying color value the swatch is built from
+      // rather than the label — unbind, which DOES depend on the resolved
+      // value, is the more direct assertion of the actual bug.
+      expect(within(fillSection).getByText("--brand-500")).toBeTruthy();
+
+      fireEvent.click(within(fillSection).getByTitle("Unbind variable"));
+
+      const updatedHtml = (useSceneStore.getState().nodesById[EMBED_ID] as EmbedNode).htmlContent;
+      expect(updatedHtml!.toLowerCase()).toContain("background-color: #445566"); // dark value
+      expect(updatedHtml).not.toContain("var(");
+    });
+
     it("an unresolvable binding (variable deleted from the Variables tab) falls back to the plain, unbound color UI", async () => {
       // No seedColorVariable() call — `color: var(--gone)` names a custom
       // property no color variable defines. `findVariableByName` can't

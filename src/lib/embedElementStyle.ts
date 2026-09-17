@@ -191,9 +191,43 @@ export function readEmbedElementSnapshot(el: Element): EmbedElementStyleSnapshot
   // always targets the `border-color` shorthand-of-sides rather than a
   // single-edge longhand), so a binding this panel wrote round-trips through
   // its own read.
+  //
+  // But an element this panel did NOT author may bind the SHORTHAND instead
+  // — `style="background: var(--brand)"` is what the backend prompt now
+  // tells the model to write. A shorthand containing a `var()` reference is
+  // a "pending-substitution value": the spec has the UA retain it as a
+  // whole rather than expand it into longhands, so
+  // `getPropertyValue("background-color")` comes back empty even though the
+  // element is plainly bound — the Fill row would render as unbound and a
+  // user edit would silently clobber the binding instead of rebinding it.
+  // Falls back to the shorthand ONLY when the longhand is empty AND the
+  // shorthand's entire value is a single `var(...)` reference
+  // (`parseVarReference` already requires that — it rejects anything with
+  // extra text around the `var()`). Deliberately NOT attempted for a
+  // multi-part `background` shorthand like `url(...) center / cover` — a
+  // `var()` inside a value like that could be sizing an image, not naming a
+  // color, and `parseVarReference`'s whole-value match already excludes it
+  // (it isn't a single `var()` call), so no extra guard is needed here.
+  //
+  // `border`/`border-color` were measured in this repo's own Vitest
+  // (happy-dom) environment and did NOT need the same fallback: authoring
+  // `border-color: var(--brand)` directly already populates the
+  // `border-color` longhand as expected, and even inside the full `border:
+  // 1px solid var(--brand)` shorthand, happy-dom's CSSOM already reflects
+  // `var(--brand)` on the `border-color` longhand read (a quirk of its
+  // shorthand expansion, not spec-mandated — the CSS spec's
+  // pending-substitution behavior for a var()-containing shorthand is the
+  // same for `border` as for `background`, so a real browser may differ).
+  // No `border` fallback is added here since it was not observed to be
+  // needed against the environment this suite actually exercises; if a
+  // future report shows a real-browser gap, add a `border`-shorthand
+  // fallback the same way.
   const varBindings: EmbedElementStyleSnapshot["varBindings"] = {};
   if (inlineStyle) {
-    const bgVar = parseVarReference(inlineStyle.getPropertyValue("background-color"));
+    const bgColorLonghand = inlineStyle.getPropertyValue("background-color");
+    const bgVar = bgColorLonghand
+      ? parseVarReference(bgColorLonghand)
+      : parseVarReference(inlineStyle.getPropertyValue("background"));
     if (bgVar) varBindings.backgroundColor = bgVar;
     const colorVar = parseVarReference(inlineStyle.getPropertyValue("color"));
     if (colorVar) varBindings.color = colorVar;

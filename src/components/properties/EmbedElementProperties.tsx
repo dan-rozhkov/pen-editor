@@ -13,6 +13,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useThemeStore } from "@/store/themeStore";
+import { getThemeFromAncestorFrames } from "@/utils/nodeUtils";
 import { getVariableCssName, getVariableValue, type ThemeName, type Variable } from "@/types/variable";
 import { useReadOnly } from "@/hooks/useReadOnly";
 import { IconButton } from "@/components/ui/IconButton";
@@ -161,13 +162,36 @@ export function EmbedElementProperties() {
     embedId ? ((s.nodesById[embedId] as { htmlContent?: string } | undefined)?.htmlContent ?? null) : null,
   );
 
-  // Same source the native properties panel binds fills/strokes to
-  // (`PropertyEditor`'s `colorVariables`/`activeTheme`) — this panel isn't
-  // handed them as props (it's swapped in by `PropertiesPanel` independently
-  // of `PropertyEditor`), so it reads the stores directly instead.
+  // `colorVariables` mirrors the same source the native properties panel
+  // binds fills/strokes to (`PropertyEditor`'s `colorVariables`) — this panel
+  // isn't handed them as props (it's swapped in by `PropertiesPanel`
+  // independently of `PropertyEditor`), so it reads the store directly
+  // instead.
   const variables = useVariableStore((s) => s.variables);
   const colorVariables = useMemo(() => variables.filter((v) => v.type === "color"), [variables]);
-  const activeTheme = useThemeStore((s) => s.activeTheme);
+  // `activeTheme` here must resolve THE SAME WAY the embed itself is
+  // actually rendered: `EmbedLayer.tsx` mounts editor variables via
+  // `getEffectiveThemeForNode(embedId)` (`nodeThemeUtils.ts`) — the nearest
+  // ancestor frame's `themeOverride`, or else the global active theme — NOT
+  // the global theme unconditionally. An earlier version of this panel read
+  // `useThemeStore`'s global theme directly, which is wrong whenever the
+  // embed sits inside a frame with its own `themeOverride`: the swatch would
+  // show the WRONG theme's resolved color, and — worse — the Unbind path
+  // below writes `getVariableValue(variable, activeTheme)` as a literal hex
+  // into `htmlContent`, so unbinding would write the wrong theme's value and
+  // make the element visibly jump, the exact opposite of what that code
+  // path's own comment promises ("so the element doesn't visually jump").
+  // Reimplemented here (rather than calling `getEffectiveThemeForNode`
+  // directly, which reads `getState()` snapshots once and wouldn't re-render
+  // this panel when the scene tree or the global theme changes) as two
+  // selectors composed together — the same `getThemeFromAncestorFrames`
+  // helper `PropertiesPanel.tsx` uses for the native panel's own
+  // `activeTheme`, given the live global theme as its fallback instead of
+  // that call site's hardcoded `"light"`.
+  const globalTheme = useThemeStore((s) => s.activeTheme);
+  const activeTheme = useSceneStore((s) =>
+    embedId ? getThemeFromAncestorFrames(s.parentById, s.nodesById, embedId, globalTheme) : globalTheme,
+  );
 
   const [snapshot, setSnapshot] = useState<EmbedElementStyleSnapshot | null>(null);
   // Distinguishes "haven't read yet" from "read, and the element genuinely
@@ -443,6 +467,19 @@ function ElementPropertyFields({
    * dropped), or clears the declaration outright when the bound name no
    * longer resolves to any variable (e.g. it was deleted from the Variables
    * tab after this element was bound to it).
+   *
+   * KNOWN LIMITATION: this writes `var(<cssVarName(variable)>)` into
+   * `htmlContent` by NAME — unlike a native node's fill/stroke, which stores
+   * `variableId` and resolves the name lazily. Renaming a variable in the
+   * Variables panel changes what `getVariableCssName` returns for it, but
+   * nothing migrates the `var(--old-name)` references already baked into
+   * embed HTML: they silently stop resolving to that variable (the property
+   * falls through to whatever the embed's own `:root` declares, or unset),
+   * and this panel's own `findVariableByName` no longer matches them either,
+   * so the row re-renders as unbound. This is inherent to plain CSS custom
+   * properties (there is no indirection to rename through) and a
+   * rename-migration is out of scope here — a rename simply does not
+   * propagate into embed HTML the way it does for native nodes.
    */
   const bindColorVariable =
     (cssProp: "background-color" | "color", boundVarName: string | undefined) =>

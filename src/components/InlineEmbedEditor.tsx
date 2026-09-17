@@ -4,7 +4,9 @@ import { useSceneStore, createSnapshot } from '../store/sceneStore'
 import { useHistoryStore } from '../store/historyStore'
 import { useSelectionStore } from '../store/selectionStore'
 import { useViewportStore } from '../store/viewportStore'
-import { mountHtmlWithBodyStyles, type MountResult } from '../utils/embedHtmlUtils'
+import { applyEditorVariableProperties, mountHtmlWithBodyStyles, type MountResult } from '../utils/embedHtmlUtils'
+import { collectVariableValues } from '../utils/variableCssUtils'
+import { getEffectiveThemeForNode } from '../utils/nodeThemeUtils'
 import { normalizeTinySvgDotPathsWithOptions, stripTinySvgDotPathNormalization } from '../utils/svgDotNormalization'
 import { isTextLeaf } from '../lib/embedTextLeaf'
 
@@ -149,6 +151,20 @@ export function InlineEmbedEditor({
     )
     mountResultRef.current = mountResult
     const editableRoot = mountResult.root
+    // F5: this overlay mounts the embed's RAW htmlContent — same as
+    // EmbedLayer.tsx's own mount effect — so an element bound to an editor
+    // variable (`var(--brand)`) has nothing to resolve that reference
+    // against unless the same editor-variable values EmbedLayer applies are
+    // set here too. Without this, pressing "Edit inline" on an element whose
+    // fill is bound to a variable made the fill render transparent for the
+    // duration of the edit (the CSS custom property was simply unset in
+    // this overlay's own shadow tree), even though the live canvas shows the
+    // resolved color correctly.
+    applyEditorVariableProperties(
+      container,
+      editableRoot,
+      collectVariableValues(undefined, getEffectiveThemeForNode(node.id)),
+    )
     shadow.appendChild(container)
     normalizeTinySvgDotPathsWithOptions(editableRoot, { markTemporary: true })
     containerRef.current = container

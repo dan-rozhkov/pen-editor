@@ -192,6 +192,31 @@ function applyGlobalRootCustomProperties(container: HTMLElement, root: HTMLEleme
 const appliedEditorVariableNames = new WeakMap<HTMLElement, Set<string>>();
 
 /**
+ * For a given mounted root, the custom-property value that was already
+ * sitting INLINE on `root` the first time `applyEditorVariableProperties`
+ * was about to overwrite it — captured before that first overwrite, so it
+ * survives even though the overwrite itself immediately replaces it. `null`
+ * means "captured, and there was nothing there" (still a real capture: it
+ * tells the revert path below not to bother re-checking), as opposed to "no
+ * entry" which means this name has never been touched by this function.
+ *
+ * Exists for a body-targeted embed: `mountHtmlWithBodyStyles` copies the
+ * AUTHOR's own `<body style="--brand:#111">` inline declaration onto the
+ * synthetic body it creates as `root`. Without this capture, the first
+ * `applyEditorVariableProperties` call overwrites that authored inline
+ * value with the editor's, and reverting later (variable deleted/renamed)
+ * had only `collectAuthoredRootCustomProperties`'s `<style>`-tag harvest to
+ * fall back to — which finds nothing for a value the author wrote inline
+ * rather than in a `:root` rule, so the property just vanished instead of
+ * returning to what the author wrote, until the embed was remounted from
+ * scratch. Keyed by `root` for the same reason `appliedEditorVariableNames`
+ * is (see its own comment) and cleared together with it, so a name that
+ * this function stops touching (reverted, then never reapplied) can be
+ * re-captured cleanly if it's touched again later.
+ */
+const originalInlineValuesByRoot = new WeakMap<HTMLElement, Map<string, string | null>>();
+
+/**
  * Applies (and live-updates) an embed's editor-defined CSS custom
  * properties on its mounted content root, as INLINE custom properties —
  * without touching `htmlContent` or remounting anything. `EmbedLayer.tsx`
@@ -210,12 +235,17 @@ const appliedEditorVariableNames = new WeakMap<HTMLElement, Set<string>>();
  * declarations — an inline custom property on `root` outranks any `<style>`
  * rule regardless of specificity — but a name that drops OUT of `vars` since
  * the previous call (a deleted or renamed variable) is not left dangling at
- * its last editor value: it falls back to whatever `container`'s own
- * authored `:root` block declares for that name, or is removed from `root`
- * entirely when the embed never declared it either. Reverting is scoped to
- * names THIS function previously applied (tracked in
- * `appliedEditorVariableNames`), so it never touches a custom property the
- * embed's own CSS is independently responsible for.
+ * its last editor value. The revert order is: (1) whatever inline value
+ * `root` itself carried for that name BEFORE this function's first-ever
+ * overwrite of it (`originalInlineValuesByRoot` — covers a body-targeted
+ * embed's author-written `<body style="--brand:...">`, which
+ * `collectAuthoredRootCustomProperties` below can never see since it only
+ * harvests `<style>` tags), then (2) whatever `container`'s own authored
+ * `:root` `<style>` block declares for that name, then (3) removed from
+ * `root` entirely when neither source has it. Reverting is scoped to names
+ * THIS function previously applied (tracked in `appliedEditorVariableNames`),
+ * so it never touches a custom property the embed's own CSS is independently
+ * responsible for.
  *
  * `container` must be the element `mountHtmlWithBodyStyles` mounted the
  * embed's own (unmodified) HTML into — its `<style>` tags are what
@@ -232,23 +262,47 @@ export function applyEditorVariableProperties(
   vars: Map<string, string>,
 ): void {
   const previouslyApplied = appliedEditorVariableNames.get(root);
-  // Only harvest authored values when there is a chance we need one as a
-  // fallback below — a fresh root (no previous call) has nothing to revert.
-  const authored =
-    previouslyApplied && previouslyApplied.size > 0
-      ? collectAuthoredRootCustomProperties(container)
-      : null;
+  // Only harvest authored values when a name is actually about to be
+  // REVERTED (dropped from `vars` since the previous call) — re-parsing
+  // every `<style>` tag in the embed via `collectAuthoredRootCustomProperties`
+  // (a full CSSOM parse per tag) is expensive, and `previouslyApplied.size >
+  // 0` alone is true on nearly every call, including a plain value update
+  // where nothing is being reverted at all. `EmbedLayer.tsx` mounts EVERY
+  // visible embed and re-runs this on every `useVariableStore` mutation, so
+  // an unconditional harvest here means dragging a single color slider
+  // re-parses every `<style>` tag of every mounted embed on every
+  // pointermove — one full CSS re-parse per embed per animation frame.
+  const hasNameToRevert =
+    previouslyApplied != null && [...previouslyApplied].some((name) => !vars.has(name));
+  const authored = hasNameToRevert ? collectAuthoredRootCustomProperties(container) : null;
 
   if (previouslyApplied) {
+    const originalInline = originalInlineValuesByRoot.get(root);
     for (const name of previouslyApplied) {
       if (vars.has(name)) continue; // still supplied below — overwritten, not reverted
+      const capturedInline = originalInline?.get(name);
       const authoredValue = authored?.get(name);
-      if (authoredValue != null) root.style.setProperty(name, authoredValue);
+      if (capturedInline != null) root.style.setProperty(name, capturedInline);
+      else if (authoredValue != null) root.style.setProperty(name, authoredValue);
       else root.style.removeProperty(name);
     }
   }
 
+  let originalInline = originalInlineValuesByRoot.get(root);
   for (const [name, value] of vars) {
+    // Capture whatever was already inline on `root` for this name the FIRST
+    // time (ever, across calls) this function is about to overwrite it —
+    // guarded on `!originalInline.has(name)` so a later call, which is
+    // overwriting ITS OWN previously-applied editor value rather than an
+    // author's, doesn't clobber the real original with that editor value.
+    if (!originalInline) {
+      originalInline = new Map();
+      originalInlineValuesByRoot.set(root, originalInline);
+    }
+    if (!originalInline.has(name)) {
+      const existing = root.style.getPropertyValue(name);
+      originalInline.set(name, existing || null);
+    }
     root.style.setProperty(name, value);
   }
 

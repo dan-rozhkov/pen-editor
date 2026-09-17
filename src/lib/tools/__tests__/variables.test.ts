@@ -23,9 +23,23 @@ describe("get_variables", () => {
         type: "color",
         value: "#3366ff",
         themeValues: { light: "#3366ff", dark: "#99bbff" },
+        cssName: "--primary",
       },
-      { id: "var-radius", name: "--radius-m", type: "number", value: "8" },
+      { id: "var-radius", name: "--radius-m", type: "number", value: "8", cssName: "--radius-m" },
     ]);
+  });
+
+  // The Variables panel creates variables literally named "Color 1", which is
+  // not a usable custom-property name. The agent is told (system prompt,
+  // "Embed variables") to reference `cssName` inside embed HTML, so this tool
+  // has to report the same canonical name `canvasContext.variables` and the
+  // embed injection use — otherwise the model writes `var(--Color 1)`.
+  it("reports the canonical CSS name for a free-form variable name", async () => {
+    useVariableStore.getState().setVariables([
+      { id: "var-loose", name: "Color 1", type: "color", value: "#ff0000" },
+    ]);
+    const result = JSON.parse(await getVariables({}));
+    expect(result.variables[0]).toMatchObject({ name: "Color 1", cssName: "--color-1" });
   });
 });
 

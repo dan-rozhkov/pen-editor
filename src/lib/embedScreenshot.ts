@@ -33,13 +33,24 @@ import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
  * throwaway PNG-encode/decode round trip.
  *
  * `nodeId`, when passed, resolves the node's effective theme
- * (`getEffectiveThemeForNode`) and appends the same `buildVariableStyleBlock`
- * `<style>:root{...}</style>` block that `EmbedLayer.tsx` injects before
- * mounting the live Shadow-DOM overlay — without it, `var(--color-...)`
- * references in the embed's HTML have nothing to resolve against off-canvas
- * (a foreignObject SVG document doesn't inherit page-level custom
- * properties), so exported/screenshotted colors would silently fall back to
- * their CSS default instead of the resolved value visible on screen.
+ * (`getEffectiveThemeForNode`) and appends a `buildVariableStyleBlock`
+ * `<style>:root{...}</style>` block to the HTML STRING before rendering —
+ * without it, `var(--color-...)` references in the embed's HTML have
+ * nothing to resolve against off-canvas (a foreignObject SVG document
+ * doesn't inherit page-level custom properties), so exported/screenshotted
+ * colors would silently fall back to their CSS default instead of the
+ * resolved value visible on screen.
+ *
+ * This is NOT the same mechanism `EmbedLayer.tsx` uses for the live
+ * Shadow-DOM overlay — that path sets editor variables as INLINE custom
+ * properties on the mounted root (`applyEditorVariableProperties` in
+ * `embedHtmlUtils.ts`), specifically to avoid baking a permanent `<style>`
+ * block into markup that gets re-harvested later (see that function's doc
+ * comment). This path has no live mounted element to set inline properties
+ * on — `renderHtmlToCanvas` starts from a fresh HTML string every call — so
+ * appending the `<style>` block here is the equivalent for a one-shot
+ * render rather than a mistake reintroducing the old approach. Both paths
+ * resolve to the same values for a given node/theme.
  */
 export async function captureEmbedCanvas(
   node: Pick<EmbedNode, "htmlContent" | "width" | "height">,

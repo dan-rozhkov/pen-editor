@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   applyEditorVariableProperties,
   collectAuthoredRootCustomProperties,
@@ -107,6 +107,77 @@ describe("applyEditorVariableProperties", () => {
     applyEditorVariableProperties(container, body, new Map());
     expect(body.style.getPropertyValue("--brand")).toBe("#101010");
     expect(container.style.getPropertyValue("--brand")).toBe("");
+  });
+});
+
+// F2: applyEditorVariableProperties must not re-harvest the embed's authored
+// <style> tags (collectAuthoredRootCustomProperties, a full CSSOM parse per
+// tag) unless a name is actually about to be reverted. EmbedLayer mounts
+// every visible embed and re-runs this on every useVariableStore mutation,
+// so an unconditional harvest turns a single value update — the common case,
+// e.g. dragging a color slider — into a full stylesheet re-parse per embed
+// per pointermove.
+describe("applyEditorVariableProperties — harvest gating (perf)", () => {
+  it("does not re-harvest authored <style> tags when nothing needs reverting", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<style>:root { --brand: #101010; }</style><div>hi</div>";
+    // collectAuthoredRootCustomProperties (the full CSSOM-parse harvest)
+    // calls `container.querySelectorAll("style")` as its very first step —
+    // spying there is a direct proxy for "did a re-harvest happen".
+    const qsaSpy = vi.spyOn(container, "querySelectorAll");
+
+    applyEditorVariableProperties(container, container, new Map([["--brand", "#00ff00"]]));
+    expect(qsaSpy).not.toHaveBeenCalled(); // first call: nothing previously applied, nothing to revert
+
+    applyEditorVariableProperties(container, container, new Map([["--brand", "#0000ff"]]));
+    expect(qsaSpy).not.toHaveBeenCalled(); // second call: same name still supplied — an update, not a revert
+
+    applyEditorVariableProperties(container, container, new Map([["--brand", "#0000ff"], ["--accent", "#ff00ff"]]));
+    expect(qsaSpy).not.toHaveBeenCalled(); // adding a NEW name is not a revert of any previously-applied name either
+
+    applyEditorVariableProperties(container, container, new Map());
+    expect(qsaSpy).toHaveBeenCalledTimes(1); // NOW something (--brand, --accent) needs reverting
+
+    qsaSpy.mockRestore();
+  });
+});
+
+// F3: the revert path's only fallback used to be the embed's authored :root
+// <style> rules — but for a body-targeted embed, mountHtmlWithBodyStyles
+// copies the author's own <body style="--brand:..."> inline declaration onto
+// the synthetic body it mounts as `root`. The first applyEditorVariableProperties
+// call overwrites that inline value; deleting the editor variable must bring
+// it back rather than losing it (falling through to nothing, or wrongly to
+// an unrelated :root rule).
+describe("applyEditorVariableProperties — captured original inline value (F3)", () => {
+  it("restores the root's own pre-existing inline value on revert, in preference to an authored :root rule", () => {
+    const container = document.createElement("div");
+    // Both sources exist for --brand: an authored :root rule AND (simulating
+    // mountHtmlWithBodyStyles copying <body style="--brand:...">) a
+    // pre-existing INLINE value directly on `root`. The inline value must win.
+    container.innerHTML = "<style>:root { --brand: #101010; }</style>";
+    const root = document.createElement("div");
+    root.style.setProperty("--brand", "#222222"); // author's own inline declaration
+    container.appendChild(root);
+
+    applyEditorVariableProperties(container, root, new Map([["--brand", "#00ff00"]]));
+    expect(root.style.getPropertyValue("--brand")).toBe("#00ff00");
+
+    applyEditorVariableProperties(container, root, new Map()); // revert
+    expect(root.style.getPropertyValue("--brand")).toBe("#222222"); // captured inline, not the :root rule
+  });
+
+  it("falls back to the authored :root rule when there was no pre-existing inline value", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<style>:root { --brand: #101010; }</style>";
+    const root = document.createElement("div");
+    container.appendChild(root); // no inline --brand on root before the first apply
+
+    applyEditorVariableProperties(container, root, new Map([["--brand", "#00ff00"]]));
+    expect(root.style.getPropertyValue("--brand")).toBe("#00ff00");
+
+    applyEditorVariableProperties(container, root, new Map()); // revert
+    expect(root.style.getPropertyValue("--brand")).toBe("#101010"); // authored :root fallback
   });
 });
 

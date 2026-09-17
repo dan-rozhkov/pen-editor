@@ -536,6 +536,36 @@ describe("readEmbedElementSnapshot: variable bindings", () => {
     const snap = readEmbedElementSnapshot(el);
     expect(snap.varBindings).toEqual({});
   });
+
+  // F4 regression: the backend's own prompt now tells the model to author
+  // `background: var(--brand)` (the shorthand) rather than the
+  // `background-color` longhand this panel itself writes. Without a
+  // fallback, that reads as unbound — `getPropertyValue("background-color")`
+  // comes back empty for a shorthand containing a `var()` reference (a
+  // "pending-substitution value" per spec) — so the Fill row would silently
+  // let a user overwrite the binding instead of showing it as bound.
+  it("falls back to the `background` shorthand when the longhand is empty and the whole value is a single var()", () => {
+    const el = makeStyledEl("background: var(--brand-500);");
+    const snap = readEmbedElementSnapshot(el);
+    expect(snap.varBindings.backgroundColor).toBe("--brand-500");
+  });
+
+  it("does NOT report a binding from a multi-part background shorthand (a var() there may size an image, not a color)", () => {
+    const el = makeStyledEl("background: url(photo.png) center / cover no-repeat;");
+    const snap = readEmbedElementSnapshot(el);
+    expect(snap.varBindings.backgroundColor).toBeUndefined();
+  });
+
+  it("prefers the background-color longhand over the shorthand when both are present", () => {
+    // Longhand declared after the shorthand in the same style attribute wins
+    // the cascade and is what the browser reflects back for the longhand
+    // getter — the panel's own edit path always writes only the longhand
+    // (see setBorder's sibling handling for background-color), so this is
+    // the shape a normal edit-then-read round trip produces.
+    const el = makeStyledEl("background: var(--brand-500); background-color: var(--accent-200);");
+    const snap = readEmbedElementSnapshot(el);
+    expect(snap.varBindings.backgroundColor).toBe("--accent-200");
+  });
 });
 
 describe("readEmbedElementSnapshot: void elements never report editable text", () => {
