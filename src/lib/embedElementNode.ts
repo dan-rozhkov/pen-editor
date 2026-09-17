@@ -250,6 +250,22 @@ function parseGaps(cs: CSSStyleDeclaration): { gap: number; rowGap?: number; col
  * inside; a border with any other box-sizing means center (left as `undefined`,
  * the section's own default) — the base case, not called out as a fixup.
  *
+ * `inlineBoxSizing` — NOT `cs.boxSizing` — is what decides "inside", and this
+ * is deliberate, not an oversight: `cs.boxSizing` is the CASCADE-RESOLVED
+ * value, and almost every generated embed carries a class-level
+ * `* { box-sizing: border-box }` reset that has nothing to do with any
+ * element's stroke. Reading the cascade would make a plain bordered element
+ * under that reset read back as "Inside" even though nothing here ever wrote
+ * it — and worse, an Outside/Center element whose class also resets
+ * box-sizing would read back as "Inside" the moment its OWN outline/border
+ * stops shadowing that class value (`generateVisualStyles` never emits
+ * `box-sizing` for `outside` or `center`), flipping the Align select right
+ * back to Inside on the very next re-read. `inlineBoxSizing` is the
+ * element's own INLINE `box-sizing` declaration only — i.e. exactly what this
+ * bridge itself last wrote for Align: Inside (see `syntheticNodeToCssDeclarations`'s
+ * `box-sizing` handling) — so a class-only `border-box` is correctly treated
+ * as a fact about the embed's reset, not about this element's stroke.
+ *
  * Known non-round-tripping combination: an outside stroke never round-trips
  * back into a genuinely different width/color if the element's own CSS class
  * (rather than this bridge) also declares a `border` — the class's border
@@ -261,7 +277,11 @@ function parseGaps(cs: CSSStyleDeclaration): { gap: number; rowGap?: number; col
  * panel; flagged rather than hidden, since it isn't caused by anything this
  * fix changes.
  */
-function applyStrokeAlignFromCss(node: SyntheticNodeShape, cs: CSSStyleDeclaration): void {
+function applyStrokeAlignFromCss(
+  node: SyntheticNodeShape,
+  cs: CSSStyleDeclaration,
+  inlineBoxSizing: string | undefined,
+): void {
   const outlineWidth = parsePx(cs.outlineWidth);
   const hasOutline = outlineWidth > 0 && cs.outlineStyle !== "none" && cs.outlineStyle !== "hidden";
   if (hasOutline) {
@@ -277,7 +297,7 @@ function applyStrokeAlignFromCss(node: SyntheticNodeShape, cs: CSSStyleDeclarati
   }
 
   if (node.strokeWidth !== undefined || node.strokeWidthPerSide !== undefined) {
-    node.strokeAlign = cs.boxSizing === "border-box" ? "inside" : "center";
+    node.strokeAlign = inlineBoxSizing === "border-box" ? "inside" : "center";
   }
 }
 
@@ -391,7 +411,13 @@ export function embedElementToSyntheticNode(
   node.fill = backgroundFill;
   node.fillOpacity = backgroundFillOpacity;
 
-  applyStrokeAlignFromCss(node, cs);
+  // Computed early (rather than where the other inline-style reads live,
+  // below) so `applyStrokeAlignFromCss` can use the element's OWN inline
+  // `box-sizing` — never the cascade-resolved `cs.boxSizing` — to decide
+  // Align: Inside. See that function's doc comment for why this distinction
+  // is load-bearing, not incidental.
+  const inlineStyle = el instanceof HTMLElement ? el.style : undefined;
+  applyStrokeAlignFromCss(node, cs, inlineStyle?.boxSizing || undefined);
 
   const hasText = elementHasEditableText(el);
   if (hasText) {
@@ -429,7 +455,7 @@ export function embedElementToSyntheticNode(
   // `fillBinding` — see `SyntheticNodeShape`'s doc comment for why a
   // background binding and a text-color binding can no longer collide now
   // that they live on separate fields.
-  const inline = el instanceof HTMLElement ? el.style : undefined;
+  const inline = inlineStyle;
   // A `background` SHORTHAND holding a single `var()` is a
   // "pending-substitution value": the UA keeps it whole instead of expanding
   // it, so `getPropertyValue("background-color")` is empty even though the

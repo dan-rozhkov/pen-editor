@@ -10,6 +10,7 @@ import { useVariableStore } from "@/store/variableStore";
 import { resetStores } from "@/test/fixtures";
 import { describeEmbedElement, buildElementPath } from "@/lib/embedElementPicker";
 import { readEmbedElementSnapshot } from "@/lib/embedElementStyle";
+import * as embedElementStyle from "@/lib/embedElementStyle";
 import { mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
 import type { EmbedNode } from "@/types/scene";
 import type { Variable } from "@/types/variable";
@@ -76,6 +77,23 @@ function mountEmbedHost(html: string, width = 300, height = 200) {
   return { host, shadow };
 }
 
+/**
+ * Re-mount `shadow`'s content from the CURRENT `htmlContent`, mirroring what
+ * a real `EmbedLayer` does in its own `useEffect` whenever `htmlContent`
+ * changes. `mountEmbedHost` only mounts once — this test file otherwise has
+ * no live component keeping the shadow DOM in sync with the store, so a test
+ * that edits more than once and wants the panel's NEXT rAF re-read
+ * (`embedElementToSyntheticNode`) to see the write it just made needs this
+ * between edits, or it would keep reading the ORIGINAL, now-stale live
+ * element and undo the optimistic `setNode` the moment the effect re-fires.
+ */
+function resyncEmbedHost(shadow: ShadowRoot, html: string, width = 300, height = 200): void {
+  shadow.replaceChildren();
+  const content = document.createElement("div");
+  mountHtmlWithBodyStyles(content, html, width, height);
+  shadow.appendChild(content);
+}
+
 function seedEmbedNode(html: string): void {
   const node: EmbedNode = {
     id: EMBED_ID,
@@ -108,6 +126,15 @@ async function flushRaf(): Promise<void> {
 
 function currentHtml(): string {
   return (useSceneStore.getState().nodesById[EMBED_ID] as EmbedNode).htmlContent;
+}
+
+/** The `div.card` fixture's OWN inline `box-sizing`, parsed fresh from the
+ * current `htmlContent` — never a substring check on the raw html, which
+ * would also match a class-level `box-sizing` rule declared in a `<style>`
+ * block elsewhere in the same document. */
+function cardInlineBoxSizing(): string {
+  const doc = new DOMParser().parseFromString(currentHtml(), "text/html");
+  return (doc.querySelector("div.card") as HTMLElement | null)?.style.boxSizing ?? "";
 }
 
 /** Scope queries to one PropertySection by its title text (sections have no
@@ -378,6 +405,14 @@ describe("<EmbedElementProperties />", () => {
     // bailed out before writing anything, and the select silently reverted
     // to "Inside" on the next rAF re-read (`applyStrokeAlignFromCss` reading
     // the unchanged `box-sizing: border-box` straight off the DOM).
+    //
+    // Inside → Center is asserted to REMOVE the inline `box-sizing` rather
+    // than force it to `content-box`: that forced write was a fourth-round
+    // review finding of its own (a class-authored `border-box` reset would
+    // otherwise fight it right back), and `applyStrokeAlignFromCss` now
+    // reads only the element's own INLINE `box-sizing` to decide Inside — so
+    // "no inline box-sizing" already reads correctly as Center without
+    // forcing anything.
     const html = `<div class="card" style="border:1px solid #dddddd;box-sizing:border-box;">hi</div>`;
     seedEmbedNode(html);
     const { shadow } = mountEmbedHost(html);
@@ -392,17 +427,152 @@ describe("<EmbedElementProperties />", () => {
 
     fireEvent.click(alignCombobox);
     selectOption("Center");
+    resyncEmbedHost(shadow, currentHtml());
+    await flushRaf();
 
     let lower = currentHtml().toLowerCase();
-    expect(lower).toContain("box-sizing: content-box");
-    expect(lower).not.toContain("box-sizing: border-box");
+    expect(lower).not.toContain("box-sizing");
+    // The select must reflect the write on the next re-read, not silently
+    // revert to "Inside" (the exact failure mode of the original bug).
+    expect(comboboxFor(getSection("Stroke"), "Align").textContent).toContain("Center");
 
     // And back the other way, so this isn't just "any write sticks".
-    fireEvent.click(alignCombobox);
+    fireEvent.click(comboboxFor(getSection("Stroke"), "Align"));
     selectOption("Inside");
+    resyncEmbedHost(shadow, currentHtml());
+    await flushRaf();
 
     lower = currentHtml().toLowerCase();
     expect(lower).toContain("box-sizing: border-box");
+    expect(comboboxFor(getSection("Stroke"), "Align").textContent).toContain("Inside");
+  });
+
+  it("Align cycles through Center/Outside/Inside/Outside/Center without reverting, under a CLASS-authored box-sizing reset (bug repro: Outside → Center stayed dead)", async () => {
+    // Fourth-round review finding: `applyStrokeAlignFromCss` used to read
+    // `cs.boxSizing` (cascade-resolved), so a class-level
+    // `box-sizing: border-box` reset — near-universal in generated embed
+    // HTML — made a plain bordered element read back as "Inside" even though
+    // nothing here ever wrote it. Switching Align to Outside or Center never
+    // touches `box-sizing` at all (`generateVisualStyles` only ever emits it
+    // for `strokeAlign: "inside"`), so the class value survived every write
+    // and `applyStrokeAlignFromCss` read the element as "Inside" again on
+    // the very next re-read — the Align select was stuck, unable to
+    // represent "Center" or "Outside" at all once a class reset was present.
+    const html =
+      `<style>.card { box-sizing: border-box; }</style>` +
+      `<div class="card" style="border:1px solid #dddddd;">hi</div>`;
+    seedEmbedNode(html);
+    const { shadow } = mountEmbedHost(html);
+    const target = shadow.querySelector("div.card")!;
+    expect(getComputedStyle(target).boxSizing).toBe("border-box");
+    expect((target as HTMLElement).style.boxSizing).toBe("");
+    selectElement(target, shadow, html);
+
+    render(<EmbedElementProperties />);
+    await flushRaf();
+
+    const strokeSection = () => getSection("Stroke");
+    const align = () => comboboxFor(strokeSection(), "Align");
+
+    // Initial read: the class reset must NOT be mistaken for this element's
+    // own Inside alignment.
+    expect(align().textContent).toContain("Center");
+
+    fireEvent.click(align());
+    selectOption("Outside");
+    resyncEmbedHost(shadow, currentHtml());
+    await flushRaf();
+    expect(cardInlineBoxSizing()).toBe("");
+    expect(align().textContent).toContain("Outside");
+
+    // The bug: this used to render "Inside" again.
+    fireEvent.click(align());
+    selectOption("Center");
+    resyncEmbedHost(shadow, currentHtml());
+    await flushRaf();
+    expect(cardInlineBoxSizing()).toBe("");
+    expect(align().textContent).toContain("Center");
+
+    fireEvent.click(align());
+    selectOption("Inside");
+    resyncEmbedHost(shadow, currentHtml());
+    await flushRaf();
+    expect(cardInlineBoxSizing()).toBe("border-box");
+    expect(align().textContent).toContain("Inside");
+
+    // Inside → Outside must not clobber box-sizing with content-box either
+    // (the same fix as the dedicated regression test above, exercised here
+    // as part of the full three-value matrix).
+    fireEvent.click(align());
+    selectOption("Outside");
+    resyncEmbedHost(shadow, currentHtml());
+    await flushRaf();
+    expect(cardInlineBoxSizing()).not.toBe("content-box");
+    expect(align().textContent).toContain("Outside");
+
+    fireEvent.click(align());
+    selectOption("Center");
+    resyncEmbedHost(shadow, currentHtml());
+    await flushRaf();
+    expect(align().textContent).toContain("Center");
+  });
+
+  it("switching Align from Inside to Outside does not clobber box-sizing with content-box (bug repro)", async () => {
+    // Bug: the `removeInsteadOfReset` decision for `box-sizing` was keyed off
+    // whether the raw stroke PAINT STACK (`getStrokes`) went from non-empty
+    // to empty ("stroke removed entirely"). Inside → Outside keeps the stack
+    // non-empty (the stroke just moves to `outline`), yet `box-sizing`
+    // disappears from the generated CSS map just the same (`outside` never
+    // emits it) — so this transition fell through to the default explicit
+    // reset and forced `box-sizing: content-box` inline, permanently
+    // overriding the embed's own `* { box-sizing: border-box }` reset for a
+    // property this edit never intended to touch.
+    const html = `<div class="card" style="border:1px solid #dddddd;box-sizing:border-box;">hi</div>`;
+    seedEmbedNode(html);
+    const { shadow } = mountEmbedHost(html);
+    const target = shadow.querySelector("div.card")!;
+    selectElement(target, shadow, html);
+
+    render(<EmbedElementProperties />);
+    await flushRaf();
+
+    const strokeSection = getSection("Stroke");
+    const alignCombobox = comboboxFor(strokeSection, "Align");
+    fireEvent.click(alignCombobox);
+    selectOption("Outside");
+
+    const lower = currentHtml().toLowerCase();
+    expect(lower).not.toContain("box-sizing: content-box");
+    // happy-dom's CSSOM re-explodes the `outline` shorthand into longhands
+    // when serialized (same documented quirk as the border-shorthand assert
+    // in the "binding Stroke to a color variable" test above) — assert the
+    // longhands rather than the shorthand string.
+    expect(lower).toContain("outline-width: 1px");
+    expect(lower).toContain("outline-color: #dddddd");
+  });
+
+  it("setting stroke weight to 0 does not clobber box-sizing with content-box (bug repro)", async () => {
+    // Same root cause as the Inside→Outside case above, different trigger:
+    // dialing the weight to 0 leaves the raw paint stack untouched
+    // (`getStrokes` stays non-empty — only `strokeWidth` changed), but
+    // `generateVisualStyles` stops emitting border/outline/box-sizing
+    // entirely once `strokeWidth` is falsy, so `box-sizing` still disappears
+    // from the generated map and got forced to `content-box` under the old
+    // stack-emptiness criterion.
+    const html = `<div class="card" style="border:1px solid #dddddd;box-sizing:border-box;">hi</div>`;
+    seedEmbedNode(html);
+    const { shadow } = mountEmbedHost(html);
+    const target = shadow.querySelector("div.card")!;
+    selectElement(target, shadow, html);
+
+    render(<EmbedElementProperties />);
+    await flushRaf();
+
+    const strokeSection = getSection("Stroke");
+    const weightInput = within(strokeSection).getByDisplayValue("1");
+    fireEvent.change(weightInput, { target: { value: "0" } });
+
+    const lower = currentHtml().toLowerCase();
     expect(lower).not.toContain("box-sizing: content-box");
   });
 
@@ -536,10 +706,39 @@ describe("<EmbedElementProperties />", () => {
     render(<EmbedElementProperties />);
     await flushRaf();
 
+    // Captures the exact `edit.styles` patch `commitPatch` computes and hands
+    // to `applyEmbedElementEdit`, independent of any DOM re-serialization or
+    // read-side fallback — see the comment below for why a live-DOM re-read
+    // isn't enough on its own to pin this.
+    const applySpy = vi.spyOn(embedElementStyle, "applyEmbedElementEdit");
+
     const autoLayoutSection = getSection("Auto Layout");
     const gapInput = within(autoLayoutSection).getByDisplayValue("10");
     fireEvent.change(gapInput, { target: { value: "15" } });
 
+    // The patch object itself: `AutoLayoutSection`'s single "Gap" field
+    // clears `rowGap`/`columnGap` on the node (see its own comment), so
+    // `generateLayoutStyles` stops emitting the `row-gap: 20px`/`column-gap:
+    // 20px` declarations that were in "before" — `diffCssDeclarations` must
+    // therefore emit explicit RESETS for both longhands alongside the new
+    // `gap`, or a class-authored per-axis gap would survive under the
+    // written `gap` shorthand exactly like a stale, unreset `box-sizing`
+    // would (this test's sibling bug class). Asserted on the actual call
+    // argument, NOT a live re-read: `readEmbedElementSnapshot`'s own
+    // `cs.gap || cs.columnGap || cs.rowGap` fallback (needed for a DIFFERENT,
+    // legitimate happy-dom quirk — see below) would report `gap: 15` from the
+    // `gap` declaration alone even if the `row-gap`/`column-gap` resets were
+    // silently dropped from the patch, so that read-back alone cannot catch
+    // their disappearance.
+    const lastEditArg = applySpy.mock.calls.at(-1)?.[2];
+    expect(lastEditArg?.styles).toMatchObject({
+      gap: "15px",
+      "row-gap": "normal",
+      "column-gap": "normal",
+    });
+
+    // And the dead-control regression this test originally guarded against:
+    // the write must also actually reach a live element's EFFECTIVE gap.
     // Not a string-containment check on the serialized `style` attribute:
     // `applyEmbedElementEdit` calls `target.style.setProperty` in patch
     // order (`row-gap`, `column-gap`, THEN `gap` — see

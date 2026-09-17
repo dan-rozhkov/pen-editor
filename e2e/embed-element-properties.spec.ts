@@ -9,7 +9,11 @@ const EMBED_HTML = `
   </div>
 `;
 
-async function addEmbedFixture(page: Page): Promise<void> {
+async function addEmbedFixture(
+  page: Page,
+  id: string = EMBED_ID,
+  html: string = EMBED_HTML,
+): Promise<void> {
   await page.route("**/api/models", (route) =>
     route.fulfill({ json: { models: [], default: null } }),
   );
@@ -36,12 +40,12 @@ async function addEmbedFixture(page: Page): Promise<void> {
         htmlContent: html,
       });
     },
-    { id: EMBED_ID, html: EMBED_HTML },
+    { id, html },
   );
 }
 
-async function enterElementPicker(page: Page) {
-  const host = page.locator(`[data-embed-id="${EMBED_ID}"]`);
+async function enterElementPicker(page: Page, id: string = EMBED_ID) {
+  const host = page.locator(`[data-embed-id="${id}"]`);
   await expect(host).toBeVisible();
   const box = await host.boundingBox();
   if (!box) throw new Error("embed host has no bounding box");
@@ -57,7 +61,7 @@ async function enterElementPicker(page: Page) {
       const rect = canvas.getBoundingClientRect();
       return w.__hitTestScreenPoint(point.x - rect.left, point.y - rect.top) === id;
     },
-    { point, id: EMBED_ID },
+    { point, id },
   );
 
   // A single click on the canvas selects the embed, which auto-starts the
@@ -112,17 +116,22 @@ function selectTriggerByLabel(container: Locator, label: string) {
 /** Read a live property off the fixture's `<div id="fixture-card">`
  * from the current `htmlContent`, the same DOMParser round-trip the rest of
  * this spec uses instead of trusting the panel's own optimistic state. */
-function readFixtureCardStyle(page: Page, prop: "boxSizing"): Promise<string | undefined> {
+function readFixtureCardStyle(
+  page: Page,
+  prop: "boxSizing",
+  embedId: string = EMBED_ID,
+  elementId: string = "fixture-card",
+): Promise<string | undefined> {
   return page.evaluate(
-    ({ id, prop }) => {
+    ({ id, prop, elementId }) => {
       const w = window as unknown as {
         __sceneStore: { getState: () => { nodesById: Record<string, { htmlContent?: string }> } };
       };
       const html = w.__sceneStore.getState().nodesById[id]?.htmlContent ?? "";
-      const card = new DOMParser().parseFromString(html, "text/html").getElementById("fixture-card");
+      const card = new DOMParser().parseFromString(html, "text/html").getElementById(elementId);
       return card?.style[prop];
     },
-    { id: EMBED_ID, prop },
+    { id: embedId, prop, elementId },
   );
 }
 
@@ -196,9 +205,14 @@ test("picked embed elements use the native inspector field layout", async ({ pag
 
   await alignSelect.click();
   await page.getByRole("option", { name: "Center", exact: true }).click();
+  // Inside → Center REMOVES the inline `box-sizing` rather than forcing it
+  // to `content-box` (fourth-round review finding: forcing it would fight a
+  // class-authored `border-box` reset right back) — `applyStrokeAlignFromCss`
+  // reads only the element's OWN inline `box-sizing` to decide Inside, so no
+  // inline declaration at all already reads correctly as Center.
   await expect
     .poll(() => readFixtureCardStyle(page, "boxSizing"))
-    .toBe("content-box");
+    .toBeFalsy();
   await expect(alignSelect).toContainText("Center");
 
   // Then select text and capture its editable typography/text state. Scrolling
@@ -256,4 +270,82 @@ test("picked embed elements use the native inspector field layout", async ({ pag
       }, EMBED_ID),
     )
     .toBe("rgb(244, 244, 245)");
+});
+
+const CLASS_BOX_SIZING_EMBED_ID = "element-properties-class-box-sizing-fixture";
+const CLASS_BOX_SIZING_ELEMENT_ID = "reset-card";
+// Near-universal in generated embed HTML: a selector-level box-sizing reset
+// (not this bridge's own inline write), with the bordered element itself
+// carrying NO inline `box-sizing` at all — exactly the shape
+// `applyStrokeAlignFromCss` used to misread as "Inside" (see
+// `embedElementNode.ts`'s doc comment and the fourth-round review finding
+// this test guards). Targeted by id (not a class) so the picker's element
+// label stays a plain `div#reset-card` — a class attribute here would also
+// show up in the label alongside the id.
+const CLASS_BOX_SIZING_HTML = `
+  <style>#${CLASS_BOX_SIZING_ELEMENT_ID} { box-sizing: border-box; }</style>
+  <div id="${CLASS_BOX_SIZING_ELEMENT_ID}" style="width:200px; height:120px; border:1px solid #dddddd;">hi</div>
+`;
+
+test("stroke Align cycles through Center/Outside/Inside/Outside/Center in a real browser, under a class-authored box-sizing reset", async ({
+  page,
+}) => {
+  // Fourth-round review finding: `applyStrokeAlignFromCss` read the CASCADE-
+  // RESOLVED `box-sizing` (via `getComputedStyle`), so a class-level
+  // `* { box-sizing: border-box }` reset — which almost every generated
+  // embed carries — made a plain bordered element read back as "Inside" even
+  // though nothing here ever wrote it. Neither "Outside" nor "Center" ever
+  // touches `box-sizing` at all (`generateVisualStyles` only emits it for
+  // `strokeAlign: "inside"`), so the class value survived every write and
+  // the element read back as "Inside" again on the very next re-read — the
+  // Align select could never actually LAND on "Center" or "Outside" once a
+  // class reset was present, only flash through it before reverting. This
+  // needs a real browser (not happy-dom): happy-dom already proved unreliable
+  // twice before as an oracle for whether a `box-sizing` write actually
+  // reaches the DOM/round-trips through this read path.
+  await addEmbedFixture(page, CLASS_BOX_SIZING_EMBED_ID, CLASS_BOX_SIZING_HTML);
+  const host = await enterElementPicker(page, CLASS_BOX_SIZING_EMBED_ID);
+  await host.click({ position: { x: 12, y: 12 } });
+  await expect(elementHeader(page, `div#${CLASS_BOX_SIZING_ELEMENT_ID}`)).toBeVisible();
+
+  const strokeSection = page
+    .getByText("Stroke", { exact: true })
+    .locator('xpath=ancestor::div[contains(@class, "relative") and contains(@class, "border-b")]');
+  const alignSelect = selectTriggerByLabel(strokeSection, "Align");
+
+  const boxSizing = () =>
+    readFixtureCardStyle(page, "boxSizing", CLASS_BOX_SIZING_EMBED_ID, CLASS_BOX_SIZING_ELEMENT_ID);
+
+  // Initial read: the class reset must NOT be mistaken for this element's
+  // own Inside alignment.
+  await expect(alignSelect).toContainText("Center");
+  expect(await boxSizing()).not.toBe("border-box");
+
+  await alignSelect.click();
+  await page.getByRole("option", { name: "Outside", exact: true }).click();
+  await expect(alignSelect).toContainText("Outside");
+  await expect.poll(boxSizing).not.toBe("border-box");
+
+  // The bug: this used to flash back to "Inside" instead.
+  await alignSelect.click();
+  await page.getByRole("option", { name: "Center", exact: true }).click();
+  await expect(alignSelect).toContainText("Center");
+  await expect.poll(boxSizing).not.toBe("border-box");
+
+  await alignSelect.click();
+  await page.getByRole("option", { name: "Inside", exact: true }).click();
+  await expect(alignSelect).toContainText("Inside");
+  await expect.poll(boxSizing).toBe("border-box");
+
+  // Inside → Outside must not clobber box-sizing with an explicit
+  // content-box either (the sibling, non-class-cascade bug this same review
+  // round fixed).
+  await alignSelect.click();
+  await page.getByRole("option", { name: "Outside", exact: true }).click();
+  await expect(alignSelect).toContainText("Outside");
+  await expect.poll(boxSizing).not.toBe("content-box");
+
+  await alignSelect.click();
+  await page.getByRole("option", { name: "Center", exact: true }).click();
+  await expect(alignSelect).toContainText("Center");
 });

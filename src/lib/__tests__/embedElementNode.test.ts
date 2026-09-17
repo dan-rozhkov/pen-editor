@@ -198,6 +198,39 @@ describe("embedElementToSyntheticNode", () => {
       const { node } = embedElementToSyntheticNode(target);
       expect(node.strokeAlign).toBeUndefined();
     });
+
+    it("bug repro: a class-wide `box-sizing: border-box` reset must NOT read as Inside", () => {
+      // Almost every generated embed carries `* { box-sizing: border-box }`
+      // as a class-level reset (not an inline declaration this panel ever
+      // wrote). `applyStrokeAlignFromCss` used to read `cs.boxSizing`, the
+      // CASCADE-RESOLVED value, which is indistinguishable from an inline
+      // `box-sizing: border-box` this panel itself would have written for
+      // Align: Inside — so a plain bordered element under that reset always
+      // read back as "Inside" even though nothing here ever set it. Confirmed
+      // this reflects a real class cascade in happy-dom (not just an inline
+      // declaration): `getComputedStyle` sees "border-box" while the
+      // element's OWN inline style never mentions box-sizing at all.
+      const style = document.createElement("style");
+      style.textContent = "* { box-sizing: border-box; }";
+      document.head.appendChild(style);
+      try {
+        const target = el("border: 2px solid rgb(0, 0, 0);");
+        expect(getComputedStyle(target).boxSizing).toBe("border-box");
+        expect(target.style.boxSizing).toBe("");
+
+        const { node } = embedElementToSyntheticNode(target);
+        expect(node.strokeAlign).toBe("center");
+      } finally {
+        style.remove();
+      }
+    });
+
+    it("an INLINE `box-sizing: border-box` (this panel's own write) still reads as Inside", () => {
+      const target = el("border: 2px solid rgb(0, 0, 0); box-sizing: border-box;");
+      expect(target.style.boxSizing).toBe("border-box");
+      const { node } = embedElementToSyntheticNode(target);
+      expect(node.strokeAlign).toBe("inside");
+    });
   });
 
   describe("flex-wrap and per-axis gap", () => {

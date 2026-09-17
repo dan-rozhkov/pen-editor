@@ -8,7 +8,7 @@ import {
 } from "@/lib/embedElementNode";
 import { findLiveEmbedElement, applyEmbedElementEdit } from "@/lib/embedElementStyle";
 import { BACKGROUND_STYLE_KEYS } from "@/lib/designToHtml/styleGeneration";
-import { getFills, getStrokes } from "@/utils/fillUtils";
+import { getFills } from "@/utils/fillUtils";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -202,30 +202,41 @@ export function EmbedElementProperties() {
       const hadFill = getFills(node).length > 0;
       const hasFillNow = getFills(nextNode).length > 0;
 
+      const beforeStyles = syntheticNodeToCssDeclarations(node);
+      const afterStyles = syntheticNodeToCssDeclarations(nextNode);
+
       // Same transition-scoped exception for `box-sizing`, mirroring the
       // fill case immediately above: `syntheticNodeToCssDeclarations` keeps
       // `box-sizing` in the diffable map (needed for the Align control — see
       // its doc comment there), but forcing an explicit `box-sizing:
-      // content-box` when a stroke is REMOVED entirely (`getStrokes`, the raw
-      // paint stack, going from non-empty to empty — "Remove stroke") would
+      // content-box` whenever this bridge stops touching it at all would
       // permanently override the embed's own box-sizing reset for a property
-      // this panel is no longer touching at all. An Align switch (inside ↔
-      // center) leaves the stroke stack non-empty, so it is NOT covered by
-      // this and keeps writing an explicit `box-sizing` value — that's what
+      // the edit never intended to change.
+      //
+      // The criterion is "did `box-sizing` disappear from the generated CSS
+      // map between before and after" — NOT "did the raw stroke paint stack
+      // (`getStrokes`) go from non-empty to empty". Those are different
+      // facts: `generateVisualStyles` only ever emits `box-sizing` for
+      // `strokeAlign: "inside"`, so it disappears on every transition OUT of
+      // Inside that isn't itself another Inside — Inside→Outside (the stroke
+      // stack stays non-empty, it just moves to `outline`), a weight edit
+      // down to 0, hiding the stroke's paint, or dialing its opacity to 0 —
+      // not only "the whole stroke was removed". Keying off the stack
+      // emptying alone missed every one of those and forced an explicit
+      // `content-box` for each. Keying off the key's actual presence in the
+      // before/after maps catches all of them, plus the "removed entirely"
+      // case, uniformly. An Align switch that STAYS on Inside↔Center keeps
+      // writing an explicit `box-sizing` value either way (the key is
+      // present in `after`, just with a different value), which is what
       // makes the Align control itself work.
-      const hadStroke = getStrokes(node).length > 0;
-      const hasStrokeNow = getStrokes(nextNode).length > 0;
-
       const removeInsteadOfReset: string[] = [];
       if (hadFill && !hasFillNow) removeInsteadOfReset.push(...BACKGROUND_STYLE_KEYS);
-      if (hadStroke && !hasStrokeNow) removeInsteadOfReset.push("box-sizing");
+      if ("box-sizing" in beforeStyles && !("box-sizing" in afterStyles)) {
+        removeInsteadOfReset.push("box-sizing");
+      }
       const diffOptions = removeInsteadOfReset.length > 0 ? { removeInsteadOfReset } : undefined;
 
-      const styles = diffCssDeclarations(
-        syntheticNodeToCssDeclarations(node),
-        syntheticNodeToCssDeclarations(nextNode),
-        diffOptions,
-      );
+      const styles = diffCssDeclarations(beforeStyles, afterStyles, diffOptions);
 
       // Width/height are DELIBERATELY excluded from
       // `syntheticNodeToCssDeclarations` (see `LAYOUT_STYLE_ALLOWLIST`'s doc
