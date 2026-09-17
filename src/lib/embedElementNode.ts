@@ -540,21 +540,35 @@ export function syntheticNodeToCssDeclarations(node: SyntheticNodeShape): Record
   const styles: Record<string, string> = {
     ...generateVisualStyles(node),
   };
-  // `generateVisualStyles` emits `box-sizing: border-box` whenever
-  // `strokeAlign === "inside"` — correct for a real canvas node, which owns
-  // its whole box model, but an embed element almost always already has its
-  // OWN box-sizing reset (`* { box-sizing: border-box }` is near-universal in
-  // generated embed HTML). `applyStrokeAlignFromCss` reads that same reset
-  // back as `strokeAlign: "inside"` for ANY bordered element, so this key
-  // would otherwise appear in "before" for nearly every stroke this bridge
-  // reads, and then disappear the moment the stroke is removed — which
-  // `diffCssDeclarations` reads as a real change and writes an explicit
-  // `box-sizing: content-box` inline, overriding the embed's own reset and
-  // silently resizing the element. There is no native control for
-  // `box-sizing` in this panel at all (same reasoning as its exclusion from
-  // `LAYOUT_STYLE_ALLOWLIST` below), so it is stripped from both "before" and
-  // "after" here rather than diffed.
-  delete styles["box-sizing"];
+  // `box-sizing` is DELIBERATELY kept here, unlike an earlier version of this
+  // function which deleted it unconditionally. That deletion was reasoned
+  // from "there is no native control for `box-sizing` in this panel" — which
+  // is wrong: `generateVisualStyles` renders `strokeAlign: "inside"` and
+  // `"center"` into the exact same `border: <width> solid <color>`
+  // declaration, and `box-sizing` (`border-box` vs anything else) is the ONLY
+  // thing that tells them apart (`applyStrokeAlignFromCss` reads it back the
+  // same way). The native control for this IS `StrokeSection`'s "Align"
+  // `SelectInput`. Stripping the key here made every Inside↔Center toggle
+  // diff to an empty patch: nothing was written, and the Align select
+  // silently reverted to "Inside" on the next re-read — the same class of
+  // "molча мёртвого контрола" bug this stripping was meant to fix for a
+  // different property.
+  //
+  // The transition this WAS guarding against — `box-sizing: border-box`
+  // showing up in "before" for nearly any bordered element (an embed's own
+  // `* { box-sizing: border-box }` reset makes `applyStrokeAlignFromCss` read
+  // every such element as `strokeAlign: "inside"`), then disappearing the
+  // moment the stroke is REMOVED and getting written back as an explicit
+  // `box-sizing: content-box` — is real, but it is a property of one
+  // transition (stroke stack goes empty), not of the key in general. It is
+  // handled the same way `EmbedElementProperties.tsx`'s `commitPatch` already
+  // handles the analogous "Remove fill" transition for `BACKGROUND_STYLE_KEYS`:
+  // by opting `box-sizing` into `diffCssDeclarations`'s `removeInsteadOfReset`
+  // for exactly that transition (stroke stack non-empty → empty), so the key
+  // is removed rather than forced to `content-box`, letting the embed's own
+  // reset show back through. Align switches (stroke stack stays non-empty)
+  // are unaffected and keep writing an explicit `box-sizing` value, which is
+  // what makes the Align control actually work.
 
   if (node.text !== undefined) {
     Object.assign(styles, generateTextStyles(node as unknown as TextNode));

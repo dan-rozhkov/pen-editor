@@ -100,6 +100,32 @@ function numberFieldByLabel(container: Locator, label: string) {
     .locator("input");
 }
 
+/** Same idea as `numberFieldByLabel`, for a `SelectInput`'s `role="combobox"`
+ * trigger instead of an `<input>`. */
+function selectTriggerByLabel(container: Locator, label: string) {
+  return container
+    .locator(`label:text-is("${label}")`)
+    .locator('xpath=ancestor::*[.//*[@role="combobox"]][1]')
+    .locator('[role="combobox"]');
+}
+
+/** Read a live property off the fixture's `<div id="fixture-card">`
+ * from the current `htmlContent`, the same DOMParser round-trip the rest of
+ * this spec uses instead of trusting the panel's own optimistic state. */
+function readFixtureCardStyle(page: Page, prop: "boxSizing"): Promise<string | undefined> {
+  return page.evaluate(
+    ({ id, prop }) => {
+      const w = window as unknown as {
+        __sceneStore: { getState: () => { nodesById: Record<string, { htmlContent?: string }> } };
+      };
+      const html = w.__sceneStore.getState().nodesById[id]?.htmlContent ?? "";
+      const card = new DOMParser().parseFromString(html, "text/html").getElementById("fixture-card");
+      return card?.style[prop];
+    },
+    { id: EMBED_ID, prop },
+  );
+}
+
 test("picked embed elements use the native inspector field layout", async ({ page }) => {
   await addEmbedFixture(page);
   const host = await enterElementPicker(page);
@@ -140,6 +166,40 @@ test("picked embed elements use the native inspector field layout", async ({ pag
     )
     .toBe("24px");
   await expect(elementHeader(page, "div#fixture-card")).toBeVisible();
+
+  // Stroke's "Align" select (Inside/Center/Outside), live in a REAL browser:
+  // `generateVisualStyles` renders `strokeAlign: "inside"` and `"center"`
+  // into the exact same `border: <w> solid <c>` declaration — `box-sizing`
+  // is the only thing distinguishing them — and happy-dom (the unit-test
+  // environment for this same control) is not a reliable oracle for whether
+  // a `box-sizing` write actually reaches the DOM/round-trips through
+  // `applyStrokeAlignFromCss`'s read side. The fixture's border has no
+  // explicit `box-sizing`, i.e. content-box, i.e. "Center".
+  const strokeSection = page
+    .getByText("Stroke", { exact: true })
+    .locator('xpath=ancestor::div[contains(@class, "relative") and contains(@class, "border-b")]');
+  const alignSelect = selectTriggerByLabel(strokeSection, "Align");
+  await expect(alignSelect).toContainText("Center");
+  expect(await readFixtureCardStyle(page, "boxSizing")).not.toBe("border-box");
+
+  await alignSelect.click();
+  await page.getByRole("option", { name: "Inside", exact: true }).click();
+  await expect
+    .poll(() => readFixtureCardStyle(page, "boxSizing"))
+    .toBe("border-box");
+  await expect(elementHeader(page, "div#fixture-card")).toBeVisible();
+  // The select itself must reflect the write, not silently revert on the
+  // next rAF re-read (the exact failure mode of the bug this asserts against
+  // — the value round-trips through `applyStrokeAlignFromCss` reading the
+  // live DOM back).
+  await expect(alignSelect).toContainText("Inside");
+
+  await alignSelect.click();
+  await page.getByRole("option", { name: "Center", exact: true }).click();
+  await expect
+    .poll(() => readFixtureCardStyle(page, "boxSizing"))
+    .toBe("content-box");
+  await expect(alignSelect).toContainText("Center");
 
   // Then select text and capture its editable typography/text state. Scrolling
   // the real 300px sidebar catches clipped or misaligned lower sections.

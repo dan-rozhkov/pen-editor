@@ -8,7 +8,7 @@ import {
 } from "@/lib/embedElementNode";
 import { findLiveEmbedElement, applyEmbedElementEdit } from "@/lib/embedElementStyle";
 import { BACKGROUND_STYLE_KEYS } from "@/lib/designToHtml/styleGeneration";
-import { getFills } from "@/utils/fillUtils";
+import { getFills, getStrokes } from "@/utils/fillUtils";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -201,9 +201,25 @@ export function EmbedElementProperties() {
       // every other property this bridge diffs.
       const hadFill = getFills(node).length > 0;
       const hasFillNow = getFills(nextNode).length > 0;
-      const diffOptions = hadFill && !hasFillNow
-        ? { removeInsteadOfReset: BACKGROUND_STYLE_KEYS }
-        : undefined;
+
+      // Same transition-scoped exception for `box-sizing`, mirroring the
+      // fill case immediately above: `syntheticNodeToCssDeclarations` keeps
+      // `box-sizing` in the diffable map (needed for the Align control — see
+      // its doc comment there), but forcing an explicit `box-sizing:
+      // content-box` when a stroke is REMOVED entirely (`getStrokes`, the raw
+      // paint stack, going from non-empty to empty — "Remove stroke") would
+      // permanently override the embed's own box-sizing reset for a property
+      // this panel is no longer touching at all. An Align switch (inside ↔
+      // center) leaves the stroke stack non-empty, so it is NOT covered by
+      // this and keeps writing an explicit `box-sizing` value — that's what
+      // makes the Align control itself work.
+      const hadStroke = getStrokes(node).length > 0;
+      const hasStrokeNow = getStrokes(nextNode).length > 0;
+
+      const removeInsteadOfReset: string[] = [];
+      if (hadFill && !hasFillNow) removeInsteadOfReset.push(...BACKGROUND_STYLE_KEYS);
+      if (hadStroke && !hasStrokeNow) removeInsteadOfReset.push("box-sizing");
+      const diffOptions = removeInsteadOfReset.length > 0 ? { removeInsteadOfReset } : undefined;
 
       const styles = diffCssDeclarations(
         syntheticNodeToCssDeclarations(node),

@@ -9,6 +9,7 @@ import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useVariableStore } from "@/store/variableStore";
 import { resetStores } from "@/test/fixtures";
 import { describeEmbedElement, buildElementPath } from "@/lib/embedElementPicker";
+import { readEmbedElementSnapshot } from "@/lib/embedElementStyle";
 import { mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
 import type { EmbedNode } from "@/types/scene";
 import type { Variable } from "@/types/variable";
@@ -114,6 +115,35 @@ function currentHtml(): string {
  * sections repeat the same field labels ("W", displayed "0", etc). */
 function getSection(title: string): HTMLElement {
   return screen.getByText(title, { exact: true }).closest(".relative.border-b") as HTMLElement;
+}
+
+/** Find the `role="combobox"` trigger for a `SelectInput`'s label within
+ * `scope`, the same "walk up from the label text" approach
+ * `StrokeSection.test.tsx`'s `numberInputFor` uses for `NumberInput` — a
+ * `SelectInput` has no other accessible link between its `<Label>` and its
+ * trigger either. */
+function comboboxFor(scope: HTMLElement, label: string): HTMLElement {
+  let container: HTMLElement | null = within(scope).getByText(label, { exact: true }).parentElement;
+  while (container) {
+    const combobox = container.querySelector('[role="combobox"]');
+    if (combobox) return combobox as HTMLElement;
+    container = container.parentElement;
+  }
+  throw new Error(`No combobox found for label "${label}"`);
+}
+
+/**
+ * Select an already-open `SelectInput`'s option by name. Mirrors
+ * `DevExportSection.test.tsx`'s `selectOption`: `@base-ui/react`'s
+ * `Select.Item` only commits a bare `click` when its OWN `pointerdown`
+ * landed on it first (guards against the trigger's opening click also
+ * landing on an item, since `SelectContent` uses `alignItemWithTrigger`) — a
+ * plain `fireEvent.click(option)` is silently ignored.
+ */
+function selectOption(name: string) {
+  const option = screen.getByRole("option", { name });
+  fireEvent.pointerDown(option);
+  fireEvent.click(option);
 }
 
 describe("<EmbedElementProperties />", () => {
@@ -339,6 +369,65 @@ describe("<EmbedElementProperties />", () => {
     expect(lower).toContain("border: 3px solid");
   });
 
+  it("toggling stroke Align between Inside and Center writes box-sizing and reaches html (bug repro: dead control)", async () => {
+    // Bug: `syntheticNodeToCssDeclarations` used to strip `box-sizing`
+    // unconditionally, but `generateVisualStyles` renders `strokeAlign:
+    // "inside"` and `"center"` into the exact same `border: <w> solid <c>`
+    // declaration — `box-sizing` was the ONLY thing telling them apart. With
+    // it stripped, switching Align diffed to an empty patch, `commitPatch`
+    // bailed out before writing anything, and the select silently reverted
+    // to "Inside" on the next rAF re-read (`applyStrokeAlignFromCss` reading
+    // the unchanged `box-sizing: border-box` straight off the DOM).
+    const html = `<div class="card" style="border:1px solid #dddddd;box-sizing:border-box;">hi</div>`;
+    seedEmbedNode(html);
+    const { shadow } = mountEmbedHost(html);
+    const target = shadow.querySelector("div.card")!;
+    selectElement(target, shadow, html);
+
+    render(<EmbedElementProperties />);
+    await flushRaf();
+
+    const strokeSection = getSection("Stroke");
+    const alignCombobox = comboboxFor(strokeSection, "Align");
+
+    fireEvent.click(alignCombobox);
+    selectOption("Center");
+
+    let lower = currentHtml().toLowerCase();
+    expect(lower).toContain("box-sizing: content-box");
+    expect(lower).not.toContain("box-sizing: border-box");
+
+    // And back the other way, so this isn't just "any write sticks".
+    fireEvent.click(alignCombobox);
+    selectOption("Inside");
+
+    lower = currentHtml().toLowerCase();
+    expect(lower).toContain("box-sizing: border-box");
+    expect(lower).not.toContain("box-sizing: content-box");
+  });
+
+  it("removing a stroke does not leave box-sizing: content-box inline (bug repro)", async () => {
+    // The fix for the Align control above must not regress the original,
+    // legitimate concern it was trying to address: removing a stroke
+    // entirely should let the embed's own `box-sizing` reset (near-universal
+    // in generated embed HTML) show back through, not force an explicit
+    // `content-box` that fights it. Mirrors `BACKGROUND_STYLE_KEYS`'s
+    // "Remove fill" handling.
+    const html = `<div class="card" style="border:1px solid #dddddd;box-sizing:border-box;">hi</div>`;
+    seedEmbedNode(html);
+    const { shadow } = mountEmbedHost(html);
+    const target = shadow.querySelector("div.card")!;
+    selectElement(target, shadow, html);
+
+    render(<EmbedElementProperties />);
+    await flushRaf();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove stroke" }));
+
+    const lower = currentHtml().toLowerCase();
+    expect(lower).not.toContain("box-sizing");
+  });
+
   it("writes an explicit padding: 0px rather than removing the declaration (removal wouldn't override a class)", async () => {
     // Regression: every write in this panel is documented to write an
     // explicit value, never `null`/remove — because embed HTML is styled
@@ -451,13 +540,26 @@ describe("<EmbedElementProperties />", () => {
     const gapInput = within(autoLayoutSection).getByDisplayValue("10");
     fireEvent.change(gapInput, { target: { value: "15" } });
 
-    const lower = currentHtml().toLowerCase();
-    expect(lower).toContain("gap: 15px");
-    // The per-axis gaps this bridge originally read are cleared as explicit
-    // resets (this bridge's own invariant — never a bare `removeProperty`),
-    // not left in place still overriding the new single `gap` value.
-    expect(lower).toContain("row-gap: normal");
-    expect(lower).toContain("column-gap: normal");
+    // Not a string-containment check on the serialized `style` attribute:
+    // `applyEmbedElementEdit` calls `target.style.setProperty` in patch
+    // order (`row-gap`, `column-gap`, THEN `gap` — see
+    // `syntheticNodeToCssDeclarations`'s `LAYOUT_STYLE_ALLOWLIST` insertion
+    // order), and in a real browser the `gap` shorthand set last overwrites
+    // the row-gap/column-gap longhands it also owns, serializing to just
+    // `gap: 15px` with no longhands at all. happy-dom's `CSSStyleDeclaration`
+    // doesn't do that expansion — it keeps `row-gap: normal` and
+    // `column-gap: normal` as separate, stale-looking entries alongside
+    // `gap: 15px` — so asserting on the raw string would pin that
+    // environment quirk (and would break the moment happy-dom's CSSOM is
+    // fixed). Instead, parse the RESOLVED value the same way this bridge's
+    // own read path does (`readEmbedElementSnapshot`'s `cs.gap || cs.columnGap
+    // || cs.rowGap` fallback, written for exactly this happy-dom gap-serialization
+    // quirk in the other direction) against a fresh mount of the written html,
+    // so this fails if the single Gap field ever stops actually changing the
+    // element's effective gap again.
+    const { shadow: editedShadow } = mountEmbedHost(currentHtml());
+    const editedTarget = editedShadow.querySelector("div.card")!;
+    expect(readEmbedElementSnapshot(editedTarget).gap).toBe(15);
   });
 
   it("a CSS-less field (aspect ratio lock) never shows as applied, since it can't actually be persisted here", async () => {

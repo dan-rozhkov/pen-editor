@@ -293,11 +293,51 @@ describe("textFillOpacity vs. background opacity (bug repro)", () => {
   });
 });
 
-describe("box-sizing excluded from the diff (bug repro)", () => {
-  it("removing a stroke does not emit a box-sizing reset", () => {
+describe("box-sizing diffing (bug repro: Align control was dead)", () => {
+  // `syntheticNodeToCssDeclarations` used to `delete styles["box-sizing"]`
+  // unconditionally, reasoning that "there is no native control for
+  // box-sizing in this panel". That was wrong: `generateVisualStyles` renders
+  // `strokeAlign: "inside"` and `"center"` into the exact same
+  // `border: <width> solid <color>` declaration, and `box-sizing` is the only
+  // thing that tells them apart — so stripping it made every Inside↔Center
+  // toggle diff to an empty patch (StrokeSection's "Align" `SelectInput`,
+  // ~line 316-326). `box-sizing` must stay in the diffable map so that
+  // control keeps working; only the "stroke removed entirely" transition
+  // needs the exception, and that is the CALLER's job (`removeInsteadOfReset`
+  // — see `EmbedElementProperties.tsx`'s `commitPatch`), not this function's.
+
+  it("switching strokeAlign from inside to center writes an explicit box-sizing reset", () => {
     const target = el("border: 1px solid #dddddd; box-sizing: border-box;");
     const { node } = embedElementToSyntheticNode(target);
     expect(node.strokeAlign).toBe("inside");
+    const before = syntheticNodeToCssDeclarations(node);
+
+    const centered: typeof node = { ...node, strokeAlign: "center" };
+    const after = syntheticNodeToCssDeclarations(centered);
+    const patch = diffCssDeclarations(before, after);
+
+    // The Align control must actually reach html: without this, the patch
+    // has no entry for `box-sizing` at all, `commitPatch` bails out on an
+    // "empty patch" and nothing is written.
+    expect(patch["box-sizing"]).toBe("content-box");
+  });
+
+  it("switching strokeAlign from center to inside writes box-sizing: border-box", () => {
+    const target = el("border: 1px solid #dddddd;");
+    const { node } = embedElementToSyntheticNode(target);
+    expect(node.strokeAlign).toBe("center");
+    const before = syntheticNodeToCssDeclarations(node);
+
+    const inside: typeof node = { ...node, strokeAlign: "inside" };
+    const after = syntheticNodeToCssDeclarations(inside);
+    const patch = diffCssDeclarations(before, after);
+
+    expect(patch["box-sizing"]).toBe("border-box");
+  });
+
+  it("removing a stroke entirely still resets box-sizing by default (the caller must opt into removeInsteadOfReset)", () => {
+    const target = el("border: 1px solid #dddddd; box-sizing: border-box;");
+    const { node } = embedElementToSyntheticNode(target);
     const before = syntheticNodeToCssDeclarations(node);
 
     const withoutStroke: typeof node = {
@@ -308,8 +348,20 @@ describe("box-sizing excluded from the diff (bug repro)", () => {
       strokeAlign: undefined,
     };
     const after = syntheticNodeToCssDeclarations(withoutStroke);
+
+    // No options passed: this low-level function has no notion of "the
+    // stroke stack went empty" on its own, so it falls back to the same
+    // explicit-reset rule as every other property.
     const patch = diffCssDeclarations(before, after);
-    expect(patch["box-sizing"]).toBeUndefined();
+    expect(patch["box-sizing"]).toBe("content-box");
+
+    // The caller (`EmbedElementProperties.tsx`) opts `box-sizing` into
+    // `removeInsteadOfReset` for exactly this transition, the same mechanism
+    // `BACKGROUND_STYLE_KEYS` already uses for "Remove fill".
+    const patchWithRemoval = diffCssDeclarations(before, after, {
+      removeInsteadOfReset: ["box-sizing"],
+    });
+    expect(patchWithRemoval["box-sizing"]).toBeNull();
   });
 });
 
