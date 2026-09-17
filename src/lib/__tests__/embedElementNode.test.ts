@@ -172,25 +172,30 @@ describe("embedElementToSyntheticNode", () => {
     });
   });
 
-  describe("strokeAlign round trip", () => {
-    it("outline (no border) reads back as outside, with stroke populated from the outline", () => {
+  describe("outline stroke reading (Align control removed)", () => {
+    // `StrokeSection`'s "Align" (Inside/Center/Outside) select is hidden for
+    // this bridge (`EmbedElementProperties.tsx` passes `hideAlign`) — CSS has
+    // no border-alignment concept, and reconstructing it from `border`/
+    // `outline`/`box-sizing` never survived an embed's own
+    // `* { box-sizing: border-box }` class reset. `node.strokeAlign` is
+    // therefore never populated by this bridge at all; only stroke
+    // color/width visibility is preserved for an outline-only element.
+
+    it("an outline-only element still reports a stroke (color/width), with strokeAlign left unset", () => {
       const target = el("outline: 3px solid rgb(0, 0, 0); outline-offset: 0;");
       const { node } = embedElementToSyntheticNode(target);
-      expect(node.strokeAlign).toBe("outside");
       expect(node.strokeWidth).toBe(3);
       expect(node.stroke).toBe("#000000");
+      expect(node.strokeAlign).toBeUndefined();
     });
 
-    it("border + box-sizing: border-box reads back as inside", () => {
+    it("a bordered element never gets strokeAlign populated, regardless of box-sizing", () => {
       const target = el("border: 2px solid rgb(0, 0, 0); box-sizing: border-box;");
       const { node } = embedElementToSyntheticNode(target);
-      expect(node.strokeAlign).toBe("inside");
-    });
-
-    it("border with content-box (default) reads back as center", () => {
-      const target = el("border: 2px solid rgb(0, 0, 0);");
-      const { node } = embedElementToSyntheticNode(target);
-      expect(node.strokeAlign).toBe("center");
+      expect(node.strokeAlign).toBeUndefined();
+      // The border itself (via `applyBaseProps`) still round-trips.
+      expect(node.strokeWidth).toBe(2);
+      expect(node.stroke).toBe("#000000");
     });
 
     it("no stroke at all leaves strokeAlign unset", () => {
@@ -199,37 +204,26 @@ describe("embedElementToSyntheticNode", () => {
       expect(node.strokeAlign).toBeUndefined();
     });
 
-    it("bug repro: a class-wide `box-sizing: border-box` reset must NOT read as Inside", () => {
-      // Almost every generated embed carries `* { box-sizing: border-box }`
-      // as a class-level reset (not an inline declaration this panel ever
-      // wrote). `applyStrokeAlignFromCss` used to read `cs.boxSizing`, the
-      // CASCADE-RESOLVED value, which is indistinguishable from an inline
-      // `box-sizing: border-box` this panel itself would have written for
-      // Align: Inside — so a plain bordered element under that reset always
-      // read back as "Inside" even though nothing here ever set it. Confirmed
-      // this reflects a real class cascade in happy-dom (not just an inline
-      // declaration): `getComputedStyle` sees "border-box" while the
-      // element's OWN inline style never mentions box-sizing at all.
+    it("a class-wide `box-sizing: border-box` reset has no effect on stroke reading", () => {
+      // Regression guard for the bug this bridge used to have: reading
+      // `strokeAlign` off the CASCADE-RESOLVED `box-sizing` (rather than the
+      // element's own inline declaration) made a plain bordered element under
+      // a `* { box-sizing: border-box }` class reset misreport as "Inside".
+      // Now that `strokeAlign` is never computed at all, box-sizing — inline
+      // or cascaded — cannot affect this bridge's output.
       const style = document.createElement("style");
       style.textContent = "* { box-sizing: border-box; }";
       document.head.appendChild(style);
       try {
         const target = el("border: 2px solid rgb(0, 0, 0);");
         expect(getComputedStyle(target).boxSizing).toBe("border-box");
-        expect(target.style.boxSizing).toBe("");
 
         const { node } = embedElementToSyntheticNode(target);
-        expect(node.strokeAlign).toBe("center");
+        expect(node.strokeAlign).toBeUndefined();
+        expect(node.strokeWidth).toBe(2);
       } finally {
         style.remove();
       }
-    });
-
-    it("an INLINE `box-sizing: border-box` (this panel's own write) still reads as Inside", () => {
-      const target = el("border: 2px solid rgb(0, 0, 0); box-sizing: border-box;");
-      expect(target.style.boxSizing).toBe("border-box");
-      const { node } = embedElementToSyntheticNode(target);
-      expect(node.strokeAlign).toBe("inside");
     });
   });
 
@@ -326,49 +320,23 @@ describe("textFillOpacity vs. background opacity (bug repro)", () => {
   });
 });
 
-describe("box-sizing diffing (bug repro: Align control was dead)", () => {
-  // `syntheticNodeToCssDeclarations` used to `delete styles["box-sizing"]`
-  // unconditionally, reasoning that "there is no native control for
-  // box-sizing in this panel". That was wrong: `generateVisualStyles` renders
-  // `strokeAlign: "inside"` and `"center"` into the exact same
-  // `border: <width> solid <color>` declaration, and `box-sizing` is the only
-  // thing that tells them apart — so stripping it made every Inside↔Center
-  // toggle diff to an empty patch (StrokeSection's "Align" `SelectInput`,
-  // ~line 316-326). `box-sizing` must stay in the diffable map so that
-  // control keeps working; only the "stroke removed entirely" transition
-  // needs the exception, and that is the CALLER's job (`removeInsteadOfReset`
-  // — see `EmbedElementProperties.tsx`'s `commitPatch`), not this function's.
+describe("box-sizing is never emitted by this bridge (Align control removed)", () => {
+  // Since nothing in this bridge ever sets `node.strokeAlign` to `"inside"`
+  // (the only value `generateVisualStyles` turns into a `box-sizing`
+  // declaration), `box-sizing` can never appear in a `syntheticNodeToCssDeclarations`
+  // map, so there is nothing for `diffCssDeclarations` to diff or reset for
+  // it — no inline `box-sizing` write is possible from this panel at all,
+  // which is exactly the property this test locks in (this used to be the
+  // source of the box-sizing/Align round-trip bugs).
 
-  it("switching strokeAlign from inside to center writes an explicit box-sizing reset", () => {
+  it("a bordered element's CSS declaration map never includes box-sizing", () => {
     const target = el("border: 1px solid #dddddd; box-sizing: border-box;");
     const { node } = embedElementToSyntheticNode(target);
-    expect(node.strokeAlign).toBe("inside");
-    const before = syntheticNodeToCssDeclarations(node);
-
-    const centered: typeof node = { ...node, strokeAlign: "center" };
-    const after = syntheticNodeToCssDeclarations(centered);
-    const patch = diffCssDeclarations(before, after);
-
-    // The Align control must actually reach html: without this, the patch
-    // has no entry for `box-sizing` at all, `commitPatch` bails out on an
-    // "empty patch" and nothing is written.
-    expect(patch["box-sizing"]).toBe("content-box");
+    const css = syntheticNodeToCssDeclarations(node);
+    expect(css["box-sizing"]).toBeUndefined();
   });
 
-  it("switching strokeAlign from center to inside writes box-sizing: border-box", () => {
-    const target = el("border: 1px solid #dddddd;");
-    const { node } = embedElementToSyntheticNode(target);
-    expect(node.strokeAlign).toBe("center");
-    const before = syntheticNodeToCssDeclarations(node);
-
-    const inside: typeof node = { ...node, strokeAlign: "inside" };
-    const after = syntheticNodeToCssDeclarations(inside);
-    const patch = diffCssDeclarations(before, after);
-
-    expect(patch["box-sizing"]).toBe("border-box");
-  });
-
-  it("removing a stroke entirely still resets box-sizing by default (the caller must opt into removeInsteadOfReset)", () => {
+  it("removing a stroke entirely never touches box-sizing in the diff", () => {
     const target = el("border: 1px solid #dddddd; box-sizing: border-box;");
     const { node } = embedElementToSyntheticNode(target);
     const before = syntheticNodeToCssDeclarations(node);
@@ -378,23 +346,24 @@ describe("box-sizing diffing (bug repro: Align control was dead)", () => {
       stroke: undefined,
       strokeWidth: undefined,
       strokeWidthPerSide: undefined,
-      strokeAlign: undefined,
     };
     const after = syntheticNodeToCssDeclarations(withoutStroke);
 
-    // No options passed: this low-level function has no notion of "the
-    // stroke stack went empty" on its own, so it falls back to the same
-    // explicit-reset rule as every other property.
     const patch = diffCssDeclarations(before, after);
-    expect(patch["box-sizing"]).toBe("content-box");
+    expect(patch["box-sizing"]).toBeUndefined();
+  });
 
-    // The caller (`EmbedElementProperties.tsx`) opts `box-sizing` into
-    // `removeInsteadOfReset` for exactly this transition, the same mechanism
-    // `BACKGROUND_STYLE_KEYS` already uses for "Remove fill".
-    const patchWithRemoval = diffCssDeclarations(before, after, {
-      removeInsteadOfReset: ["box-sizing"],
-    });
-    expect(patchWithRemoval["box-sizing"]).toBeNull();
+  it("editing stroke color/width alone never introduces a box-sizing declaration", () => {
+    const target = el("border: 1px solid #dddddd;");
+    const { node } = embedElementToSyntheticNode(target);
+    const before = syntheticNodeToCssDeclarations(node);
+
+    const recolored: typeof node = { ...node, stroke: "#ff0000", strokeWidth: 4 };
+    const after = syntheticNodeToCssDeclarations(recolored);
+    const patch = diffCssDeclarations(before, after);
+
+    expect(patch.border).toBe("4px solid #ff0000");
+    expect(patch["box-sizing"]).toBeUndefined();
   });
 });
 
@@ -574,7 +543,6 @@ describe("diffCssDeclarations", () => {
     ["outline", "1px solid #000"],
     ["border-image-source", "linear-gradient(red, blue)"],
     ["border-image-slice", "1"],
-    ["box-sizing", "border-box"],
     ["border-radius", "8px"],
     ["opacity", "0.5"],
     ["box-shadow", "0px 4px 6px 0px #000000"],

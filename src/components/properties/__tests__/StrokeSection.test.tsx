@@ -32,6 +32,7 @@ function renderSection(node: SceneNode, props: Partial<React.ComponentProps<type
       colorVariables={props.colorVariables ?? []}
       activeTheme={props.activeTheme ?? "light"}
       mixedKeys={props.mixedKeys}
+      hideAlign={props.hideAlign}
     />,
   );
   return onUpdate;
@@ -180,6 +181,31 @@ describe("<StrokeSection />", () => {
       expect(onUpdate).toHaveBeenCalledWith({
         strokeWidthPerSide: { top: 1, right: 10, bottom: 3, left: 4 },
       });
+    });
+  });
+
+  describe("hideAlign prop", () => {
+    it("shows the Align select by default (native scene-graph nodes keep it)", () => {
+      renderSection(makeNode({ stroke: "#000000", strokeWidth: 2 }));
+      expect(screen.getByText("Align")).toBeTruthy();
+      expect(screen.getByText("Center")).toBeTruthy();
+    });
+
+    it("hides the Align select entirely when hideAlign is passed", () => {
+      renderSection(makeNode({ stroke: "#000000", strokeWidth: 2 }), { hideAlign: true });
+      expect(screen.queryByText("Align")).toBeNull();
+      // Weight and other stroke controls remain unaffected.
+      expect(screen.getByText("Weight")).toBeTruthy();
+    });
+
+    it("hiding Align on an ellipse (which also omits Mode) leaves no Mode+Align row at all", () => {
+      renderSection(
+        makeNode({ type: "ellipse", stroke: "#000000", strokeWidth: 2 } as Partial<SceneNode>),
+        { hideAlign: true },
+      );
+      expect(screen.queryByText("Align")).toBeNull();
+      expect(screen.queryByText("Mode")).toBeNull();
+      expect(screen.getByText("Weight")).toBeTruthy();
     });
   });
 

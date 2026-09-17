@@ -205,52 +205,16 @@ export function EmbedElementProperties() {
       const beforeStyles = syntheticNodeToCssDeclarations(node);
       const afterStyles = syntheticNodeToCssDeclarations(nextNode);
 
-      // Same transition-scoped exception for `box-sizing`, mirroring the
-      // fill case immediately above: `syntheticNodeToCssDeclarations` keeps
-      // `box-sizing` in the diffable map (needed for the Align control — see
-      // its doc comment there), but forcing an explicit `box-sizing:
-      // content-box` whenever this bridge stops touching it at all would
-      // permanently override the embed's own box-sizing reset for a property
-      // the edit never intended to change.
-      //
-      // The criterion is NOT "did `box-sizing` disappear from the generated
-      // CSS map between before and after" (a fifth-round review finding: that
-      // was itself wrong, in the opposite direction from the fourth round's
-      // stack-emptiness bug). `generateVisualStyles` only ever emits
-      // `box-sizing` for `strokeAlign: "inside"`, so the key disappears from
-      // `after` on EVERY transition out of Inside, including Inside→Center —
-      // where the stroke is still very much drawn (`border` stays in
-      // `afterStyles`, just without a `box-sizing` key). Keying off the key
-      // alone made that transition fall into `removeInsteadOfReset` too, so
-      // the inline `box-sizing: border-box` was simply deleted, an embed's
-      // near-universal `box-sizing: border-box` class reset reasserted
-      // itself through the cascade, and the stroke rendered as Inside no
-      // matter what the (inline-only-reading) Align select claimed.
-      //
-      // The real distinction is whether a stroke is still drawn IN the box
-      // at all, i.e. whether `afterStyles` still has a `border` key
-      // (`inside`/`center`) as opposed to no stroke, a hidden/zero-weight
-      // stroke, or `outside` (which draws via `outline`, not `border`):
-      // - no `border` in `after` → nothing needs `box-sizing` any more, so it
-      //   is REMOVED, letting the embed's own reset (if any) show back
-      //   through, exactly like the fill case above.
-      // - `border` present in `after` but no `box-sizing` key (`center`) →
-      //   this is NOT a removal — an explicit `box-sizing: content-box` is
-      //   still required, or a class-authored `border-box` reset would
-      //   silently keep rendering the stroke as Inside. This case is handled
-      //   by simply NOT opting the key into `removeInsteadOfReset`: the
-      //   default diff path already writes `RESET_VALUES["box-sizing"]`
-      //   (`content-box`) whenever a key disappears and isn't explicitly
-      //   opted into removal — the same mechanism every other tracked
-      //   property uses.
-      // Center→Inside is unaffected by any of this: the key goes from absent
-      // to present with a value, which the default diff path already writes
-      // as a plain, explicit `box-sizing: border-box`.
+      // No `box-sizing` handling here (an earlier version had a
+      // transition-scoped exception mirroring the fill case above): this
+      // bridge no longer exposes Stroke's "Align" control
+      // (`StrokeSection`'s `hideAlign`), so `node.strokeAlign` is never set
+      // to `"inside"` and `box-sizing` never appears in `beforeStyles`/
+      // `afterStyles` at all — see `applyOutlineStroke`'s doc comment in
+      // `embedElementNode.ts` for why the control was removed rather than
+      // fixed again.
       const removeInsteadOfReset: string[] = [];
       if (hadFill && !hasFillNow) removeInsteadOfReset.push(...BACKGROUND_STYLE_KEYS);
-      if ("box-sizing" in beforeStyles && !("box-sizing" in afterStyles) && !("border" in afterStyles)) {
-        removeInsteadOfReset.push("box-sizing");
-      }
       const diffOptions = removeInsteadOfReset.length > 0 ? { removeInsteadOfReset } : undefined;
 
       const styles = diffCssDeclarations(beforeStyles, afterStyles, diffOptions);
@@ -420,6 +384,7 @@ export function EmbedElementProperties() {
             onUpdate={onUpdate}
             colorVariables={colorVariables}
             activeTheme={activeTheme}
+            hideAlign
           />
           <EffectsSection
             node={node}

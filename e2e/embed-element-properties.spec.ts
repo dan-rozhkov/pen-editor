@@ -104,21 +104,12 @@ function numberFieldByLabel(container: Locator, label: string) {
     .locator("input");
 }
 
-/** Same idea as `numberFieldByLabel`, for a `SelectInput`'s `role="combobox"`
- * trigger instead of an `<input>`. */
-function selectTriggerByLabel(container: Locator, label: string) {
-  return container
-    .locator(`label:text-is("${label}")`)
-    .locator('xpath=ancestor::*[.//*[@role="combobox"]][1]')
-    .locator('[role="combobox"]');
-}
-
 /** Read a live property off the fixture's `<div id="fixture-card">`
  * from the current `htmlContent`, the same DOMParser round-trip the rest of
  * this spec uses instead of trusting the panel's own optimistic state. */
 function readFixtureCardStyle(
   page: Page,
-  prop: "boxSizing",
+  prop: "boxSizing" | "borderWidth" | "borderColor",
   embedId: string = EMBED_ID,
   elementId: string = "fixture-card",
 ): Promise<string | undefined> {
@@ -132,30 +123,6 @@ function readFixtureCardStyle(
       return card?.style[prop];
     },
     { id: embedId, prop, elementId },
-  );
-}
-
-/**
- * Read the LIVE, cascade-resolved `box-sizing` straight off the shadow-DOM
- * element (`getComputedStyle`), as opposed to `readFixtureCardStyle`'s
- * `htmlContent` round-trip of the raw inline declaration. Needed to verify
- * the *actual visual claim* an Align value like "Center" makes — an inline
- * declaration can be written correctly and still render as something else if
- * a class-level reset on the same element wins the cascade, which is exactly
- * the failure mode the Inside→Center bug produced.
- */
-function liveComputedBoxSizing(
-  page: Page,
-  embedId: string,
-  elementId: string,
-): Promise<string | undefined> {
-  return page.evaluate(
-    ({ embedId, elementId }) => {
-      const host = document.querySelector(`[data-embed-id="${embedId}"]`) as HTMLElement | null;
-      const el = host?.shadowRoot?.getElementById(elementId) as HTMLElement | null;
-      return el ? getComputedStyle(el).boxSizing : undefined;
-    },
-    { embedId, elementId },
   );
 }
 
@@ -200,45 +167,27 @@ test("picked embed elements use the native inspector field layout", async ({ pag
     .toBe("24px");
   await expect(elementHeader(page, "div#fixture-card")).toBeVisible();
 
-  // Stroke's "Align" select (Inside/Center/Outside), live in a REAL browser:
-  // `generateVisualStyles` renders `strokeAlign: "inside"` and `"center"`
-  // into the exact same `border: <w> solid <c>` declaration — `box-sizing`
-  // is the only thing distinguishing them — and happy-dom (the unit-test
-  // environment for this same control) is not a reliable oracle for whether
-  // a `box-sizing` write actually reaches the DOM/round-trips through
-  // `applyStrokeAlignFromCss`'s read side. The fixture's border has no
-  // explicit `box-sizing`, i.e. content-box, i.e. "Center".
+  // Stroke's "Align" (Inside/Center/Outside) control no longer exists for an
+  // embed element, live in a REAL browser: CSS has no border-alignment
+  // concept, and reconstructing it from `border`/`box-sizing` never survived
+  // an embed's own `* { box-sizing: border-box }` class reset (five review
+  // rounds of "the panel shows a state the render doesn't have" — see
+  // `embedElementNode.ts`'s `applyOutlineStroke` doc comment). The control is
+  // gone; a stroke edit must still reach `htmlContent`, and must never write
+  // an inline `box-sizing` declaration.
   const strokeSection = page
     .getByText("Stroke", { exact: true })
     .locator('xpath=ancestor::div[contains(@class, "relative") and contains(@class, "border-b")]');
-  const alignSelect = selectTriggerByLabel(strokeSection, "Align");
-  await expect(alignSelect).toContainText("Center");
+  await expect(strokeSection.getByText("Align", { exact: true })).toHaveCount(0);
   expect(await readFixtureCardStyle(page, "boxSizing")).not.toBe("border-box");
 
-  await alignSelect.click();
-  await page.getByRole("option", { name: "Inside", exact: true }).click();
-  await expect
-    .poll(() => readFixtureCardStyle(page, "boxSizing"))
-    .toBe("border-box");
+  const strokeWeightInput = numberFieldByLabel(strokeSection, "Weight");
+  await strokeWeightInput.fill("5");
+  await expect.poll(() => readFixtureCardStyle(page, "borderWidth")).toBe("5px");
+  // No Align control means no way for this edit to ever introduce an inline
+  // `box-sizing` declaration.
+  expect(await readFixtureCardStyle(page, "boxSizing")).toBeFalsy();
   await expect(elementHeader(page, "div#fixture-card")).toBeVisible();
-  // The select itself must reflect the write, not silently revert on the
-  // next rAF re-read (the exact failure mode of the bug this asserts against
-  // — the value round-trips through `applyStrokeAlignFromCss` reading the
-  // live DOM back).
-  await expect(alignSelect).toContainText("Inside");
-
-  await alignSelect.click();
-  await page.getByRole("option", { name: "Center", exact: true }).click();
-  // Inside → Center writes an EXPLICIT `box-sizing: content-box` (fifth-round
-  // review finding, correcting the fourth round's "just remove it" fix):
-  // removing the key instead would let any class-authored `border-box` reset
-  // on this element reassert itself through the cascade and keep the stroke
-  // rendered as Inside no matter what the select says — see the dedicated
-  // class-reset cycle test below for that exact scenario in a real browser.
-  await expect
-    .poll(() => readFixtureCardStyle(page, "boxSizing"))
-    .toBe("content-box");
-  await expect(alignSelect).toContainText("Center");
 
   // Then select text and capture its editable typography/text state. Scrolling
   // the real 300px sidebar catches clipped or misaligned lower sections.
@@ -301,45 +250,24 @@ const CLASS_BOX_SIZING_EMBED_ID = "element-properties-class-box-sizing-fixture";
 const CLASS_BOX_SIZING_ELEMENT_ID = "reset-card";
 // Near-universal in generated embed HTML: a selector-level box-sizing reset
 // (not this bridge's own inline write), with the bordered element itself
-// carrying NO inline `box-sizing` at all — exactly the shape
-// `applyStrokeAlignFromCss` used to misread as "Inside" (see
-// `embedElementNode.ts`'s doc comment and the fourth-round review finding
-// this test guards). Targeted by id (not a class) so the picker's element
-// label stays a plain `div#reset-card` — a class attribute here would also
-// show up in the label alongside the id.
+// carrying NO inline `box-sizing` at all — exactly the shape that used to
+// confuse the now-removed Align control (see `embedElementNode.ts`'s
+// `applyOutlineStroke` doc comment for why that control is gone rather than
+// fixed again). Targeted by id (not a class) so the picker's element label
+// stays a plain `div#reset-card` — a class attribute here would also show up
+// in the label alongside the id.
 const CLASS_BOX_SIZING_HTML = `
   <style>#${CLASS_BOX_SIZING_ELEMENT_ID} { box-sizing: border-box; }</style>
   <div id="${CLASS_BOX_SIZING_ELEMENT_ID}" style="width:200px; height:120px; border:1px solid #dddddd;">hi</div>
 `;
 
-test("stroke Align cycles through every ordered Inside/Center/Outside transition exactly once in a real browser, under a class-authored box-sizing reset", async ({
+test("editing a bordered element under a class-authored box-sizing reset never writes an inline box-sizing, in a real browser", async ({
   page,
 }) => {
-  // Fourth-round review finding: `applyStrokeAlignFromCss` read the CASCADE-
-  // RESOLVED `box-sizing` (via `getComputedStyle`), so a class-level
-  // `* { box-sizing: border-box }` reset — which almost every generated
-  // embed carries — made a plain bordered element read back as "Inside" even
-  // though nothing here ever wrote it. Neither "Outside" nor "Center" ever
-  // touches `box-sizing` at all (`generateVisualStyles` only emits it for
-  // `strokeAlign: "inside"`), so the class value survived every write and
-  // the element read back as "Inside" again on the very next re-read — the
-  // Align select could never actually LAND on "Center" or "Outside" once a
-  // class reset was present, only flash through it before reverting.
-  //
-  // Fifth-round review finding, exercised here as the Center↔Outside
-  // Eulerian cycle below (C→O→I→C→I→O→C — each of the six ordered
-  // Inside/Center/Outside transitions exactly once): Inside → Center is the
-  // sharpest version of this bug. Removing the inline `box-sizing` (the
-  // fourth round's fix) does write "not border-box" and satisfy a *negative*
-  // assertion, but the class reset above then reasserts `border-box` through
-  // the cascade and the stroke keeps rendering as Inside — a state the
-  // select claims but the renderer can never produce. `liveComputedBoxSizing`
-  // below checks the actual rendered, cascade-resolved value, not just the
-  // written attribute, specifically to catch that.
-  //
-  // This all needs a real browser (not happy-dom): happy-dom already proved
-  // unreliable as an oracle for whether a `box-sizing` write actually reaches
-  // the DOM/round-trips through this read path.
+  // Regression coverage for the retired Align control's whole failure class:
+  // with no Align select at all, there is no code path left in this panel
+  // that can ever emit a `box-sizing` declaration — editing the stroke must
+  // leave the embed's own class-level reset alone.
   await addEmbedFixture(page, CLASS_BOX_SIZING_EMBED_ID, CLASS_BOX_SIZING_HTML);
   const host = await enterElementPicker(page, CLASS_BOX_SIZING_EMBED_ID);
   await host.click({ position: { x: 12, y: 12 } });
@@ -348,62 +276,26 @@ test("stroke Align cycles through every ordered Inside/Center/Outside transition
   const strokeSection = page
     .getByText("Stroke", { exact: true })
     .locator('xpath=ancestor::div[contains(@class, "relative") and contains(@class, "border-b")]');
-  const alignSelect = selectTriggerByLabel(strokeSection, "Align");
+  await expect(strokeSection.getByText("Align", { exact: true })).toHaveCount(0);
 
   const boxSizing = () =>
     readFixtureCardStyle(page, "boxSizing", CLASS_BOX_SIZING_EMBED_ID, CLASS_BOX_SIZING_ELEMENT_ID);
-  const selectAlign = (name: "Inside" | "Center" | "Outside") =>
-    alignSelect.click().then(() => page.getByRole("option", { name, exact: true }).click());
-
-  // Initial read: the class reset must NOT be mistaken for this element's
-  // own Inside alignment. Positive assertion: the inline declaration is
-  // genuinely absent, not merely "not border-box" (which an accidental
-  // `content-box` would also satisfy).
-  await expect(alignSelect).toContainText("Center");
   expect(await boxSizing()).toBeFalsy();
 
-  // Center → Outside: box-sizing was never touched by either state, so it
-  // stays absent.
-  await selectAlign("Outside");
-  await expect(alignSelect).toContainText("Outside");
-  await expect.poll(boxSizing).toBeFalsy();
-
-  // Outside → Inside: box-sizing must be written explicitly.
-  await selectAlign("Inside");
-  await expect(alignSelect).toContainText("Inside");
-  await expect.poll(boxSizing).toBe("border-box");
-
-  // Inside → Center: the bug this round fixes. Must write an EXPLICIT
-  // `content-box`, not merely remove the declaration, or the class reset
-  // above silently keeps the stroke rendered as Inside.
-  await selectAlign("Center");
-  await expect(alignSelect).toContainText("Center");
-  await expect.poll(boxSizing).toBe("content-box");
-  // The actual rendered claim "Center" makes: cascade-resolved box-sizing,
-  // not just the attribute that was written.
+  // The legacy single-stroke color row lives inside a popover, portalled
+  // outside `strokeSection` — open it via its "Edit stroke" trigger and
+  // scope the color input to the popover content (a Fill-section color
+  // input elsewhere on the page shares the same "#000000" placeholder).
+  await strokeSection.getByTitle("Edit stroke").click();
+  const strokePopover = page.locator('[data-slot="popover-content"]').last();
+  const strokeColorInput = strokePopover.getByPlaceholder("#000000");
+  await strokeColorInput.fill("#ff00ff");
+  await strokeColorInput.blur();
   await expect
     .poll(() =>
-      liveComputedBoxSizing(page, CLASS_BOX_SIZING_EMBED_ID, CLASS_BOX_SIZING_ELEMENT_ID),
+      readFixtureCardStyle(page, "borderColor", CLASS_BOX_SIZING_EMBED_ID, CLASS_BOX_SIZING_ELEMENT_ID),
     )
-    .toBe("content-box");
-
-  // Center → Inside: box-sizing must be written explicitly again.
-  await selectAlign("Inside");
-  await expect(alignSelect).toContainText("Inside");
-  await expect.poll(boxSizing).toBe("border-box");
-
-  // Inside → Outside: must not clobber box-sizing with an explicit
-  // content-box (the sibling, non-class-cascade bug a prior review round
-  // fixed) — the key is REMOVED, letting the class's own reset show back
-  // through, since no border is drawn in the box at all once the stroke
-  // moves to `outline`.
-  await selectAlign("Outside");
-  await expect(alignSelect).toContainText("Outside");
-  await expect.poll(boxSizing).toBeFalsy();
-
-  // Outside → Center: box-sizing was never touched by either state, so it
-  // stays absent — closes the Eulerian cycle back at the starting state.
-  await selectAlign("Center");
-  await expect(alignSelect).toContainText("Center");
+    .toBe("rgb(255, 0, 255)");
+  // The edit must not disturb the class's own box-sizing reset.
   await expect.poll(boxSizing).toBeFalsy();
 });

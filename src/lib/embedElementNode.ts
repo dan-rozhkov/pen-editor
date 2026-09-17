@@ -237,68 +237,42 @@ function parseGaps(cs: CSSStyleDeclaration): { gap: number; rowGap?: number; col
 }
 
 /**
- * Reads `strokeAlign` back from CSS, mirroring `generateVisualStyles`'s write
- * side exactly (`designToHtml/styleGeneration.ts`):
- * - `outside` is written as `outline` with NO `border` — so an outline
- *   present at all means outside, and (since `applyBaseProps` only reads
- *   `border-*`, never `outline`) this also has to populate `node.stroke`/
- *   `strokeWidth` itself, or an outside stroke would round-trip as "no
- *   stroke" the moment the panel re-reads the element.
- * - `inside` is written as `border` PLUS `box-sizing: border-box`.
- * - `center` is written as plain `border`, with `box-sizing` left alone.
- * So: an outline means outside; a border with `box-sizing: border-box` means
- * inside; a border with any other box-sizing means center (left as `undefined`,
- * the section's own default) — the base case, not called out as a fixup.
+ * Reads an author-set `outline` into `node.stroke`/`strokeWidth` so an
+ * element whose only visible stroke is an outline (rather than a `border`,
+ * which `applyBaseProps` already reads from `border-*`) isn't shown as
+ * strokeless. Outline wins over any border already read by `applyBaseProps`,
+ * mirroring `generateVisualStyles`'s write side, which never emits both.
  *
- * `inlineBoxSizing` — NOT `cs.boxSizing` — is what decides "inside", and this
- * is deliberate, not an oversight: `cs.boxSizing` is the CASCADE-RESOLVED
- * value, and almost every generated embed carries a class-level
- * `* { box-sizing: border-box }` reset that has nothing to do with any
- * element's stroke. Reading the cascade would make a plain bordered element
- * under that reset read back as "Inside" even though nothing here ever wrote
- * it — and worse, an Outside/Center element whose class also resets
- * box-sizing would read back as "Inside" the moment its OWN outline/border
- * stops shadowing that class value (`generateVisualStyles` never emits
- * `box-sizing` for `outside` or `center`), flipping the Align select right
- * back to Inside on the very next re-read. `inlineBoxSizing` is the
- * element's own INLINE `box-sizing` declaration only — i.e. exactly what this
- * bridge itself last wrote for Align: Inside (see `syntheticNodeToCssDeclarations`'s
- * `box-sizing` handling) — so a class-only `border-box` is correctly treated
- * as a fact about the embed's reset, not about this element's stroke.
- *
- * Known non-round-tripping combination: an outside stroke never round-trips
- * back into a genuinely different width/color if the element's own CSS class
- * (rather than this bridge) also declares a `border` — the class's border
- * stays as class-level CSS (nothing here can distinguish "author's own
- * border-in-a-class coexisting with our outline" from "stale border-in-class
- * this bridge should shadow"), so the Stroke section would show only the
- * outline while the class border keeps rendering underneath it unlabeled.
- * Only reachable by hand-authoring both onto the same element outside this
- * panel; flagged rather than hidden, since it isn't caused by anything this
- * fix changes.
+ * This used to also infer `node.strokeAlign` from the combination of
+ * "has outline" and the element's own inline `box-sizing` — "outside" for an
+ * outline, "inside"/"center" for a border depending on `box-sizing:
+ * border-box` — so the Stroke section's "Align" select could show the right
+ * value. That control no longer exists for this bridge (`StrokeSection`'s
+ * `hideAlign`, passed from `EmbedElementProperties.tsx`): CSS has no concept
+ * of border alignment, and reconstructing which of Figma's three fake
+ * alignments produced a given `border`/`box-sizing` pair is fundamentally
+ * ambiguous once an embed's own `* { box-sizing: border-box }` class reset is
+ * in play — five review rounds in a row found a variant of "the panel shows
+ * an alignment the render doesn't actually have" here. Leaving
+ * `node.strokeAlign` unset (this function no longer touches it, and nothing
+ * else in this bridge ever does) makes `generateVisualStyles` always emit a
+ * plain `border` with no `box-sizing` key on the next edit from this panel —
+ * an outline-based stroke is still visible and editable, it just becomes a
+ * `border` the first time the user touches it here, which matches the panel
+ * no longer being able to express "outside" at all.
  */
-function applyStrokeAlignFromCss(
-  node: SyntheticNodeShape,
-  cs: CSSStyleDeclaration,
-  inlineBoxSizing: string | undefined,
-): void {
+function applyOutlineStroke(node: SyntheticNodeShape, cs: CSSStyleDeclaration): void {
   const outlineWidth = parsePx(cs.outlineWidth);
   const hasOutline = outlineWidth > 0 && cs.outlineStyle !== "none" && cs.outlineStyle !== "hidden";
-  if (hasOutline) {
-    const outlineColor = parseColorWithOpacity(cs.outlineColor);
-    if (outlineColor?.color) {
-      node.stroke = outlineColor.color;
-      if (outlineColor.opacity !== undefined) node.strokeOpacity = outlineColor.opacity;
-    }
-    node.strokeWidth = outlineWidth;
-    node.strokeWidthPerSide = undefined;
-    node.strokeAlign = "outside";
-    return;
-  }
+  if (!hasOutline) return;
 
-  if (node.strokeWidth !== undefined || node.strokeWidthPerSide !== undefined) {
-    node.strokeAlign = inlineBoxSizing === "border-box" ? "inside" : "center";
+  const outlineColor = parseColorWithOpacity(cs.outlineColor);
+  if (outlineColor?.color) {
+    node.stroke = outlineColor.color;
+    if (outlineColor.opacity !== undefined) node.strokeOpacity = outlineColor.opacity;
   }
+  node.strokeWidth = outlineWidth;
+  node.strokeWidthPerSide = undefined;
 }
 
 /** Strip a leading `--` so a legacy binding can be matched loosely. */
@@ -411,13 +385,10 @@ export function embedElementToSyntheticNode(
   node.fill = backgroundFill;
   node.fillOpacity = backgroundFillOpacity;
 
-  // Computed early (rather than where the other inline-style reads live,
-  // below) so `applyStrokeAlignFromCss` can use the element's OWN inline
-  // `box-sizing` — never the cascade-resolved `cs.boxSizing` — to decide
-  // Align: Inside. See that function's doc comment for why this distinction
-  // is load-bearing, not incidental.
+  // `inlineStyle` is also read further below for variable-binding detection
+  // (see `parseVarReference`'s callers).
   const inlineStyle = el instanceof HTMLElement ? el.style : undefined;
-  applyStrokeAlignFromCss(node, cs, inlineStyle?.boxSizing || undefined);
+  applyOutlineStroke(node, cs);
 
   const hasText = elementHasEditableText(el);
   if (hasText) {
@@ -566,39 +537,14 @@ export function syntheticNodeToCssDeclarations(node: SyntheticNodeShape): Record
   const styles: Record<string, string> = {
     ...generateVisualStyles(node),
   };
-  // `box-sizing` is DELIBERATELY kept here, unlike an earlier version of this
-  // function which deleted it unconditionally. That deletion was reasoned
-  // from "there is no native control for `box-sizing` in this panel" — which
-  // is wrong: `generateVisualStyles` renders `strokeAlign: "inside"` and
-  // `"center"` into the exact same `border: <width> solid <color>`
-  // declaration, and `box-sizing` (`border-box` vs anything else) is the ONLY
-  // thing that tells them apart (`applyStrokeAlignFromCss` reads it back the
-  // same way). The native control for this IS `StrokeSection`'s "Align"
-  // `SelectInput`. Stripping the key here made every Inside↔Center toggle
-  // diff to an empty patch: nothing was written, and the Align select
-  // silently reverted to "Inside" on the next re-read — the same class of
-  // "molча мёртвого контрола" bug this stripping was meant to fix for a
-  // different property.
-  //
-  // The transition this WAS guarding against — `box-sizing: border-box`
-  // showing up in "before" for nearly any bordered element (an embed's own
-  // `* { box-sizing: border-box }` reset makes `applyStrokeAlignFromCss` read
-  // every such element as `strokeAlign: "inside"`), then disappearing the
-  // moment the stroke is REMOVED and getting written back as an explicit
-  // `box-sizing: content-box` — is real, but it is a property of the stroke
-  // no longer being drawn IN the box at all, not of the key merely
-  // disappearing. It is handled the same way `EmbedElementProperties.tsx`'s
-  // `commitPatch` already handles the analogous "Remove fill" transition for
-  // `BACKGROUND_STYLE_KEYS`: by opting `box-sizing` into
-  // `diffCssDeclarations`'s `removeInsteadOfReset` for exactly that case
-  // (`border` also absent from "after" — no stroke, a hidden/zero-weight
-  // one, or `outside`, which draws via `outline` instead), so the key is
-  // removed rather than forced to `content-box`, letting the embed's own
-  // reset show back through. Inside→Center keeps a `border` in "after" with
-  // no `box-sizing` key — that is NOT this removal case (see `commitPatch`'s
-  // doc comment for why forcing an explicit `content-box` there, via the
-  // default reset path rather than removal, is what makes the Align control
-  // actually able to reach "Center").
+  // No special handling of `box-sizing` here (an earlier version of this
+  // bridge had one, keyed to `StrokeSection`'s "Align" select — removed along
+  // with that control, see `applyOutlineStroke`'s doc comment). Now that
+  // nothing in this bridge ever sets `node.strokeAlign` to `"inside"`,
+  // `generateVisualStyles` never emits `box-sizing` for a synthetic embed
+  // node in the first place, so there is no key here to diff or reset: an
+  // embed's own `box-sizing` (usually a class-level reset) is simply never
+  // touched by this panel.
 
   if (node.text !== undefined) {
     Object.assign(styles, generateTextStyles(node as unknown as TextNode));
@@ -676,7 +622,10 @@ const RESET_VALUES: Record<string, string> = {
   outline: "none",
   "border-image-source": "none",
   "border-image-slice": "100%",
-  "box-sizing": "content-box",
+  // No `box-sizing` entry: this bridge never sets `node.strokeAlign` to
+  // `"inside"` (the only value `generateVisualStyles` turns into a
+  // `box-sizing` declaration — see `applyOutlineStroke`'s doc comment), so
+  // the key can never appear in `before`/`after` for this diff to reset.
   // generateVisualStyles — corner radius
   "border-radius": "0px",
   // generateVisualStyles — opacity

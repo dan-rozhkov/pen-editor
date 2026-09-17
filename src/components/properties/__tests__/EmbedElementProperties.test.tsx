@@ -77,23 +77,6 @@ function mountEmbedHost(html: string, width = 300, height = 200) {
   return { host, shadow };
 }
 
-/**
- * Re-mount `shadow`'s content from the CURRENT `htmlContent`, mirroring what
- * a real `EmbedLayer` does in its own `useEffect` whenever `htmlContent`
- * changes. `mountEmbedHost` only mounts once — this test file otherwise has
- * no live component keeping the shadow DOM in sync with the store, so a test
- * that edits more than once and wants the panel's NEXT rAF re-read
- * (`embedElementToSyntheticNode`) to see the write it just made needs this
- * between edits, or it would keep reading the ORIGINAL, now-stale live
- * element and undo the optimistic `setNode` the moment the effect re-fires.
- */
-function resyncEmbedHost(shadow: ShadowRoot, html: string, width = 300, height = 200): void {
-  shadow.replaceChildren();
-  const content = document.createElement("div");
-  mountHtmlWithBodyStyles(content, html, width, height);
-  shadow.appendChild(content);
-}
-
 function seedEmbedNode(html: string): void {
   const node: EmbedNode = {
     id: EMBED_ID,
@@ -128,49 +111,11 @@ function currentHtml(): string {
   return (useSceneStore.getState().nodesById[EMBED_ID] as EmbedNode).htmlContent;
 }
 
-/** The `div.card` fixture's OWN inline `box-sizing`, parsed fresh from the
- * current `htmlContent` — never a substring check on the raw html, which
- * would also match a class-level `box-sizing` rule declared in a `<style>`
- * block elsewhere in the same document. */
-function cardInlineBoxSizing(): string {
-  const doc = new DOMParser().parseFromString(currentHtml(), "text/html");
-  return (doc.querySelector("div.card") as HTMLElement | null)?.style.boxSizing ?? "";
-}
-
 /** Scope queries to one PropertySection by its title text (sections have no
  * accessible region role, just a styled title `<div>`), since several
  * sections repeat the same field labels ("W", displayed "0", etc). */
 function getSection(title: string): HTMLElement {
   return screen.getByText(title, { exact: true }).closest(".relative.border-b") as HTMLElement;
-}
-
-/** Find the `role="combobox"` trigger for a `SelectInput`'s label within
- * `scope`, the same "walk up from the label text" approach
- * `StrokeSection.test.tsx`'s `numberInputFor` uses for `NumberInput` — a
- * `SelectInput` has no other accessible link between its `<Label>` and its
- * trigger either. */
-function comboboxFor(scope: HTMLElement, label: string): HTMLElement {
-  let container: HTMLElement | null = within(scope).getByText(label, { exact: true }).parentElement;
-  while (container) {
-    const combobox = container.querySelector('[role="combobox"]');
-    if (combobox) return combobox as HTMLElement;
-    container = container.parentElement;
-  }
-  throw new Error(`No combobox found for label "${label}"`);
-}
-
-/**
- * Select an already-open `SelectInput`'s option by name. Mirrors
- * `DevExportSection.test.tsx`'s `selectOption`: `@base-ui/react`'s
- * `Select.Item` only commits a bare `click` when its OWN `pointerdown`
- * landed on it first (guards against the trigger's opening click also
- * landing on an item, since `SelectContent` uses `alignItemWithTrigger`) — a
- * plain `fireEvent.click(option)` is silently ignored.
- */
-function selectOption(name: string) {
-  const option = screen.getByRole("option", { name });
-  fireEvent.pointerDown(option);
-  fireEvent.click(option);
 }
 
 describe("<EmbedElementProperties />", () => {
@@ -396,27 +341,7 @@ describe("<EmbedElementProperties />", () => {
     expect(lower).toContain("border: 3px solid");
   });
 
-  it("toggling stroke Align between Inside and Center writes box-sizing and reaches html (bug repro: dead control)", async () => {
-    // Bug: `syntheticNodeToCssDeclarations` used to strip `box-sizing`
-    // unconditionally, but `generateVisualStyles` renders `strokeAlign:
-    // "inside"` and `"center"` into the exact same `border: <w> solid <c>`
-    // declaration — `box-sizing` was the ONLY thing telling them apart. With
-    // it stripped, switching Align diffed to an empty patch, `commitPatch`
-    // bailed out before writing anything, and the select silently reverted
-    // to "Inside" on the next rAF re-read (`applyStrokeAlignFromCss` reading
-    // the unchanged `box-sizing: border-box` straight off the DOM).
-    //
-    // Inside → Center is asserted to write an EXPLICIT `box-sizing:
-    // content-box` (fifth-round review finding, correcting the fourth
-    // round's "just remove it" fix): removing the key instead would let any
-    // class-authored `box-sizing: border-box` reset on the same element (or
-    // its ancestors — near-universal in generated embed HTML) reassert
-    // itself through the cascade, keeping the stroke rendered as Inside no
-    // matter what the select says. `border` is still present in the
-    // generated "after" map for `center` — only `box-sizing` disappears —
-    // which is exactly the signal `commitPatch` uses to distinguish this
-    // case from "no stroke drawn in the box at all" (removal). See
-    // `commitPatch`'s doc comment in `EmbedElementProperties.tsx`.
+  it("does not render the Stroke Align control for an embed element (CSS has no border-alignment concept, and reading it back never survives an embed's own box-sizing reset)", async () => {
     const html = `<div class="card" style="border:1px solid #dddddd;box-sizing:border-box;">hi</div>`;
     seedEmbedNode(html);
     const { shadow } = mountEmbedHost(html);
@@ -427,164 +352,45 @@ describe("<EmbedElementProperties />", () => {
     await flushRaf();
 
     const strokeSection = getSection("Stroke");
-    const alignCombobox = comboboxFor(strokeSection, "Align");
+    expect(within(strokeSection).queryByText("Align", { exact: true })).toBeNull();
+  });
 
-    fireEvent.click(alignCombobox);
-    selectOption("Center");
-    resyncEmbedHost(shadow, currentHtml());
+  it("editing stroke width and color via the embed panel still reaches htmlContent, with no Align control involved", async () => {
+    const html = `<div class="card" style="border: 2px solid #333333;">hi</div>`;
+    seedEmbedNode(html);
+    const { shadow } = mountEmbedHost(html);
+    const target = shadow.querySelector("div.card")!;
+    selectElement(target, shadow, html);
+
+    render(<EmbedElementProperties />);
     await flushRaf();
+
+    const strokeSection = getSection("Stroke");
+    const strokeColorInput = within(strokeSection).getByPlaceholderText("#000000");
+    fireEvent.change(strokeColorInput, { target: { value: "#ff00ff" } });
 
     let lower = currentHtml().toLowerCase();
-    expect(lower).toContain("box-sizing: content-box");
-    // The select must reflect the write on the next re-read, not silently
-    // revert to "Inside" (the exact failure mode of the original bug).
-    expect(comboboxFor(getSection("Stroke"), "Align").textContent).toContain("Center");
+    expect(lower).toContain("2px");
+    expect(lower).toContain("#ff00ff");
 
-    // And back the other way, so this isn't just "any write sticks".
-    fireEvent.click(comboboxFor(getSection("Stroke"), "Align"));
-    selectOption("Inside");
-    resyncEmbedHost(shadow, currentHtml());
-    await flushRaf();
+    const weightInput = within(getSection("Stroke")).getByDisplayValue("2");
+    fireEvent.change(weightInput, { target: { value: "5" } });
 
     lower = currentHtml().toLowerCase();
-    expect(lower).toContain("box-sizing: border-box");
-    expect(comboboxFor(getSection("Stroke"), "Align").textContent).toContain("Inside");
+    expect(lower).toContain("5px");
   });
 
-  it("Inside → Center writes an explicit content-box under a class-authored box-sizing reset, so the stroke actually centers (bug repro: Align=Center silently stayed Inside)", async () => {
-    // Fifth-round review finding, the sharpest version of the bug above:
-    // with a class reset present, REMOVING the inline `box-sizing` (the
-    // fourth round's fix) doesn't just fail to write "Center" — it makes the
-    // element keep rendering as Inside (the class's `border-box` shows back
-    // through) while the Align select claims "Center", i.e. a state the
-    // renderer can never actually produce is displayed as current, and
-    // "Center" becomes permanently unreachable through this control.
-    const html =
-      `<style>.card { box-sizing: border-box; }</style>` +
-      `<div class="card" style="border:1px solid #dddddd;box-sizing:border-box;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    // Sanity: starts genuinely Inside (inline, not just cascade).
-    expect((target as HTMLElement).style.boxSizing).toBe("border-box");
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
-
-    expect(comboboxFor(getSection("Stroke"), "Align").textContent).toContain("Inside");
-
-    fireEvent.click(comboboxFor(getSection("Stroke"), "Align"));
-    selectOption("Center");
-    resyncEmbedHost(shadow, currentHtml());
-    await flushRaf();
-
-    // The written value, not just "not border-box": removal would satisfy
-    // "not border-box" too while still rendering as Inside under the class
-    // reset, which is exactly the bug. Checked against `htmlContent`, not
-    // just the select.
-    expect(cardInlineBoxSizing()).toBe("content-box");
-    // And the rendered box-sizing (cascade-resolved, inline now wins over
-    // the class) must genuinely be content-box — the actual visual claim
-    // "Center" makes, not merely what got written to an attribute.
-    // `resyncEmbedHost` replaced `shadow`'s children, so `target` (the
-    // pre-resync node) is now detached — re-query the live element rather
-    // than trusting a stale reference for the computed-style check.
-    expect(getComputedStyle(shadow.querySelector("div.card")!).boxSizing).toBe("content-box");
-    expect(comboboxFor(getSection("Stroke"), "Align").textContent).toContain("Center");
-
-    // Back to Inside, so this isn't one-directional.
-    fireEvent.click(comboboxFor(getSection("Stroke"), "Align"));
-    selectOption("Inside");
-    resyncEmbedHost(shadow, currentHtml());
-    await flushRaf();
-
-    expect(cardInlineBoxSizing()).toBe("border-box");
-    expect(getComputedStyle(shadow.querySelector("div.card")!).boxSizing).toBe("border-box");
-    expect(comboboxFor(getSection("Stroke"), "Align").textContent).toContain("Inside");
-  });
-
-  it("Align cycles through Center/Outside/Inside/Outside/Center without reverting, under a CLASS-authored box-sizing reset (bug repro: Outside → Center stayed dead)", async () => {
-    // Fourth-round review finding: `applyStrokeAlignFromCss` used to read
-    // `cs.boxSizing` (cascade-resolved), so a class-level
-    // `box-sizing: border-box` reset — near-universal in generated embed
-    // HTML — made a plain bordered element read back as "Inside" even though
-    // nothing here ever wrote it. Switching Align to Outside or Center never
-    // touches `box-sizing` at all (`generateVisualStyles` only ever emits it
-    // for `strokeAlign: "inside"`), so the class value survived every write
-    // and `applyStrokeAlignFromCss` read the element as "Inside" again on
-    // the very next re-read — the Align select was stuck, unable to
-    // represent "Center" or "Outside" at all once a class reset was present.
-    const html =
-      `<style>.card { box-sizing: border-box; }</style>` +
-      `<div class="card" style="border:1px solid #dddddd;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    expect(getComputedStyle(target).boxSizing).toBe("border-box");
-    expect((target as HTMLElement).style.boxSizing).toBe("");
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
-
-    const strokeSection = () => getSection("Stroke");
-    const align = () => comboboxFor(strokeSection(), "Align");
-
-    // Initial read: the class reset must NOT be mistaken for this element's
-    // own Inside alignment.
-    expect(align().textContent).toContain("Center");
-
-    fireEvent.click(align());
-    selectOption("Outside");
-    resyncEmbedHost(shadow, currentHtml());
-    await flushRaf();
-    expect(cardInlineBoxSizing()).toBe("");
-    expect(align().textContent).toContain("Outside");
-
-    // The bug: this used to render "Inside" again.
-    fireEvent.click(align());
-    selectOption("Center");
-    resyncEmbedHost(shadow, currentHtml());
-    await flushRaf();
-    expect(cardInlineBoxSizing()).toBe("");
-    expect(align().textContent).toContain("Center");
-
-    fireEvent.click(align());
-    selectOption("Inside");
-    resyncEmbedHost(shadow, currentHtml());
-    await flushRaf();
-    expect(cardInlineBoxSizing()).toBe("border-box");
-    expect(align().textContent).toContain("Inside");
-
-    // Inside → Outside must not clobber box-sizing with content-box either
-    // (the same fix as the dedicated regression test above, exercised here
-    // as part of the full three-value matrix).
-    fireEvent.click(align());
-    selectOption("Outside");
-    resyncEmbedHost(shadow, currentHtml());
-    await flushRaf();
-    expect(cardInlineBoxSizing()).not.toBe("content-box");
-    expect(align().textContent).toContain("Outside");
-
-    fireEvent.click(align());
-    selectOption("Center");
-    resyncEmbedHost(shadow, currentHtml());
-    await flushRaf();
-    expect(align().textContent).toContain("Center");
-  });
-
-  it("switching Align from Inside to Outside does not clobber box-sizing with content-box (bug repro)", async () => {
-    // Bug: the `removeInsteadOfReset` decision for `box-sizing` was keyed off
-    // whether the raw stroke PAINT STACK (`getStrokes`) went from non-empty
-    // to empty ("stroke removed entirely"). Inside → Outside keeps the stack
-    // non-empty (the stroke just moves to `outline`), yet `box-sizing`
-    // disappears from the generated CSS map just the same (`outside` never
-    // emits it) — so this transition fell through to the default explicit
-    // reset and forced `box-sizing: content-box` inline, permanently
-    // overriding the embed's own `* { box-sizing: border-box }` reset for a
-    // property this edit never intended to touch.
-    const html = `<div class="card" style="border:1px solid #dddddd;box-sizing:border-box;">hi</div>`;
+  it("never writes an inline box-sizing declaration for any stroke edit (Inside/Center/Outside is no longer expressible from this panel)", async () => {
+    // This was the source of the original bug class: writing an Align value
+    // meant writing `box-sizing`, and reading it back off an embed's
+    // near-universal `* { box-sizing: border-box }` class reset was
+    // fundamentally ambiguous. With the Align control removed, no code path
+    // in this panel ever produces a `box-sizing` declaration at all —
+    // checked across add/recolor/reweight/remove, the whole lifecycle of a
+    // stroke edit. Starts with NO inline `box-sizing` at all (unlike an
+    // author-authored one, which this bridge now leaves alone either way,
+    // since it no longer has any opinion about the property).
+    const html = `<div class="card" style="border:1px solid #dddddd;">hi</div>`;
     seedEmbedNode(html);
     const { shadow } = mountEmbedHost(html);
     const target = shadow.querySelector("div.card")!;
@@ -594,65 +400,33 @@ describe("<EmbedElementProperties />", () => {
     await flushRaf();
 
     const strokeSection = getSection("Stroke");
-    const alignCombobox = comboboxFor(strokeSection, "Align");
-    fireEvent.click(alignCombobox);
-    selectOption("Outside");
+    const strokeColorInput = within(strokeSection).getByPlaceholderText("#000000");
+    fireEvent.change(strokeColorInput, { target: { value: "#00ff00" } });
+    expect(currentHtml().toLowerCase()).not.toContain("box-sizing");
 
-    const lower = currentHtml().toLowerCase();
-    expect(lower).not.toContain("box-sizing: content-box");
-    // happy-dom's CSSOM re-explodes the `outline` shorthand into longhands
-    // when serialized (same documented quirk as the border-shorthand assert
-    // in the "binding Stroke to a color variable" test above) — assert the
-    // longhands rather than the shorthand string.
-    expect(lower).toContain("outline-width: 1px");
-    expect(lower).toContain("outline-color: #dddddd");
-  });
-
-  it("setting stroke weight to 0 does not clobber box-sizing with content-box (bug repro)", async () => {
-    // Same root cause as the Inside→Outside case above, different trigger:
-    // dialing the weight to 0 leaves the raw paint stack untouched
-    // (`getStrokes` stays non-empty — only `strokeWidth` changed), but
-    // `generateVisualStyles` stops emitting border/outline/box-sizing
-    // entirely once `strokeWidth` is falsy, so `box-sizing` still disappears
-    // from the generated map and got forced to `content-box` under the old
-    // stack-emptiness criterion.
-    const html = `<div class="card" style="border:1px solid #dddddd;box-sizing:border-box;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
-
-    const strokeSection = getSection("Stroke");
-    const weightInput = within(strokeSection).getByDisplayValue("1");
+    const weightInput = within(getSection("Stroke")).getByDisplayValue("1");
     fireEvent.change(weightInput, { target: { value: "0" } });
-
-    const lower = currentHtml().toLowerCase();
-    expect(lower).not.toContain("box-sizing: content-box");
-  });
-
-  it("removing a stroke does not leave box-sizing: content-box inline (bug repro)", async () => {
-    // The fix for the Align control above must not regress the original,
-    // legitimate concern it was trying to address: removing a stroke
-    // entirely should let the embed's own `box-sizing` reset (near-universal
-    // in generated embed HTML) show back through, not force an explicit
-    // `content-box` that fights it. Mirrors `BACKGROUND_STYLE_KEYS`'s
-    // "Remove fill" handling.
-    const html = `<div class="card" style="border:1px solid #dddddd;box-sizing:border-box;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    expect(currentHtml().toLowerCase()).not.toContain("box-sizing");
 
     fireEvent.click(screen.getByRole("button", { name: "Remove stroke" }));
+    expect(currentHtml().toLowerCase()).not.toContain("box-sizing");
+  });
 
-    const lower = currentHtml().toLowerCase();
-    expect(lower).not.toContain("box-sizing");
+  it("leaves an author-authored inline box-sizing untouched by a stroke edit (the bridge no longer has any opinion about this property)", async () => {
+    const html = `<div class="card" style="border:1px solid #dddddd;box-sizing:border-box;">hi</div>`;
+    seedEmbedNode(html);
+    const { shadow } = mountEmbedHost(html);
+    const target = shadow.querySelector("div.card")!;
+    selectElement(target, shadow, html);
+
+    render(<EmbedElementProperties />);
+    await flushRaf();
+
+    const strokeSection = getSection("Stroke");
+    const strokeColorInput = within(strokeSection).getByPlaceholderText("#000000");
+    fireEvent.change(strokeColorInput, { target: { value: "#00ff00" } });
+
+    expect(currentHtml().toLowerCase()).toContain("box-sizing: border-box");
   });
 
   it("writes an explicit padding: 0px rather than removing the declaration (removal wouldn't override a class)", async () => {

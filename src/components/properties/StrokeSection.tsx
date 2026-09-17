@@ -40,7 +40,27 @@ const STROKE_TYPE_OPTIONS = [
   { value: "radial", label: "Radial" },
 ];
 
-type StrokeSectionProps = PaintSectionProps;
+type StrokeSectionProps = PaintSectionProps & {
+  /**
+   * Hide the "Align" (Inside/Center/Outside) select. CSS has no concept of
+   * border alignment at all — `generateVisualStyles` fakes it by writing
+   * `border` + `box-sizing: border-box` for "inside", plain `border` for
+   * "center", and `outline` (never `border`) for "outside". That mapping
+   * cannot survive a round-trip on an element that lives inside an embed's
+   * own HTML/CSS: embeds almost always carry a class-level
+   * `* { box-sizing: border-box }` reset, which is indistinguishable from
+   * this panel's own "inside" write once read back through
+   * `getComputedStyle` — there is no way to tell "the class reset this" from
+   * "this panel set Align: Inside" (`embedElementNode.ts`'s bridge used to
+   * try, off the element's own *inline* `box-sizing` only, and still lost
+   * five review rounds in a row to variants of "the panel shows an align
+   * value the render doesn't actually have"). Pass this for any node this
+   * panel can't honestly read Align back from — currently only the embed
+   * element bridge (`EmbedElementProperties.tsx`); a real scene-graph
+   * `SceneNode` has no such ambiguity and keeps showing Align by default.
+   */
+  hideAlign?: boolean;
+};
 
 type StrokeMode = "unified" | "per-side";
 
@@ -66,6 +86,7 @@ export function StrokeSection({
   colorVariables,
   activeTheme,
   mixedKeys,
+  hideAlign,
 }: StrokeSectionProps) {
   const pathStroke: PathStroke | undefined = node.type === "path" ? node.pathStroke : undefined;
 
@@ -289,43 +310,47 @@ export function StrokeSection({
           )}
 
           {/* Mode + Align row */}
-          <div className="flex items-center gap-1">
-            {canUsePerSide && (
-              <div className="flex-1">
-                <SelectInput
-                  label="Mode"
-                  labelOutside
-                  value={strokeMode}
-                  // Per-side + gradient is out of scope (ambiguous geometry,
-                  // see task spec p1-22) — omit "Per Side" while the stroke
-                  // stack has a gradient paint so it can't be reached.
-                  options={
-                    hasGradientInStack
-                      ? [{ value: "unified", label: "Unified" }]
-                      : [
-                          { value: "unified", label: "Unified" },
-                          { value: "per-side", label: "Per Side" },
-                        ]
-                  }
-                  onChange={handleModeChange}
-                />
-              </div>
-            )}
-            <div className="flex-1">
-              <SelectInput
-                label="Align"
-                labelOutside
-                value={mixedKeys?.has("strokeAlign") ? "" : (node.strokeAlign ?? (pathStroke?.align as 'center' | 'inside' | 'outside') ?? "center")}
-                options={[
-                  { value: "inside", label: "Inside" },
-                  { value: "center", label: "Center" },
-                  { value: "outside", label: "Outside" },
-                ]}
-                onChange={(v) => effectiveOnUpdate({ strokeAlign: v as 'center' | 'inside' | 'outside' })}
-                isMixed={mixedKeys?.has("strokeAlign")}
-              />
+          {(canUsePerSide || !hideAlign) && (
+            <div className="flex items-center gap-1">
+              {canUsePerSide && (
+                <div className="flex-1">
+                  <SelectInput
+                    label="Mode"
+                    labelOutside
+                    value={strokeMode}
+                    // Per-side + gradient is out of scope (ambiguous geometry,
+                    // see task spec p1-22) — omit "Per Side" while the stroke
+                    // stack has a gradient paint so it can't be reached.
+                    options={
+                      hasGradientInStack
+                        ? [{ value: "unified", label: "Unified" }]
+                        : [
+                            { value: "unified", label: "Unified" },
+                            { value: "per-side", label: "Per Side" },
+                          ]
+                    }
+                    onChange={handleModeChange}
+                  />
+                </div>
+              )}
+              {!hideAlign && (
+                <div className="flex-1">
+                  <SelectInput
+                    label="Align"
+                    labelOutside
+                    value={mixedKeys?.has("strokeAlign") ? "" : (node.strokeAlign ?? (pathStroke?.align as 'center' | 'inside' | 'outside') ?? "center")}
+                    options={[
+                      { value: "inside", label: "Inside" },
+                      { value: "center", label: "Center" },
+                      { value: "outside", label: "Outside" },
+                    ]}
+                    onChange={(v) => effectiveOnUpdate({ strokeAlign: v as 'center' | 'inside' | 'outside' })}
+                    isMixed={mixedKeys?.has("strokeAlign")}
+                  />
+                </div>
+              )}
             </div>
-          </div>
+          )}
 
           {/* Unified weight input */}
           {strokeMode === "unified" && (
