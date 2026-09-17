@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { expectEditorMounted } from "./support/editor";
 
 const EMBED_ID = "element-properties-fixture";
@@ -85,29 +85,47 @@ function sidebarFor(page: Page, selectedElement: string) {
   );
 }
 
+/**
+ * Find the `<input>` for a native `NumberInput`/`SelectInput` field by its
+ * visible label text, scoped to `container` — robust to field reordering,
+ * unlike a positional `nth(n)` query. The label (`PropertyInputs.tsx`'s
+ * `Label`) sits beside the input inside a shared `InputGroup`, not as a
+ * semantic `<label for>`, so this walks up to the closest ancestor that also
+ * contains an `<input>` rather than relying on `getByLabel`.
+ */
+function numberFieldByLabel(container: Locator, label: string) {
+  return container
+    .locator(`label:text-is("${label}")`)
+    .locator('xpath=ancestor::*[.//input][1]')
+    .locator("input");
+}
+
 test("picked embed elements use the native inspector field layout", async ({ page }) => {
   await addEmbedFixture(page);
   const host = await enterElementPicker(page);
 
-  // Select the flex container first. Its full Layout section is the visual
-  // regression surface: all select labels share the native outside-label
-  // pattern and Padding uses the same compact T/R/B/L grid as Auto Layout.
+  // Select the flex container first. Its Auto Layout section — the SAME
+  // `AutoLayoutSection` a real frame's PropertyEditor uses — is the visual
+  // regression surface here: native outside-label selects, the alignment
+  // grid, and the compact T/R/B/L padding grid.
   await host.click({ position: { x: 12, y: 12 } });
   await expect(elementHeader(page, "div#fixture-card")).toBeVisible();
   await expect(page.getByText("Padding", { exact: true })).toBeVisible();
   await expect(page.getByText("Direction", { exact: true })).toBeVisible();
-  await expect(page.getByText("Justify", { exact: true })).toBeVisible();
+  await expect(page.getByText("Alignment", { exact: true })).toBeVisible();
   const flexSidebar = sidebarFor(page, "div#fixture-card");
   await expect(flexSidebar).toBeVisible();
   await flexSidebar.screenshot({ path: test.info().outputPath("flex-element-properties.png") });
 
   // A real edit confirms that the reorganised control remains connected to
   // the selected element and that the picker selection survives the DOM
-  // refresh after the HTML source of truth changes.
-  const layoutSection = page
-    .getByText("Layout", { exact: true })
+  // refresh after the HTML source of truth changes. Found by its "T" label
+  // rather than a positional index — the native Auto Layout section reflows
+  // fields (Direction/Wrap, the alignment grid, Gap) ahead of Padding.
+  const autoLayoutSection = page
+    .getByText("Auto Layout", { exact: true })
     .locator('xpath=ancestor::div[contains(@class, "relative") and contains(@class, "border-b")]');
-  await layoutSection.locator('input[type="number"]').nth(1).fill("24");
+  await numberFieldByLabel(autoLayoutSection, "T").fill("24");
   await expect
     .poll(() =>
       page.evaluate((id) => {

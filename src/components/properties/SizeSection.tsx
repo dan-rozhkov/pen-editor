@@ -497,7 +497,16 @@ export function SizeSection({
 
   return (
     <PropertySection title="Size">
-      {(parentContext.isInsideAutoLayout ||
+      {/* `detachedNode` (a synthetic node, e.g. the embed-element bridge)
+          is ALWAYS `type: "frame"` regardless of what it represents, so the
+          plain `node.type === "frame"` check below would otherwise show
+          these Fixed/Fill/Fit toggles even when the caller explicitly asked
+          to hide sizing modes (`showSizingModes={false}`) — worse, clicking
+          them writes `sizing.widthMode`/`heightMode`, neither of which
+          `syntheticNodeToCssDeclarations`'s allowlist ever emits, so the
+          control would silently do nothing and reset on the next read. */}
+      {!detachedNode &&
+        (parentContext.isInsideAutoLayout ||
         node.type === "frame" ||
         showSizingModes) && (
         <>

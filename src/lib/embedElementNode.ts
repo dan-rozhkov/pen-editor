@@ -21,8 +21,14 @@ import type {
   JustifyContent,
   TextNode,
 } from "@/types/scene";
-import type { Variable } from "@/types/variable";
+import { getVariableCssName, type Variable } from "@/types/variable";
 import { applyBaseProps, applyBasePropsToText, applyTextProps } from "@/lib/htmlToDesign/styleApplication";
+// Shared with `readEmbedElementSnapshot`'s own binding read: one parse of
+// `var(--name)` for the whole embed-element surface, so the two can never
+// disagree about what counts as a binding (and the duplication gate stays
+// quiet). Reads the element's OWN inline style — `getComputedStyle` has
+// already resolved the reference away.
+import { parseVarReference } from "@/lib/embedElementStyle";
 import { parsePadding } from "@/lib/htmlToDesign/elementChecks";
 import { generateVisualStyles, generateTextStyles } from "@/lib/designToHtml/styleGeneration";
 import { generateLayoutStyles } from "@/lib/designToHtml/layoutStyleGeneration";
@@ -176,31 +182,35 @@ function parseGap(cs: CSSStyleDeclaration): number {
   return Number.isNaN(n) ? 0 : n;
 }
 
-/** Extracts the `--custom-property` name out of a literal `var(--x)` /
- * `var(--x, fallback)` string. Returns `null` for anything else (a resolved
- * color, `none`, empty, ...). Deliberately reads the element's OWN inline
- * `style` (not `getComputedStyle`): the computed style resolves a `var()`
- * reference down to its concrete value, so the literal reference is only
- * ever observable on the inline declaration that authored it. */
-function parseVarReference(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const match = value.trim().match(/^var\(\s*(--[a-zA-Z0-9_-]+)/);
-  return match ? match[1] : null;
+/** Strip a leading `--` so a legacy binding can be matched loosely. */
+function normalizeVarName(name: string): string {
+  return name.startsWith("--") ? name.slice(2) : name;
 }
 
-/** Resolves a CSS custom-property name to a `ColorBinding`, by matching it
- * against `Variable.name` (which is itself stored as a `--kebab-name`
- * string — see `generateVisualStyles`' own `resolveBindingToCssVar`, the
- * write-side counterpart of this lookup). Deliberately takes `variables` as
- * a plain argument rather than reading `useVariableStore` directly: this
- * keeps the module import-free of Zustand, so it stays testable against
- * plain DOM trees/arrays exactly like `embedElementStyle.ts`, and so a
- * caller in a non-store context (e.g. a future server-side/test harness)
- * isn't forced to construct a store instance just to resolve a binding. */
+/**
+ * Resolves a CSS custom-property name to a `ColorBinding`.
+ *
+ * Matching `Variable.name` directly is NOT enough: the write side
+ * (`resolveBindingToCssVar` in `designToHtml/styleGeneration.ts`) runs the
+ * name through `getVariableCssName`, so a variable the Variables panel
+ * named `"Color 1"` is written as `var(--color-1)` and would never match
+ * its own `name` on the way back in — the Fill row would show as unbound
+ * immediately after binding it. So: canonical name first, then a loose
+ * `--`-insensitive match, which keeps markup authored before that mapping
+ * existed (`var(--brand)` against a variable literally named `brand`)
+ * resolving.
+ *
+ * Takes `variables` as a plain argument rather than reading
+ * `useVariableStore`, so this module stays Zustand-free and testable
+ * against plain DOM trees/arrays exactly like `embedElementStyle.ts`.
+ */
 function resolveVariableBinding(varName: string | null, variables: readonly Variable[]): ColorBinding | undefined {
   if (!varName) return undefined;
-  const variable = variables.find((v) => v.name === varName);
-  return variable ? { variableId: variable.id } : undefined;
+  const canonical = variables.find((v) => getVariableCssName(v) === varName);
+  if (canonical) return { variableId: canonical.id };
+  const target = normalizeVarName(varName);
+  const loose = variables.find((v) => normalizeVarName(v.name) === target);
+  return loose ? { variableId: loose.id } : undefined;
 }
 
 /**
@@ -272,6 +282,10 @@ export function embedElementToSyntheticNode(
       paddingLeft: padding.paddingLeft,
     };
   }
+  // Note: `node.clip` (read by `SizeSection`'s unconditional "Clip content"
+  // checkbox for any `type: "frame"` node) is already populated above by
+  // `applyBaseProps` from `overflow`/`overflow-x` — see
+  // `LAYOUT_STYLE_ALLOWLIST`/`RESET_VALUES` below for the write side.
 
   // Variable bindings: read from the element's OWN inline style (the live
   // author-set declaration), not the resolved computed style — see
@@ -285,7 +299,16 @@ export function embedElementToSyntheticNode(
   // bound variables, so this collision is treated as out of scope; when both
   // are set, `color`'s binding wins (typography is applied after fill above).
   const inline = el instanceof HTMLElement ? el.style : undefined;
-  const bgVar = parseVarReference(inline?.getPropertyValue("background-color"));
+  // A `background` SHORTHAND holding a single `var()` is a
+  // "pending-substitution value": the UA keeps it whole instead of expanding
+  // it, so `getPropertyValue("background-color")` is empty even though the
+  // element is plainly bound. `style="background: var(--brand)"` is exactly
+  // what the backend prompt tells the model to write, so without this
+  // fallback the Fill row would render as unbound and the next edit would
+  // silently clobber the binding. Same rule `readEmbedElementSnapshot` uses.
+  const bgVar = parseVarReference(
+    inline?.getPropertyValue("background-color") || inline?.getPropertyValue("background"),
+  );
   const borderVar = parseVarReference(
     inline?.getPropertyValue("border-color") || inline?.getPropertyValue("border-top-color"),
   );
@@ -332,6 +355,13 @@ const LAYOUT_STYLE_ALLOWLIST = new Set([
   "align-items",
   "justify-content",
   "padding",
+  // `SizeSection`'s "Clip content" checkbox (writes `node.clip`, which
+  // `generateLayoutStyles` turns into `overflow: hidden` for any `frame`
+  // node, auto-layout or not) — unlike width/height/position, this is a
+  // plain boolean CSS property with no parent/sizing-mode dependency, so
+  // there is no reason to exclude it the way this allowlist's own doc
+  // comment excludes those.
+  "overflow",
 ]);
 
 /**
@@ -433,6 +463,7 @@ const RESET_VALUES: Record<string, string> = {
   "align-items": "normal",
   "justify-content": "normal",
   padding: "0px",
+  overflow: "visible",
 };
 
 /**
