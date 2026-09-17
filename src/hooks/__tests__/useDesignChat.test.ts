@@ -304,7 +304,19 @@ describe("buildCanvasContext", () => {
     const context = buildCanvasContext() as { canvasContext: string };
     const canvas = JSON.parse(context.canvasContext);
     expect(canvas.selectionHint).toBe(
-      "Screenshots of selected frames are intentionally NOT attached. If you need to see a selected frame, call get_screenshot with its node id."
+      "Screenshots of the selected nodes are intentionally NOT attached. If you need to see one, call get_screenshot with its node id."
+    );
+  });
+
+  // The hint is universal now — no node type is auto-screenshotted, so any
+  // non-empty selection (not just a frame) triggers it.
+  it("adds selectionHint for a non-frame selection too", () => {
+    chatModelsOverride.canSendImages = true;
+    useSelectionStore.setState({ selectedIds: ["rect1"] });
+    const context = buildCanvasContext() as { canvasContext: string };
+    const canvas = JSON.parse(context.canvasContext);
+    expect(canvas.selectionHint).toBe(
+      "Screenshots of the selected nodes are intentionally NOT attached. If you need to see one, call get_screenshot with its node id."
     );
   });
 
@@ -314,7 +326,7 @@ describe("buildCanvasContext", () => {
   // "Agent vision" section). canSendImages() mirrors that exact condition on
   // the frontend; pointing the model at a tool it doesn't have would waste a
   // turn.
-  it("omits selectionHint for a frame selection when the model can't be sent images", () => {
+  it("omits selectionHint for a selection when the model can't be sent images", () => {
     chatModelsOverride.canSendImages = false;
     useSelectionStore.setState({ selectedIds: ["frame1"] });
     const context = buildCanvasContext() as { canvasContext: string };
@@ -322,8 +334,8 @@ describe("buildCanvasContext", () => {
     expect(canvas).not.toHaveProperty("selectionHint");
   });
 
-  it("omits selectionHint when the selection has no frame/ref node", () => {
-    useSelectionStore.setState({ selectedIds: ["rect1"] });
+  it("omits selectionHint when the selected id isn't in the scene", () => {
+    useSelectionStore.setState({ selectedIds: ["ghost"] });
     const context = buildCanvasContext() as { canvasContext: string };
     const canvas = JSON.parse(context.canvasContext);
     expect(canvas).not.toHaveProperty("selectionHint");

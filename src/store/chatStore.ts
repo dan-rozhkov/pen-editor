@@ -8,10 +8,6 @@ import type { AttachedImage, ChatLaunchPayload, QueuedChatMessage } from "@/type
  * change). Never mutated — the store always writes fresh arrays. */
 export const NO_ATTACHED_IMAGES: AttachedImage[] = [];
 
-/** Stable empty reference for sessions with no dismissed selection previews,
- * for the same reason as NO_ATTACHED_IMAGES. Never mutated. */
-export const NO_DISMISSED_SELECTION: ReadonlySet<string> = new Set<string>();
-
 /** Stable empty reference for sessions with no queued messages, for the same
  * reason as NO_ATTACHED_IMAGES. Never mutated. */
 export const NO_QUEUED_MESSAGES: QueuedChatMessage[] = [];
@@ -87,12 +83,6 @@ interface ChatState {
    * goes inactive (inactive ChatSessions render null for performance).
    */
   attachedImages: Record<string, AttachedImage[]>;
-  /**
-   * Per-message-dismissed canvas-selection previews, keyed by chat id. Lifted
-   * out of ChatInput for the same reason as attachedImages, so the user's
-   * "remove from context" choices survive the input unmounting.
-   */
-  dismissedSelection: Record<string, Set<string>>;
   toggleOpen: () => void;
   open: () => void;
   close: () => void;
@@ -138,10 +128,6 @@ interface ChatState {
   setAttachedImages: (
     chatId: string,
     update: AttachedImage[] | ((prev: AttachedImage[]) => AttachedImage[]),
-  ) => void;
-  setDismissedSelection: (
-    chatId: string,
-    update: Set<string> | ((prev: Set<string>) => Set<string>),
   ) => void;
 
 }
@@ -230,7 +216,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messageQueue: {},
   sessionActions: {},
   attachedImages: {},
-  dismissedSelection: {},
 
   toggleOpen: () => set((s) => ({ isOpen: !s.isOpen })),
   open: () => set({ isOpen: true }),
@@ -286,7 +271,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       launchQueue,
       messageQueue,
       attachedImages,
-      dismissedSelection,
     } = get();
 
     // Abort any ongoing request for this chat
@@ -308,8 +292,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       delete newMessageQueue[chatId];
       const newAttachedImages = { ...attachedImages };
       delete newAttachedImages[chatId];
-      const newDismissedSelection = { ...dismissedSelection };
-      delete newDismissedSelection[chatId];
       set({
         chats: [makeChat(newId, "Chat 1", model, parallelCount)],
         // Only jump into the replacement chat if the user was already looking
@@ -322,7 +304,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         launchQueue: newLaunchQueue,
         messageQueue: newMessageQueue,
         attachedImages: newAttachedImages,
-        dismissedSelection: newDismissedSelection,
       });
       return;
     }
@@ -332,12 +313,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const newLaunchQueue = { ...launchQueue };
     const newMessageQueue = { ...messageQueue };
     const newAttachedImages = { ...attachedImages };
-    const newDismissedSelection = { ...dismissedSelection };
     delete newControllers[chatId];
     delete newLaunchQueue[chatId];
     delete newMessageQueue[chatId];
     delete newAttachedImages[chatId];
-    delete newDismissedSelection[chatId];
 
     // Closing the open chat returns to the chat list rather than jumping to a
     // sibling chat.
@@ -350,7 +329,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       launchQueue: newLaunchQueue,
       messageQueue: newMessageQueue,
       attachedImages: newAttachedImages,
-      dismissedSelection: newDismissedSelection,
     });
   },
 
@@ -541,21 +519,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         nextMap[chatId] = next;
       }
       return { attachedImages: nextMap };
-    });
-  },
-
-  setDismissedSelection: (chatId, update) => {
-    set((s) => {
-      const prev = s.dismissedSelection[chatId] ?? new Set<string>();
-      const next = typeof update === "function" ? update(prev) : update;
-      if (next === prev) return s;
-      const nextMap = { ...s.dismissedSelection };
-      if (next.size === 0) {
-        delete nextMap[chatId];
-      } else {
-        nextMap[chatId] = next;
-      }
-      return { dismissedSelection: nextMap };
     });
   },
 

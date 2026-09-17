@@ -22,7 +22,6 @@ describe("chatStore — message queue", () => {
       messageQueue: {},
       launchQueue: {},
       attachedImages: {},
-      dismissedSelection: {},
     });
   });
 
@@ -152,7 +151,6 @@ describe("chatStore — chat list state", () => {
       launchQueue: {},
       abortControllers: {},
       attachedImages: {},
-      dismissedSelection: {},
       sessionActions: {},
     });
   });

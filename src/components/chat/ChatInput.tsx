@@ -10,16 +10,12 @@ import {
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import type { SlashCommand } from "./slashCommands";
 import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
-import {
-  useChatStore,
-  NO_ATTACHED_IMAGES,
-  NO_DISMISSED_SELECTION,
-} from "@/store/chatStore";
+import { useChatStore, NO_ATTACHED_IMAGES } from "@/store/chatStore";
 import {
   useCanSendImages,
   useModelSupportsVision,
 } from "@/hooks/useImageSupport";
-import { useSelectionScreenshots } from "@/hooks/useSelectionScreenshots";
+import { useSelectionContext } from "@/hooks/useSelectionContext";
 import { useEmbedElementContext } from "@/hooks/useEmbedElementContext";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { OFFLINE_SEND_TITLE } from "@/lib/apiBase";
@@ -32,16 +28,21 @@ import {
 
 // Maximum images per message (mirrored by MAX_IMAGE_PARTS on the backend).
 const MAX_IMAGES = 4;
+// A marquee can select hundreds of nodes; the chips are a reference hint, not
+// message content (the ids ride in canvasContext either way), so the strip is
+// capped and the rest collapse into a "+N more" chip instead of growing the
+// composer without bound.
+const MAX_SELECTION_CHIPS = 6;
 
 interface ChatInputProps {
   /** Owning chat session; keys the composer's persisted image attachments. */
   sessionId: string;
   input: string;
   setInput: (value: string) => void;
-  // Returns whether the message was actually sent. ChatInput only clears
-  // attachments/dismissed-selection on `true` — a `false` (offline, chat not
-  // ready, …) leaves the draft and its attachments intact so the user can
-  // retry once the underlying condition clears.
+  // Returns whether the message was actually sent. ChatInput only clears the
+  // draft and its attachments on `true` — a `false` (offline, chat not
+  // ready, …) leaves them intact so the user can retry once the underlying
+  // condition clears.
   onSubmit: (payload: ChatLaunchPayload) => boolean;
   isLoading: boolean;
   stop: () => void;
@@ -73,14 +74,12 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-// Small top-right "x" overlay shared by every dismissible chip in this file
-// (a selected-element image preview, or a manually attached image) — same
-// hover-reveal button, tooltip and position, differing only in the label and
-// what removing actually does. Reference-only chips (a selected frame/ref,
-// see the `dataUrl === null` branch below) deliberately don't get one: the
-// node id they represent keeps riding along in canvasContext regardless of
-// anything dismissed here, so a "remove" affordance on them would be dead —
-// clicking it could never actually take the frame out of context.
+// Small top-right "x" overlay for a dismissible manually-attached image
+// chip. Selected-canvas-node chips (`selectionContext` below) never get one:
+// the node id they represent keeps riding along in canvasContext regardless
+// of anything dismissed in the composer, so a "remove" affordance on them
+// would be dead — clicking it could never actually take the id out of
+// context.
 function RemoveChipButton({
   label,
   onRemove,
@@ -169,90 +168,31 @@ export function ChatInput({
     if (shouldFocus) textareaRef.current?.focus();
   }, [shouldFocus]);
 
-  // Screenshots of the currently selected canvas nodes, attached to the message
-  // as visual context. The user can drop individual ones for the message they
-  // are composing without changing the canvas selection.
-  const selectionScreenshots = useSelectionScreenshots();
+  // Selected canvas nodes, shown above the composer as context chips. No
+  // screenshot is ever attached for these — the node's id already rides
+  // along in canvasContext's selectedIds/selectedNodes (see
+  // buildCanvasContext in useDesignChat.ts), and the agent can call
+  // get_screenshot itself if it needs pixels. These chips therefore carry no
+  // message content of their own: they don't occupy an attachment slot,
+  // don't count toward MAX_IMAGES, and can't be individually dismissed (the
+  // id keeps riding in canvasContext regardless).
+  const selectionContext = useSelectionContext();
   // The element the user last picked inside an embed (if any and still
   // live) — display-only, mirroring what's already riding in
   // canvasContext.selectedEmbedElement (see useDesignChat.ts). Not part of
   // attachments/images: it's not message content, just an indicator.
   const embedElementContext = useEmbedElementContext();
-  // Persisted in chatStore keyed by sessionId (like attachedImages) so the
-  // user's per-message "remove from context" choices survive the input
-  // unmounting when its tab goes inactive.
-  const dismissedSelection = useChatStore(
-    (s) => s.dismissedSelection[sessionId] ?? NO_DISMISSED_SELECTION,
-  );
-  const setSessionDismissedSelection = useChatStore(
-    (s) => s.setDismissedSelection,
-  );
-  const setDismissedSelection = useCallback(
-    (update: Set<string> | ((prev: Set<string>) => Set<string>)) =>
-      setSessionDismissedSelection(sessionId, update),
-    [setSessionDismissedSelection, sessionId],
-  );
-  const visibleSelection = useMemo(
-    () => selectionScreenshots.filter((s) => !dismissedSelection.has(s.nodeId)),
-    [selectionScreenshots, dismissedSelection]
-  );
-  // Only image items (dataUrl set) occupy an attachment slot / count toward
-  // MAX_IMAGES and canSubmit — reference-only items (frame/ref: dataUrl
-  // null) carry no message content, they just point the agent at an id it
-  // already has via canvasContext's selectedIds.
-  const visibleSelectionImages = useMemo(
-    () => visibleSelection.filter((s) => s.dataUrl !== null),
-    [visibleSelection]
-  );
 
-  const dismissSelection = useCallback(
-    (nodeId: string) => {
-      setDismissedSelection((prev) => new Set(prev).add(nodeId));
-    },
-    [setDismissedSelection]
-  );
-
-  // Forget dismissals for nodes that have left the selection, so re-selecting a
-  // previously-dismissed node brings it back as context.
-  const selectionIds = useMemo(
-    () => selectionScreenshots.map((s) => s.nodeId),
-    [selectionScreenshots]
-  );
-  useEffect(() => {
-    setDismissedSelection((prev) => {
-      if (prev.size === 0) return prev;
-      const present = new Set(selectionIds);
-      const next = new Set<string>();
-      for (const id of prev) {
-        if (present.has(id)) next.add(id);
-      }
-      return next.size === prev.size ? prev : next;
-    });
-  }, [selectionIds, setDismissedSelection]);
-
-  // Selection screenshots plus manual attachments can exceed the per-message
-  // image limit; explicit attachments are always kept and the overflow (extra
-  // selected elements) is dropped — warn so nothing disappears silently.
-  const overImageLimit =
-    canAttachImages &&
-    visibleSelectionImages.length + attachedImages.length > MAX_IMAGES;
   const canSubmit =
     isOnline &&
     // Block sending while an ask_user question is unanswered so the answer
     // isn't stranded (covers both the built-in send button and renderFooter).
     !awaitingAnswer &&
-    // A reference-only selection (a selected frame with no screenshot) is
-    // not message content by itself — its id already rides along in
-    // canvasContext regardless of whether this message is sent, so it must
-    // not unlock an otherwise-empty send.
-    (input.trim().length > 0 ||
-      attachedImages.length > 0 ||
-      visibleSelectionImages.length > 0);
-  const canAttach =
-    canAttachImages && visibleSelectionImages.length + attachedImages.length < MAX_IMAGES;
+    (input.trim().length > 0 || attachedImages.length > 0);
+  const canAttach = canAttachImages && attachedImages.length < MAX_IMAGES;
   const attachLabel = !canAttachImages
     ? "Selected model can't read images"
-    : visibleSelectionImages.length + attachedImages.length >= MAX_IMAGES
+    : attachedImages.length >= MAX_IMAGES
       ? `Max ${MAX_IMAGES} images`
       : nativeVision
         ? "Attach image"
@@ -323,18 +263,7 @@ export function ChatInput({
     () => {
       // Drop attachments the selected model can't read (a warning is shown
       // above the previews) so the request doesn't fail at the provider.
-      // Explicit attachments are always kept; selection screenshots lead in
-      // order but only fill the room left under the per-message limit, so the
-      // user's own attachments are never silently displaced.
-      const room = Math.max(0, MAX_IMAGES - attachedImages.length);
-      const selectionImages: AttachedImage[] = canAttachImages
-        ? visibleSelectionImages
-            .slice(0, room)
-            .map((s) => ({ dataUrl: s.dataUrl as string, name: s.name }))
-        : [];
-      const images = canAttachImages
-        ? [...selectionImages, ...attachedImages]
-        : [];
+      const images = canAttachImages ? attachedImages : [];
       // Deliberately not gated on `isOnline`: the send button is already
       // disabled while offline, but Enter bypasses it. Calling onSubmit
       // unconditionally lets its offline guard (in useDesignChat) surface a
@@ -349,22 +278,10 @@ export function ChatInput({
         // user can retry without re-attaching everything.
         if (didSend) {
           setAttachedImages([]);
-          // Reset per-message dismissals so the next message re-includes the
-          // still-selected nodes.
-          setDismissedSelection(new Set());
         }
       }
     },
-    [
-      input,
-      attachedImages,
-      visibleSelectionImages,
-      canAttachImages,
-      awaitingAnswer,
-      onSubmit,
-      setAttachedImages,
-      setDismissedSelection,
-    ]
+    [input, attachedImages, canAttachImages, awaitingAnswer, onSubmit, setAttachedImages]
   );
 
   const handleKeyDown = useCallback(
@@ -462,13 +379,6 @@ export function ChatInput({
         />
       )}
 
-      {overImageLimit && (
-        <div className="mb-2 text-xs text-amber-500">
-          Only {MAX_IMAGES} images can be sent per message — extra selected
-          elements won't be attached.
-        </div>
-      )}
-
       {/* Selected element inside an embed, attached as visual context.
           No remove button, same reasoning as the reference-only canvas
           chips below — the picker selection keeps riding in canvasContext
@@ -492,40 +402,31 @@ export function ChatInput({
         </div>
       )}
 
-      {/* Selected canvas elements, attached as visual context */}
-      {visibleSelection.length > 0 && (
+      {/* Selected canvas nodes, shown as reference context only — no
+          screenshot, no remove button (see the `selectionContext` doc
+          comment above: the id keeps riding in canvasContext regardless of
+          anything dismissed here). */}
+      {selectionContext.length > 0 && (
         <div className="mb-2">
           <div className="flex gap-2 flex-wrap">
-            {visibleSelection.map((sel) =>
-              sel.dataUrl === null ? (
-                // Reference-only chip (frame/ref): no remove button — see
-                // RemoveChipButton's doc comment for why one would be dead.
-                <div
-                  key={sel.nodeId}
-                  title={sel.name}
-                  aria-label={sel.name}
-                  className="flex items-center gap-1 h-12 pl-2 pr-2 rounded-md bg-secondary text-xs text-text-muted"
-                >
-                  <FrameCornersIcon size={14} />
-                  <span className="max-w-24 truncate">{sel.name}</span>
-                </div>
-              ) : (
-                <div
-                  key={sel.nodeId}
-                  title={sel.name}
-                  className="relative group w-12 h-12 rounded-md overflow-hidden bg-secondary img-outline"
-                >
-                  <img
-                    src={sel.dataUrl}
-                    alt={sel.name}
-                    className="w-full h-full object-contain"
-                  />
-                  <RemoveChipButton
-                    label="Remove from context"
-                    onRemove={() => dismissSelection(sel.nodeId)}
-                  />
-                </div>
-              )
+            {selectionContext.slice(0, MAX_SELECTION_CHIPS).map((sel) => (
+              <div
+                key={sel.nodeId}
+                title={sel.name}
+                aria-label={sel.name}
+                className="flex items-center gap-1 h-12 pl-2 pr-2 rounded-md bg-secondary text-xs text-text-muted"
+              >
+                <FrameCornersIcon size={14} />
+                <span className="max-w-24 truncate">{sel.name}</span>
+              </div>
+            ))}
+            {selectionContext.length > MAX_SELECTION_CHIPS && (
+              <div
+                aria-label={`${selectionContext.length - MAX_SELECTION_CHIPS} more selected nodes`}
+                className="flex items-center h-12 px-2 rounded-md bg-secondary text-xs text-text-muted"
+              >
+                +{selectionContext.length - MAX_SELECTION_CHIPS} more
+              </div>
             )}
           </div>
         </div>
