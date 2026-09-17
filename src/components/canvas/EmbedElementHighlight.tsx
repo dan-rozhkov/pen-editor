@@ -4,13 +4,28 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
+import { useDevModeStore } from "@/store/devModeStore";
+import { useMeasureStore, type MeasureLine } from "@/store/measureStore";
 import { resolveElementPath } from "@/lib/embedElementPicker";
+import { formatMeasureLine } from "@/lib/inspect/units";
+import { computeMeasurementLines, measureLineEndpoints, type NodeBounds } from "@/utils/measureUtils";
 import { EmbedElementAgentButton } from "@/components/canvas/EmbedElementAgentButton";
 
 const HOVER_COLOR = "#0d99ff";
 const SELECTION_COLOR = "#0d99ff";
+const MEASURE_COLOR = "#f24822";
 const HOVER_STROKE_WIDTH = 2;
 const SELECTION_STROKE_WIDTH = 1;
+
+// Mirrors the floating labels and end-caps painted by OverlayRenderer's
+// `redrawMeasureLines`, in screen-space DOM rather than its world-space Pixi
+// layer. The embed content itself is DOM, so the Pixi overlay sits behind it.
+const MEASURE_STROKE_WIDTH = 1;
+const MEASURE_CAP_SIZE = 4;
+const MEASURE_LABEL_FONT_SIZE = 11;
+const MEASURE_LABEL_PADDING_X = 4;
+const MEASURE_LABEL_PADDING_Y = 2;
+const MEASURE_LABEL_RADIUS = 2;
 
 // Mirrors the native selection size badge (src/pixi/selectionOverlay/constants.ts
 // SIZE_LABEL_* + drawSelection.ts's drawSizeLabel) so a picked embed element
@@ -200,6 +215,161 @@ function elementAgentAnchor(box: ElementBox): { x: number; y: number } {
   };
 }
 
+/** Convert an on-screen element box back to the embed's CSS-pixel coordinate
+ * system. `getBoundingClientRect()` is zoomed by the canvas viewport, but
+ * native measurements are expressed in design (world) pixels. */
+function toCssBounds(box: ElementBox, zoom: number): NodeBounds {
+  return {
+    x: box.left / zoom,
+    y: box.top / zoom,
+    width: box.width / zoom,
+    height: box.height / zoom,
+  };
+}
+
+function getElementRelation(
+  embedId: string,
+  selectedPath: string,
+  hoveredPath: string,
+): "to-is-ancestor" | "sibling" {
+  const host = document.querySelector<HTMLElement>(
+    `[data-embed-id="${CSS.escape(embedId)}"]`,
+  );
+  const root = host?.shadowRoot;
+  if (!root) return "sibling";
+
+  const selected = resolveElementPath(root, selectedPath);
+  const hovered = resolveElementPath(root, hoveredPath);
+  if (!selected || !hovered) return "sibling";
+  // Match measurementController's directed native-hover semantics exactly:
+  // parent distances are shown only when the hovered target contains the
+  // selection. Selecting a parent and hovering its child follows the sibling
+  // path (which produces no lines for overlapping/nested bounds).
+  if (hovered.contains(selected)) return "to-is-ancestor";
+  return "sibling";
+}
+
+function MeasureLineOverlay({ line, zoom }: { line: MeasureLine; zoom: number }) {
+  const { x1, y1, x2, y2 } = measureLineEndpoints(line);
+  const horizontal = line.orientation === "horizontal";
+  const startX = Math.min(x1, x2) * zoom;
+  const startY = Math.min(y1, y2) * zoom;
+  const length = Math.abs((horizontal ? x2 - x1 : y2 - y1) * zoom);
+  const centerX = ((x1 + x2) / 2) * zoom;
+  const centerY = ((y1 + y2) / 2) * zoom;
+  const capStyle = horizontal
+    ? {
+        left: -MEASURE_STROKE_WIDTH / 2,
+        top: -MEASURE_CAP_SIZE,
+        width: MEASURE_STROKE_WIDTH,
+        height: MEASURE_CAP_SIZE * 2,
+      }
+    : {
+        left: -MEASURE_CAP_SIZE,
+        top: -MEASURE_STROKE_WIDTH / 2,
+        width: MEASURE_CAP_SIZE * 2,
+        height: MEASURE_STROKE_WIDTH,
+      };
+
+  return (
+    <>
+      <div
+        data-embed-measure-line
+        data-orientation={line.orientation}
+        style={{
+          position: "absolute",
+          left: startX,
+          top: startY,
+          width: horizontal ? length : MEASURE_STROKE_WIDTH,
+          height: horizontal ? MEASURE_STROKE_WIDTH : length,
+          background: MEASURE_COLOR,
+          pointerEvents: "none",
+        }}
+      >
+        <div
+          data-embed-measure-cap="start"
+          style={{ position: "absolute", background: MEASURE_COLOR, ...capStyle }}
+        />
+        <div
+          data-embed-measure-cap="end"
+          style={{
+            position: "absolute",
+            background: MEASURE_COLOR,
+            ...capStyle,
+            ...(horizontal
+              ? { left: length - MEASURE_STROKE_WIDTH / 2 }
+              : { top: length - MEASURE_STROKE_WIDTH / 2 }),
+          }}
+        />
+      </div>
+      <div
+        data-embed-measure-label
+        style={{
+          position: "absolute",
+          left: centerX,
+          top: centerY,
+          transform: "translate(-50%, -50%)",
+          background: MEASURE_COLOR,
+          color: "#ffffff",
+          fontFamily: "system-ui, -apple-system, sans-serif",
+          fontSize: MEASURE_LABEL_FONT_SIZE,
+          lineHeight: `${MEASURE_LABEL_FONT_SIZE}px`,
+          whiteSpace: "nowrap",
+          padding: `${MEASURE_LABEL_PADDING_Y}px ${MEASURE_LABEL_PADDING_X}px`,
+          borderRadius: MEASURE_LABEL_RADIUS,
+          pointerEvents: "none",
+        }}
+      >
+        {line.label}
+      </div>
+    </>
+  );
+}
+
+function EmbedElementMeasures({
+  embedId,
+  selectionPath,
+  hoveredPath,
+  selectionBox,
+  hoverBox,
+  active,
+  formatLabels,
+  units,
+  remBase,
+}: {
+  embedId: string;
+  selectionPath: string;
+  hoveredPath: string;
+  selectionBox: ElementBox;
+  hoverBox: ElementBox;
+  active: boolean;
+  formatLabels: boolean;
+  units: "px" | "rem";
+  remBase: number;
+}) {
+  if (!active || selectionPath === hoveredPath) return null;
+
+  const zoom = useViewportStore.getState().scale || 1;
+  const relation = getElementRelation(embedId, selectionPath, hoveredPath);
+  const lines = computeMeasurementLines(
+    toCssBounds(selectionBox, zoom),
+    toCssBounds(hoverBox, zoom),
+    relation,
+  ).map((line) => (formatLabels ? formatMeasureLine(line, units, remBase) : line));
+
+  if (lines.length === 0) return null;
+  return (
+    <div
+      data-embed-element-measures
+      style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+    >
+      {lines.map((line, index) => (
+        <MeasureLineOverlay key={`${line.orientation}-${index}`} line={line} zoom={zoom} />
+      ))}
+    </div>
+  );
+}
+
 function OutlineBox({
   box,
   strokeWidth,
@@ -275,6 +445,8 @@ function OutlineBox({
  */
 export function EmbedElementHighlight() {
   const editorMode = useEditorModeStore((s) => s.mode);
+  const devMode = useDevModeStore((s) => s);
+  const modifierHeld = useMeasureStore((s) => s.modifierHeld);
   const pickingEmbedId = useEmbedPickerStore((s) => s.pickingEmbedId);
   const hoveredPath = useEmbedPickerStore((s) => s.hoveredPath);
   const hoveredEmbedId = useEmbedPickerStore((s) => s.hoveredEmbedId);
@@ -362,6 +534,21 @@ export function EmbedElementHighlight() {
     !isEditingSelection && selection && activeEmbedNode
       ? resolveElementBox(selection.embedId, selection.path)
       : null;
+  // This exactly mirrors `measurementController`: a native selection is
+  // measured against a different hovered node on Alt, or unconditionally in
+  // Dev Mode. Here both targets must be elements of the same embed.
+  const showMeasures =
+    !!selectionBox &&
+    !!hoverBox &&
+    !!selection &&
+    !!hoveredPath &&
+    hoverEmbedId === selection.embedId &&
+    (modifierHeld || devMode.active);
+  const isSelfHover =
+    !!selection &&
+    !!hoveredPath &&
+    hoverEmbedId === selection.embedId &&
+    hoveredPath === selection.path;
   const dropIndicatorEmbedId = pickingEmbedId ?? selection?.embedId ?? null;
   const indicatorBox =
     dropIndicator && dropIndicatorEmbedId
@@ -388,8 +575,21 @@ export function EmbedElementHighlight() {
         <OutlineBox
           box={hoverBox}
           strokeWidth={HOVER_STROKE_WIDTH}
-          color={HOVER_COLOR}
+          color={devMode.active && selection && !isSelfHover ? MEASURE_COLOR : HOVER_COLOR}
           kind="hover"
+        />
+      )}
+      {showMeasures && selection && hoveredPath && selectionBox && hoverBox && (
+        <EmbedElementMeasures
+          embedId={selection.embedId}
+          selectionPath={selection.path}
+          hoveredPath={hoveredPath}
+          selectionBox={selectionBox}
+          hoverBox={hoverBox}
+          active={showMeasures}
+          formatLabels={devMode.active}
+          units={devMode.units}
+          remBase={devMode.remBase}
         />
       )}
       {indicatorBox && <DropIndicatorLine box={indicatorBox} />}

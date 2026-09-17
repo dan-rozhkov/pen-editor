@@ -119,8 +119,28 @@ function readHtmlContent(page: Page): Promise<string> {
 // CSS px equal screen px.
 const BLOCK2_CENTER = { x: 150, y: 90 }; // block2 spans 60-120px
 const BLOCK3_CENTER = { x: 150, y: 150 }; // block3 spans 120-180px
+const BLOCK1_CENTER = { x: 150, y: 30 }; // block1 spans 0-60px
 
 test.describe("embed element sortable drag", () => {
+  test("Alt-hovering a different embed element shows the native-style gap measure", async ({ page }) => {
+    await gotoEditorWithEmbed(page);
+    const host = await enterPicker(page);
+
+    await host.click({ position: BLOCK1_CENTER });
+    await expect(page.locator('[data-embed-element-box][data-kind="selection"]')).toBeVisible();
+
+    await page.keyboard.down("Alt");
+    try {
+      await host.hover({ position: BLOCK3_CENTER });
+      await expect(page.locator("[data-embed-element-measures]")).toBeVisible();
+      // Block 2 is the 60px gap between the picked first block and hovered
+      // third block. Alt mode uses the same un-suffixed label as native nodes.
+      await expect(page.locator("[data-embed-measure-label]")).toHaveText("60");
+    } finally {
+      await page.keyboard.up("Alt");
+    }
+  });
+
   test("click selects without reordering", async ({ page }) => {
     await gotoEditorWithEmbed(page);
     const host = await enterPicker(page);

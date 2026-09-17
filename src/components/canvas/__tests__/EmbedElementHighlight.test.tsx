@@ -8,6 +8,8 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
+import { useDevModeStore } from "@/store/devModeStore";
+import { useMeasureStore } from "@/store/measureStore";
 import { resetStores } from "@/test/fixtures";
 import type { FlatSceneNode } from "@/types/scene";
 
@@ -62,6 +64,8 @@ describe("<EmbedElementHighlight />", () => {
     resetStores();
     vi.mocked(launchEmbedElementAgentChat).mockReset();
     useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
+    useDevModeStore.setState({ active: false, units: "px", remBase: 16 });
+    useMeasureStore.setState({ modifierHeld: false });
     useSceneStore.setState({
       nodesById: {
         embed1: {
@@ -158,6 +162,148 @@ describe("<EmbedElementHighlight />", () => {
     const { container } = render(<EmbedElementHighlight />);
 
     expect(container.querySelector("[data-embed-element-label]")).toBeNull();
+  });
+
+  it("renders the same sibling gap measure as native nodes for a picked element and a different hovered element", () => {
+    const { canvas } = mountEmbedDom();
+    const host = canvas.querySelector<HTMLElement>('[data-embed-id="embed1"]')!;
+    const content = host.shadowRoot!.firstElementChild as HTMLElement;
+    const selected = content.querySelector<HTMLElement>("#cta")!;
+    const hovered = document.createElement("button");
+    hovered.id = "other";
+    hovered.textContent = "Other";
+    content.appendChild(hovered);
+
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.hasAttribute("data-canvas")) return rect(0, 0, 400, 300);
+      if (this.hasAttribute("data-embed-id")) return rect(0, 0, 300, 200);
+      if (this === selected) return rect(20, 20, 40, 20);
+      if (this === hovered) return rect(100, 20, 30, 20);
+      return rect(0, 0, 0, 0);
+    });
+
+    const selectedPath = "div:nth-of-type(1) > button:nth-of-type(1)";
+    useEmbedPickerStore.getState().startPicking("embed1");
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "embed1",
+      path: selectedPath,
+      tagName: "button",
+      classes: [],
+      textPreview: "Buy",
+      outerHtml: "<button>Buy</button>",
+    });
+    useEmbedPickerStore.getState().setHoveredPath("div:nth-of-type(1) > button:nth-of-type(2)");
+
+    const { container } = render(<EmbedElementHighlight />);
+    expect(container.querySelector("[data-embed-element-measures]")).toBeNull();
+
+    act(() => useMeasureStore.getState().setModifierHeld(true));
+
+    const measure = container.querySelector<HTMLElement>("[data-embed-element-measures]");
+    const line = container.querySelector<HTMLElement>('[data-embed-measure-line][data-orientation="horizontal"]');
+    const label = container.querySelector<HTMLElement>("[data-embed-measure-label]");
+    expect(measure).toBeTruthy();
+    expect(line?.style.left).toBe("60px");
+    expect(line?.style.width).toBe("40px");
+    expect(label?.textContent).toBe("40");
+  });
+
+  it("uses native Dev Mode units when the hovered embed element is the selected element's parent", () => {
+    const { canvas } = mountEmbedDom();
+    const host = canvas.querySelector<HTMLElement>('[data-embed-id="embed1"]')!;
+    const content = host.shadowRoot!.firstElementChild as HTMLElement;
+    const child = content.querySelector<HTMLElement>("#cta")!;
+
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.hasAttribute("data-canvas")) return rect(0, 0, 400, 300);
+      if (this.hasAttribute("data-embed-id")) return rect(0, 0, 300, 200);
+      if (this === content) return rect(10, 10, 200, 100);
+      if (this === child) return rect(30, 30, 50, 20);
+      return rect(0, 0, 0, 0);
+    });
+
+    useEmbedPickerStore.getState().startPicking("embed1");
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "embed1",
+      path: "div:nth-of-type(1) > button:nth-of-type(1)",
+      tagName: "button",
+      classes: [],
+      textPreview: "Buy",
+      outerHtml: "<button>Buy</button>",
+    });
+    useEmbedPickerStore.getState().setHoveredPath("div:nth-of-type(1)");
+    useDevModeStore.setState({ active: true, units: "rem", remBase: 10 });
+
+    const { container } = render(<EmbedElementHighlight />);
+    const labels = [...container.querySelectorAll("[data-embed-measure-label]")].map((el) => el.textContent);
+    expect(container.querySelector("[data-embed-element-measures]")).toBeTruthy();
+    // Native hover measurements use parent geometry only when the hovered
+    // node is the selected node's parent.
+    expect(labels).toEqual(expect.arrayContaining(["2rem", "6rem", "2rem", "13rem"]));
+    expect(
+      (container.querySelector('[data-embed-element-box][data-kind="hover"] [data-embed-element-outline]') as HTMLElement).style.borderColor,
+    ).toBe("#f24822");
+  });
+
+  it("matches native hover by drawing no measure for selected parent to hovered child", () => {
+    const { canvas } = mountEmbedDom();
+    const host = canvas.querySelector<HTMLElement>('[data-embed-id="embed1"]')!;
+    const content = host.shadowRoot!.firstElementChild as HTMLElement;
+    const child = content.querySelector<HTMLElement>("#cta")!;
+
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.hasAttribute("data-canvas")) return rect(0, 0, 400, 300);
+      if (this.hasAttribute("data-embed-id")) return rect(0, 0, 300, 200);
+      if (this === content) return rect(10, 10, 200, 100);
+      if (this === child) return rect(30, 30, 50, 20);
+      return rect(0, 0, 0, 0);
+    });
+
+    useEmbedPickerStore.getState().startPicking("embed1");
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "embed1",
+      path: "div:nth-of-type(1)",
+      tagName: "div",
+      classes: [],
+      textPreview: "",
+      outerHtml: "<div><button>Buy</button></div>",
+    });
+    useEmbedPickerStore.getState().setHoveredPath("div:nth-of-type(1) > button:nth-of-type(1)");
+    useDevModeStore.setState({ active: true, units: "px", remBase: 16 });
+
+    const { container } = render(<EmbedElementHighlight />);
+    expect(container.querySelector("[data-embed-element-measures]")).toBeNull();
+  });
+
+  it("keeps the native blue outline when Dev Mode hovers the selected embed element itself", () => {
+    mountEmbedDom();
+    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
+    useEmbedPickerStore.getState().startPicking("embed1");
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "embed1",
+      path: "div:nth-of-type(1) > button:nth-of-type(1)",
+      tagName: "button",
+      classes: [],
+      textPreview: "Buy",
+      outerHtml: "<button>Buy</button>",
+    });
+    useEmbedPickerStore.getState().setHoveredPath(
+      "div:nth-of-type(1) > button:nth-of-type(1)",
+    );
+    useDevModeStore.setState({ active: true });
+
+    const { container } = render(<EmbedElementHighlight />);
+    const hoverOutline = container.querySelector<HTMLElement>(
+      '[data-embed-element-box][data-kind="hover"] [data-embed-element-outline]',
+    );
+    expect(hoverOutline?.style.borderColor).toBe("#0d99ff");
+    expect(container.querySelector("[data-embed-element-measures]")).toBeNull();
   });
 
   it("draws a 1px selection box with no label once an element is picked", () => {
