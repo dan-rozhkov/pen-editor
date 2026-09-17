@@ -334,7 +334,19 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys, onEnableAutoLayou
                 value={node.layout?.gap ?? 0}
                 onChange={(v) =>
                   onUpdate({
-                    layout: { ...node.layout, gap: v },
+                    // This single input is only rendered when `flexWrap` is
+                    // off, and is the sole control for `layout.gap` in that
+                    // state — but `rowGap`/`columnGap` can still be set on
+                    // the node without wrap (e.g. read from a CSS `gap: <row>
+                    // <column>` shorthand with differing axes), and
+                    // `generateLayoutStyles` prefers them over `gap` whenever
+                    // either is defined. Without clearing them here, editing
+                    // this field would never change the generated CSS (both
+                    // axes still pinned to their old values), making the
+                    // control silently dead. Clearing them is safe: this is
+                    // the ONLY input that can express per-axis gaps in this
+                    // state, so there is no other control this could clobber.
+                    layout: { ...node.layout, gap: v, rowGap: undefined, columnGap: undefined },
                   } as Partial<SceneNode>)
                 }
                 labelOutside={true}

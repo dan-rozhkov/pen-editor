@@ -386,6 +386,80 @@ describe("<EmbedElementProperties />", () => {
     expect(lower).not.toContain("background-color");
   });
 
+  it("hiding a fill (visibility toggle) writes an explicit reset, not removeProperty (bug repro)", async () => {
+    // Bug: `hadFill`/`hasFillNow` were computed from `getRenderableFills`,
+    // which also filters out `visible: false` — so toggling a fill's
+    // visibility off (not removing it) was indistinguishable from the
+    // "Remove fill" action and took the `removeInsteadOfReset` branch,
+    // deleting the inline `background-color` entirely instead of writing an
+    // explicit reset. On a class-styled element that makes "hide" show the
+    // class's own background back through.
+    const html = `<div class="card" style="background-color:#ff0000;">hi</div>`;
+    seedEmbedNode(html);
+    const { shadow } = mountEmbedHost(html);
+    const target = shadow.querySelector("div.card")!;
+    selectElement(target, shadow, html);
+
+    render(<EmbedElementProperties />);
+    await flushRaf();
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide fill" }));
+
+    const lower = currentHtml().toLowerCase();
+    expect(lower).toContain("background-color: transparent");
+  });
+
+  it("setting a fill's layer opacity to 0 writes an explicit reset, not removeProperty (bug repro)", async () => {
+    const html = `<div class="card" style="background-color:#ff0000;">hi</div>`;
+    seedEmbedNode(html);
+    const { shadow } = mountEmbedHost(html);
+    const target = shadow.querySelector("div.card")!;
+    selectElement(target, shadow, html);
+
+    render(<EmbedElementProperties />);
+    await flushRaf();
+
+    const fillSection = getSection("Fill");
+    // Scoped to `type="number"` — the color picker's own sliders in this
+    // section also carry a display value of "100" (saturation/brightness).
+    const opacityInput = within(fillSection)
+      .getAllByDisplayValue("100")
+      .find((el) => el.getAttribute("type") === "number") as HTMLInputElement;
+    fireEvent.change(opacityInput, { target: { value: "0" } });
+
+    const lower = currentHtml().toLowerCase();
+    expect(lower).toContain("background-color: transparent");
+  });
+
+  it("editing the single Gap field updates per-axis gaps set outside the panel (bug repro: dead control)", async () => {
+    // `parseGaps` reads `gap: 10px 20px` into `{gap:10, rowGap:10,
+    // columnGap:20}` even though `flexWrap` is off, so `AutoLayoutSection`
+    // shows only the single "Gap" input (gated on `flexWrap`) — but that
+    // input only ever wrote `layout.gap`, and `generateLayoutStyles` prefers
+    // `rowGap`/`columnGap` whenever either is defined, so the generated CSS
+    // (and thus the diff) never changed and the edit was silently dropped.
+    const html = `<div class="card" style="display:flex;gap:10px 20px;">hi</div>`;
+    seedEmbedNode(html);
+    const { shadow } = mountEmbedHost(html);
+    const target = shadow.querySelector("div.card")!;
+    selectElement(target, shadow, html);
+
+    render(<EmbedElementProperties />);
+    await flushRaf();
+
+    const autoLayoutSection = getSection("Auto Layout");
+    const gapInput = within(autoLayoutSection).getByDisplayValue("10");
+    fireEvent.change(gapInput, { target: { value: "15" } });
+
+    const lower = currentHtml().toLowerCase();
+    expect(lower).toContain("gap: 15px");
+    // The per-axis gaps this bridge originally read are cleared as explicit
+    // resets (this bridge's own invariant — never a bare `removeProperty`),
+    // not left in place still overriding the new single `gap` value.
+    expect(lower).toContain("row-gap: normal");
+    expect(lower).toContain("column-gap: normal");
+  });
+
   it("a CSS-less field (aspect ratio lock) never shows as applied, since it can't actually be persisted here", async () => {
     // Bug: `onUpdate` called `setNode(nextNode)` BEFORE checking whether the
     // patch produced any CSS to write. `aspectRatioLocked` has no CSS

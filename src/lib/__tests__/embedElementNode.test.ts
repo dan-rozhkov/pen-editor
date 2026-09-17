@@ -273,6 +273,46 @@ describe("embedElementToSyntheticNode", () => {
   });
 });
 
+describe("textFillOpacity vs. background opacity (bug repro)", () => {
+  it("does not inherit the background's alpha when the text color is fully opaque", () => {
+    const target = el("background-color: rgba(255, 0, 0, 0.5); color: rgb(0, 0, 0);");
+    target.textContent = "hi";
+    const { node } = embedElementToSyntheticNode(target);
+    // Background alpha is preserved on the BACKGROUND fields...
+    expect(node.fillOpacity).toBe(0.5);
+    // ...and must not leak onto the (fully opaque) text color.
+    expect(node.textFillOpacity).toBeUndefined();
+  });
+
+  it("emits a fully opaque `color` declaration, not the background's rgba alpha", () => {
+    const target = el("background-color: rgba(255, 0, 0, 0.5); color: rgb(0, 0, 0);");
+    target.textContent = "hi";
+    const { node } = embedElementToSyntheticNode(target);
+    const css = syntheticNodeToCssDeclarations(node);
+    expect(css.color).toBe("#000000");
+  });
+});
+
+describe("box-sizing excluded from the diff (bug repro)", () => {
+  it("removing a stroke does not emit a box-sizing reset", () => {
+    const target = el("border: 1px solid #dddddd; box-sizing: border-box;");
+    const { node } = embedElementToSyntheticNode(target);
+    expect(node.strokeAlign).toBe("inside");
+    const before = syntheticNodeToCssDeclarations(node);
+
+    const withoutStroke: typeof node = {
+      ...node,
+      stroke: undefined,
+      strokeWidth: undefined,
+      strokeWidthPerSide: undefined,
+      strokeAlign: undefined,
+    };
+    const after = syntheticNodeToCssDeclarations(withoutStroke);
+    const patch = diffCssDeclarations(before, after);
+    expect(patch["box-sizing"]).toBeUndefined();
+  });
+});
+
 describe("syntheticNodeToCssDeclarations", () => {
   it("round-trips simple visual styles", () => {
     const target = el(

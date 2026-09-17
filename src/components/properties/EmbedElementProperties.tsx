@@ -8,7 +8,7 @@ import {
 } from "@/lib/embedElementNode";
 import { findLiveEmbedElement, applyEmbedElementEdit } from "@/lib/embedElementStyle";
 import { BACKGROUND_STYLE_KEYS } from "@/lib/designToHtml/styleGeneration";
-import { getRenderableFills } from "@/utils/fillUtils";
+import { getFills } from "@/utils/fillUtils";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -189,11 +189,18 @@ export function EmbedElementProperties() {
       // entirely) wants the class's own background to show back through —
       // not `background-color: transparent` forced over it — so every
       // background-related key gets `removeInsteadOfReset` for exactly this
-      // transition (had a renderable fill, now has none). Any other diff
-      // (recoloring, adding another fill, etc.) keeps the default explicit
-      // reset, same as every other property this bridge diffs.
-      const hadFill = getRenderableFills(node).length > 0;
-      const hasFillNow = getRenderableFills(nextNode).length > 0;
+      // transition (the paint STACK itself went from non-empty to empty).
+      // Deliberately `getFills` (the raw stack), not `getRenderableFills`
+      // (which also drops invisible/zero-opacity paints): hiding a fill via
+      // its visibility toggle or dialing its layer opacity to 0 both leave
+      // the paint in the stack, just unrenderable, and are edits the user
+      // expects to see explicitly reflected (a transparent background), not
+      // a removal that lets the class's own background show back through as
+      // if the fill had never been touched. Any other diff (recoloring,
+      // adding another fill, etc.) keeps the default explicit reset, same as
+      // every other property this bridge diffs.
+      const hadFill = getFills(node).length > 0;
+      const hasFillNow = getFills(nextNode).length > 0;
       const diffOptions = hadFill && !hasFillNow
         ? { removeInsteadOfReset: BACKGROUND_STYLE_KEYS }
         : undefined;

@@ -375,6 +375,15 @@ export function embedElementToSyntheticNode(
   // the text color is no longer silently discarded.
   const backgroundFill = node.fill;
   const backgroundFillOpacity = node.fillOpacity;
+  // `applyTextProps` only WRITES `node.fillOpacity` when the text color's own
+  // alpha is below 1 (see its "Text color → fill" block) — an opaque text
+  // color leaves the field untouched. Since `applyBaseProps` above already
+  // populated it from the BACKGROUND's alpha, a translucent background with
+  // an opaque text color would otherwise have this snapshot-and-restore dance
+  // capture the background's own alpha as `textFillOpacity`. Reset it to
+  // `undefined` first so "untouched" and "explicitly opaque" read the same
+  // way here as they do in a real `TextNode`.
+  node.fillOpacity = undefined;
   applyBasePropsToText(node as unknown as TextNode, cs);
   applyTextProps(node as unknown as TextNode, cs);
   node.textFill = node.fill;
@@ -531,6 +540,21 @@ export function syntheticNodeToCssDeclarations(node: SyntheticNodeShape): Record
   const styles: Record<string, string> = {
     ...generateVisualStyles(node),
   };
+  // `generateVisualStyles` emits `box-sizing: border-box` whenever
+  // `strokeAlign === "inside"` — correct for a real canvas node, which owns
+  // its whole box model, but an embed element almost always already has its
+  // OWN box-sizing reset (`* { box-sizing: border-box }` is near-universal in
+  // generated embed HTML). `applyStrokeAlignFromCss` reads that same reset
+  // back as `strokeAlign: "inside"` for ANY bordered element, so this key
+  // would otherwise appear in "before" for nearly every stroke this bridge
+  // reads, and then disappear the moment the stroke is removed — which
+  // `diffCssDeclarations` reads as a real change and writes an explicit
+  // `box-sizing: content-box` inline, overriding the embed's own reset and
+  // silently resizing the element. There is no native control for
+  // `box-sizing` in this panel at all (same reasoning as its exclusion from
+  // `LAYOUT_STYLE_ALLOWLIST` below), so it is stripped from both "before" and
+  // "after" here rather than diffed.
+  delete styles["box-sizing"];
 
   if (node.text !== undefined) {
     Object.assign(styles, generateTextStyles(node as unknown as TextNode));
