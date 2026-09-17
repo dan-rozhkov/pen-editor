@@ -36,6 +36,20 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     label: "DeepSeek V4.1 Flash",
     supportsVision: true,
   },
+  { value: "stealth/union-alpha", label: "Union Alpha", supportsVision: true },
+  {
+    value: "google/gemini-3.8-flash",
+    label: "Gemini 3.8 Flash",
+    supportsVision: true,
+  },
+  { value: "tencent/hy4-preview", label: "Hy4 Preview", supportsVision: false },
+  { value: "z-ai/glm-5.3", label: "GLM 5.3", supportsVision: false },
+  {
+    value: "openai/gpt-5.6-luna",
+    label: "GPT-5.6 Luna",
+    supportsVision: true,
+  },
+  { value: "z-ai/glm-5.2", label: "GLM 5.2", supportsVision: false },
 ];
 
 // Mirrors the backend's CHAT_MODEL default. Only used until GET /api/models

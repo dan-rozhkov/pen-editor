@@ -13,15 +13,27 @@ describe("chatModels fallback", () => {
       "qwen/qwen3.8-flash",
       "z-ai/glm-5.3-flash",
       "deepseek/deepseek-v4.1-flash",
+      "stealth/union-alpha",
+      "google/gemini-3.8-flash",
+      "tencent/hy4-preview",
+      "z-ai/glm-5.3",
+      "openai/gpt-5.6-luna",
+      "z-ai/glm-5.2",
     ]);
     expect(getDefaultModel()).toBe("deepseek/deepseek-v4.1-flash");
   });
 
-  it("allows images on every shipped model, all of which read them natively", () => {
+  // Not every shipped model reads images: the text-only ones (tencent/hy4-preview,
+  // z-ai/glm-5.3, z-ai/glm-5.2) carry supportsVision: false, and without a
+  // backend vision fallback canSendImages() must follow that flag.
+  it("reports each shipped model's own vision support", () => {
     for (const option of getModelOptions()) {
-      expect(modelSupportsVision(option.value)).toBe(true);
-      expect(canSendImages(option.value)).toBe(true);
+      expect(modelSupportsVision(option.value)).toBe(option.supportsVision);
+      expect(canSendImages(option.value)).toBe(option.supportsVision);
     }
+    expect(
+      getModelOptions().filter((option) => !option.supportsVision).map((o) => o.value),
+    ).toEqual(["tencent/hy4-preview", "z-ai/glm-5.3", "z-ai/glm-5.2"]);
   });
 
   // A stale saved selection, or a model the backend added after this bundle
@@ -78,7 +90,7 @@ describe("chatModels visionFallback", () => {
     await fresh.loadModels();
 
     expect(fresh.getDefaultModel()).toBe("deepseek/deepseek-v4.1-flash");
-    expect(fresh.getModelOptions()).toHaveLength(4);
+    expect(fresh.getModelOptions()).toHaveLength(10);
     expect(fresh.canSendImages("deepseek/deepseek-v4.1-flash")).toBe(true);
   });
 });
