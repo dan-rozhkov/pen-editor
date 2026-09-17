@@ -73,6 +73,28 @@ export type SyntheticNodeShape = FrameNode &
     textFill?: string;
     textFillOpacity?: number;
     textFillBinding?: ColorBinding;
+
+    /**
+     * True when `node.stroke`/`strokeWidth` were populated by
+     * `applyOutlineStroke` from a live `outline` declaration, rather than
+     * from a `border` read by `applyBaseProps`. Bridge-only, like the
+     * `textFill*` trio above — no real `SceneNode` needs it.
+     *
+     * Why this has to exist at all: `applyOutlineStroke` never sets
+     * `node.strokeAlign` (see its own doc comment), so
+     * `syntheticNodeToCssDeclarations` always renders `node.stroke` as
+     * `border`, never `outline` — for an outline-sourced stroke just as much
+     * as a border-sourced one. That means the live `outline` declaration
+     * never appears as a key in either the "before" or "after" CSS map, so
+     * `diffCssDeclarations` can never see it to reset it on its own: nothing
+     * downstream can tell an outline-sourced stroke apart from a
+     * border-sourced one once it is captured as plain `stroke`/`strokeWidth`
+     * numbers. This flag is what lets `applyOutlineReset` add the missing
+     * `outline: none` reset alongside a `border` patch, so a stroke edit
+     * (or removal) doesn't leave the original `outline` painting a second,
+     * stale stroke next to the freshly written `border`.
+     */
+    strokeFromOutline?: boolean;
   };
 
 /**
@@ -258,8 +280,15 @@ function parseGaps(cs: CSSStyleDeclaration): { gap: number; rowGap?: number; col
  * else in this bridge ever does) makes `generateVisualStyles` always emit a
  * plain `border` with no `box-sizing` key on the next edit from this panel —
  * an outline-based stroke is still visible and editable, it just becomes a
- * `border` the first time the user touches it here, which matches the panel
- * no longer being able to express "outside" at all.
+ * `border` the first time the user edits the stroke from this panel, which
+ * matches the panel no longer being able to express "outside" at all.
+ *
+ * That conversion is one-way and needs help to be safe: `node.stroke`/
+ * `strokeWidth` no longer distinguish "read from `outline`" from "read from
+ * `border`" once populated, so this function stamps `node.strokeFromOutline`
+ * to keep that provenance around — see its doc comment on
+ * `SyntheticNodeShape` for why `EmbedElementProperties.tsx`'s `commitPatch`
+ * needs it (`applyOutlineReset`, below `diffCssDeclarations`).
  */
 function applyOutlineStroke(node: SyntheticNodeShape, cs: CSSStyleDeclaration): void {
   const outlineWidth = parsePx(cs.outlineWidth);
@@ -273,6 +302,7 @@ function applyOutlineStroke(node: SyntheticNodeShape, cs: CSSStyleDeclaration): 
   }
   node.strokeWidth = outlineWidth;
   node.strokeWidthPerSide = undefined;
+  node.strokeFromOutline = true;
 }
 
 /** Strip a leading `--` so a legacy binding can be matched loosely. */
@@ -619,6 +649,12 @@ const RESET_VALUES: Record<string, string> = {
   "border-right": "none",
   "border-bottom": "none",
   "border-left": "none",
+  // `outline` is never a key in `before`/`after` itself (`generateVisualStyles`
+  // only ever emits `border`/`border-*` for a node this bridge builds — see
+  // `applyOutlineStroke`'s doc comment), so `diffCssDeclarations`'s own
+  // appear/disappear diffing can never reach this entry. `applyOutlineReset`
+  // (below) is what reads it instead, once per stroke edit that started from
+  // a live `outline` declaration.
   outline: "none",
   "border-image-source": "none",
   "border-image-slice": "100%",
@@ -738,4 +774,51 @@ export function diffCssDeclarations(
   }
 
   return patch;
+}
+
+/**
+ * CSS properties `generateVisualStyles`'s stroke branch can write for a
+ * node this bridge builds — a uniform `border` or a per-side
+ * `border-<side>` set (see `styleGeneration.ts`). A gradient stroke also
+ * always includes plain `border` alongside `border-image-*`, so checking
+ * this list alone is enough to notice ANY stroke-shaped change in a patch,
+ * regardless of paint kind. Deliberately excludes `outline` itself — this
+ * bridge's `generateVisualStyles` call never targets it (see
+ * `applyOutlineStroke`'s doc comment) — and `border-image-*`, which only
+ * ever accompanies `border` and never appears alone.
+ */
+const BORDER_STROKE_KEYS = ["border", "border-top", "border-right", "border-bottom", "border-left"] as const;
+
+/**
+ * Mutates `stylePatch` (the output of `diffCssDeclarations`) to add an
+ * explicit `outline: none` reset when needed, so a stroke that was
+ * originally read from a live `outline` declaration
+ * (`node.strokeFromOutline`, set by `applyOutlineStroke`) never ends up
+ * painted twice.
+ *
+ * Why this can't be folded into `diffCssDeclarations` itself: that function
+ * only ever sees two flat CSS-declaration maps, and `outline` is never a key
+ * in either one for a node built by this bridge — `syntheticNodeToCssDeclarations`
+ * always renders `node.stroke` as `border`, whether it came from a `border`
+ * or an `outline` read (see `applyOutlineStroke`'s doc comment). So the
+ * live `outline` can never appear as a "disappeared" key for
+ * `diffCssDeclarations`'s own appear/disappear diffing to reset — the
+ * information this needs (provenance, not the CSS maps) lives only on the
+ * node, one level up from that diff.
+ *
+ * Called after `diffCssDeclarations`, gated on `strokeFromOutline` and on
+ * the patch actually touching a border-shaped key — i.e. only when the
+ * stroke itself changed (new weight/color/opacity/binding) or was removed
+ * outright, never for an unrelated edit (fill, text, layout, ...) that
+ * happens to run through the same `commitPatch`. Reuses `RESET_VALUES.outline`
+ * rather than a literal `"none"` so there is exactly one place that says what
+ * "no stroke" means for this property.
+ */
+export function applyOutlineReset(
+  strokeFromOutline: boolean | undefined,
+  stylePatch: Record<string, string | null>,
+): void {
+  if (!strokeFromOutline) return;
+  if (!BORDER_STROKE_KEYS.some((key) => key in stylePatch)) return;
+  stylePatch.outline = RESET_VALUES.outline;
 }

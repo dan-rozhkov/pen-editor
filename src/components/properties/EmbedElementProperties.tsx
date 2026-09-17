@@ -4,6 +4,7 @@ import {
   embedElementToSyntheticNode,
   syntheticNodeToCssDeclarations,
   diffCssDeclarations,
+  applyOutlineReset,
   type SyntheticNodeShape,
 } from "@/lib/embedElementNode";
 import { findLiveEmbedElement, applyEmbedElementEdit } from "@/lib/embedElementStyle";
@@ -218,6 +219,18 @@ export function EmbedElementProperties() {
       const diffOptions = removeInsteadOfReset.length > 0 ? { removeInsteadOfReset } : undefined;
 
       const styles = diffCssDeclarations(beforeStyles, afterStyles, diffOptions);
+
+      // A stroke that was originally read from a live `outline` (rather than
+      // `border`) always renders as `border` from this panel onward (see
+      // `applyOutlineStroke`'s doc comment) — but the diff above can never
+      // see the live `outline` to reset it: it was never a key in either
+      // `beforeStyles`/`afterStyles`. Without this, editing or removing such
+      // a stroke would write a fresh `border` right next to the still-live
+      // `outline`, and the element would render two strokes. Gated inside
+      // `applyOutlineReset` on the patch actually containing a border-shaped
+      // key, so an unrelated edit (fill, text, layout, ...) never touches
+      // `outline` at all.
+      applyOutlineReset(node.strokeFromOutline, styles);
 
       // Width/height are DELIBERATELY excluded from
       // `syntheticNodeToCssDeclarations` (see `LAYOUT_STYLE_ALLOWLIST`'s doc

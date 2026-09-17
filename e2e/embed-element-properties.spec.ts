@@ -109,7 +109,7 @@ function numberFieldByLabel(container: Locator, label: string) {
  * this spec uses instead of trusting the panel's own optimistic state. */
 function readFixtureCardStyle(
   page: Page,
-  prop: "boxSizing" | "borderWidth" | "borderColor",
+  prop: "boxSizing" | "borderWidth" | "borderColor" | "borderStyle" | "outline",
   embedId: string = EMBED_ID,
   elementId: string = "fixture-card",
 ): Promise<string | undefined> {
@@ -298,4 +298,85 @@ test("editing a bordered element under a class-authored box-sizing reset never w
     .toBe("rgb(255, 0, 255)");
   // The edit must not disturb the class's own box-sizing reset.
   await expect.poll(boxSizing).toBeFalsy();
+});
+
+const OUTLINE_STROKE_EMBED_ID = "element-properties-outline-stroke-fixture";
+const OUTLINE_STROKE_ELEMENT_ID = "outline-card";
+// An `outline`-only stroke (no `border` at all): `applyOutlineStroke`
+// (`embedElementNode.ts`) reads this into `node.stroke`/`strokeWidth` for
+// display, but always renders it back as `border` (never `strokeAlign:
+// "outside"` — see its doc comment). Real-browser coverage for the bug this
+// used to have: a stroke edit wrote a NEW `border` right next to this
+// still-live `outline`, so the element visibly painted TWO strokes; removing
+// the stroke reset `border` to `none` but left `outline` untouched, so the
+// stroke kept rendering and the very next re-read pulled it straight back
+// out of the outline.
+const OUTLINE_STROKE_HTML = `
+  <div id="${OUTLINE_STROKE_ELEMENT_ID}" style="width:200px; height:120px; outline:3px solid #333333;">hi</div>
+`;
+
+test("editing an outline-sourced stroke resets the live outline instead of painting a second stroke, in a real browser", async ({
+  page,
+}) => {
+  await addEmbedFixture(page, OUTLINE_STROKE_EMBED_ID, OUTLINE_STROKE_HTML);
+  const host = await enterElementPicker(page, OUTLINE_STROKE_EMBED_ID);
+  await host.click({ position: { x: 12, y: 12 } });
+  await expect(elementHeader(page, `div#${OUTLINE_STROKE_ELEMENT_ID}`)).toBeVisible();
+
+  const strokeSection = page
+    .getByText("Stroke", { exact: true })
+    .locator('xpath=ancestor::div[contains(@class, "relative") and contains(@class, "border-b")]');
+
+  const strokeWeightInput = numberFieldByLabel(strokeSection, "Weight");
+  await strokeWeightInput.fill("6");
+
+  await expect
+    .poll(() => readFixtureCardStyle(page, "borderWidth", OUTLINE_STROKE_EMBED_ID, OUTLINE_STROKE_ELEMENT_ID))
+    .toBe("6px");
+  // The invariant this bug broke: never both an active `outline` AND an
+  // active `border` painting at once. Read via `CSSStyleDeclaration.outline`
+  // (a real browser's CSS parser, unlike happy-dom's, serializes a `none`
+  // shorthand write back faithfully) rather than a raw string search over
+  // `htmlContent`, which can't tell "never had an outline" from "had one and
+  // it was reset".
+  await expect
+    .poll(() => readFixtureCardStyle(page, "outline", OUTLINE_STROKE_EMBED_ID, OUTLINE_STROKE_ELEMENT_ID))
+    .toBe("none");
+});
+
+test("removing an outline-sourced stroke actually removes it, and a fresh picker read does not resurrect it, in a real browser", async ({
+  page,
+}) => {
+  await addEmbedFixture(page, OUTLINE_STROKE_EMBED_ID, OUTLINE_STROKE_HTML);
+  const host = await enterElementPicker(page, OUTLINE_STROKE_EMBED_ID);
+  await host.click({ position: { x: 12, y: 12 } });
+  await expect(elementHeader(page, `div#${OUTLINE_STROKE_ELEMENT_ID}`)).toBeVisible();
+
+  const strokeSection = page
+    .getByText("Stroke", { exact: true })
+    .locator('xpath=ancestor::div[contains(@class, "relative") and contains(@class, "border-b")]');
+  await strokeSection.getByRole("button", { name: "Remove stroke" }).click();
+
+  await expect
+    .poll(() => readFixtureCardStyle(page, "outline", OUTLINE_STROKE_EMBED_ID, OUTLINE_STROKE_ELEMENT_ID))
+    .toBe("none");
+  // `.style.border` (the shorthand GETTER) only serializes when every
+  // longhand was set to a mutually consistent value, which a bare
+  // `border: none` write does not guarantee (width/color fall back to their
+  // initial specified values, not "none") — so this checks the one longhand
+  // the write unambiguously touches instead of the shorthand string.
+  await expect
+    .poll(() => readFixtureCardStyle(page, "borderStyle", OUTLINE_STROKE_EMBED_ID, OUTLINE_STROKE_ELEMENT_ID))
+    .toBe("none");
+
+  // Re-select elsewhere and back onto the element — the same rAF re-read
+  // path `EmbedElementProperties` takes after every edit
+  // (`embedElementToSyntheticNode` off the just-written `htmlContent`) — and
+  // confirm the panel shows NO stroke, rather than the "removed" stroke
+  // reappearing because the live outline was never actually cleared.
+  await host.click({ position: { x: 180, y: 100 } });
+  await host.click({ position: { x: 12, y: 12 } });
+  await expect(elementHeader(page, `div#${OUTLINE_STROKE_ELEMENT_ID}`)).toBeVisible();
+  await expect(strokeSection.getByRole("button", { name: "Add stroke" })).toBeVisible();
+  await expect(strokeSection.getByRole("button", { name: "Remove stroke" })).toHaveCount(0);
 });

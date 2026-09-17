@@ -429,6 +429,121 @@ describe("<EmbedElementProperties />", () => {
     expect(currentHtml().toLowerCase()).toContain("box-sizing: border-box");
   });
 
+  describe("outline-sourced stroke edits never leave a second, stale outline (bug repro)", () => {
+    // `applyOutlineStroke` (`embedElementNode.ts`) reads an author-set
+    // `outline` into `node.stroke`/`strokeWidth` but always renders it back
+    // as `border` (no `strokeAlign` is ever set — see its doc comment). Two
+    // consequences the panel used to get wrong, reproduced end-to-end
+    // through `commitPatch` here (not just the pure diff, in
+    // `embedElementNode.test.ts`):
+    // 1. editing weight/color wrote a new `border` NEXT TO the still-live
+    //    `outline`, so the element visibly had two strokes.
+    // 2. "Remove stroke" wrote `border: none` but never touched `outline`,
+    //    so the stroke kept rendering and the next re-read pulled it right
+    //    back out of the still-live outline — the control looked dead.
+
+    it("editing the stroke color resets the live outline instead of stacking a border next to it", async () => {
+      const html = `<div class="card" style="outline: 2px solid #333333;">hi</div>`;
+      seedEmbedNode(html);
+      const { shadow } = mountEmbedHost(html);
+      const target = shadow.querySelector("div.card")!;
+      selectElement(target, shadow, html);
+
+      render(<EmbedElementProperties />);
+      await flushRaf();
+
+      // Asserted on the actual `edit.styles` patch handed to
+      // `applyEmbedElementEdit`, not a live-DOM re-read: happy-dom's own
+      // `CSSStyleDeclaration` mangles a `none` shorthand it is given for
+      // `border`/`outline` into malformed longhands (`outline-color: none`,
+      // `border: none none`, ...) on `setProperty`, which is a happy-dom
+      // quirk, not something this bridge writes — see the real-browser e2e
+      // spec (`e2e/embed-element-properties.spec.ts`) for byte-accurate
+      // confirmation of what actually lands in `htmlContent`.
+      const applySpy = vi.spyOn(embedElementStyle, "applyEmbedElementEdit");
+
+      const strokeSection = getSection("Stroke");
+      const strokeColorInput = within(strokeSection).getByPlaceholderText("#000000");
+      fireEvent.change(strokeColorInput, { target: { value: "#ff00ff" } });
+
+      const lastEditArg = applySpy.mock.calls.at(-1)?.[2];
+      expect(lastEditArg?.styles).toMatchObject({
+        border: "2px solid #ff00ff",
+        // The original outline must be explicitly reset, not left live —
+        // this is the actual bug fix: without it, `styles` here would have
+        // no `outline` key at all, and the live outline keeps painting a
+        // second stroke beside the new inline border.
+        outline: "none",
+      });
+    });
+
+    it("editing the stroke weight resets the live outline too", async () => {
+      const html = `<div class="card" style="outline: 2px solid #333333;">hi</div>`;
+      seedEmbedNode(html);
+      const { shadow } = mountEmbedHost(html);
+      const target = shadow.querySelector("div.card")!;
+      selectElement(target, shadow, html);
+
+      render(<EmbedElementProperties />);
+      await flushRaf();
+
+      const applySpy = vi.spyOn(embedElementStyle, "applyEmbedElementEdit");
+
+      const weightInput = within(getSection("Stroke")).getByDisplayValue("2");
+      fireEvent.change(weightInput, { target: { value: "6" } });
+
+      const lastEditArg = applySpy.mock.calls.at(-1)?.[2];
+      expect(lastEditArg?.styles).toMatchObject({
+        border: "6px solid #333333",
+        outline: "none",
+      });
+    });
+
+    it("removing an outline-sourced stroke actually removes it, and does not resurrect it on the next read", async () => {
+      const html = `<div class="card" style="outline: 2px solid #333333;">hi</div>`;
+      seedEmbedNode(html);
+      const { shadow } = mountEmbedHost(html);
+      const target = shadow.querySelector("div.card")!;
+      selectElement(target, shadow, html);
+
+      render(<EmbedElementProperties />);
+      await flushRaf();
+
+      const applySpy = vi.spyOn(embedElementStyle, "applyEmbedElementEdit");
+
+      fireEvent.click(screen.getByRole("button", { name: "Remove stroke" }));
+
+      const lastEditArg = applySpy.mock.calls.at(-1)?.[2];
+      expect(lastEditArg?.styles).toMatchObject({
+        border: "none",
+        // Without this, the diff alone has no way to know a live `outline`
+        // is what's still painting the "removed" stroke — the control would
+        // look dead, and the next re-read would pull the stroke right back
+        // out of the untouched outline.
+        outline: "none",
+      });
+
+      const written = currentHtml();
+      expect(written.toLowerCase()).not.toContain("#333333");
+
+      // Re-read straight off the just-written HTML (what the rAF re-read in
+      // `EmbedElementProperties` would build next) and confirm the stroke
+      // genuinely stays gone — not resurrected from a live outline the first
+      // write forgot to clear.
+      cleanup();
+      document.body.innerHTML = "";
+      seedEmbedNode(written);
+      const { shadow: shadow2 } = mountEmbedHost(written);
+      const target2 = shadow2.querySelector("div.card")!;
+      selectElement(target2, shadow2, written);
+      render(<EmbedElementProperties />);
+      await flushRaf();
+
+      expect(screen.getByRole("button", { name: "Add stroke" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Remove stroke" })).toBeNull();
+    });
+  });
+
   it("writes an explicit padding: 0px rather than removing the declaration (removal wouldn't override a class)", async () => {
     // Regression: every write in this panel is documented to write an
     // explicit value, never `null`/remove — because embed HTML is styled

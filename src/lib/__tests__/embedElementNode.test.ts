@@ -3,6 +3,7 @@ import {
   embedElementToSyntheticNode,
   syntheticNodeToCssDeclarations,
   diffCssDeclarations,
+  applyOutlineReset,
   SYNTHETIC_EMBED_ELEMENT_ID,
 } from "../embedElementNode";
 import { useVariableStore } from "@/store/variableStore";
@@ -224,6 +225,114 @@ describe("embedElementToSyntheticNode", () => {
       } finally {
         style.remove();
       }
+    });
+  });
+
+  describe("strokeFromOutline provenance + applyOutlineReset (bug repro)", () => {
+    // Bug this locks in: `applyOutlineStroke` reads an author-set `outline`
+    // into `node.stroke`/`strokeWidth` without ever setting `strokeAlign`, so
+    // `syntheticNodeToCssDeclarations` always renders that stroke as
+    // `border` — for an outline-sourced stroke exactly as much as a
+    // border-sourced one (see the describe block above). Diffing two such
+    // maps can therefore never see the live `outline` to reset it on its
+    // own: editing the stroke wrote a NEW `border` right next to the
+    // still-live `outline` (two strokes visible), and removing the stroke
+    // reset `border` to `none` while the `outline` kept painting (the
+    // control looked dead, and the next re-read pulled the "removed" stroke
+    // right back out of the still-live outline).
+
+    it("an outline-only element is flagged strokeFromOutline; a bordered element is not", () => {
+      const outlineNode = embedElementToSyntheticNode(el("outline: 3px solid #000000;")).node;
+      expect(outlineNode.strokeFromOutline).toBe(true);
+
+      const borderNode = embedElementToSyntheticNode(el("border: 2px solid #000000;")).node;
+      expect(borderNode.strokeFromOutline).toBeUndefined();
+
+      const strokelessNode = embedElementToSyntheticNode(el("width: 10px;")).node;
+      expect(strokelessNode.strokeFromOutline).toBeUndefined();
+    });
+
+    it("RED (pre-fix behavior, still true of the diff alone): recoloring an outline-sourced stroke never puts `outline` in the raw diff", () => {
+      // This is the shape of the actual bug: `diffCssDeclarations` alone,
+      // with no help from `applyOutlineReset`, has no way to know the
+      // border it just wrote is replacing a live outline.
+      const target = el("outline: 2px solid #333333;");
+      const { node } = embedElementToSyntheticNode(target);
+      const before = syntheticNodeToCssDeclarations(node);
+      const recolored = { ...node, stroke: "#ff00ff" };
+      const after = syntheticNodeToCssDeclarations(recolored);
+      const patch = diffCssDeclarations(before, after);
+
+      expect(patch.border).toBe("2px solid #ff00ff");
+      expect(patch.outline).toBeUndefined();
+    });
+
+    it("GREEN: applyOutlineReset adds outline: none alongside a changed border, reusing RESET_VALUES", () => {
+      const target = el("outline: 2px solid #333333;");
+      const { node } = embedElementToSyntheticNode(target);
+      const before = syntheticNodeToCssDeclarations(node);
+      const recolored = { ...node, stroke: "#ff00ff" };
+      const after = syntheticNodeToCssDeclarations(recolored);
+      const patch = diffCssDeclarations(before, after);
+
+      applyOutlineReset(node.strokeFromOutline, patch);
+
+      expect(patch.border).toBe("2px solid #ff00ff");
+      // Never both an active border AND an active outline.
+      expect(patch.outline).toBe("none");
+    });
+
+    it("GREEN: removing an outline-sourced stroke resets both border and outline to none", () => {
+      const target = el("outline: 2px solid #333333;");
+      const { node } = embedElementToSyntheticNode(target);
+      const before = syntheticNodeToCssDeclarations(node);
+      const withoutStroke = { ...node, stroke: undefined, strokeWidth: undefined, strokeWidthPerSide: undefined };
+      const after = syntheticNodeToCssDeclarations(withoutStroke);
+      const patch = diffCssDeclarations(before, after);
+
+      applyOutlineReset(node.strokeFromOutline, patch);
+
+      expect(patch.border).toBe("none");
+      expect(patch.outline).toBe("none");
+    });
+
+    it("is a no-op for a genuinely border-sourced stroke (RESET_VALUES['outline'] stays reachable, but only via the outline path)", () => {
+      const target = el("border: 1px solid #dddddd;");
+      const { node } = embedElementToSyntheticNode(target);
+      const before = syntheticNodeToCssDeclarations(node);
+      const recolored = { ...node, stroke: "#ff0000" };
+      const after = syntheticNodeToCssDeclarations(recolored);
+      const patch = diffCssDeclarations(before, after);
+
+      applyOutlineReset(node.strokeFromOutline, patch);
+
+      expect(patch.border).toBe("1px solid #ff0000");
+      expect(patch.outline).toBeUndefined();
+    });
+
+    it("is a no-op for an edit that never touches the border (e.g. a fill-only change)", () => {
+      const target = el("outline: 2px solid #333333; background-color: #ffffff;");
+      const { node } = embedElementToSyntheticNode(target);
+      const before = syntheticNodeToCssDeclarations(node);
+      const recolored = { ...node, fill: "#000000" };
+      const after = syntheticNodeToCssDeclarations(recolored);
+      const patch = diffCssDeclarations(before, after);
+
+      applyOutlineReset(node.strokeFromOutline, patch);
+
+      expect(patch["background-color"]).toBe("#000000");
+      expect(patch.outline).toBeUndefined();
+      expect(patch.border).toBeUndefined();
+    });
+
+    it("a fresh re-read after the outline was reset to none no longer reports a stroke at all", () => {
+      // Simulates the post-write DOM: `outline: none` inline now beats
+      // whatever class/UA default was there before. `applyOutlineStroke`
+      // must not resurrect a stroke from this.
+      const reread = embedElementToSyntheticNode(el("outline: none; border: none;")).node;
+      expect(reread.strokeFromOutline).toBeUndefined();
+      expect(reread.stroke).toBeUndefined();
+      expect(reread.strokeWidth).toBeUndefined();
     });
   });
 
