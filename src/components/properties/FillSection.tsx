@@ -33,7 +33,30 @@ import {
 } from "@/components/properties/fillSectionUtils";
 import { BlendModeDropdown, PaintSwatch, StackRowShell, useDragReorder } from "@/components/properties/stackRow";
 
-type FillSectionProps = PaintSectionProps;
+interface FillSectionProps extends PaintSectionProps {
+  /**
+   * Restrict which fill kinds the type selector offers. `video` renders as a
+   * real `<video>`/`<iframe>` element alongside the node's background
+   * (`generateVideoFillHtml`, designToHtml/styleGeneration.ts) — it isn't a
+   * CSS background at all, so it can't be produced by writing inline CSS to
+   * an existing HTML element (no CSS property can insert a new element).
+   * Omitted (default) offers every kind, unchanged from today. Used by the
+   * embed-element properties panel.
+   */
+  allowedFillKinds?: FillKind[];
+  /**
+   * The node passed in isn't backed by a real entry in `nodesById` (e.g. a
+   * synthetic node built from an embed's computed style). The fill-style
+   * apply/detach picker below writes to `useStyleStore`
+   * (`detachFillStyleFromPaint`) by `node.id` directly, bypassing `onUpdate`
+   * — for a detached node that's either a silent no-op or a write to
+   * whatever unrelated real node happens to share that id. Hides the picker
+   * entirely; the rest of the row (color/gradient/image/pattern/video
+   * editors, opacity) is unaffected since it always goes through `onUpdate`.
+   * Used by the embed-element properties panel.
+   */
+  detachedNode?: boolean;
+}
 
 const FILL_TYPE_OPTIONS = [
   { value: "solid", label: "Solid" },
@@ -47,6 +70,8 @@ export function FillSection({
   colorVariables,
   activeTheme,
   mixedKeys,
+  allowedFillKinds,
+  detachedNode = false,
 }: FillSectionProps) {
   const fills = getFills(node);
   const isMixed = mixedKeys?.has("fills") || mixedKeys?.has("fill");
@@ -95,7 +120,7 @@ export function FillSection({
               const canMoveUp = arrayIndex < fills.length - 1;
               const canMoveDown = arrayIndex > 0;
 
-              const typeOptions = supportsImage
+              const allTypeOptions = supportsImage
                 ? [
                     ...FILL_TYPE_OPTIONS,
                     { value: "image", label: "Image" },
@@ -103,6 +128,9 @@ export function FillSection({
                     { value: "video", label: "Video" },
                   ]
                 : FILL_TYPE_OPTIONS;
+              const typeOptions = allowedFillKinds
+                ? allTypeOptions.filter((o) => allowedFillKinds.includes(o.value as FillKind))
+                : allTypeOptions;
 
               return (
                 <StackRowShell
@@ -167,16 +195,19 @@ export function FillSection({
                     />
                   </div>
 
-                  {/* Named fill-style binding (apply / detach) */}
-                  <StylePicker
-                    kindLabel="fill style"
-                    styles={fillStyles}
-                    boundId={paint.styleId}
-                    onPick={(styleId) =>
-                      commit(updateFillAt(fills, arrayIndex, { ...paint, styleId }))
-                    }
-                    onDetach={() => detachFillStyleFromPaint(node.id, paint.id)}
-                  />
+                  {/* Named fill-style binding (apply / detach) — hidden for a
+                      detached node, see the `detachedNode` doc comment above. */}
+                  {!detachedNode && (
+                    <StylePicker
+                      kindLabel="fill style"
+                      styles={fillStyles}
+                      boundId={paint.styleId}
+                      onPick={(styleId) =>
+                        commit(updateFillAt(fills, arrayIndex, { ...paint, styleId }))
+                      }
+                      onDetach={() => detachFillStyleFromPaint(node.id, paint.id)}
+                    />
+                  )}
 
                   {/* Solid color + variable binding */}
                   {paint.type === "solid" && (

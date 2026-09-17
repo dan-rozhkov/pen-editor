@@ -62,23 +62,58 @@ interface EffectsSectionProps {
   node: SceneNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
   mixedKeys?: Set<string>;
+  /**
+   * Restrict which effect types can be added or shown. `glass` and `noise`
+   * render entirely in Pixi via shaders — `generateVisualStyles`
+   * (designToHtml/styleGeneration.ts) drops `noise` outright (no CSS
+   * analogue at all), and for `glass` only `frost`/`vibrancy` degrade to a
+   * `backdrop-filter` approximation while lightAngle/lightIntensity/
+   * refraction/depth/dispersion/splay are silently dropped — so most of
+   * either effect's editing surface would be a no-op on a node whose only
+   * write path is inline CSS. Omitted (default) shows every type, unchanged
+   * from today. Used by the embed-element properties panel.
+   */
+  allowedEffectTypes?: Effect["type"][];
+  /**
+   * The node passed in isn't backed by a real entry in `nodesById` (e.g. a
+   * synthetic node built from an embed's computed style). Named effect-style
+   * apply/detach (`applyEffectStyleToNode`/`detachEffectStyleFromNode`,
+   * below) write to `useStyleStore` by `node.id` directly, bypassing
+   * `onUpdate` entirely — for a detached node that's either a silent no-op
+   * (id matches nothing) or a write to whatever unrelated real node happens
+   * to share that id. Hides both style-picker affordances; the per-effect
+   * value editors below are unaffected since they always go through
+   * `onUpdate`. Used by the embed-element properties panel.
+   */
+  detachedNode?: boolean;
 }
 
-export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProps) {
+export function EffectsSection({ node, onUpdate, mixedKeys, allowedEffectTypes, detachedNode = false }: EffectsSectionProps) {
   // Effects from .pen import / AI tools may lack a stable `id`. Backfill one so
   // React keys (and reorder) track the right shadow; memoized on the source
   // array so ids stay stable across renders. createShadowEffect already sets one.
   const rawEffects = getEffects(node);
-  const effects = useMemo(
+  const allEffects = useMemo(
     () => rawEffects.map((e) => (e.id ? e : { ...e, id: generateId() })),
     [rawEffects],
   );
+  const effects = useMemo(
+    () =>
+      allowedEffectTypes
+        ? allEffects.filter((e) => allowedEffectTypes.includes(e.type))
+        : allEffects,
+    [allEffects, allowedEffectTypes],
+  );
   const isMixed = mixedKeys?.has("effects") || mixedKeys?.has("effect");
 
-  const effectStyles = useStyleStore((s) => s.effectStyles);
+  const effectStylesRaw = useStyleStore((s) => s.effectStyles);
+  // Style binding always goes through the store by node.id (see the
+  // `detachedNode` doc comment above) — treat "no styles" and "detached" the
+  // same way so the picker never renders for a detached node.
+  const effectStyles = detachedNode ? [] : effectStylesRaw;
   const applyEffectStyleToNode = useStyleStore((s) => s.applyEffectStyleToNode);
   const detachEffectStyleFromNode = useStyleStore((s) => s.detachEffectStyleFromNode);
-  const boundEffectStyleId = node.effectStyleId;
+  const boundEffectStyleId = detachedNode ? undefined : node.effectStyleId;
   const hasEffectControls = effectStyles.length > 0 || effects.length > 0;
 
   const commit = (next: Effect[]) => {
@@ -104,8 +139,10 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
     commit(updateEffectAt(effects, index, normalizeGlassEffect(glass)));
   };
 
-  const noiseCount = effects.filter((e) => e.type === "noise").length;
-  const glassCount = effects.filter((e) => e.type === "glass").length;
+  const noiseCount = allEffects.filter((e) => e.type === "noise").length;
+  const glassCount = allEffects.filter((e) => e.type === "glass").length;
+  const isEffectTypeAllowed = (type: Effect["type"]) =>
+    !allowedEffectTypes || allowedEffectTypes.includes(type);
 
   // Glass and background blur share one "material" slot (Figma parity): the
   // first visible one in bottom-to-top order wins. Used to flag every other
@@ -131,32 +168,44 @@ export function EffectsSection({ node, onUpdate, mixedKeys }: EffectsSectionProp
             <PlusIcon />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => handleAdd(createShadowEffect())}>
-              Drop shadow
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => handleAdd(createShadowEffect({ shadowType: "inner" }))}
-            >
-              Inner shadow
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleAdd(createBlurEffect())}>
-              Layer blur
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleAdd(createBackgroundBlurEffect())}>
-              Background blur
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => handleAdd(createGlassEffect())}
-              disabled={glassCount >= MAX_GLASS_EFFECTS}
-            >
-              Glass
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => handleAdd(createNoiseEffect())}
-              disabled={noiseCount >= MAX_NOISE_EFFECTS}
-            >
-              Noise
-            </DropdownMenuItem>
+            {isEffectTypeAllowed("shadow") && (
+              <>
+                <DropdownMenuItem onClick={() => handleAdd(createShadowEffect())}>
+                  Drop shadow
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleAdd(createShadowEffect({ shadowType: "inner" }))}
+                >
+                  Inner shadow
+                </DropdownMenuItem>
+              </>
+            )}
+            {isEffectTypeAllowed("blur") && (
+              <DropdownMenuItem onClick={() => handleAdd(createBlurEffect())}>
+                Layer blur
+              </DropdownMenuItem>
+            )}
+            {isEffectTypeAllowed("background-blur") && (
+              <DropdownMenuItem onClick={() => handleAdd(createBackgroundBlurEffect())}>
+                Background blur
+              </DropdownMenuItem>
+            )}
+            {isEffectTypeAllowed("glass") && (
+              <DropdownMenuItem
+                onClick={() => handleAdd(createGlassEffect())}
+                disabled={glassCount >= MAX_GLASS_EFFECTS}
+              >
+                Glass
+              </DropdownMenuItem>
+            )}
+            {isEffectTypeAllowed("noise") && (
+              <DropdownMenuItem
+                onClick={() => handleAdd(createNoiseEffect())}
+                disabled={noiseCount >= MAX_NOISE_EFFECTS}
+              >
+                Noise
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       }

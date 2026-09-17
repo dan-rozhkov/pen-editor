@@ -78,6 +78,33 @@ function textPathOverflows(node: TextNode): boolean {
 interface TypographySectionProps {
   node: TextNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
+  /**
+   * The node passed in isn't backed by a real entry in `nodesById` (e.g. a
+   * synthetic node built from an embed's computed style). Text-style
+   * apply/create/detach (`TextStylesPopover`'s `applyStyleToNode`/
+   * `createStyleFromNode`, and this component's own `detachStyleFromNode`)
+   * write to `useTextStyleStore` by `node.id` directly, bypassing `onUpdate`
+   * — for a detached node that's either a silent no-op or a write to
+   * whatever unrelated real node happens to share that id. Hides the text
+   * styles popover and the detach button; every other control here is
+   * unaffected since it goes through `onUpdate`/`updateTypography`. Used by
+   * the embed-element properties panel.
+   */
+  detachedNode?: boolean;
+  /**
+   * Hide the List (bullet/number, indent/outdent) row and the whole Path
+   * section. Both need real markup/geometry a plain inline-CSS edit of an
+   * existing HTML element can't produce: lists rewrite the node's paragraphs
+   * into nested `<ul>`/`<ol>` markup at HTML-generation time
+   * (`convertNode.ts`'s paragraph serialization) rather than a style
+   * property, and text-on-a-path has no CSS equivalent at all and is
+   * dropped entirely on export (`convertNode.ts`'s documented degradation) —
+   * its "Edit Path" button is also Pixi-canvas-only
+   * (`enterTextPathEditMode`/`useSelectionStore`), which doesn't exist
+   * without a real Pixi node either. Used by the embed-element properties
+   * panel.
+   */
+  hideStructuralText?: boolean;
 }
 
 const STYLE_MANAGED_KEYS: readonly string[] = TEXT_STYLE_PROPERTY_KEYS;
@@ -625,7 +652,12 @@ function OpenTypePopover({
   );
 }
 
-export function TypographySection({ node, onUpdate }: TypographySectionProps) {
+export function TypographySection({
+  node,
+  onUpdate,
+  detachedNode = false,
+  hideStructuralText = false,
+}: TypographySectionProps) {
   const detachStyleFromNode = useTextStyleStore((s) => s.detachStyleFromNode);
   const isEditingPath = useSelectionStore(
     (s) => s.editingNodeId === node.id && s.editingMode === "text-path",
@@ -713,7 +745,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             <FontUploadButton
               onUploaded={(family) => updateTypography({ fontFamily: family })}
             />
-            <TextStylesPopover node={node} />
+            {!detachedNode && <TextStylesPopover node={node} />}
           </div>
         }
       >
@@ -724,7 +756,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             updateTypography({ fontFamily: v })
           }
         />
-        {node.textStyleId && (
+        {node.textStyleId && !detachedNode && (
           <IconButton
             variant="ghost"
             size="icon-sm"
@@ -977,6 +1009,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
           </div>
         </PropertyRow>
       </div>
+      {!hideStructuralText && (
       <div className="flex flex-col gap-1">
         <div className="text-[10px] font-normal text-text-muted">
           List
@@ -1042,6 +1075,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
           </div>
         </PropertyRow>
       </div>
+      )}
       <div className="flex flex-col gap-1">
         <div className="text-[10px] font-normal text-text-muted">
           Resizing
@@ -1196,7 +1230,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
           step={1}
         />
       </PropertyRow>
-      {node.textPath && (
+      {node.textPath && !hideStructuralText && (
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between">
             <div className="text-[10px] font-normal text-text-muted">

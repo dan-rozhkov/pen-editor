@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
 import type { ComponentProps, ReactNode } from "react";
 import { FillSection } from "../FillSection";
+import { useStyleStore } from "@/store/styleStore";
 import type { Paint, SceneNode } from "@/types/scene";
 
 // The gradient/image editors open portals / run their own effects and are not
@@ -34,6 +35,9 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   // became a component that computes `title` internally from `tooltip`).
   DropdownMenuTrigger: ({ render }: { children?: ReactNode; render: ReactNode }) => render,
   DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DropdownMenuItem: ({ children, onClick }: ComponentProps<"button">) => (
+    <button onClick={onClick}>{children}</button>
+  ),
   DropdownMenuRadioGroup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   DropdownMenuRadioItem: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
@@ -259,6 +263,72 @@ describe("<FillSection />", () => {
       fill: undefined,
       gradientFill: undefined,
       imageFill: undefined,
+    });
+  });
+
+  describe("allowedFillKinds", () => {
+    it("omits Video from the type selector's options when it isn't in the allowlist", () => {
+      render(
+        <FillSection
+          {...baseProps(makeNode([solid("a", "#ff0000")], "frame"))}
+          allowedFillKinds={["solid", "linear", "radial", "image", "pattern"]}
+        />,
+      );
+      // The listbox only mounts once opened.
+      fireEvent.click(screen.getByRole("combobox"));
+      expect(screen.queryByText("Video")).toBeNull();
+      expect(screen.getByText("Pattern")).toBeTruthy();
+    });
+
+    it("offers every kind including Video when allowedFillKinds is omitted (unchanged default)", () => {
+      render(<FillSection {...baseProps(makeNode([solid("a", "#ff0000")], "frame"))} />);
+      fireEvent.click(screen.getByRole("combobox"));
+      expect(screen.getByText("Video")).toBeTruthy();
+    });
+  });
+
+  describe("detachedNode", () => {
+    afterEach(() => {
+      act(() => {
+        useStyleStore.getState().setFillStyles([]);
+      });
+    });
+
+    it("hides the fill-style picker when detachedNode is set, even with named styles available", () => {
+      useStyleStore.getState().setFillStyles([{ id: "fs1", name: "Brand red", paint: solid("p1", "#ff0000") }]);
+      render(
+        <FillSection
+          {...baseProps(makeNode([solid("a", "#ff0000")]))}
+          detachedNode
+        />,
+      );
+      // The dropdown-menu mock above renders the StylePicker trigger via its
+      // `render` prop (a plain <Button title="Apply a fill style">), so the
+      // trigger's title is what's queryable here rather than its (dropped)
+      // children text.
+      expect(screen.queryByTitle("Apply a fill style")).toBeNull();
+      // The rest of the row (color editing) is unaffected.
+      expect(screen.getByPlaceholderText("#000000")).toBeTruthy();
+    });
+
+    it("shows the fill-style picker when detachedNode is unset (unchanged default)", () => {
+      useStyleStore.getState().setFillStyles([{ id: "fs1", name: "Brand red", paint: solid("p1", "#ff0000") }]);
+      render(<FillSection {...baseProps(makeNode([solid("a", "#ff0000")]))} />);
+      expect(screen.getByTitle("Apply a fill style")).toBeTruthy();
+    });
+
+    it("still allows editing a fill's color when detachedNode is set (only the style picker is hidden)", () => {
+      const onUpdate = vi.fn();
+      render(
+        <FillSection
+          {...baseProps(makeNode([solid("a", "#ff0000")]), onUpdate)}
+          detachedNode
+        />,
+      );
+      fireEvent.change(screen.getByPlaceholderText("#000000"), {
+        target: { value: "#123456" },
+      });
+      expect(onUpdate).toHaveBeenCalledTimes(1);
     });
   });
 });

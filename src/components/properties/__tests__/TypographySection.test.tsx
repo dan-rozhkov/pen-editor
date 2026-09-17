@@ -643,4 +643,68 @@ describe("<TypographySection />", () => {
       expect(screen.queryByPlaceholderText("Paste a URL")).toBeNull();
     });
   });
+
+  describe("detachedNode", () => {
+    it("hides the Text styles popover and the Detach button when detachedNode is set", () => {
+      render(
+        <TypographySection
+          node={textNode({ textStyleId: "style-1" })}
+          onUpdate={vi.fn()}
+          detachedNode
+        />,
+      );
+      expect(screen.queryByRole("button", { name: "Text styles" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Detach from style" })).toBeNull();
+    });
+
+    it("still shows the Text styles popover and Detach button when detachedNode is unset (unchanged default)", () => {
+      render(
+        <TypographySection
+          node={textNode({ textStyleId: "style-1" })}
+          onUpdate={vi.fn()}
+        />,
+      );
+      expect(screen.getByRole("button", { name: "Text styles" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Detach from style" })).toBeTruthy();
+    });
+  });
+
+  describe("hideStructuralText", () => {
+    it("hides the List row when hideStructuralText is set", () => {
+      render(<TypographySection node={textNode()} onUpdate={vi.fn()} hideStructuralText />);
+      expect(screen.queryByRole("button", { name: "Bulleted list" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Numbered list" })).toBeNull();
+    });
+
+    it("still shows the List row when hideStructuralText is unset (unchanged default)", () => {
+      render(<TypographySection node={textNode()} onUpdate={vi.fn()} />);
+      expect(screen.getByRole("button", { name: "Bulleted list" })).toBeTruthy();
+    });
+
+    it("hides the whole Path section when hideStructuralText is set, even with textPath data present", () => {
+      render(
+        <TypographySection
+          node={textNode({
+            textPath: { points: [], startOffset: 0, side: "left" },
+          })}
+          onUpdate={vi.fn()}
+          hideStructuralText
+        />,
+      );
+      expect(screen.queryByText("Path")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Edit Path" })).toBeNull();
+    });
+
+    it("still shows the Path section for textPath data when hideStructuralText is unset (unchanged default)", () => {
+      render(
+        <TypographySection
+          node={textNode({
+            textPath: { points: [], startOffset: 0, side: "left" },
+          })}
+          onUpdate={vi.fn()}
+        />,
+      );
+      expect(screen.getByText("Path")).toBeTruthy();
+    });
+  });
 });

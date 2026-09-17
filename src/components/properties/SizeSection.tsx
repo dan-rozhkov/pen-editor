@@ -280,6 +280,21 @@ interface SizeSectionProps {
   selectedNodes?: SceneNode[];
   showSizingModes?: boolean;
   useDirectUpdateOnly?: boolean;
+  /**
+   * The node passed in isn't backed by a real entry in `nodesById` (e.g. a
+   * synthetic node built from an embed's computed style). "Fit to content"
+   * (below) reads the REAL scene tree via `useSceneStore.getState().getNodes()`
+   * and looks up the node's children by its id in the real `childrenById` —
+   * for a detached node's id that lookup finds nothing, so
+   * `computeFrameFitToContentSize` silently computes an empty frame's size
+   * (1x1) and, via `onUpdate`/`updateNode`, would actually apply that bogus
+   * 1x1 size to the node. `useDirectUpdateOnly`/`showSizingModes` cover the
+   * *write* side of the other store-dependent paths in this section
+   * (sizing-mode reflow), but this one corrupts its own read before
+   * `onUpdate` is ever called, so it needs its own gate. Used by the
+   * embed-element properties panel.
+   */
+  detachedNode?: boolean;
 }
 
 export function SizeSection({
@@ -291,6 +306,7 @@ export function SizeSection({
   selectedNodes,
   showSizingModes,
   useDirectUpdateOnly = false,
+  detachedNode = false,
 }: SizeSectionProps) {
   const calculateLayoutForFrame = useLayoutStore((s) => s.calculateLayoutForFrame);
   // Narrow subscription: re-render only when a node INSIDE the relevant
@@ -723,7 +739,7 @@ export function SizeSection({
             </TooltipContent>
           </Tooltip>
         )}
-        {canFitToContent && (
+        {canFitToContent && !detachedNode && (
           <IconButton
             variant="secondary"
             size="icon-sm"

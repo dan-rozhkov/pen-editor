@@ -450,4 +450,40 @@ describe("<SizeSection />", () => {
     );
     expect(screen.queryByText("Clip content")).toBeNull();
   });
+
+  describe("detachedNode", () => {
+    it("hides the Fit to content button for a frame when detachedNode is set", () => {
+      render(
+        <SizeSection
+          node={sceneNode("frame1")}
+          onUpdate={vi.fn()}
+          parentContext={ROOT_CONTEXT}
+          detachedNode
+        />,
+      );
+      expect(screen.queryByRole("button", { name: "Fit to content" })).toBeNull();
+    });
+
+    it("still shows the Fit to content button for a frame when detachedNode is unset (unchanged default)", () => {
+      render(
+        <SizeSection node={sceneNode("frame1")} onUpdate={vi.fn()} parentContext={ROOT_CONTEXT} />,
+      );
+      expect(screen.getByRole("button", { name: "Fit to content" })).toBeTruthy();
+    });
+
+    it("leaves Clip content (a plain onUpdate-only control) unaffected by detachedNode", () => {
+      const onUpdate = vi.fn();
+      render(
+        <SizeSection
+          node={sceneNode("frame1")}
+          onUpdate={onUpdate}
+          parentContext={ROOT_CONTEXT}
+          detachedNode
+        />,
+      );
+      expect(screen.getByText("Clip content")).toBeTruthy();
+      fireEvent.click(screen.getByRole("checkbox"));
+      expect(onUpdate).toHaveBeenCalledWith({ clip: true });
+    });
+  });
 });

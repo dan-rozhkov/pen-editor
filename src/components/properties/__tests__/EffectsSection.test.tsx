@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup, within } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, within, act } from "@testing-library/react";
 import type { ComponentProps, ReactNode } from "react";
 import { EffectsSection } from "../EffectsSection";
 import { createGlassEffect } from "@/utils/fillUtils";
+import { useStyleStore } from "@/store/styleStore";
 import type {
   BackgroundBlurEffect,
   BlurEffect,
@@ -561,5 +562,69 @@ describe("<EffectsSection />", () => {
     expect(screen.getByText("Mixed")).toBeTruthy();
     expect(screen.queryByText("Drop Shadow")).toBeNull();
     expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
+  });
+
+  describe("allowedEffectTypes", () => {
+    it("hides Glass and Noise from the Add effect menu when omitted from the allowlist", () => {
+      render(
+        <EffectsSection
+          node={makeNode()}
+          onUpdate={vi.fn()}
+          allowedEffectTypes={["shadow", "blur", "background-blur"]}
+        />,
+      );
+      expect(screen.getByText("Drop shadow")).toBeTruthy();
+      expect(screen.queryByText("Glass")).toBeNull();
+      expect(screen.queryByText("Noise")).toBeNull();
+    });
+
+    it("hides an existing Glass effect row when Glass isn't in the allowlist", () => {
+      render(
+        <EffectsSection
+          node={makeNode([glassFx()])}
+          onUpdate={vi.fn()}
+          allowedEffectTypes={["shadow"]}
+        />,
+      );
+      expect(screen.queryByText("Glass")).toBeNull();
+      expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
+    });
+
+    it("shows every effect type when allowedEffectTypes is omitted (unchanged default)", () => {
+      render(<EffectsSection node={makeNode([glassFx()])} onUpdate={vi.fn()} />);
+      expect(screen.getAllByText("Glass").length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("detachedNode", () => {
+    it("hides the effect-style picker when detachedNode is set, even with named styles available", () => {
+      useStyleStore.getState().setEffectStyles([{ id: "es1", name: "Card shadow", effects: [shadow()] }]);
+      render(<EffectsSection node={makeNode([shadow()])} onUpdate={vi.fn()} detachedNode />);
+      expect(screen.queryByText(/Apply effect style/)).toBeNull();
+      act(() => {
+        useStyleStore.getState().setEffectStyles([]);
+      });
+    });
+
+    it("shows the effect-style picker when detachedNode is unset (unchanged default)", () => {
+      useStyleStore.getState().setEffectStyles([{ id: "es1", name: "Card shadow", effects: [shadow()] }]);
+      render(<EffectsSection node={makeNode([shadow()])} onUpdate={vi.fn()} />);
+      expect(screen.getByText(/Apply effect style/)).toBeTruthy();
+      act(() => {
+        useStyleStore.getState().setEffectStyles([]);
+      });
+    });
+
+    it("falls back to the plain effect list instead of the bound-style picker when detachedNode is set", () => {
+      const boundNode = { ...makeNode([shadow()]), effectStyleId: "es1" } as unknown as SceneNode;
+      useStyleStore.getState().setEffectStyles([{ id: "es1", name: "Card shadow", effects: [shadow()] }]);
+      render(<EffectsSection node={boundNode} onUpdate={vi.fn()} detachedNode />);
+      // No "Detach style" affordance, but the per-effect editor still renders.
+      expect(screen.queryByLabelText("Detach style")).toBeNull();
+      expect(screen.getAllByText("Drop Shadow").length).toBeGreaterThan(0);
+      act(() => {
+        useStyleStore.getState().setEffectStyles([]);
+      });
+    });
   });
 });

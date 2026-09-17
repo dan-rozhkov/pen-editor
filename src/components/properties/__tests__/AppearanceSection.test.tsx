@@ -293,6 +293,18 @@ describe("<AppearanceSection />", () => {
     expect(screen.queryByText("Smoothing %")).toBeNull();
   });
 
+  it("hides the Smoothing % control when hideCornerSmoothing is set", () => {
+    render(
+      <AppearanceSection node={makeNode()} onUpdate={vi.fn()} hideCornerSmoothing />,
+    );
+    expect(screen.queryByText("Smoothing %")).toBeNull();
+  });
+
+  it("still shows Smoothing % for a corner-radius node when hideCornerSmoothing is unset", () => {
+    render(<AppearanceSection node={makeNode()} onUpdate={vi.fn()} />);
+    expect(screen.getByText("Smoothing %")).toBeTruthy();
+  });
+
   it("marks opacity as Mixed when listed in mixedKeys", () => {
     render(
       <AppearanceSection

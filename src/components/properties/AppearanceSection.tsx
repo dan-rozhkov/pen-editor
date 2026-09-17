@@ -16,6 +16,16 @@ interface AppearanceSectionProps {
   mixedKeys?: Set<string>;
   allTypesSupport?: { cornerRadius: boolean };
   hideOpacity?: boolean;
+  /**
+   * Hide the corner-smoothing (squircle) control. Smoothing is a Figma-style
+   * superellipse interpolation applied by the Pixi renderer — `generateVisualStyles`
+   * (designToHtml/styleGeneration.ts) only ever emits a plain `border-radius`,
+   * with no CSS equivalent for the squircle curve, so for a node whose only
+   * write path is inline CSS on an existing HTML element, this control edits
+   * a value that can never affect what's rendered. Used by the embed-element
+   * properties panel.
+   */
+  hideCornerSmoothing?: boolean;
 }
 
 type CornerRadiusMode = "unified" | "per-corner";
@@ -30,6 +40,7 @@ export function AppearanceSection({
   mixedKeys,
   allTypesSupport,
   hideOpacity = false,
+  hideCornerSmoothing = false,
 }: AppearanceSectionProps) {
   const showCornerRadius = allTypesSupport
     ? allTypesSupport.cornerRadius
@@ -252,7 +263,7 @@ export function AppearanceSection({
           </PropertyRow>
         </>
       )}
-      {showCornerRadius && (
+      {showCornerRadius && !hideCornerSmoothing && (
         <PropertyRow>
           <NumberInput
             label="Smoothing %"
