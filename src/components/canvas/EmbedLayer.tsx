@@ -391,6 +391,7 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
   const node = useSceneStore((s) => s.nodesById[nodeId]) as EmbedNode | undefined;
   const isActive = useSelectionStore((s) => s.activeEmbedId === nodeId);
   const isPicking = useEmbedPickerStore((s) => s.pickingEmbedId === nodeId);
+  const isEditingElement = useEmbedPickerStore((s) => s.editingEmbedId === nodeId);
 
   const htmlContent = node?.htmlContent;
   const width = node?.width;
@@ -520,6 +521,13 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
     const eventTargetsEditingElement = (e: Event): boolean =>
       edit !== null && e.composedPath().includes(edit.el);
 
+    /** True when `root` implements its own `getSelection` (real Chrome gives
+     * every shadow tree one). Shared by `getShadowSelection` and
+     * `clearTextSelectionIn` so the two agree on which browser path we're
+     * on — see `clearTextSelectionIn`'s comment for why that matters. */
+    const shadowHasOwnSelection = (root: ShadowRoot): boolean =>
+      typeof (root as unknown as { getSelection?: unknown }).getSelection === "function";
+
     /** The live `Selection` for content mounted inside `root` — prefers the
      * shadow root's own `getSelection` (real browsers give each shadow tree
      * its own), falling back to `document.getSelection()` where that isn't
@@ -528,9 +536,10 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
      * with neither (happy-dom, in unit tests) — every caller treats that as
      * "no live selection to work with" rather than an error. */
     const getShadowSelection = (root: ShadowRoot): Selection | null => {
-      const shadowGetSelection = (root as unknown as { getSelection?: () => Selection | null })
-        .getSelection;
-      return typeof shadowGetSelection === "function" ? shadowGetSelection.call(root) : document.getSelection();
+      if (shadowHasOwnSelection(root)) {
+        return (root as unknown as { getSelection: () => Selection | null }).getSelection();
+      }
+      return document.getSelection();
     };
 
     /** Select `el`'s full text content, so typing right after entering edit
@@ -549,6 +558,50 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
         selection.addRange(range);
       } catch {
         // See the comment above — never let a selection failure block entry.
+      }
+    };
+
+    /** Clears the live `Selection` left over from text-edit mode, but only
+     * when it's actually still inside `el` — the same containment check
+     * `insertPlainTextAtCaret` uses, so we never rip out a selection the
+     * user made elsewhere (e.g. they clicked into a different element while
+     * this one's blur handler is still unwinding). `beginElementEdit` calls
+     * `selectAllTextIn` to select the whole element on entry; removing
+     * `contenteditable` on exit does NOT clear that selection by itself, so
+     * without this the highlighted text stays visibly selected on screen
+     * after edit mode ends. Best-effort/try-catch for the same reason as
+     * `selectAllTextIn`: no real `Selection`/`ShadowRoot.getSelection` in
+     * happy-dom.
+     *
+     * `el.contains(...)` alone is a Chrome-only check. `getShadowSelection`
+     * only gets a shadow-scoped `Selection` when `root.getSelection` exists
+     * (Chrome); in WebKit/Firefox, which don't implement
+     * `ShadowRoot.getSelection`, it falls back to `document.getSelection()`
+     * — and the browser RETARGETS nodes crossing a shadow boundary for that
+     * call, so `range.commonAncestorContainer` comes back as the shadow HOST
+     * (or an ancestor of it) rather than the actual editable node inside the
+     * shadow tree. `el.contains(host)` is always false, so without a second
+     * path this silently never clears the selection outside Chrome — exactly
+     * the kind of WebKit-only regression that's easy to ship unnoticed. When
+     * `root` has no own `getSelection`, we instead ask the retargeted range
+     * whether it `intersectsNode(host)` — `host` is the actual DOM node the
+     * (possibly retargeted) range can still be compared against, so this
+     * still refuses to touch a selection that's genuinely outside our embed. */
+    const clearTextSelectionIn = (el: HTMLElement, root: ShadowRoot | null, host: HTMLElement) => {
+      if (!root) return;
+      try {
+        const selection = getShadowSelection(root);
+        if (!selection || selection.rangeCount === 0) return;
+        const range = selection.getRangeAt(0);
+        const insideViaContainment = el.contains(range.commonAncestorContainer);
+        const insideViaRetargetedIntersection =
+          !shadowHasOwnSelection(root) &&
+          typeof range.intersectsNode === "function" &&
+          range.intersectsNode(host);
+        if (!insideViaContainment && !insideViaRetargetedIntersection) return;
+        selection.removeAllRanges();
+      } catch {
+        // See the comment above — never let a selection failure block exit.
       }
     };
 
@@ -596,6 +649,10 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
       e.el.removeEventListener("paste", e.handlePaste);
       e.el.innerHTML = e.originalInnerHtml;
       e.el.removeAttribute("contenteditable");
+      // Removing `contenteditable` doesn't clear the selection `beginElementEdit`
+      // made with `selectAllTextIn` — left alone, the highlight stays visible
+      // on screen after Escape. See `clearTextSelectionIn`'s own comment.
+      clearTextSelectionIn(e.el, shadowRoot(), host);
       useEmbedPickerStore.getState().stopElementEdit();
       // Unregister — a stale callback here would let a LATER Escape (once
       // some other gesture has re-armed `cancelElementDrag`, say) find a
@@ -623,6 +680,10 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
       // that only ever exists to make typing possible would ride along
       // into `htmlContent` itself.
       e.el.removeAttribute("contenteditable");
+      // Symmetric with `cancelElementEdit` — see `clearTextSelectionIn`'s own
+      // comment. Safe to do before the innerHTML read/diff below: it only
+      // touches the live `Selection`, never `e.el`'s content.
+      clearTextSelectionIn(e.el, shadowRoot(), host);
 
       // Read off a detached CLONE, never `e.el` itself: the live element was
       // mounted through `mountHtmlWithBodyStyles`, which ran
@@ -1492,7 +1553,14 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
         position: "absolute",
         overflow: "hidden",
         pointerEvents: isActive || isPicking ? "auto" : "none",
-        cursor: isPicking && !isActive ? "crosshair" : undefined,
+        // Forcing "default" is what turns off the crosshair while merely
+        // hovering in pick mode, but a forced (non-"auto") cursor value
+        // inherits into shadow content — during `isEditingElement` that
+        // would paint an arrow over the contenteditable text instead of
+        // letting the browser show its native I-beam caret. So we simply
+        // don't force anything while editing; the shadow content picks its
+        // own cursor as normal.
+        cursor: isPicking && !isActive && !isEditingElement ? "default" : undefined,
       }}
     />
   );

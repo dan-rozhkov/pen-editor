@@ -43,6 +43,14 @@ describe("<EmbedLayer /> element picker — dblclick to edit text", () => {
   });
   afterEach(() => cleanup());
 
+  it("hovering an embed while picking (but not yet inside an element) shows an ordinary arrow, not crosshair", () => {
+    const { container } = render(<EmbedLayer />);
+    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+
+    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    expect(host.style.cursor).toBe("default");
+  });
+
   it("dblclick on a text-leaf element enters edit mode: contenteditable, focus, store state, and selection", () => {
     const { container } = render(<EmbedLayer />);
     act(() => useEmbedPickerStore.getState().startPicking("e1"));
@@ -401,6 +409,193 @@ describe("<EmbedLayer /> element picker — dblclick to edit text preserves stru
     expect(button.innerHTML).toBe(originalInnerHtml);
     expect(button.querySelector("i.ph-plus")).not.toBeNull();
     expect(button.hasAttribute("contenteditable")).toBe(false);
+  });
+});
+
+describe("<EmbedLayer /> element picker — text selection is cleared on exit, not left highlighted", () => {
+  // happy-dom has no real `Selection`/`ShadowRoot.getSelection` (see
+  // `getShadowSelection`'s own comment), and this embed host's shadow root
+  // doesn't implement `getSelection` at all here, so `getShadowSelection`
+  // falls through to `document.getSelection()` — stub THAT to drive the
+  // "is the caller's selection actually inside `el`" branch deterministically.
+  beforeEach(() => {
+    resetStores();
+    seedEmbed();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanup();
+  });
+
+  function stubSelectionInside(el: Element) {
+    const removeAllRanges = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({
+      rangeCount: 1,
+      getRangeAt: () => ({ commonAncestorContainer: el }),
+      removeAllRanges,
+      addRange: vi.fn(),
+    } as unknown as Selection);
+    return removeAllRanges;
+  }
+
+  function stubSelectionOutside() {
+    const removeAllRanges = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({
+      rangeCount: 1,
+      getRangeAt: () => ({ commonAncestorContainer: document.body }),
+      removeAllRanges,
+      addRange: vi.fn(),
+    } as unknown as Selection);
+    return removeAllRanges;
+  }
+
+  // Simulates the real WebKit/Firefox failure mode: `ShadowRoot.getSelection`
+  // isn't implemented there, so `document.getSelection()` is used instead —
+  // and the browser RETARGETS nodes crossing the shadow boundary for that
+  // call, so `commonAncestorContainer` comes back as `retargetedTo` (the
+  // shadow host, or an ancestor of it), never the actual editable element
+  // inside the shadow tree. `el.contains(retargetedTo)` is therefore always
+  // false here; `intersectsNode` is the only way `clearTextSelectionIn` can
+  // still recognize the selection as "ours".
+  function stubRetargetedSelection(retargetedTo: Element, intersects: boolean) {
+    const removeAllRanges = vi.fn();
+    const intersectsNode = vi.fn(() => intersects);
+    vi.spyOn(document, "getSelection").mockReturnValue({
+      rangeCount: 1,
+      getRangeAt: () => ({ commonAncestorContainer: retargetedTo, intersectsNode }),
+      removeAllRanges,
+      addRange: vi.fn(),
+    } as unknown as Selection);
+    return { removeAllRanges, intersectsNode };
+  }
+
+  it("Escape clears a selection left inside the edited element", () => {
+    const { container } = render(<EmbedLayer />);
+    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+
+    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const button = host.shadowRoot!.querySelector("button")!;
+
+    act(() => dblclick(button));
+    const removeAllRanges = stubSelectionInside(button);
+
+    act(() => {
+      button.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(removeAllRanges).toHaveBeenCalled();
+  });
+
+  it("Enter (commit) clears a selection left inside the edited element", () => {
+    const { container } = render(<EmbedLayer />);
+    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+
+    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const button = host.shadowRoot!.querySelector("button")!;
+
+    act(() => dblclick(button));
+    const removeAllRanges = stubSelectionInside(button);
+
+    act(() => {
+      button.textContent = "Buy later";
+      button.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(removeAllRanges).toHaveBeenCalled();
+  });
+
+  it("does not touch a selection that lives outside the edited element", () => {
+    const { container } = render(<EmbedLayer />);
+    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+
+    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const button = host.shadowRoot!.querySelector("button")!;
+
+    act(() => dblclick(button));
+    const removeAllRanges = stubSelectionOutside();
+
+    act(() => {
+      button.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(removeAllRanges).not.toHaveBeenCalled();
+  });
+
+  it("Escape clears a retargeted (WebKit-style) selection that intersects the embed host", () => {
+    const { container } = render(<EmbedLayer />);
+    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+
+    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const button = host.shadowRoot!.querySelector("button")!;
+
+    act(() => dblclick(button));
+    // happy-dom's shadow root has no own `getSelection`, matching WebKit/
+    // Firefox — `document.getSelection()` retargets to `host` itself rather
+    // than `button`, so only the `intersectsNode(host)` fallback path can
+    // recognize this selection as belonging to the edited element.
+    const { removeAllRanges, intersectsNode } = stubRetargetedSelection(host, true);
+
+    act(() => {
+      button.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(removeAllRanges).toHaveBeenCalled();
+    expect(intersectsNode).toHaveBeenCalledWith(host);
+  });
+
+  it("does not clear a retargeted selection that does not intersect the embed host", () => {
+    const { container } = render(<EmbedLayer />);
+    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+
+    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const button = host.shadowRoot!.querySelector("button")!;
+
+    act(() => dblclick(button));
+    const { removeAllRanges } = stubRetargetedSelection(host, false);
+
+    act(() => {
+      button.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(removeAllRanges).not.toHaveBeenCalled();
+  });
+});
+
+describe("<EmbedLayer /> element picker — native caret cursor during inline text edit", () => {
+  beforeEach(() => {
+    resetStores();
+    seedEmbed();
+  });
+  afterEach(() => cleanup());
+
+  it("does not force the arrow cursor on the host while an element is being edited", () => {
+    const { container } = render(<EmbedLayer />);
+    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+
+    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const button = host.shadowRoot!.querySelector("button")!;
+
+    // Before entering edit mode, picking mode forces the ordinary arrow so
+    // hovering doesn't look draggable.
+    expect(host.style.cursor).toBe("default");
+
+    act(() => dblclick(button));
+
+    // Once inside edit mode, forcing any explicit cursor (not "auto") on the
+    // host would inherit into the shadow content and paint an arrow over the
+    // contenteditable text instead of the native I-beam caret. So nothing
+    // should be forced here.
+    expect(host.style.cursor).not.toBe("default");
   });
 });
 
