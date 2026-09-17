@@ -10,6 +10,7 @@ import {
   ArrowLineLeftIcon,
   DotsThreeVerticalIcon,
   BookOpenIcon,
+  SphereIcon,
 } from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
@@ -447,16 +448,15 @@ export function ChatPanelContent() {
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <Button
+            <IconButton
               type="button"
               variant="ghost"
-              size="default"
-              className="ml-auto inline-flex h-[30px] min-w-0 items-center gap-1 rounded-lg px-2 text-xs leading-none text-text-muted hover:bg-secondary"
-              aria-label={`Model: ${activeModelLabel}`}
+              size="icon"
+              tooltip={`Model: ${activeModelLabel}`}
+              className="ml-auto size-[30px] text-text-muted hover:bg-secondary"
             >
-              <span className="truncate">{activeModelLabel}</span>
-              <CaretDownIcon className="size-3 shrink-0" />
-            </Button>
+              <SphereIcon size={18} weight="light" />
+            </IconButton>
           }
         />
         <DropdownMenuContent side="top" align="end" className="w-56">

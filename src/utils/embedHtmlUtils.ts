@@ -51,6 +51,15 @@ export const EMBED_UA_RESET_CSS = `@layer embed-ua-reset {
   }
   button { cursor: pointer; }
   textarea { resize: none; }
+  /* beginElementEdit (EmbedLayer.tsx) puts the picked element into
+     contenteditable, and Chromium/WebKit then draw their default focus ring
+     on it like on any editable region — a stray blue rectangle around the
+     text instead of the app's own selection chrome. In practice this only
+     ever matches that element: nothing strips contenteditable from embed
+     content (sanitizeEmbedHtml leaves it), so an embed whose own HTML uses
+     the attribute would lose its focus ring too — but being layered, such an
+     embed's own :focus outline still wins over this rule. */
+  [contenteditable]:focus, [contenteditable]:focus-visible { outline: none; }
 }`;
 
 /** Puts the UA reset FIRST in the mount container. Position is cosmetic — a

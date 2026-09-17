@@ -58,6 +58,21 @@ export const LayerItem = memo(function LayerItem({
 }: LayerItemProps) {
   const isEmbedElement = !!embedElement;
   const readOnly = useReadOnly();
+  // Picking an element inside an embed still selects the OWNING embed in
+  // selectionStore (see handleClick below — the picker only activates once
+  // the embed is the sole native selection), so the embed's own native row
+  // would otherwise read as selected the whole time an element inside it is
+  // picked. That's wrong for the LAYERS PANEL specifically: the row that
+  // should look selected is the element's, not the embed's. Don't touch
+  // selectionStore itself for this — the properties panel, the Pixi
+  // selection outline and canvasContext all key off the embed actually being
+  // selected there, and changing that would break all three; this is purely
+  // how the row is DRAWN, applied down at `rowSelected`.
+  const isNativeEmbedWithPickedElement =
+    !isEmbedElement &&
+    node.type === "embed" &&
+    !!selectedEmbedElement &&
+    selectedEmbedElement.embedId === node.id;
   const isSelected = useSelectionStore((s) => {
     // Embed-element selection isn't tracked in selectionStore at all (it
     // lives in embedPickerStore, gated on the embed being the sole native
@@ -377,7 +392,14 @@ export const LayerItem = memo(function LayerItem({
   // toggled through the same eye button below.
   const isElementHidden = isEmbedElement ? embedElement.element.hidden : !isVisible;
   const isDimmed = isElementHidden;
-  const rowSelected = isEmbedElement ? isSelectedEmbedElement : isSelected;
+  // The highlight belongs to the picked element's own row, never to both.
+  // That row is always on screen while the pick is live: LayersPanel's
+  // auto-expand effect re-runs on `expandedFrameIds` and re-expands the embed
+  // whenever `selectedEmbedElement` names it, so collapsing the embed over a
+  // picked element cannot leave the panel with no highlighted row at all.
+  const rowSelected = isEmbedElement
+    ? isSelectedEmbedElement
+    : isSelected && !isNativeEmbedWithPickedElement;
 
   return (
     <div

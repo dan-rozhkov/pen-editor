@@ -57,4 +57,10 @@ describe("embed UA reset", () => {
       expect(EMBED_UA_RESET_CSS).not.toContain(`input[type="${type}"]`);
     }
   });
+
+  it("suppresses the UA focus ring on the element the inline editor puts into contenteditable", () => {
+    expect(EMBED_UA_RESET_CSS).toContain(
+      "[contenteditable]:focus, [contenteditable]:focus-visible { outline: none; }",
+    );
+  });
 });

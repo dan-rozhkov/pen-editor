@@ -216,6 +216,39 @@ describe("<LayersPanel />", () => {
 
       scrollIntoViewSpy.mockRestore();
     });
+
+    // Regression: `handleClick`'s element-pick branch calls
+    // `selState.select(embedId)` so the picker can activate (it only turns
+    // on once the embed is the SOLE native selection) — but that leaves
+    // embed1 sitting in `selectionStore.selectedIds` the whole time an
+    // element inside it is picked. The embed's own native row must not read
+    // as selected while that's true; only the picked element's row should.
+    it("does not mark the embed's own row selected while an element inside it is picked", () => {
+      const html = "<button>Buy</button>";
+      seedEmbedScene(html);
+      useSceneStore.getState().setFrameExpanded("embed1", true);
+      render(<LayersPanel />);
+
+      fireEvent.click(screen.getByText("Buy"));
+
+      const embedRow = document.querySelector('[data-node-id="embed1"]') as HTMLElement;
+      const buyRow = screen.getByText("Buy").closest("[data-layer-key]") as HTMLElement;
+      expect(embedRow.className).not.toContain("bg-accent-selection");
+      expect(buyRow.className).toContain("bg-accent-selection");
+    });
+
+    // Complement to the above: with NO element picked, selecting the embed
+    // itself must still highlight its own native row as before — the fix
+    // above must only suppress the embed row while `selectedEmbedElement`
+    // actually names it.
+    it("marks the embed's own row selected when the embed is selected without a picked element", () => {
+      seedEmbedScene("<button>Buy</button>");
+      useSelectionStore.setState({ selectedIds: ["embed1"] });
+      render(<LayersPanel />);
+
+      const embedRow = document.querySelector('[data-node-id="embed1"]') as HTMLElement;
+      expect(embedRow.className).toContain("bg-accent-selection");
+    });
   });
 
   describe("embed-element rename/visibility/drag (Part 2)", () => {
