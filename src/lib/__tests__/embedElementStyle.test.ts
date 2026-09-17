@@ -3,6 +3,7 @@ import {
   applyEmbedElementEdit,
   applyEmbedElementReorder,
   findLiveEmbedElement,
+  parseVarReference,
   readEmbedElementSnapshot,
   shadowPathToSourcePath,
   sourcePathToShadowPath,
@@ -475,6 +476,66 @@ describe("readEmbedElementSnapshot: color parsing beyond rgb()", () => {
       }
     },
   );
+});
+
+describe("parseVarReference", () => {
+  it("parses a bare var(--name) reference", () => {
+    expect(parseVarReference("var(--brand-500)")).toBe("--brand-500");
+  });
+
+  it("parses var(--name, fallback) and ignores the fallback", () => {
+    expect(parseVarReference("var(--brand-500, #fff)")).toBe("--brand-500");
+    expect(parseVarReference("var(--brand-500, rgba(0, 0, 0, 0.5))")).toBe("--brand-500");
+  });
+
+  it("tolerates surrounding/internal whitespace", () => {
+    expect(parseVarReference("  var( --brand-500 )  ")).toBe("--brand-500");
+    expect(parseVarReference("var(--brand-500 , #fff)")).toBe("--brand-500");
+  });
+
+  it("returns null for a plain color value", () => {
+    expect(parseVarReference("#ff0000")).toBeNull();
+    expect(parseVarReference("rgb(255, 0, 0)")).toBeNull();
+  });
+
+  it("returns null for empty/nullish input", () => {
+    expect(parseVarReference("")).toBeNull();
+    expect(parseVarReference(null)).toBeNull();
+    expect(parseVarReference(undefined)).toBeNull();
+  });
+});
+
+describe("readEmbedElementSnapshot: variable bindings", () => {
+  function makeStyledEl(styleAttr: string): HTMLElement {
+    const el = document.createElement("div");
+    el.setAttribute("style", styleAttr);
+    document.body.appendChild(el);
+    return el;
+  }
+
+  it("reports the bound variable name for background-color/color/border-color", () => {
+    const el = makeStyledEl(
+      "background-color: var(--brand-500); color: var(--text-primary); border-color: var(--brand-500, #fff);",
+    );
+    const snap = readEmbedElementSnapshot(el);
+    expect(snap.varBindings).toEqual({
+      backgroundColor: "--brand-500",
+      color: "--text-primary",
+      borderColor: "--brand-500",
+    });
+  });
+
+  it("omits a key when the corresponding property is a plain color, not a variable", () => {
+    const el = makeStyledEl("background-color: #ff0000;");
+    const snap = readEmbedElementSnapshot(el);
+    expect(snap.varBindings).toEqual({});
+  });
+
+  it("omits a key when the corresponding property is unset", () => {
+    const el = makeStyledEl("");
+    const snap = readEmbedElementSnapshot(el);
+    expect(snap.varBindings).toEqual({});
+  });
 });
 
 describe("readEmbedElementSnapshot: void elements never report editable text", () => {

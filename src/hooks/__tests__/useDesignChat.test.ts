@@ -286,8 +286,9 @@ describe("buildCanvasContext", () => {
         type: "color",
         value: "#3366ff",
         themeValues: { light: "#3366ff", dark: "#99bbff" },
+        cssName: "--primary",
       },
-      { name: "--radius-m", type: "number", value: "8" },
+      { name: "--radius-m", type: "number", value: "8", cssName: "--radius-m" },
     ]);
   });
 

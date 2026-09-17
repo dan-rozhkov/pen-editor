@@ -1,5 +1,5 @@
 import type { BaseNode, TextNode, FrameNode, RectNode, ShadowEffect, BlurEffect, GradientFill, ImageFill, PerSideStroke, ColorBinding, SolidPaint, GradientPaint, ImagePaint, VideoFill, VideoPaint } from "@/types/scene";
-import type { Variable } from "@/types/variable";
+import { getVariableCssName, type Variable } from "@/types/variable";
 import { applyOpacity } from "@/utils/colorUtils";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
 import { useVariableStore } from "@/store/variableStore";
@@ -37,7 +37,10 @@ function resolveBindingToCssVar(
   if (!binding) return null;
   const variable = variables.find((v) => v.id === binding.variableId);
   if (!variable) return null;
-  return `var(${variable.name}, ${fallbackColor})`;
+  // `variable.name` is a free-form label ("Color 1"), not necessarily a
+  // valid CSS identifier — route through the canonical CSS name so this
+  // agrees with every other place a variable gets written into CSS.
+  return `var(${getVariableCssName(variable)}, ${fallbackColor})`;
 }
 
 /**

@@ -15,6 +15,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
+import { getVariableCssName } from "@/types/variable";
 import { useRepoContextStore } from "@/store/repoContextStore";
 import { useChatStore, NO_QUEUED_MESSAGES } from "@/store/chatStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
@@ -144,6 +145,12 @@ export function buildCanvasContext(sessionId?: string): object {
         type: v.type,
         value: v.value,
         themeValues: v.themeValues,
+        // The name to reference from CSS/embed HTML (`var(--x)`) — `name`
+        // itself may be a free-form label like "Color 1" that is not valid
+        // CSS. Appended last, not inserted earlier, so this payload's shape
+        // for existing fields stays byte-identical and doesn't invalidate
+        // the prompt cache for callers that only read the earlier keys.
+        cssName: getVariableCssName(v),
       })),
       ...(selectionHint ? { selectionHint } : {}),
       ...(selectedEmbedElement ? { selectedEmbedElement } : {}),

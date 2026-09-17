@@ -1,15 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CaretLeftIcon, MinusIcon, PencilSimpleLineIcon } from "@phosphor-icons/react";
 import {
   findLiveEmbedElement,
   readEmbedElementSnapshot,
   applyEmbedElementEdit,
+  parseVarReference,
   type EmbedElementStyleSnapshot,
   type EmbedElementEdit,
 } from "@/lib/embedElementStyle";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useVariableStore } from "@/store/variableStore";
+import { useThemeStore } from "@/store/themeStore";
+import { getVariableCssName, getVariableValue, type ThemeName, type Variable } from "@/types/variable";
 import { useReadOnly } from "@/hooks/useReadOnly";
 import { IconButton } from "@/components/ui/IconButton";
 import {
@@ -82,6 +86,42 @@ function isFlexDisplay(display: string): boolean {
   return display === "flex" || display === "inline-flex";
 }
 
+/** `Variable.name` is "usually" already a `--`-prefixed custom-property
+ * name, but nothing enforces it — strip a leading `--` (if present) so a
+ * name read off an element's inline style (`snapshot.varBindings`, always
+ * `--`-prefixed since it came out of a `var(--x)` call) can be matched
+ * against a `Variable` regardless of which convention that variable used.
+ * This is the LEGACY/loose half of `findVariableByName`'s two-step match —
+ * kept only so pre-existing markup authored before `getVariableCssName`
+ * existed (e.g. `var(--Color 1)`-shaped strings written by an older build,
+ * or a hand-authored `var(--brand)` matching a variable literally named
+ * `"brand"` with no `--`) keeps resolving. */
+function normalizeVarName(name: string): string {
+  return name.startsWith("--") ? name.slice(2) : name;
+}
+
+/** Resolve the color `Variable` an authored `var(--name)` reference points
+ * at. Tries the CANONICAL CSS name first (`getVariableCssName` — what any
+ * *new* binding is written as, see `cssVarName` below), then falls back to
+ * the legacy loose match so bindings written before that mapping existed
+ * keep resolving. */
+function findVariableByName(varName: string | undefined, variables: Variable[]): Variable | undefined {
+  if (!varName) return undefined;
+  const canonical = variables.find((v) => getVariableCssName(v) === varName);
+  if (canonical) return canonical;
+  const target = normalizeVarName(varName);
+  return variables.find((v) => normalizeVarName(v.name) === target);
+}
+
+/** The custom-property name to write into `var(...)` for a given variable —
+ * always `--`-prefixed and CSS-valid, regardless of how `Variable.name`
+ * itself was authored (a Variables-panel-created variable can be named
+ * `"Color 1"`). Delegates to the shared `getVariableCssName` so every place
+ * that turns a variable into CSS agrees on the same name. */
+function cssVarName(variable: Variable): string {
+  return getVariableCssName(variable);
+}
+
 /**
  * Properties panel for a single element picked *inside* an embed's HTML
  * (via the embed element picker, `embedElementPicker.ts`/`EmbedLayer.tsx`).
@@ -120,6 +160,14 @@ export function EmbedElementProperties() {
   const htmlContent = useSceneStore((s) =>
     embedId ? ((s.nodesById[embedId] as { htmlContent?: string } | undefined)?.htmlContent ?? null) : null,
   );
+
+  // Same source the native properties panel binds fills/strokes to
+  // (`PropertyEditor`'s `colorVariables`/`activeTheme`) — this panel isn't
+  // handed them as props (it's swapped in by `PropertiesPanel` independently
+  // of `PropertyEditor`), so it reads the stores directly instead.
+  const variables = useVariableStore((s) => s.variables);
+  const colorVariables = useMemo(() => variables.filter((v) => v.type === "color"), [variables]);
+  const activeTheme = useThemeStore((s) => s.activeTheme);
 
   const [snapshot, setSnapshot] = useState<EmbedElementStyleSnapshot | null>(null);
   // Distinguishes "haven't read yet" from "read, and the element genuinely
@@ -236,7 +284,13 @@ export function EmbedElementProperties() {
           Element unavailable — it may no longer exist in this embed.
         </div>
       ) : (
-        <ElementPropertyFields snapshot={snapshot} onWriteStyles={writeStyles} onApplyEdit={applyEdit} />
+        <ElementPropertyFields
+          snapshot={snapshot}
+          onWriteStyles={writeStyles}
+          onApplyEdit={applyEdit}
+          colorVariables={colorVariables}
+          activeTheme={activeTheme}
+        />
       )}
     </>
   );
@@ -308,12 +362,18 @@ function patchSnapshotStyle(
       break;
     case "background-color":
       snap.backgroundColor = value ?? "";
+      // Keep the variable-binding flag in lockstep with the color value it
+      // describes — otherwise the swatch would show the newly-written plain
+      // color while the row still rendered as "bound", until the rAF re-read
+      // overwrote this optimistic patch a frame later.
+      snap.varBindings = { ...snap.varBindings, backgroundColor: parseVarReference(value) ?? undefined };
       break;
     case "border-width":
       snap.borderWidth = num(value);
       break;
     case "border-color":
       snap.borderColor = value ?? "";
+      snap.varBindings = { ...snap.varBindings, borderColor: parseVarReference(value) ?? undefined };
       break;
     case "border-style":
       snap.borderStyle = value ?? "none";
@@ -337,6 +397,7 @@ function patchSnapshotStyle(
       break;
     case "color":
       snap.color = value ?? "";
+      snap.varBindings = { ...snap.varBindings, color: parseVarReference(value) ?? undefined };
       break;
     default:
       break;
@@ -347,6 +408,8 @@ interface FieldsProps {
   snapshot: EmbedElementStyleSnapshot;
   onWriteStyles: (styles: Record<string, string | null>) => void;
   onApplyEdit: (edit: EmbedElementEdit) => void;
+  colorVariables: Variable[];
+  activeTheme: ThemeName;
 }
 
 /**
@@ -360,8 +423,41 @@ interface FieldsProps {
  * the class. The one deliberate removal left is the Fill section's explicit
  * "Remove" action.
  */
-function ElementPropertyFields({ snapshot, onWriteStyles, onApplyEdit }: FieldsProps) {
+function ElementPropertyFields({
+  snapshot,
+  onWriteStyles,
+  onApplyEdit,
+  colorVariables,
+  activeTheme,
+}: FieldsProps) {
   const flexy = isFlexDisplay(snapshot.display);
+
+  /**
+   * Build an `onVariableChange` handler for a plain (non-border) color
+   * property. Binding writes `var(<name>)`, matching how the CONTROL's own
+   * text/swatch value is written for a literal color — `ColorInput` resolves
+   * the display value from `variableId` + `availableVariables` on its own,
+   * so this never needs to touch `snapshot.backgroundColor`/`color` itself.
+   * Unbinding writes the variable's CURRENTLY RESOLVED color as a literal
+   * hex (so the element doesn't visually jump the instant the binding is
+   * dropped), or clears the declaration outright when the bound name no
+   * longer resolves to any variable (e.g. it was deleted from the Variables
+   * tab after this element was bound to it).
+   */
+  const bindColorVariable =
+    (cssProp: "background-color" | "color", boundVarName: string | undefined) =>
+    (variableId: string | undefined) => {
+      if (variableId) {
+        const variable = colorVariables.find((v) => v.id === variableId);
+        if (!variable) return;
+        onWriteStyles({ [cssProp]: `var(${cssVarName(variable)})` });
+        return;
+      }
+      const prevVariable = findVariableByName(boundVarName, colorVariables);
+      onWriteStyles({
+        [cssProp]: prevVariable ? getVariableValue(prevVariable, activeTheme) : null,
+      });
+    };
 
   const setBorder = (patch: { width?: number; color?: string; style?: string }) => {
     const nextWidth = patch.width ?? snapshot.borderWidth;
@@ -384,6 +480,27 @@ function ElementPropertyFields({ snapshot, onWriteStyles, onApplyEdit }: FieldsP
       styles["border-style"] = nextStyle;
     }
     onWriteStyles(styles);
+  };
+
+  /**
+   * Same idea as `bindColorVariable`, routed through `setBorder` instead of
+   * a bare `onWriteStyles` so binding a variable gets the same "nudge
+   * `border-style: none` to `solid`" treatment a literal stroke color pick
+   * gets — otherwise binding a variable on a style-less border would look
+   * like nothing happened. `setBorder({ color: "" })` is the clear-the-
+   * declaration case (an empty string, not `undefined`: `setBorder` treats
+   * `undefined` as "this longhand wasn't touched," so `""` is what makes it
+   * actually remove `border-color`).
+   */
+  const bindBorderColorVariable = (boundVarName: string | undefined) => (variableId: string | undefined) => {
+    if (variableId) {
+      const variable = colorVariables.find((v) => v.id === variableId);
+      if (!variable) return;
+      setBorder({ color: `var(${cssVarName(variable)})` });
+      return;
+    }
+    const prevVariable = findVariableByName(boundVarName, colorVariables);
+    setBorder({ color: prevVariable ? getVariableValue(prevVariable, activeTheme) : "" });
   };
 
   return (
@@ -522,6 +639,10 @@ function ElementPropertyFields({ snapshot, onWriteStyles, onApplyEdit }: FieldsP
           <ColorInput
             value={snapshot.backgroundColor}
             onChange={(v) => onWriteStyles({ "background-color": v })}
+            variableId={findVariableByName(snapshot.varBindings.backgroundColor, colorVariables)?.id}
+            onVariableChange={bindColorVariable("background-color", snapshot.varBindings.backgroundColor)}
+            availableVariables={colorVariables}
+            activeTheme={activeTheme}
           />
         </div>
       </PropertySection>
@@ -544,7 +665,14 @@ function ElementPropertyFields({ snapshot, onWriteStyles, onApplyEdit }: FieldsP
           />
         </PropertyRow>
         <div className="[&>div]:w-full">
-          <ColorInput value={snapshot.borderColor} onChange={(v) => setBorder({ color: v })} />
+          <ColorInput
+            value={snapshot.borderColor}
+            onChange={(v) => setBorder({ color: v })}
+            variableId={findVariableByName(snapshot.varBindings.borderColor, colorVariables)?.id}
+            onVariableChange={bindBorderColorVariable(snapshot.varBindings.borderColor)}
+            availableVariables={colorVariables}
+            activeTheme={activeTheme}
+          />
         </div>
       </PropertySection>
 
@@ -590,7 +718,14 @@ function ElementPropertyFields({ snapshot, onWriteStyles, onApplyEdit }: FieldsP
           />
         </PropertyRow>
         <div className="[&>div]:w-full">
-          <ColorInput value={snapshot.color} onChange={(v) => onWriteStyles({ color: v })} />
+          <ColorInput
+            value={snapshot.color}
+            onChange={(v) => onWriteStyles({ color: v })}
+            variableId={findVariableByName(snapshot.varBindings.color, colorVariables)?.id}
+            onVariableChange={bindColorVariable("color", snapshot.varBindings.color)}
+            availableVariables={colorVariables}
+            activeTheme={activeTheme}
+          />
         </div>
       </PropertySection>
 

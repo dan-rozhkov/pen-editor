@@ -6,11 +6,13 @@ import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useViewportStore } from "@/store/viewportStore";
 import {
+  applyEditorVariableProperties,
   applyEmbedInheritedDefaults,
   mountHtmlWithBodyStyles,
   stripForcedEagerImageLoading,
 } from "@/utils/embedHtmlUtils";
-import { buildVariableStyleBlock } from "@/utils/variableCssUtils";
+import { collectVariableValues } from "@/utils/variableCssUtils";
+import { useVariableStore } from "@/store/variableStore";
 import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
 import { findHiddenSelfOrAncestor } from "@/utils/nodeUtils";
 import type { EmbedNode } from "@/types/scene";
@@ -387,6 +389,13 @@ function beginNodeDragForward(e: PointerEvent, canvas: HTMLCanvasElement): void 
 function EmbedHost({ nodeId }: { nodeId: string }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
+  // The element `mountHtmlWithBodyStyles` actually applied custom properties
+  // to — `contentRef.current` itself for most embeds, but a synthetic
+  // `<body>` NESTED inside it for a body-targeted one (see `MountResult`).
+  // The live variable-update effect below must target the same element the
+  // mount did, or `applyEditorVariableProperties` would set properties on an
+  // element the embed's own CSS never inherits from.
+  const mountRootRef = useRef<HTMLElement | null>(null);
 
   const node = useSceneStore((s) => s.nodesById[nodeId]) as EmbedNode | undefined;
   const isActive = useSelectionStore((s) => s.activeEmbedId === nodeId);
@@ -421,21 +430,69 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
     content.style.height = `${height}px`;
     content.style.overflow = "auto";
     applyEmbedInheritedDefaults(content);
-    const themeBlock = buildVariableStyleBlock(undefined, getEffectiveThemeForNode(nodeId));
-    const html = themeBlock ? htmlContent + themeBlock : htmlContent;
     // mountHtmlWithBodyStyles hoists allowlisted external font stylesheets
     // (Google Fonts / Phosphor icon fonts) to document level — Chrome only
     // registers `@font-face` fonts from document-level styles, never from a
     // shadow tree, so without this icon/text web fonts render as tofu.
-    mountHtmlWithBodyStyles(content, html, width, height);
+    //
+    // Editor variables are deliberately NOT baked into `htmlContent` as an
+    // extra `<style>:root{...}</style>` block here (an earlier version of
+    // this mount did exactly that, via `buildVariableStyleBlock`). That
+    // block would become literal, permanent markup inside `content` —
+    // indistinguishable, on any later re-harvest, from an authored `:root`
+    // rule the embed's own HTML actually declares. `applyEditorVariableProperties`
+    // below needs to tell those apart (an authored rule is the fallback when
+    // a variable is deleted; the editor's own injected rule must never be
+    // mistaken for it) — see that function's doc comment — so the ONLY path
+    // that ever sets editor values onto the mounted root is that call,
+    // both here and in the live-update effect right below.
+    const mountResult = mountHtmlWithBodyStyles(content, htmlContent, width, height);
     shadow.appendChild(content);
     contentRef.current = content;
+    mountRootRef.current = mountResult.root;
+
+    applyEditorVariableProperties(
+      content,
+      mountResult.root,
+      collectVariableValues(undefined, getEffectiveThemeForNode(nodeId)),
+    );
 
     // Position now that content exists (applies the current scale transform).
     position();
 
-    return () => { contentRef.current = null; };
+    return () => { contentRef.current = null; mountRootRef.current = null; };
   }, [position, nodeId, htmlContent, width, height]);
+
+  // Live-update editor variables on the already-mounted content root when the
+  // Variables tab changes, WITHOUT remounting the shadow DOM (the effect
+  // above) — a remount would reset the embed's scroll position and tear down
+  // any live element-picker gesture (`ElementDragState`/`ElementEditState`
+  // above are both anchored to specific live DOM nodes a remount detaches).
+  // Uses the store's imperative `subscribe` rather than a reactive
+  // `useVariableStore(s => s.variables)` selector on purpose: the `variables`
+  // array is a new reference on every store mutation, so a selector would
+  // re-render this component (and re-run this effect) on every keystroke of
+  // an unrelated edit elsewhere in the app; subscribing lets this effect
+  // decide for itself when to touch the DOM (mirrors `pixiSync.ts`'s own
+  // `useVariableStore.subscribe` idiom for scene-wide theme updates).
+  //
+  // Theme changes (a frame's `themeOverride`, or the global active theme)
+  // are NOT wired up here — this mirrors the existing mount effect, whose
+  // deps also don't include theme, so an embed already doesn't live-update
+  // on a theme change today. That gap is out of scope for this change.
+  useEffect(() => {
+    const applyVariables = () => {
+      const container = contentRef.current;
+      const root = mountRootRef.current;
+      if (!container || !root) return; // not mounted (yet, or anymore)
+      applyEditorVariableProperties(
+        container,
+        root,
+        collectVariableValues(undefined, getEffectiveThemeForNode(nodeId)),
+      );
+    };
+    return useVariableStore.subscribe(applyVariables);
+  }, [nodeId]);
 
   // Element-picking mode: hover highlights, click selects, and a drag past
   // the threshold REORDERS the element among its in-flow siblings — it does

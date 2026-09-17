@@ -46,8 +46,54 @@ export interface EmbedElementStyleSnapshot {
   letterSpacing: number; // px; 0 when "normal"
   textAlign: string;
   color: string; // "#rrggbb"
+  /**
+   * The *authored* CSS-custom-property reference (e.g. `--brand-500`, no
+   * `var()` wrapper, no fallback) each color property's inline declaration
+   * carries, when it's bound to one — read from the element's own inline
+   * style (`el.style.getPropertyValue(...)`), NOT `getComputedStyle`, which
+   * resolves `var(--x)` away to its final color and can't tell a bound
+   * property from a literal one. A key is omitted when that property isn't
+   * bound (plain color, or unset). The panel (`EmbedElementProperties`)
+   * resolves each name to a `Variable.id` by matching against the editor's
+   * Variables-tab list; this module stays DOM-only and has no notion of a
+   * variable store, so it hands back the raw name for that lookup.
+   */
+  varBindings: {
+    backgroundColor?: string;
+    color?: string;
+    borderColor?: string;
+  };
   /** Element's text, when it has no child ELEMENTS (only text nodes); null otherwise. */
   text: string | null;
+}
+
+/**
+ * Parse a leading `var(--name)` (optionally with a fallback,
+ * `var(--name, #fff)`) out of an inline style VALUE string — i.e. what
+ * `el.style.getPropertyValue(prop)` returns, which preserves the author's
+ * `var()` call verbatim, unlike `getComputedStyle`'s already-resolved color.
+ * Returns the bare custom-property name (with its leading `--`) or `null`
+ * for a plain value, an empty string, or anything else that isn't a single
+ * `var()` reference. Exported so `EmbedElementProperties` can reuse the same
+ * parse for its optimistic local snapshot patch after writing a binding.
+ */
+export function parseVarReference(rawValue: string | null | undefined): string | null {
+  if (!rawValue) return null;
+  const match = /^\s*var\(\s*(--[\w-]+)\s*(?:,[\s\S]*)?\)\s*$/.exec(rawValue);
+  return match ? match[1] : null;
+}
+
+/**
+ * The element's own inline `CSSStyleDeclaration`, feature-detected rather
+ * than assumed: `readEmbedElementSnapshot` takes a bare `Element`, and while
+ * both `HTMLElement` and `SVGElement` implement `ElementCSSInlineStyle`,
+ * nothing guarantees the picker only ever hands this one of those two.
+ */
+function getInlineStyle(el: Element): CSSStyleDeclaration | null {
+  const style = (el as unknown as { style?: unknown }).style;
+  return style && typeof (style as CSSStyleDeclaration).getPropertyValue === "function"
+    ? (style as CSSStyleDeclaration)
+    : null;
 }
 
 /** Parse a `<n>px` (or unitless) computed-style string, falling back to 0 for
@@ -138,6 +184,23 @@ export function readEmbedElementSnapshot(el: Element): EmbedElementStyleSnapshot
   // `gap` itself comes back empty but the expanded longhands are set.
   const gapRaw = cs.gap || cs.columnGap || cs.rowGap;
 
+  const inlineStyle = getInlineStyle(el);
+  // Read the same three property names the panel's edit path writes
+  // (`background-color`/`color`/`border-color` — see
+  // `ElementPropertyFields.setBorder` in `EmbedElementProperties.tsx`, which
+  // always targets the `border-color` shorthand-of-sides rather than a
+  // single-edge longhand), so a binding this panel wrote round-trips through
+  // its own read.
+  const varBindings: EmbedElementStyleSnapshot["varBindings"] = {};
+  if (inlineStyle) {
+    const bgVar = parseVarReference(inlineStyle.getPropertyValue("background-color"));
+    if (bgVar) varBindings.backgroundColor = bgVar;
+    const colorVar = parseVarReference(inlineStyle.getPropertyValue("color"));
+    if (colorVar) varBindings.color = colorVar;
+    const borderVar = parseVarReference(inlineStyle.getPropertyValue("border-color"));
+    if (borderVar) varBindings.borderColor = borderVar;
+  }
+
   return {
     tagName: el.tagName.toLowerCase(),
     ...(el.id ? { elementId: el.id } : {}),
@@ -167,6 +230,7 @@ export function readEmbedElementSnapshot(el: Element): EmbedElementStyleSnapshot
     letterSpacing: parseNormalOrPx(cs.letterSpacing),
     textAlign: cs.textAlign,
     color: parseColor(cs.color),
+    varBindings,
     // Void/replaced elements are reported as having NO editable text even
     // though they trivially have no element children: setting `textContent`
     // on an `<img>`/`<input>`/`<br>` mutates a DOM node whose serialization

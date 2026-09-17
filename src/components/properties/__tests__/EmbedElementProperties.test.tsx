@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import type { ComponentProps, ReactNode } from "react";
 import { EmbedElementProperties } from "../EmbedElementProperties";
 import { PropertiesPanel } from "@/components/PropertiesPanel";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
+import { useVariableStore } from "@/store/variableStore";
+import { useThemeStore } from "@/store/themeStore";
 import { resetStores } from "@/test/fixtures";
 import { describeEmbedElement, buildElementPath } from "@/lib/embedElementPicker";
 import { mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
@@ -15,6 +18,20 @@ import type { EmbedNode } from "@/types/scene";
 // (called unconditionally) is stubbed to the identity function here too.
 vi.mock("@/utils/sanitizeEmbedHtml", () => ({
   sanitizeEmbedHtml: (html: string) => html,
+}));
+
+// `ColorInput`'s variable-bind menu is a base-ui `DropdownMenu`, which
+// portals and is flaky to drive open in happy-dom (same rationale
+// FillSection.test.tsx documents for its own dropdown-menu mock). Render the
+// trigger/content inline instead, so the "Bind to variable" menu items are
+// always in the DOM.
+vi.mock("@/components/ui/dropdown-menu", () => ({
+  DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children, ...props }: ComponentProps<"button">) => (
+    <button {...props}>{children}</button>
+  ),
+  DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DropdownMenuItem: ({ children, ...props }: ComponentProps<"div">) => <div {...props}>{children}</div>,
 }));
 
 const EMBED_ID = "embed1";
@@ -318,5 +335,154 @@ describe("<EmbedElementProperties />", () => {
     render(<PropertiesPanel />);
 
     expect(screen.queryByRole("button", { name: "Back to embed" })).toBeNull();
+  });
+
+  describe("editor variable binding", () => {
+    /** Seeds a color variable with distinct light/dark values, mirroring
+     * how the Variables tab creates one. */
+    function seedColorVariable(id: string, name: string, light: string, dark: string): void {
+      useVariableStore.getState().addVariable({
+        id,
+        name,
+        type: "color",
+        value: dark,
+        themeValues: { light, dark },
+      });
+    }
+
+    it("shows a bound background-color as the variable's name, using its active-theme value as the swatch", async () => {
+      seedColorVariable("var_brand", "--brand-500", "#112233", "#445566");
+      useThemeStore.getState().setActiveTheme("light");
+      const html = `<div class="card" style="background-color: var(--brand-500);">hi</div>`;
+      seedEmbedNode(html);
+      const { shadow } = mountEmbedHost(html);
+      const target = shadow.querySelector("div.card")!;
+      selectElement(target, shadow, html);
+
+      render(<EmbedElementProperties />);
+      await flushRaf();
+
+      // Bound state renders the variable's display name instead of a hex
+      // text field — the hex input this suite's other tests query via
+      // getByPlaceholderText("#000000") is replaced entirely. Scoped to the
+      // Fill section: Stroke/Typography are still unbound and each render
+      // their own "--brand-500" bind-menu item.
+      expect(within(getSection("Fill")).getByText("--brand-500")).toBeTruthy();
+    });
+
+    it("binding a variable through the Fill picker writes var(--name) into htmlContent", async () => {
+      seedColorVariable("var_brand", "--brand-500", "#112233", "#445566");
+      const html = `<div class="card">hi</div>`;
+      seedEmbedNode(html);
+      const { shadow } = mountEmbedHost(html);
+      const target = shadow.querySelector("div.card")!;
+      selectElement(target, shadow, html);
+
+      render(<EmbedElementProperties />);
+      await flushRaf();
+
+      const fillSection = getSection("Fill");
+      fireEvent.click(within(fillSection).getByTitle("Bind to variable"));
+      fireEvent.click(within(fillSection).getByText("--brand-500"));
+
+      const updatedHtml = (useSceneStore.getState().nodesById[EMBED_ID] as EmbedNode).htmlContent;
+      expect(updatedHtml).toContain("background-color: var(--brand-500)");
+
+      // Optimistic local patch: the row must flip to "bound" immediately,
+      // without waiting for the rAF re-read (patchSnapshotStyle keeps
+      // varBindings in lockstep with the written style value).
+      expect(within(fillSection).getByText("--brand-500")).toBeTruthy();
+    });
+
+    it("binding a variable whose name is a free-form label (\"Color 1\") writes var(--color-1), not the invalid var(--Color 1)", async () => {
+      // Mirrors what the Variables panel's `handleAddVariable` actually
+      // creates — a human label, not a CSS identifier.
+      seedColorVariable("var_c1", "Color 1", "#112233", "#445566");
+      const html = `<div class="card">hi</div>`;
+      seedEmbedNode(html);
+      const { shadow } = mountEmbedHost(html);
+      const target = shadow.querySelector("div.card")!;
+      selectElement(target, shadow, html);
+
+      render(<EmbedElementProperties />);
+      await flushRaf();
+
+      const fillSection = getSection("Fill");
+      fireEvent.click(within(fillSection).getByTitle("Bind to variable"));
+      // The bind-menu item still shows the human label...
+      fireEvent.click(within(fillSection).getByText("Color 1"));
+
+      // ...but the written declaration is the slugified, valid custom
+      // property name.
+      const updatedHtml = (useSceneStore.getState().nodesById[EMBED_ID] as EmbedNode).htmlContent;
+      expect(updatedHtml).toContain("background-color: var(--color-1)");
+      expect(updatedHtml).not.toContain("var(--Color 1)");
+
+      // And it reads back as bound (findVariableByName resolves the
+      // canonical name back to the same variable), showing the label again.
+      expect(within(fillSection).getByText("Color 1")).toBeTruthy();
+    });
+
+    it("binding a variable on the Stroke color nudges border-style to solid, same as a literal color pick", async () => {
+      seedColorVariable("var_brand", "--brand-500", "#112233", "#445566");
+      const html = `<div class="card" style="border-style: none;">hi</div>`;
+      seedEmbedNode(html);
+      const { shadow } = mountEmbedHost(html);
+      const target = shadow.querySelector("div.card")!;
+      selectElement(target, shadow, html);
+
+      render(<EmbedElementProperties />);
+      await flushRaf();
+
+      const strokeSection = getSection("Stroke");
+      fireEvent.click(within(strokeSection).getByTitle("Bind to variable"));
+      fireEvent.click(within(strokeSection).getByText("--brand-500"));
+
+      const updatedHtml = (useSceneStore.getState().nodesById[EMBED_ID] as EmbedNode).htmlContent;
+      expect(updatedHtml).toContain("border-color: var(--brand-500)");
+      expect(updatedHtml).toContain("border-style: solid");
+    });
+
+    it("unbinding writes the variable's currently-resolved literal color instead of leaving var(...) behind", async () => {
+      seedColorVariable("var_brand", "--brand-500", "#112233", "#445566");
+      useThemeStore.getState().setActiveTheme("dark");
+      const html = `<div class="card" style="background-color: var(--brand-500);">hi</div>`;
+      seedEmbedNode(html);
+      const { shadow } = mountEmbedHost(html);
+      const target = shadow.querySelector("div.card")!;
+      selectElement(target, shadow, html);
+
+      render(<EmbedElementProperties />);
+      await flushRaf();
+
+      const fillSection = getSection("Fill");
+      fireEvent.click(within(fillSection).getByTitle("Unbind variable"));
+
+      const updatedHtml = (useSceneStore.getState().nodesById[EMBED_ID] as EmbedNode).htmlContent;
+      // Active theme is "dark" at unbind time — the dark value must be what
+      // gets written, so the element doesn't visually jump.
+      expect(updatedHtml.toLowerCase()).toContain("background-color: #445566");
+      expect(updatedHtml).not.toContain("var(");
+    });
+
+    it("an unresolvable binding (variable deleted from the Variables tab) falls back to the plain, unbound color UI", async () => {
+      // No seedColorVariable() call — `color: var(--gone)` names a custom
+      // property no color variable defines. `findVariableByName` can't
+      // resolve it, so the row can't offer "Unbind" for something it can't
+      // identify — it renders as an ordinary unbound color field instead
+      // (computed color resolves to "" for an unresolvable var()), which is
+      // itself the "clears to nothing to bind against" half of the contract.
+      const html = `<div class="card" style="color: var(--gone);">hi</div>`;
+      seedEmbedNode(html);
+      const { shadow } = mountEmbedHost(html);
+      const target = shadow.querySelector("div.card")!;
+      selectElement(target, shadow, html);
+
+      render(<EmbedElementProperties />);
+      await flushRaf();
+
+      const typographySection = getSection("Typography");
+      expect(within(typographySection).queryByTitle("Unbind variable")).toBeNull();
+    });
   });
 });
