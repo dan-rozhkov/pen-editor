@@ -41,11 +41,14 @@ interface ElementBox {
    * which has no `offsetWidth`). */
   cssWidth: number;
   cssHeight: number;
-  /** The owning embed host's right edge, in the same canvas-relative space
-   * as `left`/`top`. The element-scoped agent button anchors on it so it
-   * sits beside the embed instead of on top of its content — see
-   * `EmbedElementAgentButton`'s `anchor` prop. */
-  hostRight: number;
+  /** The owning embed host's own box, in the same canvas-relative space as
+   * `left`/`top`. Not an anchor any more (the element-scoped agent button
+   * anchors on the element itself) — it is the clamp that keeps that button
+   * on the embed: `left/top/width/height` come from the element's
+   * *unclipped* rect, so an element wider than the embed's clipped viewport,
+   * or one scrolled out of it, would otherwise put the trigger in empty
+   * canvas with nothing under it. */
+  host: { left: number; top: number; right: number; bottom: number };
 }
 
 /** Resolve the on-screen box of `path` inside embed `embedId`'s live shadow
@@ -83,7 +86,12 @@ function resolveElementBox(embedId: string, path: string): ElementBox | null {
   return {
     left: elRect.left - originRect.left,
     top: elRect.top - originRect.top,
-    hostRight: hostRect.right - originRect.left,
+    host: {
+      left: hostRect.left - originRect.left,
+      top: hostRect.top - originRect.top,
+      right: hostRect.right - originRect.left,
+      bottom: hostRect.bottom - originRect.top,
+    },
     width: elRect.width,
     height: elRect.height,
     cssWidth,
@@ -171,6 +179,25 @@ function SizeBadge({ box }: { box: ElementBox }) {
       {text}
     </div>
   );
+}
+
+/** Where the element-scoped agent trigger goes: the picked element's own
+ * top-right corner — the same corner `NodeAgentButton` uses for a native
+ * node, so the affordance is where the user just clicked instead of across
+ * the embed. It is clamped into the embed host's box because the element
+ * rect is unclipped: a full-bleed or scrolled-out-of-view element would
+ * otherwise anchor the trigger onto empty canvas.
+ *
+ * The cost this accepts, deliberately: the trigger (and the composer it
+ * opens) overlaps live embed HTML and, being an overlay above the embed
+ * layer, takes the pointer events for that small area. Sitting beside the
+ * *embed* avoided that, but put the affordance arbitrarily far from the
+ * element it acts on, which is the bug this replaces. */
+function elementAgentAnchor(box: ElementBox): { x: number; y: number } {
+  return {
+    x: Math.min(box.left + box.width, box.host.right),
+    y: Math.min(Math.max(box.top, box.host.top), box.host.bottom),
+  };
 }
 
 function OutlineBox({
@@ -375,7 +402,7 @@ export function EmbedElementHighlight() {
         <div key={selection.embedId} style={{ pointerEvents: "auto" }}>
           <EmbedElementAgentButton
             selection={selection}
-            anchor={{ x: selectionBox.hostRight, y: selectionBox.top }}
+            anchor={elementAgentAnchor(selectionBox)}
           />
         </div>
       )}

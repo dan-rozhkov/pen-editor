@@ -6,11 +6,13 @@ import type { EmbedElementSelection } from "@/lib/embedElementPicker";
 
 interface EmbedElementAgentButtonProps {
   selection: EmbedElementSelection;
-  /** Where the trigger sits: the owning embed's right edge, at the picked
-   * element's top. Deliberately NOT the element's own top-right corner —
-   * that point is inside the embed, so the trigger (and, once opened, the
-   * 288px composer) would cover live HTML and swallow clicks in the one mode
-   * whose entire job is clicking elements inside that HTML. */
+  /** Where the trigger sits: the picked element's own top-right corner, in
+   * the overlay's canvas-relative space — the same corner `NodeAgentButton`
+   * anchors to for a native node, so the affordance lands next to what was
+   * actually picked rather than across the embed. Clamped into the embed
+   * host's box by `elementAgentAnchor` (EmbedElementHighlight.tsx), which
+   * also documents the pointer-overlap this placement accepts.
+   * `AgentComposerButton` adds the 8px gap. */
   anchor: { x: number; y: number };
 }
 

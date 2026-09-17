@@ -48,9 +48,10 @@ test("picked embed element: size badge, no tag label, element-scoped agent butto
       id: "e1",
       type: "embed",
       name: "Code",
-      // Placed so the whole affordance — the trigger at the embed's right
-      // edge plus the 288px composer it opens — stays clear of the right
-      // properties panel, which would otherwise intercept the click.
+      // Placed so the whole affordance — the trigger at the picked
+      // element's right edge plus the 288px composer it opens — stays clear
+      // of the right properties panel, which would otherwise intercept the
+      // click.
       x: 450,
       y: 300,
       width: 200,

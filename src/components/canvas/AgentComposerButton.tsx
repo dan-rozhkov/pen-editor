@@ -7,10 +7,11 @@ import type { FrameQuickAction } from "@/components/canvas/frameQuickActions";
 
 interface AgentComposerButtonProps {
   /** Where the trigger's top-left corner goes, in the overlay's coordinate
-   * space, BEFORE the 8px gap this component adds. Callers decide what to
-   * anchor on: a native node uses its own top-right corner, while a picked
-   * embed element anchors on its embed's right edge (so the affordance never
-   * covers the live HTML the user is picking inside). */
+   * space, BEFORE the 8px gap this component adds. Both callers anchor on
+   * the top-right corner of their own target — a native node
+   * (`NodeAgentButton`) and a picked embed element
+   * (`EmbedElementAgentButton`, clamped into its embed's box) — so the
+   * affordance always sits beside whatever is actually selected. */
   anchor: { x: number; y: number };
   placeholder: string;
   onSend: (text: string) => void;

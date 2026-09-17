@@ -614,14 +614,23 @@ describe("<EmbedElementHighlight />", () => {
     expect(getByLabelText("Ask agent")).toBeTruthy();
   });
 
-  // The trigger anchors on the EMBED's right edge, not the element's own —
-  // anchoring inside the embed would put a click target (and a 288px
-  // composer) on top of the live HTML the picker exists to click.
-  it("anchors the agent button at the embed host's right edge, at the element's top", () => {
+  // The trigger anchors on the picked ELEMENT's own top-right corner —
+  // mirroring NodeAgentButton's anchor for a native node — not the embed
+  // host's right edge. Host and element are given deliberately different
+  // stubbed rects so this would fail under the old host-right-edge
+  // behaviour.
+  it("anchors the agent button at the picked element's top-right corner", () => {
     const { canvas } = mountEmbedDom();
-    // Host and element share a stubbed rect here, so the host's right edge is
-    // the element rect's right edge, measured from the canvas origin.
-    stubRects(rect(10, 20, 400, 300), rect(50, 60, 40, 20));
+    const canvasRect = rect(10, 20, 400, 300);
+    const hostRect = rect(30, 40, 200, 150);
+    const elementRect = rect(50, 60, 40, 20);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.hasAttribute("data-canvas")) return canvasRect;
+      if (this.hasAttribute("data-embed-id")) return hostRect;
+      return elementRect;
+    });
 
     useEmbedPickerStore.getState().selectElement({
       embedId: "embed1",
@@ -634,9 +643,46 @@ describe("<EmbedElementHighlight />", () => {
 
     const { getByLabelText } = render(<EmbedElementHighlight />);
     const wrapper = getByLabelText("Ask agent").closest("div.absolute") as HTMLElement;
+    // Element's own top-right corner, canvas-relative: 50 + 40 - 10, 60 - 20.
+    // The host's right edge (30 + 200 - 10 = 220) would have produced a
+    // different, wrong x under the old behaviour.
     expect(wrapper.style.left).toBe(`${50 + 40 - 10}px`);
     expect(wrapper.style.top).toBe(`${60 - 20}px`);
     expect(canvas).toBeTruthy();
+  });
+
+  // The element rect is UNCLIPPED: a full-bleed element inside a clipped
+  // embed reports a right edge past the host's own, which would strand the
+  // trigger on empty canvas with nothing under it.
+  it("clamps the agent button to the embed host's box when the element overflows it", () => {
+    mountEmbedDom();
+    const canvasRect = rect(10, 20, 400, 300);
+    const hostRect = rect(30, 40, 100, 80);
+    // Wider and taller than the host, and starting above it.
+    const elementRect = rect(30, 10, 400, 400);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.hasAttribute("data-canvas")) return canvasRect;
+      if (this.hasAttribute("data-embed-id")) return hostRect;
+      return elementRect;
+    });
+
+    useEmbedPickerStore.getState().selectElement({
+      embedId: "embed1",
+      path: "div:nth-of-type(1) > button:nth-of-type(1)",
+      tagName: "button",
+      classes: [],
+      textPreview: "Buy",
+      outerHtml: "<button>Buy</button>",
+    });
+
+    const { getByLabelText } = render(<EmbedElementHighlight />);
+    const wrapper = getByLabelText("Ask agent").closest("div.absolute") as HTMLElement;
+    // Host right edge (30 + 100 - 10 = 120), not the element's (30 + 400 - 10
+    // = 420); host top (40 - 20 = 20), not the element's (10 - 20 = -10).
+    expect(wrapper.style.left).toBe("120px");
+    expect(wrapper.style.top).toBe("20px");
   });
 
   // PixiCanvas suppresses the embed-level agent button on this flag, not on
