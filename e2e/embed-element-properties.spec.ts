@@ -374,7 +374,11 @@ test("removing an outline-sourced stroke actually removes it, and a fresh picker
   // (`embedElementToSyntheticNode` off the just-written `htmlContent`) — and
   // confirm the panel shows NO stroke, rather than the "removed" stroke
   // reappearing because the live outline was never actually cleared.
-  await host.click({ position: { x: 180, y: 100 } });
+  // Below the 200x120 card, so this genuinely lands on a DIFFERENT element:
+  // clicking back onto the card then changes `path` and actually re-fires the
+  // re-read effect. A point inside the card would re-select the card itself,
+  // leaving the assertions below to re-check state that had already settled.
+  await host.click({ position: { x: 40, y: 200 } });
   await host.click({ position: { x: 12, y: 12 } });
   await expect(elementHeader(page, `div#${OUTLINE_STROKE_ELEMENT_ID}`)).toBeVisible();
   await expect(strokeSection.getByRole("button", { name: "Add stroke" })).toBeVisible();

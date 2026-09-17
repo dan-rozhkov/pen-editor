@@ -252,6 +252,19 @@ describe("embedElementToSyntheticNode", () => {
       expect(strokelessNode.strokeFromOutline).toBeUndefined();
     });
 
+    it("a fully transparent outline is not read as a stroke at all", () => {
+      // It paints nothing, so `generateVisualStyles` emits no `border` key in
+      // either the before or the after map. Recording a width for it anyway
+      // would make StrokeSection show a stroke row (its `hasStroke` only
+      // checks `strokeWidth`) that "Remove stroke" cannot clear: the diff
+      // comes back empty and the panel writes nothing at all.
+      const node = embedElementToSyntheticNode(el("outline: 2px solid transparent;")).node;
+
+      expect(node.strokeWidth).toBeUndefined();
+      expect(node.stroke).toBeUndefined();
+      expect(node.strokeFromOutline).toBeUndefined();
+    });
+
     it("RED (pre-fix behavior, still true of the diff alone): recoloring an outline-sourced stroke never puts `outline` in the raw diff", () => {
       // This is the shape of the actual bug: `diffCssDeclarations` alone,
       // with no help from `applyOutlineReset`, has no way to know the

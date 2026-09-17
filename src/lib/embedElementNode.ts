@@ -296,10 +296,18 @@ function applyOutlineStroke(node: SyntheticNodeShape, cs: CSSStyleDeclaration): 
   if (!hasOutline) return;
 
   const outlineColor = parseColorWithOpacity(cs.outlineColor);
-  if (outlineColor?.color) {
-    node.stroke = outlineColor.color;
-    if (outlineColor.opacity !== undefined) node.strokeOpacity = outlineColor.opacity;
-  }
+  // A fully transparent outline paints nothing, and `parseColorWithOpacity`
+  // reports it as no colour at all. Recording a width for it anyway would
+  // make `StrokeSection` show a stroke row (its `hasStroke` only looks at
+  // `strokeWidth`) that no control can clear: with no paint,
+  // `generateVisualStyles` emits no `border` key in either the before or the
+  // after map, so "Remove stroke" diffs to nothing, takes the empty-patch
+  // early return and writes nothing at all. An invisible outline is simply
+  // not a stroke here.
+  if (!outlineColor?.color) return;
+
+  node.stroke = outlineColor.color;
+  if (outlineColor.opacity !== undefined) node.strokeOpacity = outlineColor.opacity;
   node.strokeWidth = outlineWidth;
   node.strokeWidthPerSide = undefined;
   node.strokeFromOutline = true;
