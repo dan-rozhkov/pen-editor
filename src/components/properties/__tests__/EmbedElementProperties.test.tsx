@@ -406,13 +406,17 @@ describe("<EmbedElementProperties />", () => {
     // to "Inside" on the next rAF re-read (`applyStrokeAlignFromCss` reading
     // the unchanged `box-sizing: border-box` straight off the DOM).
     //
-    // Inside → Center is asserted to REMOVE the inline `box-sizing` rather
-    // than force it to `content-box`: that forced write was a fourth-round
-    // review finding of its own (a class-authored `border-box` reset would
-    // otherwise fight it right back), and `applyStrokeAlignFromCss` now
-    // reads only the element's own INLINE `box-sizing` to decide Inside — so
-    // "no inline box-sizing" already reads correctly as Center without
-    // forcing anything.
+    // Inside → Center is asserted to write an EXPLICIT `box-sizing:
+    // content-box` (fifth-round review finding, correcting the fourth
+    // round's "just remove it" fix): removing the key instead would let any
+    // class-authored `box-sizing: border-box` reset on the same element (or
+    // its ancestors — near-universal in generated embed HTML) reassert
+    // itself through the cascade, keeping the stroke rendered as Inside no
+    // matter what the select says. `border` is still present in the
+    // generated "after" map for `center` — only `box-sizing` disappears —
+    // which is exactly the signal `commitPatch` uses to distinguish this
+    // case from "no stroke drawn in the box at all" (removal). See
+    // `commitPatch`'s doc comment in `EmbedElementProperties.tsx`.
     const html = `<div class="card" style="border:1px solid #dddddd;box-sizing:border-box;">hi</div>`;
     seedEmbedNode(html);
     const { shadow } = mountEmbedHost(html);
@@ -431,7 +435,7 @@ describe("<EmbedElementProperties />", () => {
     await flushRaf();
 
     let lower = currentHtml().toLowerCase();
-    expect(lower).not.toContain("box-sizing");
+    expect(lower).toContain("box-sizing: content-box");
     // The select must reflect the write on the next re-read, not silently
     // revert to "Inside" (the exact failure mode of the original bug).
     expect(comboboxFor(getSection("Stroke"), "Align").textContent).toContain("Center");
@@ -444,6 +448,59 @@ describe("<EmbedElementProperties />", () => {
 
     lower = currentHtml().toLowerCase();
     expect(lower).toContain("box-sizing: border-box");
+    expect(comboboxFor(getSection("Stroke"), "Align").textContent).toContain("Inside");
+  });
+
+  it("Inside → Center writes an explicit content-box under a class-authored box-sizing reset, so the stroke actually centers (bug repro: Align=Center silently stayed Inside)", async () => {
+    // Fifth-round review finding, the sharpest version of the bug above:
+    // with a class reset present, REMOVING the inline `box-sizing` (the
+    // fourth round's fix) doesn't just fail to write "Center" — it makes the
+    // element keep rendering as Inside (the class's `border-box` shows back
+    // through) while the Align select claims "Center", i.e. a state the
+    // renderer can never actually produce is displayed as current, and
+    // "Center" becomes permanently unreachable through this control.
+    const html =
+      `<style>.card { box-sizing: border-box; }</style>` +
+      `<div class="card" style="border:1px solid #dddddd;box-sizing:border-box;">hi</div>`;
+    seedEmbedNode(html);
+    const { shadow } = mountEmbedHost(html);
+    const target = shadow.querySelector("div.card")!;
+    // Sanity: starts genuinely Inside (inline, not just cascade).
+    expect((target as HTMLElement).style.boxSizing).toBe("border-box");
+    selectElement(target, shadow, html);
+
+    render(<EmbedElementProperties />);
+    await flushRaf();
+
+    expect(comboboxFor(getSection("Stroke"), "Align").textContent).toContain("Inside");
+
+    fireEvent.click(comboboxFor(getSection("Stroke"), "Align"));
+    selectOption("Center");
+    resyncEmbedHost(shadow, currentHtml());
+    await flushRaf();
+
+    // The written value, not just "not border-box": removal would satisfy
+    // "not border-box" too while still rendering as Inside under the class
+    // reset, which is exactly the bug. Checked against `htmlContent`, not
+    // just the select.
+    expect(cardInlineBoxSizing()).toBe("content-box");
+    // And the rendered box-sizing (cascade-resolved, inline now wins over
+    // the class) must genuinely be content-box — the actual visual claim
+    // "Center" makes, not merely what got written to an attribute.
+    // `resyncEmbedHost` replaced `shadow`'s children, so `target` (the
+    // pre-resync node) is now detached — re-query the live element rather
+    // than trusting a stale reference for the computed-style check.
+    expect(getComputedStyle(shadow.querySelector("div.card")!).boxSizing).toBe("content-box");
+    expect(comboboxFor(getSection("Stroke"), "Align").textContent).toContain("Center");
+
+    // Back to Inside, so this isn't one-directional.
+    fireEvent.click(comboboxFor(getSection("Stroke"), "Align"));
+    selectOption("Inside");
+    resyncEmbedHost(shadow, currentHtml());
+    await flushRaf();
+
+    expect(cardInlineBoxSizing()).toBe("border-box");
+    expect(getComputedStyle(shadow.querySelector("div.card")!).boxSizing).toBe("border-box");
     expect(comboboxFor(getSection("Stroke"), "Align").textContent).toContain("Inside");
   });
 

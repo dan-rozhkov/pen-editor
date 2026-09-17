@@ -135,6 +135,30 @@ function readFixtureCardStyle(
   );
 }
 
+/**
+ * Read the LIVE, cascade-resolved `box-sizing` straight off the shadow-DOM
+ * element (`getComputedStyle`), as opposed to `readFixtureCardStyle`'s
+ * `htmlContent` round-trip of the raw inline declaration. Needed to verify
+ * the *actual visual claim* an Align value like "Center" makes — an inline
+ * declaration can be written correctly and still render as something else if
+ * a class-level reset on the same element wins the cascade, which is exactly
+ * the failure mode the Inside→Center bug produced.
+ */
+function liveComputedBoxSizing(
+  page: Page,
+  embedId: string,
+  elementId: string,
+): Promise<string | undefined> {
+  return page.evaluate(
+    ({ embedId, elementId }) => {
+      const host = document.querySelector(`[data-embed-id="${embedId}"]`) as HTMLElement | null;
+      const el = host?.shadowRoot?.getElementById(elementId) as HTMLElement | null;
+      return el ? getComputedStyle(el).boxSizing : undefined;
+    },
+    { embedId, elementId },
+  );
+}
+
 test("picked embed elements use the native inspector field layout", async ({ page }) => {
   await addEmbedFixture(page);
   const host = await enterElementPicker(page);
@@ -205,14 +229,15 @@ test("picked embed elements use the native inspector field layout", async ({ pag
 
   await alignSelect.click();
   await page.getByRole("option", { name: "Center", exact: true }).click();
-  // Inside → Center REMOVES the inline `box-sizing` rather than forcing it
-  // to `content-box` (fourth-round review finding: forcing it would fight a
-  // class-authored `border-box` reset right back) — `applyStrokeAlignFromCss`
-  // reads only the element's OWN inline `box-sizing` to decide Inside, so no
-  // inline declaration at all already reads correctly as Center.
+  // Inside → Center writes an EXPLICIT `box-sizing: content-box` (fifth-round
+  // review finding, correcting the fourth round's "just remove it" fix):
+  // removing the key instead would let any class-authored `border-box` reset
+  // on this element reassert itself through the cascade and keep the stroke
+  // rendered as Inside no matter what the select says — see the dedicated
+  // class-reset cycle test below for that exact scenario in a real browser.
   await expect
     .poll(() => readFixtureCardStyle(page, "boxSizing"))
-    .toBeFalsy();
+    .toBe("content-box");
   await expect(alignSelect).toContainText("Center");
 
   // Then select text and capture its editable typography/text state. Scrolling
@@ -287,7 +312,7 @@ const CLASS_BOX_SIZING_HTML = `
   <div id="${CLASS_BOX_SIZING_ELEMENT_ID}" style="width:200px; height:120px; border:1px solid #dddddd;">hi</div>
 `;
 
-test("stroke Align cycles through Center/Outside/Inside/Outside/Center in a real browser, under a class-authored box-sizing reset", async ({
+test("stroke Align cycles through every ordered Inside/Center/Outside transition exactly once in a real browser, under a class-authored box-sizing reset", async ({
   page,
 }) => {
   // Fourth-round review finding: `applyStrokeAlignFromCss` read the CASCADE-
@@ -299,10 +324,22 @@ test("stroke Align cycles through Center/Outside/Inside/Outside/Center in a real
   // `strokeAlign: "inside"`), so the class value survived every write and
   // the element read back as "Inside" again on the very next re-read — the
   // Align select could never actually LAND on "Center" or "Outside" once a
-  // class reset was present, only flash through it before reverting. This
-  // needs a real browser (not happy-dom): happy-dom already proved unreliable
-  // twice before as an oracle for whether a `box-sizing` write actually
-  // reaches the DOM/round-trips through this read path.
+  // class reset was present, only flash through it before reverting.
+  //
+  // Fifth-round review finding, exercised here as the Center↔Outside
+  // Eulerian cycle below (C→O→I→C→I→O→C — each of the six ordered
+  // Inside/Center/Outside transitions exactly once): Inside → Center is the
+  // sharpest version of this bug. Removing the inline `box-sizing` (the
+  // fourth round's fix) does write "not border-box" and satisfy a *negative*
+  // assertion, but the class reset above then reasserts `border-box` through
+  // the cascade and the stroke keeps rendering as Inside — a state the
+  // select claims but the renderer can never produce. `liveComputedBoxSizing`
+  // below checks the actual rendered, cascade-resolved value, not just the
+  // written attribute, specifically to catch that.
+  //
+  // This all needs a real browser (not happy-dom): happy-dom already proved
+  // unreliable as an oracle for whether a `box-sizing` write actually reaches
+  // the DOM/round-trips through this read path.
   await addEmbedFixture(page, CLASS_BOX_SIZING_EMBED_ID, CLASS_BOX_SIZING_HTML);
   const host = await enterElementPicker(page, CLASS_BOX_SIZING_EMBED_ID);
   await host.click({ position: { x: 12, y: 12 } });
@@ -315,37 +352,58 @@ test("stroke Align cycles through Center/Outside/Inside/Outside/Center in a real
 
   const boxSizing = () =>
     readFixtureCardStyle(page, "boxSizing", CLASS_BOX_SIZING_EMBED_ID, CLASS_BOX_SIZING_ELEMENT_ID);
+  const selectAlign = (name: "Inside" | "Center" | "Outside") =>
+    alignSelect.click().then(() => page.getByRole("option", { name, exact: true }).click());
 
   // Initial read: the class reset must NOT be mistaken for this element's
-  // own Inside alignment.
+  // own Inside alignment. Positive assertion: the inline declaration is
+  // genuinely absent, not merely "not border-box" (which an accidental
+  // `content-box` would also satisfy).
   await expect(alignSelect).toContainText("Center");
-  expect(await boxSizing()).not.toBe("border-box");
+  expect(await boxSizing()).toBeFalsy();
 
-  await alignSelect.click();
-  await page.getByRole("option", { name: "Outside", exact: true }).click();
+  // Center → Outside: box-sizing was never touched by either state, so it
+  // stays absent.
+  await selectAlign("Outside");
   await expect(alignSelect).toContainText("Outside");
-  await expect.poll(boxSizing).not.toBe("border-box");
+  await expect.poll(boxSizing).toBeFalsy();
 
-  // The bug: this used to flash back to "Inside" instead.
-  await alignSelect.click();
-  await page.getByRole("option", { name: "Center", exact: true }).click();
-  await expect(alignSelect).toContainText("Center");
-  await expect.poll(boxSizing).not.toBe("border-box");
-
-  await alignSelect.click();
-  await page.getByRole("option", { name: "Inside", exact: true }).click();
+  // Outside → Inside: box-sizing must be written explicitly.
+  await selectAlign("Inside");
   await expect(alignSelect).toContainText("Inside");
   await expect.poll(boxSizing).toBe("border-box");
 
-  // Inside → Outside must not clobber box-sizing with an explicit
-  // content-box either (the sibling, non-class-cascade bug this same review
-  // round fixed).
-  await alignSelect.click();
-  await page.getByRole("option", { name: "Outside", exact: true }).click();
-  await expect(alignSelect).toContainText("Outside");
-  await expect.poll(boxSizing).not.toBe("content-box");
-
-  await alignSelect.click();
-  await page.getByRole("option", { name: "Center", exact: true }).click();
+  // Inside → Center: the bug this round fixes. Must write an EXPLICIT
+  // `content-box`, not merely remove the declaration, or the class reset
+  // above silently keeps the stroke rendered as Inside.
+  await selectAlign("Center");
   await expect(alignSelect).toContainText("Center");
+  await expect.poll(boxSizing).toBe("content-box");
+  // The actual rendered claim "Center" makes: cascade-resolved box-sizing,
+  // not just the attribute that was written.
+  await expect
+    .poll(() =>
+      liveComputedBoxSizing(page, CLASS_BOX_SIZING_EMBED_ID, CLASS_BOX_SIZING_ELEMENT_ID),
+    )
+    .toBe("content-box");
+
+  // Center → Inside: box-sizing must be written explicitly again.
+  await selectAlign("Inside");
+  await expect(alignSelect).toContainText("Inside");
+  await expect.poll(boxSizing).toBe("border-box");
+
+  // Inside → Outside: must not clobber box-sizing with an explicit
+  // content-box (the sibling, non-class-cascade bug a prior review round
+  // fixed) — the key is REMOVED, letting the class's own reset show back
+  // through, since no border is drawn in the box at all once the stroke
+  // moves to `outline`.
+  await selectAlign("Outside");
+  await expect(alignSelect).toContainText("Outside");
+  await expect.poll(boxSizing).toBeFalsy();
+
+  // Outside → Center: box-sizing was never touched by either state, so it
+  // stays absent — closes the Eulerian cycle back at the starting state.
+  await selectAlign("Center");
+  await expect(alignSelect).toContainText("Center");
+  await expect.poll(boxSizing).toBeFalsy();
 });

@@ -213,25 +213,42 @@ export function EmbedElementProperties() {
       // permanently override the embed's own box-sizing reset for a property
       // the edit never intended to change.
       //
-      // The criterion is "did `box-sizing` disappear from the generated CSS
-      // map between before and after" — NOT "did the raw stroke paint stack
-      // (`getStrokes`) go from non-empty to empty". Those are different
-      // facts: `generateVisualStyles` only ever emits `box-sizing` for
-      // `strokeAlign: "inside"`, so it disappears on every transition OUT of
-      // Inside that isn't itself another Inside — Inside→Outside (the stroke
-      // stack stays non-empty, it just moves to `outline`), a weight edit
-      // down to 0, hiding the stroke's paint, or dialing its opacity to 0 —
-      // not only "the whole stroke was removed". Keying off the stack
-      // emptying alone missed every one of those and forced an explicit
-      // `content-box` for each. Keying off the key's actual presence in the
-      // before/after maps catches all of them, plus the "removed entirely"
-      // case, uniformly. An Align switch that STAYS on Inside↔Center keeps
-      // writing an explicit `box-sizing` value either way (the key is
-      // present in `after`, just with a different value), which is what
-      // makes the Align control itself work.
+      // The criterion is NOT "did `box-sizing` disappear from the generated
+      // CSS map between before and after" (a fifth-round review finding: that
+      // was itself wrong, in the opposite direction from the fourth round's
+      // stack-emptiness bug). `generateVisualStyles` only ever emits
+      // `box-sizing` for `strokeAlign: "inside"`, so the key disappears from
+      // `after` on EVERY transition out of Inside, including Inside→Center —
+      // where the stroke is still very much drawn (`border` stays in
+      // `afterStyles`, just without a `box-sizing` key). Keying off the key
+      // alone made that transition fall into `removeInsteadOfReset` too, so
+      // the inline `box-sizing: border-box` was simply deleted, an embed's
+      // near-universal `box-sizing: border-box` class reset reasserted
+      // itself through the cascade, and the stroke rendered as Inside no
+      // matter what the (inline-only-reading) Align select claimed.
+      //
+      // The real distinction is whether a stroke is still drawn IN the box
+      // at all, i.e. whether `afterStyles` still has a `border` key
+      // (`inside`/`center`) as opposed to no stroke, a hidden/zero-weight
+      // stroke, or `outside` (which draws via `outline`, not `border`):
+      // - no `border` in `after` → nothing needs `box-sizing` any more, so it
+      //   is REMOVED, letting the embed's own reset (if any) show back
+      //   through, exactly like the fill case above.
+      // - `border` present in `after` but no `box-sizing` key (`center`) →
+      //   this is NOT a removal — an explicit `box-sizing: content-box` is
+      //   still required, or a class-authored `border-box` reset would
+      //   silently keep rendering the stroke as Inside. This case is handled
+      //   by simply NOT opting the key into `removeInsteadOfReset`: the
+      //   default diff path already writes `RESET_VALUES["box-sizing"]`
+      //   (`content-box`) whenever a key disappears and isn't explicitly
+      //   opted into removal — the same mechanism every other tracked
+      //   property uses.
+      // Center→Inside is unaffected by any of this: the key goes from absent
+      // to present with a value, which the default diff path already writes
+      // as a plain, explicit `box-sizing: border-box`.
       const removeInsteadOfReset: string[] = [];
       if (hadFill && !hasFillNow) removeInsteadOfReset.push(...BACKGROUND_STYLE_KEYS);
-      if ("box-sizing" in beforeStyles && !("box-sizing" in afterStyles)) {
+      if ("box-sizing" in beforeStyles && !("box-sizing" in afterStyles) && !("border" in afterStyles)) {
         removeInsteadOfReset.push("box-sizing");
       }
       const diffOptions = removeInsteadOfReset.length > 0 ? { removeInsteadOfReset } : undefined;

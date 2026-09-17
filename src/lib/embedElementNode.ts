@@ -585,16 +585,20 @@ export function syntheticNodeToCssDeclarations(node: SyntheticNodeShape): Record
   // `* { box-sizing: border-box }` reset makes `applyStrokeAlignFromCss` read
   // every such element as `strokeAlign: "inside"`), then disappearing the
   // moment the stroke is REMOVED and getting written back as an explicit
-  // `box-sizing: content-box` — is real, but it is a property of one
-  // transition (stroke stack goes empty), not of the key in general. It is
-  // handled the same way `EmbedElementProperties.tsx`'s `commitPatch` already
-  // handles the analogous "Remove fill" transition for `BACKGROUND_STYLE_KEYS`:
-  // by opting `box-sizing` into `diffCssDeclarations`'s `removeInsteadOfReset`
-  // for exactly that transition (stroke stack non-empty → empty), so the key
-  // is removed rather than forced to `content-box`, letting the embed's own
-  // reset show back through. Align switches (stroke stack stays non-empty)
-  // are unaffected and keep writing an explicit `box-sizing` value, which is
-  // what makes the Align control actually work.
+  // `box-sizing: content-box` — is real, but it is a property of the stroke
+  // no longer being drawn IN the box at all, not of the key merely
+  // disappearing. It is handled the same way `EmbedElementProperties.tsx`'s
+  // `commitPatch` already handles the analogous "Remove fill" transition for
+  // `BACKGROUND_STYLE_KEYS`: by opting `box-sizing` into
+  // `diffCssDeclarations`'s `removeInsteadOfReset` for exactly that case
+  // (`border` also absent from "after" — no stroke, a hidden/zero-weight
+  // one, or `outside`, which draws via `outline` instead), so the key is
+  // removed rather than forced to `content-box`, letting the embed's own
+  // reset show back through. Inside→Center keeps a `border` in "after" with
+  // no `box-sizing` key — that is NOT this removal case (see `commitPatch`'s
+  // doc comment for why forcing an explicit `content-box` there, via the
+  // default reset path rather than removal, is what makes the Align control
+  // actually able to reach "Center").
 
   if (node.text !== undefined) {
     Object.assign(styles, generateTextStyles(node as unknown as TextNode));
