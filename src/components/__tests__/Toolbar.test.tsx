@@ -17,6 +17,7 @@ import { useUIThemeStore } from "@/store/uiThemeStore";
 import { usePixelGridStore } from "@/store/pixelGridStore";
 import { useMcpBridgeStore } from "@/store/mcpBridgeStore";
 import { useRepoContextStore } from "@/store/repoContextStore";
+import { useMobbinAuthStore } from "@/store/mobbinAuthStore";
 import { resetStores } from "@/test/fixtures";
 
 /**
@@ -202,6 +203,51 @@ describe("<Toolbar />", () => {
 
     expect(runCommandMock).toHaveBeenCalledTimes(1);
     expect(runCommandMock.mock.calls[0][0]).toMatchObject({ id: "file-export-tokens" });
+  });
+
+  describe("Mobbin connection item", () => {
+    afterEach(() => {
+      useMobbinAuthStore.setState({ status: "disconnected", error: null });
+    });
+
+    it("shows \"Connect Mobbin…\" when disconnected", () => {
+      useMobbinAuthStore.setState({ status: "disconnected", error: null });
+      render(<Toolbar />);
+      openSettings();
+      expect(screen.getByText("Connect Mobbin…")).toBeTruthy();
+      expect(screen.queryByText("Disconnect Mobbin")).toBeNull();
+    });
+
+    it("shows \"Disconnect Mobbin\" when connected", () => {
+      useMobbinAuthStore.setState({ status: "connected", error: null });
+      render(<Toolbar />);
+      openSettings();
+      expect(screen.getByText("Disconnect Mobbin")).toBeTruthy();
+      expect(screen.queryByText("Connect Mobbin…")).toBeNull();
+    });
+
+    it("disconnects immediately (no network) when the connected item is clicked", () => {
+      useMobbinAuthStore.setState({ status: "connected", error: null });
+      render(<Toolbar />);
+      openSettings();
+
+      fireEvent.click(screen.getByText("Disconnect Mobbin"));
+
+      expect(useMobbinAuthStore.getState().status).toBe("disconnected");
+    });
+
+    it("surfaces a connect failure as an error line in the menu", () => {
+      useMobbinAuthStore.setState({
+        status: "disconnected",
+        error: "Couldn't open the Mobbin sign-in window — check your browser's popup blocker.",
+      });
+      render(<Toolbar />);
+      openSettings();
+
+      expect(
+        screen.getByText(/couldn't open the mobbin sign-in window/i),
+      ).toBeTruthy();
+    });
   });
 
   describe("attached local repo row", () => {

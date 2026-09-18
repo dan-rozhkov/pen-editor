@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { toolDisplayNames, referoToolDisplayNames } from "../toolDisplayNames";
+import { toolDisplayNames, mobbinToolDisplayNames } from "../toolDisplayNames";
 import { getToolIcon } from "../toolIcons";
 import { toolHandlers } from "../toolRegistry";
-import { ReferoIcon } from "@/components/icons/ReferoIcon";
+import { MobbinIcon } from "@/components/icons/MobbinIcon";
 import { BinocularsIcon, NotePencilIcon } from "@phosphor-icons/react";
 
 describe("toolIcons", () => {
@@ -57,19 +57,20 @@ describe("toolIcons", () => {
     expect(getToolIcon("edit_embed_html")).toBe(NotePencilIcon);
   });
 
-  it("brands every Refero-served tool with the Refero mark", () => {
-    const referoTools = Object.keys(referoToolDisplayNames);
-    expect(referoTools.length).toBeGreaterThan(0);
-    for (const name of referoTools) {
-      expect(getToolIcon(name)).toBe(ReferoIcon);
+  it("brands every Mobbin-served tool with the Mobbin mark", () => {
+    const mobbinTools = Object.keys(mobbinToolDisplayNames);
+    expect(mobbinTools.length).toBeGreaterThan(0);
+    for (const name of mobbinTools) {
+      expect(getToolIcon(name)).toBe(MobbinIcon);
     }
   });
 
-  it("gives every spelling of a Refero tool the same label", () => {
-    // Bare, `refero_`-prefixed and `mcp_refero_`-prefixed names are the same
-    // tool; they once drifted into three different labels and icons.
-    for (const spelling of ["get_style", "refero_get_style", "mcp_refero_get_style"]) {
-      expect(toolDisplayNames[spelling]).toBe("Open Design Style");
+  it("gives every spelling of a Mobbin tool the same label", () => {
+    // Bare, `mobbin_`-prefixed and `mcp_mobbin_`-prefixed names are the same
+    // tool; the Refero tool set this replaced once drifted into three
+    // different labels and icons for exactly this reason.
+    for (const spelling of ["search_flows", "mobbin_search_flows", "mcp_mobbin_search_flows"]) {
+      expect(toolDisplayNames[spelling]).toBe("Searching flows");
     }
   });
 });

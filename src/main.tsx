@@ -7,6 +7,7 @@ import { startBridges } from '@/lib/bridgeBootstrap'
 import { installModelContextForEditorRoute } from '@/lib/webmcp/earlyInstall'
 import { loadModels } from '@/lib/chatModels'
 import { applyStoredUITheme } from '@/lib/uiTheme'
+import { MOBBIN_OAUTH_CALLBACK_PATH } from '@/lib/mobbinAuth'
 
 import './index.css'
 import { AppRouter } from './AppRouter'
@@ -28,7 +29,21 @@ installModelContextForEditorRoute()
 // complete no-op without VITE_POSTHOG_KEY, so this gate is
 // belt-and-suspenders: it guarantees a dev build never even attempts the
 // dynamic posthog-js import.
-if (import.meta.env.PROD) {
+//
+// Also never on the Mobbin OAuth callback popup: that page's whole job is to
+// hand a one-time `code`/`state` back to its opener and call `window.close()`
+// (MobbinCallback.tsx), which scrubs those params from the URL as its very
+// first act — but PostHog's `capture_pageleave: true` fires on close and
+// records `location.href` verbatim, so this is a second, independent guard
+// against ever wiring analytics into that page at all, not just against it
+// seeing a dirty URL.
+function isMobbinOAuthCallbackRoute(): boolean {
+  const base = import.meta.env.BASE_URL || '/'
+  const normalizedBase = base.endsWith('/') ? base.slice(0, -1) : base
+  return window.location.pathname === `${normalizedBase}${MOBBIN_OAUTH_CALLBACK_PATH}`
+}
+
+if (import.meta.env.PROD && !isMobbinOAuthCallbackRoute()) {
   initAnalytics()
 }
 

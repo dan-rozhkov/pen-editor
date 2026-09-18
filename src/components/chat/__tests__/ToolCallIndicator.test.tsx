@@ -169,7 +169,7 @@ describe("<ToolCallIndicator />", () => {
       <ToolCallIndicator
         part={{
           type: "dynamic-tool",
-          toolName: "refero_search_screens",
+          toolName: "mobbin_search_screens",
           toolCallId: "call-2",
           state: "output-available",
           input: {},
@@ -177,8 +177,8 @@ describe("<ToolCallIndicator />", () => {
         }}
       />
     );
-    // mapped display name for refero_search_screens
-    expect(screen.getByText("Search Reference Screens")).toBeTruthy();
+    // mapped display name for mobbin_search_screens
+    expect(screen.getByText("Searching screens")).toBeTruthy();
     expect(screen.getByText("Done")).toBeTruthy();
   });
 

@@ -873,18 +873,18 @@ describe("useDesignChat (hook + UI message stream)", () => {
         {
           type: "tool-input-start",
           toolCallId: "mcp-1",
-          toolName: "refero_search_screens",
+          toolName: "mobbin_search_screens",
           dynamic: true,
         },
         {
           type: "tool-input-available",
           toolCallId: "mcp-1",
-          toolName: "refero_search_screens",
+          toolName: "mobbin_search_screens",
           input: { query: "onboarding", platform: "web" },
           providerMetadata: { openrouter: { reasoning_details: [] } },
           toolMetadata: { clientName: "ai-sdk-mcp-client" },
           dynamic: true,
-          title: "refero_search_screens",
+          title: "mobbin_search_screens",
         },
         {
           type: "tool-output-available",
@@ -928,8 +928,175 @@ describe("useDesignChat (hook + UI message stream)", () => {
       | { state?: string; toolName?: string }
       | undefined;
     expect(toolPart).toBeDefined();
-    expect(toolPart!.toolName).toBe("refero_search_screens");
+    expect(toolPart!.toolName).toBe("mobbin_search_screens");
     expect(toolPart!.state).toBe("output-available");
+  });
+
+  describe("Mobbin token header", () => {
+    const MOBBIN_KEYS = [
+      "pen.mobbin.clientId",
+      "pen.mobbin.accessToken",
+      "pen.mobbin.refreshToken",
+      "pen.mobbin.expiresAt",
+    ];
+
+    afterEach(() => {
+      for (const key of MOBBIN_KEYS) localStorage.removeItem(key);
+    });
+
+    it("sends X-Mobbin-Token when connected, and never in the request body", async () => {
+      localStorage.setItem("pen.mobbin.clientId", "client-1");
+      localStorage.setItem("pen.mobbin.accessToken", "mobbin-secret-token");
+      localStorage.setItem("pen.mobbin.expiresAt", String(Date.now() + 60 * 60 * 1000));
+
+      const requests: Array<{ headers: Headers; bodyText: string }> = [];
+      const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push({
+          headers: new Headers(init?.headers),
+          bodyText: String(init?.body),
+        });
+        return sseResponse([
+          { type: "start" },
+          { type: "start-step" },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "ok" },
+          { type: "text-end", id: "t1" },
+          { type: "finish-step" },
+          { type: "finish" },
+        ]);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `test-session-mobbin-on-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+      act(() => result.current.setInput("find onboarding screens"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      expect(requests[0].headers.get("X-Mobbin-Token")).toBe("mobbin-secret-token");
+      expect(requests[0].bodyText).not.toContain("mobbin-secret-token");
+    });
+
+    it("sends no X-Mobbin-Token header when not connected", async () => {
+      const requests: Array<{ headers: Headers }> = [];
+      const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push({ headers: new Headers(init?.headers) });
+        return sseResponse([
+          { type: "start" },
+          { type: "start-step" },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "ok" },
+          { type: "text-end", id: "t1" },
+          { type: "finish-step" },
+          { type: "finish" },
+        ]);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `test-session-mobbin-off-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+      act(() => result.current.setInput("find onboarding screens"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      expect(requests[0].headers.has("X-Mobbin-Token")).toBe(false);
+    });
+
+    // The coordinator's correction: an expired token with no refresh token
+    // must not be silently sent — it clears itself via disconnect() and the
+    // request goes out with no Mobbin header at all, rather than a stale one
+    // that would 401 against Mobbin mid-turn.
+    it("drops the header and clears credentials when expired with no refresh token", async () => {
+      localStorage.setItem("pen.mobbin.clientId", "client-1");
+      localStorage.setItem("pen.mobbin.accessToken", "stale-token");
+      localStorage.setItem("pen.mobbin.expiresAt", String(Date.now() - 1000));
+
+      const requests: Array<{ headers: Headers }> = [];
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        // No /api/mobbin/refresh call should happen — there is no refresh
+        // token to use — but guard it anyway so a regression fails loudly
+        // instead of hanging.
+        if (String(input).includes("/api/mobbin/refresh")) {
+          throw new Error("unexpected refresh call with no refresh token");
+        }
+        requests.push({ headers: new Headers(init?.headers) });
+        return sseResponse([
+          { type: "start" },
+          { type: "start-step" },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "ok" },
+          { type: "text-end", id: "t1" },
+          { type: "finish-step" },
+          { type: "finish" },
+        ]);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `test-session-mobbin-expired-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+      act(() => result.current.setInput("find onboarding screens"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      expect(requests[0].headers.has("X-Mobbin-Token")).toBe(false);
+      expect(localStorage.getItem("pen.mobbin.accessToken")).toBeNull();
+    });
+
+    // Finding #9 regression: prepareSendMessagesRequest used to also set a
+    // best-effort X-Mobbin-Token header synchronously from whatever access
+    // token happened to be in storage at send time. That's ALWAYS the STALE
+    // value once a refresh is needed — only withMobbinAuthHeader's async,
+    // expiry-aware getValidAccessToken() ever sees the refreshed one. This
+    // pins the outgoing header to the refreshed token, which would fail if
+    // the removed synchronous header ever reappeared and (per the AI SDK's
+    // own "headers replaces baseHeaders wholesale" semantics) won the race.
+    it("sends the freshly refreshed token, never the stale one that was in storage at send time", async () => {
+      localStorage.setItem("pen.mobbin.clientId", "client-1");
+      localStorage.setItem("pen.mobbin.accessToken", "stale-token");
+      localStorage.setItem("pen.mobbin.refreshToken", "refresh-1");
+      localStorage.setItem("pen.mobbin.expiresAt", String(Date.now() - 1000));
+
+      const requests: Array<{ headers: Headers }> = [];
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).includes("/api/mobbin/refresh")) {
+          return new Response(
+            JSON.stringify({
+              accessToken: "refreshed-token",
+              refreshToken: "refresh-2",
+              expiresIn: 3600,
+            }),
+            { status: 200 },
+          );
+        }
+        requests.push({ headers: new Headers(init?.headers) });
+        return sseResponse([
+          { type: "start" },
+          { type: "start-step" },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "ok" },
+          { type: "text-end", id: "t1" },
+          { type: "finish-step" },
+          { type: "finish" },
+        ]);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `test-session-mobbin-refresh-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+      act(() => result.current.setInput("find onboarding screens"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+      await waitFor(() => expect(requests.length).toBe(1));
+
+      expect(requests[0].headers.get("X-Mobbin-Token")).toBe("refreshed-token");
+    });
   });
 
   it("fails locally without a network request when offline", async () => {

@@ -1,10 +1,11 @@
 import { forwardRef } from "react";
 import type { Icon, IconProps, IconWeight } from "@phosphor-icons/react";
 
-// The Refero brand mark: a capital R inside a ring (the ® shape). Redrawn as
-// an outline so it sits next to the Phosphor icons in the chat tool chips
-// without looking like a pasted logo — same 256×256 viewBox and the same
-// per-weight stroke widths Phosphor uses.
+// The Mobbin brand mark: a capital M inside a ring, redrawn as an outline so
+// it sits next to the Phosphor icons in the chat tool chips without looking
+// like a pasted logo — same 256×256 viewBox and the same per-weight stroke
+// widths Phosphor uses. Replaces ReferoIcon when Refero MCP was swapped for
+// Mobbin MCP (docs/superpowers/specs/2026-09-18-mobbin-mcp-design.md).
 //
 // Phosphor icons are filled paths tinted with `fill`; this one is stroked, so
 // `color` is applied to `stroke` (and `fill` is forced to none) instead. Every
@@ -19,8 +20,8 @@ const STROKE_WIDTHS: Record<IconWeight, number> = {
   duotone: 16,
 };
 
-export const ReferoIcon: Icon = forwardRef<SVGSVGElement, IconProps>(
-  function ReferoIcon(
+export const MobbinIcon: Icon = forwardRef<SVGSVGElement, IconProps>(
+  function MobbinIcon(
     { alt, color = "currentColor", size = 16, weight = "regular", mirrored, ...rest },
     ref,
   ) {
@@ -44,9 +45,9 @@ export const ReferoIcon: Icon = forwardRef<SVGSVGElement, IconProps>(
           <circle cx="128" cy="128" r="96" fill={color} opacity="0.2" stroke="none" />
         )}
         <circle cx="128" cy="128" r="96" />
-        {/* Stem, shoulder and bowl of the R, then its leg. */}
-        <path d="M100,180 L100,76 L140,76 a26,26 0 0 1 0,52 L100,128" />
-        <path d="M134,128 L162,180" />
+        {/* Two legs of the M meeting a shallow center peak, wide enough to
+            read clearly at 16px next to the Phosphor icons. */}
+        <path d="M84,176 L84,80 L128,140 L172,80 L172,176" />
       </svg>
     );
   },

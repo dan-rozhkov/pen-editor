@@ -11,6 +11,7 @@ import { getUserId } from "@/lib/userId";
 import { canSendImages } from "@/lib/chatModels";
 import { getOpenCodeKey } from "@/lib/opencodeKey";
 import { createRetryingFetch, type RetryState } from "@/lib/retryFetch";
+import { withMobbinAuthHeader } from "@/lib/mobbinAuth";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
@@ -330,7 +331,14 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     () =>
       new DefaultChatTransport({
         api: resolveChatApiUrl(),
-        fetch: createRetryingFetch({ onRetryStateChange: setRetryState }),
+        // withMobbinAuthHeader wraps the retrying fetch so the *actual*
+        // network call always carries a currently-valid X-Mobbin-Token
+        // header (refreshed first if it had expired) or none at all — see
+        // its doc comment in mobbinAuth.ts for why the header is set here
+        // rather than only in prepareSendMessagesRequest below.
+        fetch: withMobbinAuthHeader(
+          createRetryingFetch({ onRetryStateChange: setRetryState }),
+        ),
         body: () => buildCanvasContext(sessionId),
         prepareSendMessagesRequest: ({ id, messages, body, headers: baseHeaders, trigger, messageId }) => {
           // Images always ride along regardless of the selected model's
@@ -390,6 +398,17 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
                   return merged;
                 })()
               : undefined;
+          // The Mobbin token, by contrast, must NEVER ride in `body` — it's
+          // a user-held OAuth credential, and `body` gets recorded into
+          // `raw_traces` on the backend (src/routes/chat.ts). It only ever
+          // travels as the X-Mobbin-Token header, and only ever set in ONE
+          // place: `withMobbinAuthHeader` above, which wraps the transport's
+          // `fetch` and attaches a currently-valid (refreshed if needed)
+          // token right before the network call actually goes out. Returning
+          // a `headers` object from here would REPLACE `baseHeaders` wholesale
+          // per the AI SDK's own semantics, not merge into it — and it would
+          // be redundant besides, since withMobbinAuthHeader overwrites
+          // whatever header value arrives here anyway.
           return {
             ...(headers ? { headers } : {}),
             body: {

@@ -11,6 +11,7 @@ import { useMcpBridgeStore } from "../store/mcpBridgeStore";
 import { useRepoContextStore } from "../store/repoContextStore";
 import { useSharedViewStore } from "../store/sharedViewStore";
 import { useShareDialogStore } from "../store/shareDialogStore";
+import { useMobbinAuthStore } from "../store/mobbinAuthStore";
 
 import { importDesignTokens, openDocument } from "../lib/commands/fileCommands";
 import { getCommands, runCommand } from "../lib/commands/registry";
@@ -65,6 +66,10 @@ export function Toolbar() {
     state.rootIds.some((id) => state.nodesById[id]?.type === "frame"),
   );
   const isSharedView = useSharedViewStore((s) => s.isSharedView);
+  const mobbinStatus = useMobbinAuthStore((s) => s.status);
+  const mobbinError = useMobbinAuthStore((s) => s.error);
+  const mobbinConnect = useMobbinAuthStore((s) => s.connect);
+  const mobbinDisconnect = useMobbinAuthStore((s) => s.disconnect);
 
   const [importOpen, setImportOpen] = useState(false);
   const [jsonText, setJsonText] = useState("");
@@ -119,6 +124,14 @@ export function Toolbar() {
 
   const handlePasteStyle = () => {
     window.dispatchEvent(new Event("pen-editor:paste-style"));
+  };
+
+  const handleMobbinConnect = async () => {
+    await mobbinConnect();
+    const failure = useMobbinAuthStore.getState().error;
+    if (failure) {
+      toast(`Couldn't connect Mobbin — ${failure}`);
+    }
   };
 
   const handleImport = () => {
@@ -252,6 +265,34 @@ export function Toolbar() {
                 Outline mode
                 <TooltipShortcut className="ml-auto">{formatShortcut(["mod", "shift", "O"])}</TooltipShortcut>
               </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              {/* Mobbin is a per-user OAuth connection, not a checkbox — the
+                  token lives in this browser's localStorage only
+                  (mobbinAuth.ts); the backend never stores it. "Connected"
+                  here means "currently has a usable token", not "something
+                  is stored" — an expired token with no refresh token reads
+                  as disconnected (mobbinAuthStore.refreshStatus). */}
+              <DropdownMenuItem
+                onClick={() => {
+                  if (mobbinStatus === "connected") {
+                    mobbinDisconnect();
+                  } else {
+                    void handleMobbinConnect();
+                  }
+                }}
+                disabled={mobbinStatus === "connecting"}
+              >
+                {mobbinStatus === "connected"
+                  ? "Disconnect Mobbin"
+                  : mobbinStatus === "connecting"
+                    ? "Connecting to Mobbin…"
+                    : "Connect Mobbin…"}
+              </DropdownMenuItem>
+              {mobbinError && (
+                <div className="px-2 py-1 text-xs text-destructive">
+                  {mobbinError}
+                </div>
+              )}
               <DropdownMenuSeparator />
               {/* Read-only: the bridge connects itself (a WebSocket token or the
                   desktop shell), so there is nothing to toggle here. "Off" is the

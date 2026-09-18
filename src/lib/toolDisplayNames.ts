@@ -1,29 +1,24 @@
-// Refero (MCP), keyed by the bare tool name. The labels say what the tool does
-// to a *reference* — Refero's own vocabulary for the screens, flows and styles
-// it indexes — rather than echoing the raw tool name; the Refero mark in
-// `toolIcons` already says where the data comes from, so the label doesn't
-// repeat it.
-const referoLabels: Record<string, string> = {
-  search_screens: "Search Reference Screens",
-  get_screen: "Open Reference Screen",
-  get_screen_image: "Reference Screenshot",
-  get_similar_screens: "Find Similar Screens",
-  search_flows: "Search Reference Flows",
-  get_flow: "Open Reference Flow",
-  search_styles: "Search Design Styles",
-  get_style: "Open Design Style",
-  get_design_guidance: "Design Guidance",
+// Mobbin (MCP), keyed by the bare tool name. Mobbin's whole surface is these
+// three search tools — no per-item fetch, no flow detail, no style search, no
+// guidance tool, unlike the Refero MCP this replaced — so the labels just say
+// what's being searched; the Mobbin mark in `toolIcons` already says where
+// the results come from, so the label doesn't repeat it.
+const mobbinLabels: Record<string, string> = {
+  search_screens: "Searching screens",
+  search_flows: "Searching flows",
+  search_sections: "Searching sections",
 };
 
 // The same tool reaches this UI under up to three spellings: bare (the older
-// naming still used in the backend's research skill), `refero_`-prefixed (what
-// the MCP server advertises today) and `mcp_refero_`-prefixed. All three must
+// naming still used in the backend's research skill), `mobbin_`-prefixed (what
+// the MCP server advertises today) and `mcp_mobbin_`-prefixed. All three must
 // render identically, so they are generated rather than hand-listed — a
 // hand-written table is exactly how the bare aliases previously ended up with
-// a different label and a different icon from their prefixed twins.
-export const referoToolDisplayNames: Record<string, string> = Object.fromEntries(
-  Object.entries(referoLabels).flatMap(([name, label]) =>
-    ["", "refero_", "mcp_refero_"].map((prefix) => [`${prefix}${name}`, label]),
+// a different label and a different icon from their prefixed twins (the
+// Refero tool set this replaced hit exactly this bug once).
+export const mobbinToolDisplayNames: Record<string, string> = Object.fromEntries(
+  Object.entries(mobbinLabels).flatMap(([name, label]) =>
+    ["", "mobbin_", "mcp_mobbin_"].map((prefix) => [`${prefix}${name}`, label]),
   ),
 );
 
@@ -74,7 +69,7 @@ export const toolDisplayNames: Record<string, string> = {
   attach_local_repo: "Attach Local Repo",
   web_search: "Search the Web",
   fetch_url: "Read Web Pages",
-  ...referoToolDisplayNames,
+  ...mobbinToolDisplayNames,
   ask_user: "Ask a question",
   load_skill: "Load skill",
   memory: "Memory",

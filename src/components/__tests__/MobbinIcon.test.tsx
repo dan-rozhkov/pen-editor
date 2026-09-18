@@ -1,15 +1,15 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, cleanup } from "@testing-library/react";
-import { ReferoIcon } from "@/components/icons/ReferoIcon";
+import { MobbinIcon } from "@/components/icons/MobbinIcon";
 
 afterEach(cleanup);
 
-function renderIcon(props: Parameters<typeof ReferoIcon>[0] = {}) {
-  const { container } = render(<ReferoIcon {...props} />);
+function renderIcon(props: Parameters<typeof MobbinIcon>[0] = {}) {
+  const { container } = render(<MobbinIcon {...props} />);
   return container.querySelector("svg")!;
 }
 
-describe("ReferoIcon", () => {
+describe("MobbinIcon", () => {
   it("renders a stroked 256-unit icon that inherits the text colour", () => {
     const svg = renderIcon();
     expect(svg.getAttribute("viewBox")).toBe("0 0 256 256");

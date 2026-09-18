@@ -44,8 +44,8 @@ import {
   QuestionIcon,
   WrenchIcon,
 } from "@phosphor-icons/react";
-import { ReferoIcon } from "@/components/icons/ReferoIcon";
-import { referoToolDisplayNames } from "@/lib/toolDisplayNames";
+import { MobbinIcon } from "@/components/icons/MobbinIcon";
+import { mobbinToolDisplayNames } from "@/lib/toolDisplayNames";
 
 // Icon per tool, shown before the label in ToolCallIndicator. Keys mirror
 // `toolDisplayNames` — `toolIcons.test.ts` fails if the two drift, so a new
@@ -97,14 +97,14 @@ const toolIcons: Record<string, Icon> = {
   attach_local_repo: FolderPlusIcon,
   web_search: GlobeIcon,
   fetch_url: LinkIcon,
-  // Every Refero-served tool carries the Refero mark instead of a
+  // Every Mobbin-served tool carries the Mobbin mark instead of a
   // task-specific glyph: in a long turn the useful thing to spot at a glance
-  // is that the agent went out to the reference library at all. The labels
-  // (`toolDisplayNames`) are what tell the calls apart from one another.
-  // Derived from the same generated key set as the labels, so every spelling
-  // of a Refero tool is branded and none can be forgotten here.
+  // is that the agent went out to Mobbin's reference library at all. The
+  // labels (`toolDisplayNames`) are what tell the calls apart from one
+  // another. Derived from the same generated key set as the labels, so every
+  // spelling of a Mobbin tool is branded and none can be forgotten here.
   ...Object.fromEntries(
-    Object.keys(referoToolDisplayNames).map((name) => [name, ReferoIcon]),
+    Object.keys(mobbinToolDisplayNames).map((name) => [name, MobbinIcon]),
   ),
   ask_user: QuestionIcon,
   load_skill: BookOpenIcon,

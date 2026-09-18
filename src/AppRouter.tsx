@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 
 import { ShowcasePage } from "@/components/showcase/ShowcasePage";
 import { RouteTracker } from "@/lib/analytics/RouteTracker";
+import MobbinCallback from "@/routes/MobbinCallback";
 
 // The editor pulls in PixiJS and the whole canvas/tool stack; the showcase at
 // "/" must never pay that cost. Loading it via `lazy()` behind the "/app"
@@ -19,6 +20,11 @@ export function AppRouter() {
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <Routes>
         <Route path="/" element={<ShowcasePage />} />
+        {/* Popup-only OAuth callback for connecting Mobbin (mobbinAuth.ts).
+            Not lazy — it has no editor/Pixi dependency, so there's no bundle
+            cost to keep it in the showcase entry chunk. Must be included in
+            the deployed SPA rewrite, same trap /app and /c/:id hit before. */}
+        <Route path="/oauth/mobbin/callback" element={<MobbinCallback />} />
         <Route
           path="/app"
           element={
