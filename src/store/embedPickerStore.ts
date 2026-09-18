@@ -72,6 +72,24 @@ interface EmbedPickerState {
    * panel jumping back to the embed) on every Escape-cancelled text edit,
    * even though the edit itself reverted correctly via `el`'s own listener. */
   cancelElementEdit: (() => void) | null;
+  /** Starts the SAME inline text edit `EmbedLayer`'s dblclick handler starts
+   * (`beginElementEdit`), but from a shadow-relative `path` rather than a
+   * live pointer target — the entry point for keyboard navigation's Enter
+   * key. Returns whether the edit actually started: `false` when `path`
+   * doesn't resolve to a live element in the embed's current shadow DOM, or
+   * resolves to one that isn't a text leaf (`isTextLeaf`), so the caller
+   * (`keyboardCommands.ts`) knows not to treat Enter as consumed. `null`
+   * while no embed is picking — there is no live shadow DOM/edit session to
+   * hand the request to.
+   *
+   * Store-registered for the same reason as `cancelElementDrag`/
+   * `cancelElementEdit` right above: the global keyboard handler is a
+   * capture-phase `window` listener wired up once at app mount, with no way
+   * to reach into `EmbedLayer`'s per-embed picking effect — where
+   * `beginElementEdit` actually lives, closing over the live shadow root
+   * and the element's edit-session state — except through a callback that
+   * effect hands the store itself. */
+  requestElementEdit: ((path: string) => boolean) | null;
   /** The insertion-line rect for the sortable drag currently in flight (see
    * `embedElementSortable.ts`'s `DropSlot.indicator`), in CLIENT
    * coordinates — `null` whenever no drag is in progress or the pointer
@@ -129,6 +147,8 @@ interface EmbedPickerState {
   setCancelElementDrag: (cancel: (() => void) | null) => void;
   /** Registers/clears `cancelElementEdit` — see that field's own doc comment. */
   setCancelElementEdit: (cancel: (() => void) | null) => void;
+  /** Registers/clears `requestElementEdit` — see that field's own doc comment. */
+  setRequestElementEdit: (request: ((path: string) => boolean) | null) => void;
   setDropIndicator: (
     indicator: { left: number; top: number; width: number; height: number } | null,
   ) => void;
@@ -168,6 +188,7 @@ export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
   dragVersion: 0,
   cancelElementDrag: null,
   cancelElementEdit: null,
+  requestElementEdit: null,
   dropIndicator: null,
   elementAffordanceVisible: false,
   editingEmbedId: null,
@@ -231,6 +252,8 @@ export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
 
   setCancelElementEdit: (cancel) => set({ cancelElementEdit: cancel }),
 
+  setRequestElementEdit: (request) => set({ requestElementEdit: request }),
+
   setDropIndicator: (indicator) => set({ dropIndicator: indicator }),
 
   setElementAffordanceVisible: (visible) => {
@@ -250,6 +273,7 @@ export const useEmbedPickerStore = create<EmbedPickerState>((set, get) => ({
       selectionHtmlSnapshot: null,
       cancelElementDrag: null,
       cancelElementEdit: null,
+      requestElementEdit: null,
       dropIndicator: null,
       elementAffordanceVisible: false,
       editingEmbedId: null,

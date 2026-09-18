@@ -3,6 +3,7 @@ import {
   buildEmbedLayerTree,
   buildSourceEmbedElementSelection,
   getEmbedLayerTree,
+  isLayerTreeLeaf,
   normalizeShadowPathToSourcePath,
   sourcePathToShadowPath,
   type EmbedElementLayer,
@@ -159,6 +160,24 @@ describe("buildEmbedLayerTree", () => {
       expect(tree[0].children[0].tagName).toBe("article");
       expect(tree[0].children[0].children).toHaveLength(1);
       expect(tree[0].children[0].children[0].tagName).toBe("p");
+    });
+
+    it("collapses a leaf-eligible icon wrapper with NO text to a childless row, keeping its own kind (Finding 2)", () => {
+      // Unlike `<div>Label <span>3</span></div>` above, this wrapper has no
+      // text content at all — it must still stop descending (children: []),
+      // but since there's no text it keeps kind "frame" rather than
+      // becoming "text". This is the exact shape `isLayerTreeLeaf` exists
+      // to recognize for `embedElementNavigation.ts`'s `firstChildEmbedElement`:
+      // a `leafEligible` element with no text used to be missed by the old
+      // `collapsesToTextRow` predicate (which also required text), letting
+      // Enter descend into the `<span>` even though it gets no row here.
+      const html = `<div id="wrap"><span class="ph ph-bell"></span></div>`;
+      const tree = buildEmbedLayerTree(html);
+      expect(tree[0].kind).toBe("frame");
+      expect(tree[0].children).toEqual([]);
+
+      const wrapEl = new DOMParser().parseFromString(html, "text/html").body.querySelector("#wrap")!;
+      expect(isLayerTreeLeaf(wrapEl)).toBe(true);
     });
   });
 

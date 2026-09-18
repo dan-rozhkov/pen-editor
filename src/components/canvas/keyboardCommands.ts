@@ -31,6 +31,11 @@ import {
   handleEnterEditing,
   handleTabNavigation,
 } from "./keyboardNavigation";
+import {
+  handleEmbedElementEnter,
+  handleEmbedElementSelectParent,
+  handleEmbedElementTab,
+} from "./embedElementNavigation";
 
 // Letters V/F/R/O/T/L/P/G/S/E/D/N/C/K activate tools. This map is the single
 // source of truth: `toolDefinitions` feeds toolbar + palette display, and the
@@ -156,6 +161,18 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
     // handle it before the read-only guard below.
     if (e.code === "Tab") {
       if (isTyping) return;
+      // A picked embed element takes priority over native sibling
+      // navigation. This check sits HERE, before the read-only gate below,
+      // because Tab is a pure selection change (non-mutating) and must work
+      // in read-only mode too — unlike the Delete-vs-embed-element check
+      // further down, which sits AFTER that gate (Delete mutates, so it has
+      // to be blocked in read-only mode); the two checks share the "picked
+      // element wins" precedence rule, not the same position relative to
+      // the gate.
+      if (handleEmbedElementTab(e)) {
+        e.preventDefault();
+        return;
+      }
       if (handleTabNavigation(e)) {
         e.preventDefault();
         return;
@@ -248,9 +265,26 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
     if (e.key === "Enter" && !e.shiftKey) {
       if (isTyping) return;
       // Pen tool: Enter finishes the in-progress draft as an open path.
+      // Checked FIRST, before the embed-element branch below: nothing about
+      // starting/continuing a pen draft clears the current scene selection,
+      // so "select an embed on the canvas, then press P and place points"
+      // leaves that embed as the sole selection the whole time. With the
+      // embed check ahead of this one, Enter to finish the draft was instead
+      // swallowed by `handleEmbedElementEnter()` (which auto-starts picking
+      // on a sole-selected embed) — `finishPenDraft` never ran, and the
+      // draft stayed open with no way out but Escape. A pen draft in
+      // progress is a stronger claim on Enter than an idle embed selection.
       if (useDrawModeStore.getState().activeTool === "pen" && usePenToolStore.getState().isDrafting) {
         e.preventDefault();
         finishPenDraft(false);
+        return;
+      }
+      // A picked embed element (or a sole-selected embed with nothing
+      // picked yet) takes priority over the remaining native Enter meanings
+      // below — path-edit/text-edit are about scene nodes, and an embed
+      // element is neither.
+      if (handleEmbedElementEnter()) {
+        e.preventDefault();
         return;
       }
       // A single selected path node: Enter enters point-edit mode.
@@ -268,6 +302,14 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
 
     if (e.key === "Enter" && e.shiftKey) {
       if (isTyping) return;
+      // A picked embed element (or the embed itself with an element picked
+      // that's already at the top level) takes priority over the native
+      // "select parent frame" below — same reasoning as the Enter branch
+      // above.
+      if (handleEmbedElementSelectParent()) {
+        e.preventDefault();
+        return;
+      }
       e.preventDefault();
 
       const { selectedIds } = useSelectionStore.getState();

@@ -176,11 +176,28 @@ describe("embedPickerStore", () => {
     expect(useEmbedPickerStore.getState().dropIndicator).toBeNull();
   });
 
+  it("setRequestElementEdit sets and clears requestElementEdit", () => {
+    const request = (_path: string) => true;
+    useEmbedPickerStore.getState().setRequestElementEdit(request);
+    expect(useEmbedPickerStore.getState().requestElementEdit).toBe(request);
+    useEmbedPickerStore.getState().setRequestElementEdit(null);
+    expect(useEmbedPickerStore.getState().requestElementEdit).toBeNull();
+  });
+
+  it("stopPicking does NOT clear requestElementEdit — mirrors cancelElementDrag/cancelElementEdit, which EmbedLayer's own picking-effect teardown clears instead", () => {
+    const request = (_path: string) => true;
+    useEmbedPickerStore.getState().startPicking("e1");
+    useEmbedPickerStore.getState().setRequestElementEdit(request);
+    useEmbedPickerStore.getState().stopPicking();
+    expect(useEmbedPickerStore.getState().requestElementEdit).toBe(request);
+  });
+
   it("reset clears everything", () => {
     useEmbedPickerStore.getState().startPicking("e1");
     useEmbedPickerStore.getState().setHoveredElement("e1", "p:nth-of-type(1)");
     useEmbedPickerStore.getState().selectElement(selectionFor("e1"));
     useEmbedPickerStore.getState().setDropIndicator({ left: 0, top: 0, width: 1, height: 1 });
+    useEmbedPickerStore.getState().setRequestElementEdit((_path: string) => true);
     useEmbedPickerStore.getState().reset();
     const s = useEmbedPickerStore.getState();
     expect(s.pickingEmbedId).toBeNull();
@@ -188,5 +205,6 @@ describe("embedPickerStore", () => {
     expect(s.hoveredEmbedId).toBeNull();
     expect(s.selection).toBeNull();
     expect(s.dropIndicator).toBeNull();
+    expect(s.requestElementEdit).toBeNull();
   });
 });

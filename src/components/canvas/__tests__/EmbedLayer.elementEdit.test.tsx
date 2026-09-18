@@ -6,6 +6,7 @@ import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { resetStores } from "@/test/fixtures";
 import type { FlatSceneNode } from "@/types/scene";
+import { buildElementPath } from "@/lib/embedElementPicker";
 
 function seedEmbed(
   htmlContent = "<div><button id='cta'>Buy now</button><p><span>Nested</span><span>Text</span></p></div>",
@@ -764,5 +765,200 @@ describe("<EmbedLayer /> element picker — paste during inline text edit never 
     expect(patch.htmlContent).not.toContain("<script>");
 
     updateSpy.mockRestore();
+  });
+});
+
+describe("<EmbedLayer /> element picker — keyboard navigation entry point (requestElementEdit)", () => {
+  beforeEach(() => {
+    resetStores();
+    seedEmbed();
+  });
+  afterEach(() => cleanup());
+
+  it("starts the same inline edit as dblclick when the path resolves to a text leaf", () => {
+    const { container } = render(<EmbedLayer />);
+    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+
+    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const root = host.shadowRoot!;
+    const button = root.querySelector("button")!;
+    const path = buildElementPath(button, root);
+
+    let started = false;
+    act(() => {
+      started = useEmbedPickerStore.getState().requestElementEdit!(path);
+    });
+
+    expect(started).toBe(true);
+    expect(button.getAttribute("contenteditable")).toBe("plaintext-only");
+    const state = useEmbedPickerStore.getState();
+    expect(state.editingEmbedId).toBe("e1");
+    expect(state.editingPath).toBe(path);
+  });
+
+  it("returns false and does not enter edit mode for a non-text-leaf path", () => {
+    const { container } = render(<EmbedLayer />);
+    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+
+    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const root = host.shadowRoot!;
+    const p = root.querySelector("p")!; // holds two <span> children — not a text leaf
+    const path = buildElementPath(p, root);
+
+    let started = true;
+    act(() => {
+      started = useEmbedPickerStore.getState().requestElementEdit!(path);
+    });
+
+    expect(started).toBe(false);
+    expect(p.getAttribute("contenteditable")).toBeNull();
+    expect(useEmbedPickerStore.getState().editingEmbedId).toBeNull();
+  });
+
+  it("returns false for a path that no longer resolves to any live element", () => {
+    render(<EmbedLayer />);
+    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+
+    let started = true;
+    act(() => {
+      started = useEmbedPickerStore.getState().requestElementEdit!("nonexistent > path");
+    });
+
+    expect(started).toBe(false);
+    expect(useEmbedPickerStore.getState().editingEmbedId).toBeNull();
+  });
+
+  it("commits an in-flight edit before starting a new one on a different element", () => {
+    const { container } = render(<EmbedLayer />);
+    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+
+    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const root = host.shadowRoot!;
+    const button = root.querySelector("button")!;
+    const spans = root.querySelectorAll("span");
+    const buttonPath = buildElementPath(button, root);
+    const spanPath = buildElementPath(spans[0], root);
+
+    act(() => {
+      useEmbedPickerStore.getState().requestElementEdit!(buttonPath);
+    });
+    act(() => {
+      button.textContent = "Buy soon";
+    });
+    const updateSpy = vi.spyOn(useSceneStore.getState(), "updateNode");
+    updateSpy.mockClear();
+
+    // A second `requestElementEdit` call while the first edit is still open
+    // (never committed by Enter/blur/Escape) must commit it first — same
+    // invariant `handlePointerDown`/`handleDblClick` enforce with their own
+    // `if (edit) commitElementEdit()` before starting a new one.
+    let started = false;
+    act(() => {
+      started = useEmbedPickerStore.getState().requestElementEdit!(spanPath);
+    });
+
+    expect(started).toBe(true);
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+    const [, patch] = updateSpy.mock.calls[0] as [string, { htmlContent: string }];
+    expect(patch.htmlContent).toContain("Buy soon");
+    // The button is no longer contenteditable — its edit session was closed
+    // out, not left dangling underneath the new one.
+    expect(button.hasAttribute("contenteditable")).toBe(false);
+
+    updateSpy.mockRestore();
+  });
+
+  it("does not start an edit in a read-only mode, even with a resolvable text-leaf path", () => {
+    const { container } = render(<EmbedLayer />);
+    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+
+    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const root = host.shadowRoot!;
+    const button = root.querySelector("button")!;
+    const path = buildElementPath(button, root);
+
+    act(() => useEditorModeStore.setState({ mode: "view" }));
+    let started = true;
+    try {
+      act(() => {
+        started = useEmbedPickerStore.getState().requestElementEdit!(path);
+      });
+
+      expect(started).toBe(false);
+      expect(button.hasAttribute("contenteditable")).toBe(false);
+      expect(useEmbedPickerStore.getState().editingEmbedId).toBeNull();
+    } finally {
+      act(() => useEditorModeStore.setState({ mode: "edit" }));
+    }
+  });
+
+  it("rejects a request in read-only mode WITHOUT committing an already-open edit (Finding 5)", () => {
+    // Regression test for guard ordering: `requestElementEdit` used to call
+    // `commitElementEdit()` (flushing whatever edit was already open into
+    // the scene) BEFORE its own `canEditScene` check — so the one write
+    // this guard exists to prevent happened anyway, on the very call the
+    // guard was meant to reject. The fix checks `canEditScene` first.
+    const { container } = render(<EmbedLayer />);
+    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+
+    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const root = host.shadowRoot!;
+    const button = root.querySelector("button")!;
+    const spans = root.querySelectorAll("span");
+    const buttonPath = buildElementPath(button, root);
+    const spanPath = buildElementPath(spans[0], root);
+
+    act(() => {
+      useEmbedPickerStore.getState().requestElementEdit!(buttonPath);
+    });
+    act(() => {
+      button.textContent = "Uncommitted edit";
+    });
+
+    act(() => useEditorModeStore.setState({ mode: "view" }));
+    const updateSpy = vi.spyOn(useSceneStore.getState(), "updateNode");
+    updateSpy.mockClear();
+
+    let started = true;
+    try {
+      act(() => {
+        started = useEmbedPickerStore.getState().requestElementEdit!(spanPath);
+      });
+
+      expect(started).toBe(false);
+      // No commit ran: updateNode was never called with the uncommitted text.
+      expect(updateSpy).not.toHaveBeenCalled();
+      // The first edit's contenteditable session is untouched, not torn
+      // down as a side effect of the rejected second request.
+      expect(button.getAttribute("contenteditable")).toBe("plaintext-only");
+      expect(button.textContent).toBe("Uncommitted edit");
+      expect(useEmbedPickerStore.getState().editingEmbedId).toBe("e1");
+    } finally {
+      updateSpy.mockRestore();
+      act(() => useEditorModeStore.setState({ mode: "edit" }));
+    }
+  });
+
+  it("is null while no embed is picking, and is cleared again once picking stops", () => {
+    const { container } = render(<EmbedLayer />);
+
+    expect(useEmbedPickerStore.getState().requestElementEdit).toBeNull();
+
+    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+    expect(useEmbedPickerStore.getState().requestElementEdit).toBeInstanceOf(Function);
+
+    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const root = host.shadowRoot!;
+    const button = root.querySelector("button")!;
+    const path = buildElementPath(button, root);
+    act(() => useEmbedPickerStore.getState().requestElementEdit!(path));
+    expect(useEmbedPickerStore.getState().editingEmbedId).toBe("e1");
+
+    act(() => useEmbedPickerStore.getState().stopPicking());
+
+    // The picking effect's own teardown (keyed on `isPicking`) is what
+    // clears the callback — mirrors `cancelElementDrag`/`cancelElementEdit`'s
+    // lifecycle right above it in the same file.
+    expect(useEmbedPickerStore.getState().requestElementEdit).toBeNull();
   });
 });

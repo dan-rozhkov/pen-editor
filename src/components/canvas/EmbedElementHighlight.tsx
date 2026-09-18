@@ -7,6 +7,8 @@ import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import { useDevModeStore } from "@/store/devModeStore";
 import { useMeasureStore, type MeasureLine } from "@/store/measureStore";
 import { resolveElementPath } from "@/lib/embedElementPicker";
+import { findTopLevelContentRoot, navigableChildren } from "@/lib/embedElementNavigation";
+import { isLayerTreeLeaf } from "@/lib/embedLayerTree";
 import { formatMeasureLine } from "@/lib/inspect/units";
 import { computeMeasurementLines, measureLineEndpoints, type NodeBounds } from "@/utils/measureUtils";
 import { EmbedElementAgentButton } from "@/components/canvas/EmbedElementAgentButton";
@@ -38,6 +40,16 @@ const SIZE_BADGE_CORNER_RADIUS = 3;
 const SIZE_BADGE_BG = "#0d99ff";
 const SIZE_BADGE_TEXT_COLOR = "#ffffff";
 
+// Mirrors drawDashedRect (src/pixi/selectionOverlay/helpers.ts): dash === gap
+// (4/scale world px each) and a 1/scale stroke. Those are WORLD-space, but
+// `resolveElementBox` already reports boxes in SCREEN px (post-zoom, via
+// `getBoundingClientRect()`), which is exactly what `4/scale` converts BACK
+// to once multiplied by `scale` — so the plain, unscaled 4px/4px/1px numbers
+// below are the correct 1:1 match at any zoom level, not an approximation.
+const CHILD_OUTLINE_DASH = 4;
+const CHILD_OUTLINE_GAP = 4;
+const CHILD_OUTLINE_STROKE_WIDTH = 1;
+
 interface ElementBox {
   left: number;
   top: number;
@@ -66,22 +78,13 @@ interface ElementBox {
   host: { left: number; top: number; right: number; bottom: number };
 }
 
-/** Resolve the on-screen box of `path` inside embed `embedId`'s live shadow
- * DOM, relative to the canvas container. Returns null when the embed host or
- * the element itself can't currently be resolved (host not mounted, embed
- * off-screen, path stale after an HTML edit, etc.) — callers simply skip
- * rendering rather than treating this as an error. */
-function resolveElementBox(embedId: string, path: string): ElementBox | null {
-  const host = document.querySelector<HTMLElement>(
-    `[data-embed-id="${CSS.escape(embedId)}"]`,
-  );
-  const root = host?.shadowRoot;
-  if (!host || !root) return null;
-
-  const el = resolveElementPath(root, path);
-  if (!el) return null;
-
-  const origin = (host.closest("[data-canvas]") as HTMLElement | null) ?? document.body;
+/** Compute `el`'s on-screen box (relative to `origin`), given the embed
+ * `host` it lives under — the shared geometry step behind both
+ * `resolveElementBox` (path-addressed) and the child-outline resolvers below
+ * (already holding a live `Element`, so re-resolving it by path would be
+ * redundant DOM work). See `ElementBox`'s doc comment for what each field
+ * means. */
+function computeElementBox(host: HTMLElement, origin: HTMLElement, el: Element): ElementBox {
   const elRect = el.getBoundingClientRect();
   const originRect = origin.getBoundingClientRect();
 
@@ -112,6 +115,82 @@ function resolveElementBox(embedId: string, path: string): ElementBox | null {
     cssWidth,
     cssHeight,
   };
+}
+
+/** Resolve the on-screen box of `path` inside embed `embedId`'s live shadow
+ * DOM, relative to the canvas container. Returns null when the embed host or
+ * the element itself can't currently be resolved (host not mounted, embed
+ * off-screen, path stale after an HTML edit, etc.) — callers simply skip
+ * rendering rather than treating this as an error. */
+function resolveElementBox(embedId: string, path: string): ElementBox | null {
+  const host = document.querySelector<HTMLElement>(
+    `[data-embed-id="${CSS.escape(embedId)}"]`,
+  );
+  const root = host?.shadowRoot;
+  if (!host || !root) return null;
+
+  const el = resolveElementPath(root, path);
+  if (!el) return null;
+
+  const origin = (host.closest("[data-canvas]") as HTMLElement | null) ?? document.body;
+  return computeElementBox(host, origin, el);
+}
+
+/** Boxes for every navigable child of `parent` (a live element or the
+ * embed's content root), in the same canvas-relative coordinate space
+ * `resolveElementBox` uses. Shared by both child-outline cases below —
+ * "selected element's children" and "embed's top-level children". */
+function resolveChildBoxes(host: HTMLElement, origin: HTMLElement, parent: ParentNode): ElementBox[] {
+  return navigableChildren(parent).map((el) => computeElementBox(host, origin, el));
+}
+
+/** Case A: dashed outlines around the navigable children of the currently
+ * hovered-and-selected embed element (`isSelfHover` at the call site) —
+ * the embed analog of native `drawHover`'s `childOutlines` for a hovered
+ * selected node.
+ *
+ * Gated on `isLayerTreeLeaf(el)` rather than going straight to
+ * `navigableChildren(el)`: `navigableChildren` only filters out skipped
+ * tags/inline-hidden elements, so on a `leafEligible` element (only inline-
+ * formatting markup below it, e.g. `<div><span>x</span></div>`) it would
+ * still return the `<span>` — a child that never gets a row in the layers
+ * panel (`embedLayerTree.ts`'s `buildRow` collapses `el` itself to a
+ * childless row there) and that keyboard navigation's `firstChildEmbedElement`
+ * (same `isLayerTreeLeaf` gate) can never land on via Enter either. Without
+ * this the dashed outline promised children the rest of the picker
+ * disagrees exist. */
+function resolveSelectedElementChildBoxes(embedId: string, path: string): ElementBox[] {
+  const host = document.querySelector<HTMLElement>(`[data-embed-id="${CSS.escape(embedId)}"]`);
+  const root = host?.shadowRoot;
+  if (!host || !root) return [];
+
+  const el = resolveElementPath(root, path);
+  if (!el || isLayerTreeLeaf(el)) return [];
+
+  const origin = (host.closest("[data-canvas]") as HTMLElement | null) ?? document.body;
+  return resolveChildBoxes(host, origin, el);
+}
+
+/** Case B: dashed outlines around the embed's own top-level elements, drawn
+ * while the embed node itself is selected (no element picked yet) and the
+ * pointer is somewhere over its content — the embed analog of a selected
+ * native frame showing its children's outlines.
+ *
+ * Same `isLayerTreeLeaf` gate as case A above, applied to the content root
+ * itself: an embed whose entire visible content is one leaf-eligible
+ * wrapper (unusual, but not impossible — a single-icon embed) must show no
+ * top-level outlines rather than reaching into markup the layers tree
+ * doesn't expose as rows. */
+function resolveTopLevelChildBoxes(embedId: string): ElementBox[] {
+  const host = document.querySelector<HTMLElement>(`[data-embed-id="${CSS.escape(embedId)}"]`);
+  const root = host?.shadowRoot;
+  if (!host || !root) return [];
+
+  const contentRoot = findTopLevelContentRoot(root);
+  if (!contentRoot || isLayerTreeLeaf(contentRoot)) return [];
+
+  const origin = (host.closest("[data-canvas]") as HTMLElement | null) ?? document.body;
+  return resolveChildBoxes(host, origin, contentRoot);
 }
 
 /** Convert a sortable drop indicator's rect — CLIENT coordinates, as
@@ -415,6 +494,100 @@ function OutlineBox({
   );
 }
 
+/** A single dashed child-outline rect (see `CHILD_OUTLINE_*` constants for
+ * where the 4/4/1 numbers come from). SVG rather than a CSS `dashed` border:
+ * CSS's dash length is UA-dependent and not independently controllable from
+ * the gap, so it can't reproduce `drawDashedRect`'s equal dash/gap ritm.
+ * `stroke-dasharray` restarts at (0,0) of the rect's own path rather than
+ * being phase-continuous around the corners the way `drawDashedRect`'s
+ * per-edge `moveTo`/`lineTo` calls are — a corner can land mid-dash or
+ * mid-gap slightly differently than the Pixi original. Visually
+ * indistinguishable at the 4px/4px rhythm used here; noted as the accepted
+ * compromise between the two renderers rather than something worth a heavier
+ * fix (e.g. a `<canvas>`). */
+function ChildOutlineRect({ box, color }: { box: ElementBox; color: string }) {
+  if (box.width <= 0 || box.height <= 0) return null;
+  return (
+    <svg
+      data-embed-child-outline
+      style={{
+        position: "absolute",
+        left: box.left,
+        top: box.top,
+        width: box.width,
+        height: box.height,
+        pointerEvents: "none",
+        overflow: "visible",
+      }}
+      width={box.width}
+      height={box.height}
+    >
+      <rect
+        x={CHILD_OUTLINE_STROKE_WIDTH / 2}
+        y={CHILD_OUTLINE_STROKE_WIDTH / 2}
+        width={Math.max(0, box.width - CHILD_OUTLINE_STROKE_WIDTH)}
+        height={Math.max(0, box.height - CHILD_OUTLINE_STROKE_WIDTH)}
+        fill="none"
+        stroke={color}
+        strokeWidth={CHILD_OUTLINE_STROKE_WIDTH}
+        strokeDasharray={`${CHILD_OUTLINE_DASH} ${CHILD_OUTLINE_GAP}`}
+      />
+    </svg>
+  );
+}
+
+/** Clip `box` to the host embed's own on-screen rect (`box.host`), returning
+ * a new box with `left`/`top`/`width`/`height` narrowed to the visible
+ * intersection, or `null` when there's no overlap at all. The embed's host
+ * container clips its content via `height: <node height>px; overflow:
+ * auto`, so a child positioned below the fold (tall content in a short
+ * embed, or a scrolled embed) reports its full, UNCLIPPED
+ * `getBoundingClientRect()` — `left`/`top`/`width`/`height` on `ElementBox`
+ * come straight from that rect (see its own doc comment). Without this
+ * clip, `ChildOutlineRect` draws the dashed rect at that raw position,
+ * spilling out of the host and onto whatever sits below it on the canvas.
+ * Deliberately CLIPS rather than drops outright for a partially visible
+ * child: the visible sliver still gets a (smaller) outline, matching what's
+ * actually on screen, rather than the child vanishing entirely the instant
+ * it crosses the fold. Single hover/selection outlines (`OutlineBox`) have
+ * the same unclipped-rect issue but are deliberately left alone here — out
+ * of scope for this fix; see the review notes this addresses. */
+function clipBoxToHost(box: ElementBox): ElementBox | null {
+  const left = Math.max(box.left, box.host.left);
+  const top = Math.max(box.top, box.host.top);
+  const right = Math.min(box.left + box.width, box.host.right);
+  const bottom = Math.min(box.top + box.height, box.host.bottom);
+  if (right <= left || bottom <= top) return null;
+  return { ...box, left, top, width: right - left, height: bottom - top };
+}
+
+/** Dashed outlines for every box in `boxes` — the DOM analog of native
+ * `drawHover`'s `childOutlines` Graphics layer. Rendered as its own group so
+ * it can be placed earlier in DOM order than the hover/selection
+ * `OutlineBox`es and the size badge, which must paint on top of it (see the
+ * two call sites in `EmbedElementHighlight` below). Each box is clipped to
+ * the embed host via `clipBoxToHost` before rendering — see that function's
+ * doc comment. */
+function ChildOutlines({ boxes, color }: { boxes: ElementBox[]; color: string }) {
+  const clipped = boxes
+    .map(clipBoxToHost)
+    .filter((box): box is ElementBox => box !== null);
+  if (clipped.length === 0) return null;
+  return (
+    <div
+      data-embed-child-outlines
+      style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+    >
+      {clipped.map((box, index) => (
+        // Positional key: boxes are recomputed fresh every render from a
+        // live DOM walk, with no stable per-element id to key on (same
+        // reasoning as the rest of this file's imperative box resolution).
+        <ChildOutlineRect key={index} box={box} color={color} />
+      ))}
+    </div>
+  );
+}
+
 /**
  * DOM overlay that draws the hovered/selected element box while the embed
  * element picker is active. Rendered once at the PixiCanvas level (not
@@ -555,6 +728,22 @@ export function EmbedElementHighlight() {
       ? resolveDropIndicatorBox(dropIndicatorEmbedId, dropIndicator)
       : null;
 
+  // Dashed child outlines, mirroring native `drawHover`'s `childOutlines`
+  // for a hovered-and-selected node. Two mutually exclusive cases:
+  //  A. An embed element IS selected, and the pointer is over that very
+  //     element (`isSelfHover`) — outline its own navigable children.
+  //  B. Nothing is picked yet (`selection === null`), the embed itself is
+  //     what's being picked (`pickingEmbedId`), and the pointer is
+  //     somewhere over its content (`hoveredPath !== null`) — outline the
+  //     embed's top-level elements, the same way a selected native frame
+  //     shows its children's outlines before any child is selected.
+  const childOutlineBoxes =
+    selectionBox && isSelfHover && selection
+      ? resolveSelectedElementChildBoxes(selection.embedId, selection.path)
+      : !selection && pickingEmbedId && hoveredPath
+        ? resolveTopLevelChildBoxes(pickingEmbedId)
+        : [];
+
   if (!hoverBox && !selectionBox && !indicatorBox) return null;
 
   return (
@@ -562,6 +751,9 @@ export function EmbedElementHighlight() {
       data-embed-element-highlight
       style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 12 }}
     >
+      {/* Painted first (= below) so it never sits on top of the hover/
+          selection outlines or the size badge, which are drawn after it. */}
+      <ChildOutlines boxes={childOutlineBoxes} color={SELECTION_COLOR} />
       {selectionBox && (
         <OutlineBox
           box={selectionBox}

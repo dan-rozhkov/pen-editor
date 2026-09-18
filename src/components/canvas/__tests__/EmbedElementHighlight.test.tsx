@@ -912,4 +912,305 @@ describe("<EmbedElementHighlight />", () => {
     expect(selectionArg.embedId).toBe("embed1");
     expect(textArg).toBe("Make this bigger");
   });
+
+  describe("dashed child outlines", () => {
+    const FRAME_PATH = "div:nth-of-type(1) > div:nth-of-type(1)";
+    const CHILD_A_PATH = "div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1)";
+
+    /** Rebuilds `mountEmbedDom`'s content with a frame element (`#frame`)
+     * holding a visible BLOCK child (`#a`), a `display:none` block child
+     * (`#b`) and a `<script>` — the shape every test below needs to assert
+     * hidden/skipped-tag children never get an outline.
+     *
+     * Children are `<div>`s, not `<span>`s (as an earlier version of this
+     * fixture used): a frame whose only element children are ALL inline-
+     * formatting tags (`INLINE_TAGS`) collapses to a single childless leaf
+     * row in the layers tree regardless of whether it has text
+     * (`isLayerTreeLeaf` — Finding 2/3), which is exactly the case the
+     * dedicated "collapsed frame" test below covers on its own. Using block
+     * children here keeps THIS fixture a genuine, non-collapsing frame, so
+     * the case A/B outline-resolution tests below still exercise a real
+     * subtree instead of accidentally hitting the collapsed-leaf path. */
+    function mountFrameWithChildren() {
+      const { canvas } = mountEmbedDom();
+      const host = canvas.querySelector<HTMLElement>('[data-embed-id="embed1"]')!;
+      const content = host.shadowRoot!.firstElementChild as HTMLElement;
+      content.innerHTML =
+        `<div id="frame"><div id="a">A</div>` +
+        `<div id="b" style="display:none">B</div><script>1</script></div>`;
+      const frame = content.querySelector<HTMLElement>("#frame")!;
+      const childA = content.querySelector<HTMLElement>("#a")!;
+      return { canvas, content, frame, childA };
+    }
+
+    function stubFrameRects(frame: HTMLElement, childA: HTMLElement) {
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+        this: HTMLElement,
+      ) {
+        if (this.hasAttribute("data-canvas")) return rect(0, 0, 400, 300);
+        if (this.hasAttribute("data-embed-id")) return rect(0, 0, 300, 200);
+        if (this === frame) return rect(10, 10, 200, 100);
+        if (this === childA) return rect(20, 20, 50, 20);
+        return rect(0, 0, 0, 0);
+      });
+    }
+
+    it("outlines a selected element's navigable children only while hovering that same element (case A)", () => {
+      const { frame, childA } = mountFrameWithChildren();
+      stubFrameRects(frame, childA);
+
+      // `setHoveredPath` alone (without `startPicking`) resolves against
+      // `hoveredEmbedId`, not `pickingEmbedId` — the canvas-picker path this
+      // case mirrors always has `pickingEmbedId` set (see
+      // `embedPickerStore.ts`'s doc comment on `setHoveredPath`).
+      useEmbedPickerStore.getState().startPicking("embed1");
+      useEmbedPickerStore.getState().selectElement({
+        embedId: "embed1",
+        path: FRAME_PATH,
+        tagName: "div",
+        classes: [],
+        textPreview: "",
+        outerHtml: frame.outerHTML,
+      });
+
+      // No hover yet — self-hover gate must withhold the outlines.
+      const { container, rerender } = render(<EmbedElementHighlight />);
+      expect(container.querySelectorAll("[data-embed-child-outline]").length).toBe(0);
+
+      // Hover something else in the embed — still withheld.
+      act(() => useEmbedPickerStore.getState().setHoveredPath(CHILD_A_PATH));
+      rerender(<EmbedElementHighlight />);
+      expect(container.querySelectorAll("[data-embed-child-outline]").length).toBe(0);
+
+      // Hover the selected element itself — only its visible, non-skipped
+      // child (#a) gets a dashed outline; the hidden `#b` and `<script>`
+      // never do.
+      act(() => useEmbedPickerStore.getState().setHoveredPath(FRAME_PATH));
+      rerender(<EmbedElementHighlight />);
+      const outlines = container.querySelectorAll<HTMLElement>("[data-embed-child-outline]");
+      expect(outlines.length).toBe(1);
+      expect(outlines[0].style.left).toBe("20px");
+      expect(outlines[0].style.top).toBe("20px");
+      expect(outlines[0].style.width).toBe("50px");
+      expect(outlines[0].style.height).toBe("20px");
+
+      const dashedRect = outlines[0].querySelector("rect");
+      expect(dashedRect?.getAttribute("stroke")).toBe("#0d99ff");
+      expect(dashedRect?.getAttribute("stroke-dasharray")).toBe("4 4");
+    });
+
+    // Finding 2/3: the layers tree's `isLayerTreeLeaf` predicate stops
+    // descent on ANY leaf-eligible element (only inline-formatting markup
+    // below it), whether or not it has text — so a frame collapsing to a
+    // childless row must show no child outlines either, even when its
+    // "children" (purely `INLINE_TAGS`, here with no text at all — an icon
+    // wrapper) would otherwise pass `navigableChildren`'s filter. This
+    // replaces an earlier version of this test file that (incorrectly)
+    // expected case A to outline such a span — see this describe block's
+    // fixture comment for why that was wrong.
+    it("draws no child outlines for a frame that collapses to a leaf row in the layers tree, even with no text (case A)", () => {
+      const { canvas } = mountEmbedDom();
+      const host = canvas.querySelector<HTMLElement>('[data-embed-id="embed1"]')!;
+      const content = host.shadowRoot!.firstElementChild as HTMLElement;
+      content.innerHTML = `<div id="frame2"><span class="ph ph-bell"></span></div>`;
+      const frame2 = content.querySelector<HTMLElement>("#frame2")!;
+      const icon = content.querySelector<HTMLElement>("span")!;
+      const FRAME2_PATH = "div:nth-of-type(1) > div:nth-of-type(1)";
+
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+        this: HTMLElement,
+      ) {
+        if (this.hasAttribute("data-canvas")) return rect(0, 0, 400, 300);
+        if (this.hasAttribute("data-embed-id")) return rect(0, 0, 300, 200);
+        if (this === frame2) return rect(10, 10, 200, 100);
+        if (this === icon) return rect(20, 20, 24, 24);
+        return rect(0, 0, 0, 0);
+      });
+
+      useEmbedPickerStore.getState().startPicking("embed1");
+      useEmbedPickerStore.getState().selectElement({
+        embedId: "embed1",
+        path: FRAME2_PATH,
+        tagName: "div",
+        classes: [],
+        textPreview: "",
+        outerHtml: frame2.outerHTML,
+      });
+      useEmbedPickerStore.getState().setHoveredPath(FRAME2_PATH);
+
+      const { container } = render(<EmbedElementHighlight />);
+      expect(container.querySelectorAll("[data-embed-child-outline]").length).toBe(0);
+    });
+
+    it("outlines the embed's top-level elements once the embed is selected, no element picked yet, and the pointer is over it (case B)", () => {
+      const { frame, childA } = mountFrameWithChildren();
+      stubFrameRects(frame, childA);
+
+      // Hovering deep inside the embed (#a), not the frame itself —
+      // case B outlines the TOP-LEVEL rows (just #frame) regardless of
+      // which descendant is actually under the pointer.
+      useEmbedPickerStore.getState().startPicking("embed1");
+      useEmbedPickerStore.getState().setHoveredPath(CHILD_A_PATH);
+
+      const { container } = render(<EmbedElementHighlight />);
+      const outlines = container.querySelectorAll<HTMLElement>("[data-embed-child-outline]");
+      expect(outlines.length).toBe(1);
+      expect(outlines[0].style.left).toBe("10px");
+      expect(outlines[0].style.top).toBe("10px");
+    });
+
+    it("draws no child outlines once a leaf element (no navigable children) is picked and self-hovered", () => {
+      const { frame, childA } = mountFrameWithChildren();
+      stubFrameRects(frame, childA);
+
+      // Picking and self-hovering #a switches from case B (embed's top-level
+      // elements) to case A (#a's OWN children) — but #a is a text leaf with
+      // no element children, so case A correctly produces zero outlines too.
+      useEmbedPickerStore.getState().startPicking("embed1");
+      useEmbedPickerStore.getState().setHoveredPath(CHILD_A_PATH);
+      useEmbedPickerStore.getState().selectElement({
+        embedId: "embed1",
+        path: CHILD_A_PATH,
+        tagName: "div",
+        classes: [],
+        textPreview: "A",
+        outerHtml: "<div>A</div>",
+      });
+
+      const { container } = render(<EmbedElementHighlight />);
+      expect(container.querySelectorAll("[data-embed-child-outline]").length).toBe(0);
+    });
+
+    it("draws no child outlines while the selected element is being inline-edited", () => {
+      const { frame, childA } = mountFrameWithChildren();
+      stubFrameRects(frame, childA);
+
+      useEmbedPickerStore.getState().startPicking("embed1");
+      useEmbedPickerStore.getState().selectElement({
+        embedId: "embed1",
+        path: FRAME_PATH,
+        tagName: "div",
+        classes: [],
+        textPreview: "",
+        outerHtml: frame.outerHTML,
+      });
+      useEmbedPickerStore.getState().setHoveredPath(FRAME_PATH);
+      useEmbedPickerStore.getState().startElementEdit("embed1", FRAME_PATH);
+
+      const { container } = render(<EmbedElementHighlight />);
+      expect(container.querySelectorAll("[data-embed-child-outline]").length).toBe(0);
+    });
+
+    it("places child outlines below the hover/selection outline and size badge in DOM order", () => {
+      const { frame, childA } = mountFrameWithChildren();
+      stubFrameRects(frame, childA);
+
+      useEmbedPickerStore.getState().startPicking("embed1");
+      useEmbedPickerStore.getState().selectElement({
+        embedId: "embed1",
+        path: FRAME_PATH,
+        tagName: "div",
+        classes: [],
+        textPreview: "",
+        outerHtml: frame.outerHTML,
+      });
+      useEmbedPickerStore.getState().setHoveredPath(FRAME_PATH);
+
+      const { container } = render(<EmbedElementHighlight />);
+      const highlight = container.querySelector("[data-embed-element-highlight]")!;
+      const childOutlines = highlight.querySelector("[data-embed-child-outlines]");
+      const selectionBox = highlight.querySelector('[data-embed-element-box][data-kind="selection"]');
+      expect(childOutlines).toBeTruthy();
+      expect(selectionBox).toBeTruthy();
+      const children = Array.from(highlight.children);
+      expect(children.indexOf(childOutlines!)).toBeLessThan(children.indexOf(selectionBox!));
+    });
+
+    it("never intercepts pointer events for the dashed outlines", () => {
+      const { frame, childA } = mountFrameWithChildren();
+      stubFrameRects(frame, childA);
+
+      useEmbedPickerStore.getState().startPicking("embed1");
+      useEmbedPickerStore.getState().selectElement({
+        embedId: "embed1",
+        path: FRAME_PATH,
+        tagName: "div",
+        classes: [],
+        textPreview: "",
+        outerHtml: frame.outerHTML,
+      });
+      useEmbedPickerStore.getState().setHoveredPath(FRAME_PATH);
+
+      const { container } = render(<EmbedElementHighlight />);
+      const group = container.querySelector<HTMLElement>("[data-embed-child-outlines]");
+      expect(group).toBeTruthy();
+      expect(group!.style.pointerEvents).toBe("none");
+    });
+
+    // Finding 4: the embed host clips its content (`overflow: auto`), but a
+    // child's `getBoundingClientRect()` is unclipped — a child entirely
+    // below the host's bottom edge (tall content in a short embed, or a
+    // scrolled embed) must draw no visible outline rather than spilling
+    // past the host onto whatever's under it on the canvas.
+    it("clips a child outline to the embed host, drawing nothing for a child entirely below the host's bottom edge", () => {
+      const { frame, childA } = mountFrameWithChildren();
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+        this: HTMLElement,
+      ) {
+        if (this.hasAttribute("data-canvas")) return rect(0, 0, 400, 300);
+        // Host clipped to a short box, mirroring `overflow: auto` on a low
+        // embed node.
+        if (this.hasAttribute("data-embed-id")) return rect(0, 0, 300, 100);
+        if (this === frame) return rect(10, 10, 200, 300); // tall content, overflowing the host
+        if (this === childA) return rect(20, 150, 50, 20); // entirely below host.bottom (100)
+        return rect(0, 0, 0, 0);
+      });
+
+      useEmbedPickerStore.getState().startPicking("embed1");
+      useEmbedPickerStore.getState().selectElement({
+        embedId: "embed1",
+        path: FRAME_PATH,
+        tagName: "div",
+        classes: [],
+        textPreview: "",
+        outerHtml: frame.outerHTML,
+      });
+      useEmbedPickerStore.getState().setHoveredPath(FRAME_PATH);
+
+      const { container } = render(<EmbedElementHighlight />);
+      expect(container.querySelectorAll("[data-embed-child-outline]").length).toBe(0);
+    });
+
+    it("clips a partially visible child outline to the host's bottom edge instead of dropping it entirely", () => {
+      const { frame, childA } = mountFrameWithChildren();
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+        this: HTMLElement,
+      ) {
+        if (this.hasAttribute("data-canvas")) return rect(0, 0, 400, 300);
+        if (this.hasAttribute("data-embed-id")) return rect(0, 0, 300, 100);
+        if (this === frame) return rect(10, 10, 200, 200);
+        // Straddles the host's bottom edge (100): starts at 80, 40 tall, so
+        // only the first 20px (80 to 100) are actually visible.
+        if (this === childA) return rect(20, 80, 50, 40);
+        return rect(0, 0, 0, 0);
+      });
+
+      useEmbedPickerStore.getState().startPicking("embed1");
+      useEmbedPickerStore.getState().selectElement({
+        embedId: "embed1",
+        path: FRAME_PATH,
+        tagName: "div",
+        classes: [],
+        textPreview: "",
+        outerHtml: frame.outerHTML,
+      });
+      useEmbedPickerStore.getState().setHoveredPath(FRAME_PATH);
+
+      const { container } = render(<EmbedElementHighlight />);
+      const outlines = container.querySelectorAll<HTMLElement>("[data-embed-child-outline]");
+      expect(outlines.length).toBe(1);
+      expect(outlines[0].style.top).toBe("80px");
+      expect(outlines[0].style.height).toBe("20px"); // clipped from 40 to 20
+    });
+  });
 });

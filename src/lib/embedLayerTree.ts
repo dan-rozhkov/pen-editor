@@ -44,8 +44,10 @@ export interface EmbedElementLayer {
 /** Tags whose entire subtree is skipped — never rows, never descended into.
  * These carry no visual content of their own in the layers sense (styling/
  * scripting/metadata), and walking into a `<template>`'s inert content in
- * particular would surface elements that never actually render. */
-const SKIPPED_TAGS = new Set([
+ * particular would surface elements that never actually render. Exported so
+ * `embedElementNavigation.ts` can filter on the exact same set without
+ * retyping the literal (a jscpd duplication gate runs in CI). */
+export const SKIPPED_TAGS = new Set([
   "script",
   "style",
   "link",
@@ -120,22 +122,57 @@ function resolveName(el: Element, tag: string, kind: EmbedLayerKind, text: strin
 
 /** Reads `display: none` off the parsed element's own inline style — never
  * computed style, since there's no layout engine behind a bare `DOMParser`
- * document. `style` exists on every parsed HTML/SVG element here. */
-function isInlineHidden(el: Element): boolean {
+ * document. `style` exists on every parsed HTML/SVG element here. Exported
+ * for `embedElementNavigation.ts` — see `SKIPPED_TAGS`'s doc comment for
+ * why it's shared rather than reimplemented. */
+export function isInlineHidden(el: Element): boolean {
   const display = (el as HTMLElement).style?.display;
   return typeof display === "string" && display.toLowerCase() === "none";
 }
 
-function buildRow(el: Element, root: Element, shadowPrefixStr: string): EmbedElementLayer {
-  const tag = el.tagName.toLowerCase();
+/** "Leaf-eligible" per the text-leaf rule: nothing but inline-formatting
+ * markup (`INLINE_TAGS`), or nothing at all, sits directly below `el` — so
+ * it renders like one row of text (when it also has text — see
+ * `collapsesToTextRow`) rather than a subtree. Factored out of `buildRow`
+ * so `collapsesToTextRow` can share the exact same computation rather than
+ * re-deriving it — a jscpd duplication gate runs in CI, and more
+ * importantly a second copy could silently drift from this one. */
+function leafEligibility(el: Element): { elementChildren: Element[]; leafEligible: boolean } {
   const elementChildren = visibleElementChildren(el);
   const allChildrenInline =
     elementChildren.length > 0 &&
     elementChildren.every((c) => INLINE_TAGS.has(c.tagName.toLowerCase()));
-  // "Leaf-eligible" per the text-leaf rule: nothing but inline-formatting
-  // markup (or nothing at all) sits below this element, so it renders like
-  // one row of text rather than a subtree.
-  const leafEligible = elementChildren.length === 0 || allChildrenInline;
+  return { elementChildren, leafEligible: elementChildren.length === 0 || allChildrenInline };
+}
+
+/** True when `el` is a LEAF of the layers tree — `buildRow` stops
+ * descending into it and gives it `children: []`, whether or not it also
+ * collapses into a text row. This is exactly `leafEligibility`'s
+ * `leafEligible` (nothing but inline-formatting markup, or nothing at all,
+ * sits directly below `el`), re-exported under a name that says what it
+ * actually gates: `buildRow` cuts off descent on `leafEligible` ALONE, not
+ * on `leafEligible && hasText` — a leaf-eligible element with NO text (e.g.
+ * `<div><span class="ph ph-bell"></span></div>`, an icon wrapper) still
+ * gets `children: []`, it just keeps its own tag's `kind` (frame/image/
+ * shape) instead of becoming `kind: "text"`. An earlier version of this
+ * function was named `collapsesToTextRow` and required `hasText` too, which
+ * correctly described when a row's KIND becomes `"text"` but incorrectly
+ * described when the row STOPS HAVING CHILDREN — those are two different
+ * questions, and conflating them here let `firstChildEmbedElement` (below)
+ * still descend into an icon wrapper's inline child even though the layers
+ * panel gives that child no row at all.
+ *
+ * `embedElementNavigation.ts`'s `firstChildEmbedElement` needs exactly this
+ * predicate so Enter never descends past where the layers panel's own tree
+ * bottoms out. Exported for exactly that caller; see `SKIPPED_TAGS`'s doc
+ * comment for why sharing beats re-deriving. */
+export function isLayerTreeLeaf(el: Element): boolean {
+  return leafEligibility(el).leafEligible;
+}
+
+function buildRow(el: Element, root: Element, shadowPrefixStr: string): EmbedElementLayer {
+  const tag = el.tagName.toLowerCase();
+  const { elementChildren, leafEligible } = leafEligibility(el);
   const text = collapseText(el.textContent);
 
   let kind: EmbedLayerKind;

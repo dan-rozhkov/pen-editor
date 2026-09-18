@@ -902,6 +902,53 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
       useEmbedPickerStore.getState().setCancelElementEdit(cancelElementEdit);
     };
 
+    /** Registered as `embedPickerStore`'s `requestElementEdit` — see that
+     * field's own doc comment for why the keyboard handler can't just call
+     * `beginElementEdit` directly. Resolves `path` against the CURRENT
+     * shadow DOM (never trusts a caller-held element reference, matching
+     * the dblclick handler's own re-resolve-by-path discipline above) and
+     * only proceeds for a live text-leaf element.
+     *
+     * This is `beginElementEdit`'s THIRD entry point, alongside
+     * `handlePointerDown`/`handleDblClick` above — but unlike them it's
+     * called from `embedElementNavigation.ts`'s Enter handler, which is
+     * dispatched from `keyboardCommands.ts`'s plain-Enter branch, BELOW the
+     * read-only gate there (unlike Tab, which sits above it — see that
+     * branch's own comment for why Tab is the exception). So in the current
+     * wiring `canEditScene` is already enforced before this ever runs. Both
+     * invariants the other two entry points enforce right before touching
+     * `beginElementEdit` are repeated here anyway, not assumed:
+     * - `canEditScene(...)` — checked FIRST, before touching anything else:
+     *   defense-in-depth, not load-bearing today (this callback is
+     *   reachable only through `handleEmbedElementEnter()`, which is
+     *   already behind the read-only gate in `keyboardCommands.ts`), but it
+     *   must run before `commitElementEdit()` below, not after — the commit
+     *   is the one write this guard exists to prevent, so gating AFTER it
+     *   would let a rejected request still flush a still-open edit into the
+     *   embed's `htmlContent`. It stays here so this function is safe on
+     *   its own terms if a future refactor calls it from somewhere that
+     *   isn't already gated — e.g. if Enter's dispatch in
+     *   `keyboardCommands.ts` ever moved above the gate the way Tab's did,
+     *   this would otherwise start writing to embed content in view/
+     *   shared-view mode with no guard of its own.
+     * - `if (edit) commitElementEdit();` — without it, a second
+     *   `beginElementEdit` on top of a still-open one would attach a
+     *   second set of `keydown`/`blur`/`paste` listeners to a (possibly
+     *   different) element while the first edit's listeners/contenteditable
+     *   state never get torn down, leaking listeners and leaving an
+     *   element permanently editable. */
+    const requestElementEdit = (path: string): boolean => {
+      if (!canEditScene(useEditorModeStore.getState().mode)) return false;
+      if (edit) commitElementEdit();
+
+      const root = shadowRoot();
+      if (!root) return false;
+      const el = resolveElementPath(root, path);
+      if (!el || !(el instanceof HTMLElement) || !isTextLeaf(el)) return false;
+      beginElementEdit(el, path);
+      return true;
+    };
+
     const revertDrag = (d: ElementDragState) => {
       // Restore the live element's original `style` attribute — undoes the
       // visual-only transform/opacity `handleDragMove` applied below. This
@@ -1549,6 +1596,13 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
     host.addEventListener("touchend", handleTouchEnd, { capture: true, passive: false });
     host.addEventListener("touchcancel", handleTouchCancel, { capture: true, passive: false });
 
+    // Registered for the duration of this picking session so the global
+    // keyboard handler can start an inline text edit on the currently
+    // selected element — see `requestElementEdit`'s own doc comment (and
+    // `embedPickerStore`'s field doc) for why this can't instead be reached
+    // via listener order.
+    useEmbedPickerStore.getState().setRequestElementEdit(requestElementEdit);
+
     return () => {
       disposed = true;
       if (pendingEditFrame !== null) {
@@ -1567,6 +1621,13 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
       host.removeEventListener("touchmove", handleTouchMove, true);
       host.removeEventListener("touchend", handleTouchEnd, true);
       host.removeEventListener("touchcancel", handleTouchCancel, true);
+      // Mirrors `setCancelElementDrag(null)`/`setCancelElementEdit(null)`
+      // elsewhere in this effect: `requestElementEdit` closes over this
+      // effect's `shadowRoot`/`beginElementEdit`, both dead once this
+      // teardown runs, so the store must not keep calling it after this
+      // picking session ends (isPicking flipping off, the embed switching,
+      // or a full unmount).
+      useEmbedPickerStore.getState().setRequestElementEdit(null);
       // In case the effect tears down mid-edit (isPicking flips off, or
       // isActive flips on) while an element is still being typed into —
       // commit whatever was typed rather than silently discarding it,
