@@ -46,7 +46,6 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     label: "DeepSeek V4.1 Flash",
     supportsVision: true,
   },
-  { value: "stealth/union-alpha", label: "Union Alpha", supportsVision: true },
   {
     value: "google/gemini-3.8-flash",
     label: "Gemini 3.8 Flash",

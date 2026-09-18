@@ -19,7 +19,6 @@ describe("chatModels fallback", () => {
       "qwen/qwen3.8-flash",
       "z-ai/glm-5.3-flash",
       "deepseek/deepseek-v4.1-flash",
-      "stealth/union-alpha",
       "google/gemini-3.8-flash",
       "tencent/hy4-preview",
       "z-ai/glm-5.3",
@@ -151,7 +150,7 @@ describe("chatModels visionFallback", () => {
     await fresh.loadModels();
 
     expect(fresh.getDefaultModel()).toBe("deepseek/deepseek-v4.1-flash");
-    expect(fresh.getModelOptions()).toHaveLength(18);
+    expect(fresh.getModelOptions()).toHaveLength(17);
     expect(fresh.canSendImages("deepseek/deepseek-v4.1-flash")).toBe(true);
   });
 });
