@@ -10,11 +10,21 @@
 // auxiliary vision model describes the image as text server-side).
 
 import { resolveApiUrl } from "@/lib/apiBase";
+import { hasOpenCodeKey } from "@/lib/opencodeKey";
 
 export interface ChatModelOption {
   value: string;
   label: string;
   supportsVision: boolean;
+  /**
+   * True when this model only ever works with a key the user entered in
+   * their own browser (OpenCode BYOK — see pen-editor-backend's
+   * docs/specs/2026-09-18-opencode-byok-design.md and src/config.ts's
+   * `ModelOption.requiresUserKey`). Absent/false for every OpenRouter
+   * entry. Mirrors the backend's field name and semantics exactly so
+   * `GET /api/models`' payload can be forwarded with no translation.
+   */
+  requiresUserKey?: boolean;
 }
 
 // First-paint/offline safety net, mirroring the backend's DEFAULT_MODELS
@@ -50,6 +60,59 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     supportsVision: true,
   },
   { value: "z-ai/glm-5.2", label: "GLM 5.2", supportsVision: false },
+  // --- OpenCode BYOK (pen-editor-backend docs/specs/2026-09-18-opencode-
+  // byok-design.md) --- Eight entries mirroring the backend's DEFAULT_MODELS
+  // verbatim (id, label, supportsVision) — modelContract.test.ts pins the
+  // two lists against each other from the sibling checkout, so a drift here
+  // fails that test rather than silently mismatching the picker.
+  {
+    value: "opencode-go/deepseek-v4.1-flash",
+    label: "DeepSeek V4.1 Flash · Go",
+    supportsVision: false,
+    requiresUserKey: true,
+  },
+  {
+    value: "opencode-go/deepseek-v4-flash-vision-exp",
+    label: "DeepSeek V4 Flash Vision · Go",
+    supportsVision: true,
+    requiresUserKey: true,
+  },
+  {
+    value: "opencode-go/glm-5.3-flash",
+    label: "GLM 5.3 Flash · Go",
+    supportsVision: false,
+    requiresUserKey: true,
+  },
+  {
+    value: "opencode-go/glm-5.3",
+    label: "GLM 5.3 · Go",
+    supportsVision: false,
+    requiresUserKey: true,
+  },
+  {
+    value: "opencode-go/glm-5.2",
+    label: "GLM 5.2 · Go",
+    supportsVision: false,
+    requiresUserKey: true,
+  },
+  {
+    value: "opencode/deepseek-v4-flash",
+    label: "DeepSeek V4 Flash · Zen",
+    supportsVision: false,
+    requiresUserKey: true,
+  },
+  {
+    value: "opencode/glm-5.3-flash",
+    label: "GLM 5.3 Flash · Zen",
+    supportsVision: false,
+    requiresUserKey: true,
+  },
+  {
+    value: "opencode/kimi-k2.7-code",
+    label: "Kimi K2.7 Code · Zen",
+    supportsVision: false,
+    requiresUserKey: true,
+  },
 ];
 
 // Mirrors the backend's CHAT_MODEL default. Only used until GET /api/models
@@ -58,7 +121,12 @@ const FALLBACK_DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash";
 
 // Backend wire shape (pen-editor-backend GET /api/models).
 interface ModelsResponse {
-  models: { id: string; label: string; supportsVision: boolean }[];
+  models: {
+    id: string;
+    label: string;
+    supportsVision: boolean;
+    requiresUserKey?: boolean;
+  }[];
   default: string;
   visionFallback: boolean;
   imageOps?: { removeBackground: boolean; vectorize: boolean };
@@ -113,6 +181,20 @@ export function canSendImages(model: string): boolean {
   return modelSupportsVision(model) || visionFallback;
 }
 
+// Whether `model` is currently selectable at all: known to the backend list
+// (an unknown id is harmless to pick — the backend just ignores it and runs
+// its default — but there is no reason to let the picker show one that
+// isn't real), and, if it's an OpenCode BYOK entry, only when this browser
+// actually has a key stored. Used both by the picker (lock icon + disabled
+// radio item) and by reconcileModels() (chatStore.ts) to decide whether a
+// saved selection must fall back to the default — the same rule, so a
+// selection that's disabled in the UI can never linger as the active model.
+export function canUseModel(value: string): boolean {
+  const option = currentModels.find((o) => o.value === value);
+  if (!option) return false;
+  return !option.requiresUserKey || hasOpenCodeKey();
+}
+
 /** Whether the backend can serve `remove_background`/the "Remove background" button. */
 export function canRemoveBackground(): boolean {
   return imageOpsCapabilities.removeBackground;
@@ -145,6 +227,7 @@ export function loadModels(): Promise<void> {
           value: m.id,
           label: m.label,
           supportsVision: m.supportsVision,
+          ...(m.requiresUserKey ? { requiresUserKey: true } : {}),
         }));
       }
       if (data.default) defaultModel = data.default;

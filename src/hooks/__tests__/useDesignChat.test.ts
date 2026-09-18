@@ -30,6 +30,7 @@ import {
   useDesignChat,
 } from "@/hooks/useDesignChat";
 import { toolHandlers, type ToolHandler } from "@/lib/toolRegistry";
+import { clearOpenCodeKey, setOpenCodeKey } from "@/lib/opencodeKey";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useChatStore } from "@/store/chatStore";
 import { useSceneStore } from "@/store/sceneStore";
@@ -531,6 +532,100 @@ describe("useDesignChat (hook + UI message stream)", () => {
 
     expect(requests[0].model).toBe("qwen/qwen3.8-flash");
     expect(requests[0]).not.toHaveProperty("agentMode");
+  });
+
+  // OpenCode BYOK (pen-editor-backend docs/specs/2026-09-18-opencode-byok-
+  // design.md): the key must ride along ONLY on a turn whose model is an
+  // OpenCode route, and never on an ordinary OpenRouter turn — see
+  // useDesignChat.ts's isOpenCodeModel/prepareSendMessagesRequest.
+  describe("OpenCode key header", () => {
+    afterEach(() => {
+      clearOpenCodeKey();
+    });
+
+    it("attaches X-OpenCode-Key when the session's model is an OpenCode route", async () => {
+      setOpenCodeKey("sk-test-opencode");
+      const seenHeaders: Array<Headers> = [];
+      const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        seenHeaders.push(new Headers(init?.headers));
+        return sseResponse([
+          { type: "start" },
+          { type: "start-step" },
+          { type: "finish-step" },
+          { type: "finish" },
+        ]);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      useChatStore.setState({ model: "opencode-go/glm-5.3-flash" });
+
+      const { result } = renderHook(() =>
+        useDesignChat({ sessionId: "opencode-session" })
+      );
+      act(() => result.current.setInput("hello"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      expect(seenHeaders[0].get("X-OpenCode-Key")).toBe("sk-test-opencode");
+    });
+
+    it("does not attach X-OpenCode-Key on an ordinary OpenRouter turn", async () => {
+      setOpenCodeKey("sk-test-opencode");
+      const seenHeaders: Array<Headers> = [];
+      const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        seenHeaders.push(new Headers(init?.headers));
+        return sseResponse([
+          { type: "start" },
+          { type: "start-step" },
+          { type: "finish-step" },
+          { type: "finish" },
+        ]);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      useChatStore.setState({ model: "deepseek/deepseek-v4.1-flash" });
+
+      const { result } = renderHook(() =>
+        useDesignChat({ sessionId: "openrouter-session" })
+      );
+      act(() => result.current.setInput("hello"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      expect(seenHeaders[0].has("X-OpenCode-Key")).toBe(false);
+    });
+
+    it("does not attach a header for an OpenCode model when no key is stored", async () => {
+      clearOpenCodeKey();
+      const seenHeaders: Array<Headers> = [];
+      const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        seenHeaders.push(new Headers(init?.headers));
+        return sseResponse([
+          { type: "start" },
+          { type: "start-step" },
+          { type: "finish-step" },
+          { type: "finish" },
+        ]);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      useChatStore.setState({ model: "opencode-go/glm-5.3-flash" });
+
+      const { result } = renderHook(() =>
+        useDesignChat({ sessionId: "opencode-nokey-session" })
+      );
+      act(() => result.current.setInput("hello"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      expect(seenHeaders[0].has("X-OpenCode-Key")).toBe(false);
+    });
   });
 
   it("executes a streamed tool call locally and sends the output back", async () => {

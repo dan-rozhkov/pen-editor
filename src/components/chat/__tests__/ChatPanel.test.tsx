@@ -47,6 +47,7 @@ vi.mock("@/hooks/useDesignChat", () => ({
 import { ChatPanelContent } from "../ChatPanel";
 import { useChatStore } from "@/store/chatStore";
 import type { ChatSummary } from "@/store/chatStore";
+import { clearOpenCodeKey, setOpenCodeKey } from "@/lib/opencodeKey";
 
 afterEach(() => cleanup());
 
@@ -415,5 +416,71 @@ describe("<ChatPanelContent /> chat list", () => {
     render(<ChatPanelContent />);
 
     expect(screen.getByLabelText("Model: gone/retired-model")).toBeTruthy();
+  });
+});
+
+describe("<ChatPanelContent /> OpenCode BYOK picker", () => {
+  afterEach(() => {
+    clearOpenCodeKey();
+  });
+
+  // Locked entries must render disabled and not be selectable — the whole
+  // point of gating them on a stored key (see chatModels.ts's
+  // requiresUserKey / opencodeKey.ts).
+  it("renders a requiresUserKey entry as locked and unselectable when no key is stored", async () => {
+    clearOpenCodeKey();
+    useChatStore.setState({
+      chats: [makeChat({ id: "tab-1", model: "deepseek/deepseek-v4.1-flash" })],
+      activeChatId: "tab-1",
+      model: "deepseek/deepseek-v4.1-flash",
+    });
+    render(<ChatPanelContent />);
+
+    fireEvent.click(screen.getByLabelText("Model: DeepSeek V4.1 Flash"));
+
+    const locked = await screen.findByRole("menuitemradio", {
+      name: /GLM 5\.3 Flash · Go/,
+    });
+    expect(locked.getAttribute("aria-disabled")).toBe("true");
+
+    fireEvent.click(locked);
+    // A disabled radio item must not flip the active selection.
+    expect(useChatStore.getState().model).toBe("deepseek/deepseek-v4.1-flash");
+  });
+
+  it("makes a requiresUserKey entry selectable once a key is saved", async () => {
+    setOpenCodeKey("sk-test-panel");
+    useChatStore.setState({
+      chats: [makeChat({ id: "tab-1", model: "deepseek/deepseek-v4.1-flash" })],
+      activeChatId: "tab-1",
+      model: "deepseek/deepseek-v4.1-flash",
+    });
+    render(<ChatPanelContent />);
+
+    fireEvent.click(screen.getByLabelText("Model: DeepSeek V4.1 Flash"));
+
+    const unlocked = await screen.findByRole("menuitemradio", {
+      name: /GLM 5\.3 Flash · Go/,
+    });
+    expect(unlocked.getAttribute("aria-disabled")).not.toBe("true");
+
+    fireEvent.click(unlocked);
+    expect(useChatStore.getState().model).toBe("opencode-go/glm-5.3-flash");
+  });
+
+  it("opens the OpenCode key dialog from the picker", async () => {
+    clearOpenCodeKey();
+    useChatStore.setState({
+      chats: [makeChat({ id: "tab-1", model: "deepseek/deepseek-v4.1-flash" })],
+      activeChatId: "tab-1",
+      model: "deepseek/deepseek-v4.1-flash",
+    });
+    render(<ChatPanelContent />);
+
+    fireEvent.click(screen.getByLabelText("Model: DeepSeek V4.1 Flash"));
+    const connectItem = await screen.findByText("Connect OpenCode…");
+    fireEvent.click(connectItem);
+
+    expect(await screen.findByText("OpenCode key")).toBeTruthy();
   });
 });

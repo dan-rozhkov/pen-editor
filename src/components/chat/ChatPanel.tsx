@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   PlusIcon,
   LightningIcon,
@@ -11,6 +11,7 @@ import {
   DotsThreeVerticalIcon,
   BookOpenIcon,
   SphereIcon,
+  LockIcon,
 } from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
@@ -20,11 +21,13 @@ import { useDesignChat } from "@/hooks/useDesignChat";
 import { useModelOptions } from "@/hooks/useModelOptions";
 import { useAgentActivityToast } from "@/hooks/useAgentActivityToast";
 import { getUserId } from "@/lib/userId";
+import { hasOpenCodeKey, subscribeOpenCodeKey } from "@/lib/opencodeKey";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { ChatList } from "./ChatList";
 import { QueuedMessagePanel } from "./QueuedMessagePanel";
 import { SkillsPanel } from "./SkillsPanel";
+import { OpenCodeKeyDialog } from "./OpenCodeKeyDialog";
 import { hasPendingAskUser } from "./pendingAskUser";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { IconButton } from "@/components/ui/IconButton";
@@ -410,7 +413,15 @@ export function ChatPanelContent() {
   const activeChatId = useChatStore((s) => s.activeChatId);
   const isAgentsSectionActive = useLeftSidebarStore((s) => s.activeSection === "agents");
   const [isSkillsPanelOpen, setSkillsPanelOpen] = useState(false);
+  const [isOpenCodeDialogOpen, setOpenCodeDialogOpen] = useState(false);
   const ensureSkillsHydrated = useUserSkillStore((s) => s.ensureHydrated);
+  // Re-renders the picker the moment a key is saved/removed in the dialog,
+  // so a just-unlocked model becomes selectable without a reload.
+  const hasKey = useSyncExternalStore(
+    subscribeOpenCodeKey,
+    hasOpenCodeKey,
+    hasOpenCodeKey,
+  );
 
   // Hydrate the user's custom skills once the chat panel mounts (not on every
   // slash-menu keystroke) so the slash menu can list them alongside the
@@ -461,14 +472,38 @@ export function ChatPanelContent() {
         />
         <DropdownMenuContent side="top" align="end" className="w-56">
           <DropdownMenuRadioGroup value={model} onValueChange={setModel}>
-            {modelOptions.map((option) => (
-              <DropdownMenuRadioItem key={option.value} value={option.value}>
-                {option.label}
-              </DropdownMenuRadioItem>
-            ))}
+            {modelOptions.map((option) => {
+              const locked = Boolean(option.requiresUserKey) && !hasKey;
+              return (
+                <DropdownMenuRadioItem
+                  key={option.value}
+                  value={option.value}
+                  disabled={locked}
+                >
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
+                    <span className="truncate">{option.label}</span>
+                    {locked && (
+                      <LockIcon
+                        size={12}
+                        weight="light"
+                        className="shrink-0 text-text-muted"
+                      />
+                    )}
+                  </span>
+                </DropdownMenuRadioItem>
+              );
+            })}
           </DropdownMenuRadioGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setOpenCodeDialogOpen(true)}>
+            {hasKey ? "OpenCode key" : "Connect OpenCode…"}
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <OpenCodeKeyDialog
+        open={isOpenCodeDialogOpen}
+        onOpenChange={setOpenCodeDialogOpen}
+      />
       <DropdownMenu>
         <DropdownMenuTrigger
           render={

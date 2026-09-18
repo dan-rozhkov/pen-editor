@@ -1,10 +1,16 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   canSendImages,
+  canUseModel,
   getDefaultModel,
   getModelOptions,
   modelSupportsVision,
 } from "@/lib/chatModels";
+import { clearOpenCodeKey, setOpenCodeKey } from "@/lib/opencodeKey";
+
+afterEach(() => {
+  clearOpenCodeKey();
+});
 
 describe("chatModels fallback", () => {
   it("offers the shipped models before any /api/models response", () => {
@@ -19,8 +25,32 @@ describe("chatModels fallback", () => {
       "z-ai/glm-5.3",
       "openai/gpt-5.6-luna",
       "z-ai/glm-5.2",
+      "opencode-go/deepseek-v4.1-flash",
+      "opencode-go/deepseek-v4-flash-vision-exp",
+      "opencode-go/glm-5.3-flash",
+      "opencode-go/glm-5.3",
+      "opencode-go/glm-5.2",
+      "opencode/deepseek-v4-flash",
+      "opencode/glm-5.3-flash",
+      "opencode/kimi-k2.7-code",
     ]);
     expect(getDefaultModel()).toBe("deepseek/deepseek-v4.1-flash");
+  });
+
+  it("marks exactly the eight OpenCode BYOK entries as requiresUserKey", () => {
+    const requiresKey = getModelOptions()
+      .filter((option) => option.requiresUserKey)
+      .map((option) => option.value);
+    expect(requiresKey).toEqual([
+      "opencode-go/deepseek-v4.1-flash",
+      "opencode-go/deepseek-v4-flash-vision-exp",
+      "opencode-go/glm-5.3-flash",
+      "opencode-go/glm-5.3",
+      "opencode-go/glm-5.2",
+      "opencode/deepseek-v4-flash",
+      "opencode/glm-5.3-flash",
+      "opencode/kimi-k2.7-code",
+    ]);
   });
 
   // Not every shipped model reads images: the text-only ones (tencent/hy4-preview,
@@ -33,7 +63,18 @@ describe("chatModels fallback", () => {
     }
     expect(
       getModelOptions().filter((option) => !option.supportsVision).map((o) => o.value),
-    ).toEqual(["tencent/hy4-preview", "z-ai/glm-5.3", "z-ai/glm-5.2"]);
+    ).toEqual([
+      "tencent/hy4-preview",
+      "z-ai/glm-5.3",
+      "z-ai/glm-5.2",
+      "opencode-go/deepseek-v4.1-flash",
+      "opencode-go/glm-5.3-flash",
+      "opencode-go/glm-5.3",
+      "opencode-go/glm-5.2",
+      "opencode/deepseek-v4-flash",
+      "opencode/glm-5.3-flash",
+      "opencode/kimi-k2.7-code",
+    ]);
   });
 
   // A stale saved selection, or a model the backend added after this bundle
@@ -41,6 +82,26 @@ describe("chatModels fallback", () => {
   // for an id with no metadata.
   it("assumes an unknown model reads images", () => {
     expect(modelSupportsVision("who/knows")).toBe(true);
+  });
+});
+
+describe("chatModels canUseModel", () => {
+  it("is false for a totally unknown id", () => {
+    expect(canUseModel("nonexistent/model")).toBe(false);
+  });
+
+  it("is true for an OpenRouter entry regardless of any stored key", () => {
+    expect(canUseModel("deepseek/deepseek-v4.1-flash")).toBe(true);
+  });
+
+  it("is false for an OpenCode BYOK entry with no key stored", () => {
+    clearOpenCodeKey();
+    expect(canUseModel("opencode-go/glm-5.3-flash")).toBe(false);
+  });
+
+  it("is true for an OpenCode BYOK entry once a key is stored", () => {
+    setOpenCodeKey("sk-test");
+    expect(canUseModel("opencode-go/glm-5.3-flash")).toBe(true);
   });
 });
 
@@ -90,7 +151,7 @@ describe("chatModels visionFallback", () => {
     await fresh.loadModels();
 
     expect(fresh.getDefaultModel()).toBe("deepseek/deepseek-v4.1-flash");
-    expect(fresh.getModelOptions()).toHaveLength(10);
+    expect(fresh.getModelOptions()).toHaveLength(18);
     expect(fresh.canSendImages("deepseek/deepseek-v4.1-flash")).toBe(true);
   });
 });

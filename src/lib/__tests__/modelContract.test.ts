@@ -25,7 +25,12 @@ if (process.env.CONTRACT_REQUIRE_BACKEND && !backendExists) {
 
 describe.runIf(backendExists)("chat model fallback contract", () => {
   async function loadBackend(): Promise<{
-    DEFAULT_MODELS: { id: string; label: string; supportsVision: boolean }[];
+    DEFAULT_MODELS: {
+      id: string;
+      label: string;
+      supportsVision: boolean;
+      requiresUserKey?: boolean;
+    }[];
     envSchema: { shape: { CHAT_MODEL: { parse: (v: undefined) => string } } };
   }> {
     return (await import(/* @vite-ignore */ backendConfigPath)) as never;
@@ -38,6 +43,13 @@ describe.runIf(backendExists)("chat model fallback contract", () => {
         value: model.id,
         label: model.label,
         supportsVision: model.supportsVision,
+        // requiresUserKey travels through unchanged from the backend's
+        // ModelOption (chatModels.ts) — undefined for every OpenRouter
+        // entry, `true` for the eight OpenCode BYOK ones. Only include the
+        // key at all when the backend set it, matching how ChatModelOption
+        // is actually constructed (an absent key, not an explicit
+        // `undefined` value) — see chatModels.ts's FALLBACK_MODELS.
+        ...(model.requiresUserKey ? { requiresUserKey: true } : {}),
       }))
     );
   });

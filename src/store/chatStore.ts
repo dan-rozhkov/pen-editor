@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { deriveChatTitle } from "@/lib/chatTitle";
-import { getDefaultModel, getModelOptions } from "@/lib/chatModels";
+import { canUseModel, getDefaultModel } from "@/lib/chatModels";
 import type { AttachedImage, ChatLaunchPayload, QueuedChatMessage } from "@/types/chat";
 
 /** Stable empty reference so the per-session selector never returns a fresh
@@ -146,10 +146,15 @@ function normalizeModel(model: string | null): string {
 // Re-validate the active/per-chat models against the freshly loaded backend
 // list. Called after loadModels() resolves; resets any selection the backend
 // no longer offers, so the picker can't keep showing a model nobody runs.
+// Also resets a selection that IS still offered but requires an OpenCode key
+// this browser doesn't have — otherwise a user who deletes their key (or
+// loads a fresh browser with an old saved chat) would hit a 400 on every
+// turn instead of falling back to a model that actually works. canUseModel
+// (chatModels.ts) is the single rule for "is this selection usable right
+// now" — the picker's disabled/lock state follows the exact same function.
 export function reconcileModels() {
   const { model, chats, setModel } = useChatStore.getState();
-  const known = getModelOptions();
-  const isValid = (m: string) => known.some((option) => option.value === m);
+  const isValid = canUseModel;
   if (chats.some((c) => !isValid(c.model)) || !isValid(model)) {
     useChatStore.setState((s) => ({
       chats: s.chats.map((c) => (isValid(c.model) ? c : { ...c, model: getDefaultModel() })),

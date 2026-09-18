@@ -9,6 +9,7 @@ import { consumeFirstPromptTiming } from "@/lib/analytics/sessionTiming";
 import { resolveApiUrl, isOffline, OFFLINE_MESSAGE } from "@/lib/apiBase";
 import { getUserId } from "@/lib/userId";
 import { canSendImages } from "@/lib/chatModels";
+import { getOpenCodeKey } from "@/lib/opencodeKey";
 import { createRetryingFetch, type RetryState } from "@/lib/retryFetch";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -31,6 +32,23 @@ import {
 } from "@/lib/streamingTools";
 
 const STREAM_RENDER_THROTTLE_MS = 50;
+
+// Whether `model` is an OpenCode BYOK route (pen-editor-backend
+// docs/specs/2026-09-18-opencode-byok-design.md), i.e. one of the two
+// slash-prefixed ids OpenCode's own config uses ("opencode-go/<id>",
+// "opencode/<id>") — checked by PREFIX rather than by looking the id up in
+// chatModels' `requiresUserKey` flag, on purpose: prepareSendMessagesRequest
+// runs on every send including every tool-loop auto-continuation, and it
+// must decide this from `body.model` alone (a plain string in the outgoing
+// request), not from a lookup into the model list that could be stale (a
+// selection made before GET /api/models answered) or, worse, momentarily
+// empty in a test/offline context. The backend's own parseModelRef
+// (src/ai/modelRef.ts) recognizes exactly these two prefixes, so matching
+// them here keeps this function and the backend's routing decision talking
+// about the same string.
+function isOpenCodeModel(model: string): boolean {
+  return model.startsWith("opencode-go/") || model.startsWith("opencode/");
+}
 
 // Exported for tests.
 export function resolveChatApiUrl(): string {
@@ -321,7 +339,28 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
           // (pen-editor-backend/src/ai/vision-messages.ts) and never
           // forwards raw image parts to a model that can't read them. See
           // pen-editor-backend/docs/specs/2026-08-14-agent-vision-design.md.
+          //
+          // The OpenCode key is attached HERE, not baked into the transport
+          // at construction (see the `useMemo` comment above — the
+          // transport is built once per mounted session): this function is
+          // re-evaluated on every send, including every tool-loop
+          // auto-continuation, so a key entered mid-session is picked up on
+          // the very next request. It rides as a header, never in `body` —
+          // the request body is what reaches pen-editor-backend's
+          // `raw_traces`, and a key that ever landed there would be stored
+          // forever (see the spec's "Поток ключа"). Sent ONLY when this
+          // turn's model is actually an OpenCode route: on every OpenRouter
+          // turn the key must never leave the browser at all.
+          const model = (body as { model?: unknown } | undefined)?.model;
+          const headers =
+            typeof model === "string" && isOpenCodeModel(model)
+              ? (() => {
+                  const key = getOpenCodeKey();
+                  return key ? { "X-OpenCode-Key": key } : undefined;
+                })()
+              : undefined;
           return {
+            ...(headers ? { headers } : {}),
             body: {
               ...body,
               id,
