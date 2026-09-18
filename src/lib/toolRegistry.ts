@@ -39,6 +39,9 @@ import { vectorizeImage } from "./tools/vectorizeImage";
 import { readDesignRepo } from "./tools/readDesignRepo";
 import { readRepoFiles } from "./tools/readRepoFiles";
 import { attachLocalRepo } from "./tools/attachLocalRepo";
+import { browseOpen } from "./tools/browser/browseOpen";
+import { browseAct } from "./tools/browser/browseAct";
+import { browseFindImages } from "./tools/browser/browseFindImages";
 
 /**
  * Per-call metadata threaded through to handlers that need to correlate
@@ -101,4 +104,13 @@ export const toolHandlers: Record<string, ToolHandler> = {
   read_design_repo: readDesignRepo,
   read_repo_files: readRepoFiles,
   attach_local_repo: attachLocalRepo,
+  // Client-executed; desktop-only (window.penDesktop.browser). Gated out of
+  // the backend's per-request tool set unless clientCapabilities.desktopBrowser
+  // is set (see useDesignChat.ts's buildCanvasContext) — deliberately NOT in
+  // mcpToolNames.ts, since these are chat-path tools, not part of the
+  // desktop-MCP/WebMCP surface. See docs/superpowers/specs/
+  // 2026-09-18-builtin-browser-design.md.
+  browse_open: browseOpen,
+  browse_act: browseAct,
+  browse_find_images: browseFindImages,
 };

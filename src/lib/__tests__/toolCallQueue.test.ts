@@ -112,3 +112,16 @@ describe("repo-reading tools are not serialized", () => {
     expect(isSerializedTool(name)).toBe(false);
   });
 });
+
+// The browse_* tools are thin forwarders onto the desktop shell's browser
+// bridge and never touch the scene graph. `browse_open` in particular can
+// hold the desktop shell's 20s command timeout on a slow page — queuing it
+// like a mutating call would stall unrelated scene-mutating traffic for that
+// whole window (and, in reverse, a browse call queued behind a long
+// batch_design could eat into its own 30s client-side tool timeout).
+describe("browse_* tools are not serialized", () => {
+  it.each(["browse_open", "browse_act", "browse_find_images"])("%s skips the queue", (name) => {
+    expect(UNSERIALIZED_TOOL_NAMES).toContain(name);
+    expect(isSerializedTool(name)).toBe(false);
+  });
+});

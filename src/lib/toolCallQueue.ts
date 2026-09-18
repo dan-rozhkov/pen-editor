@@ -52,6 +52,15 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   // which is exactly the window that would stall unrelated bridge traffic.
   "read_design_repo",
   "read_repo_files",
+  // The three browse_* tools (docs/superpowers/specs/2026-09-18-builtin-
+  // browser-design.md) are thin forwarders onto the desktop shell's
+  // BrowserController — they never touch the scene graph. `browse_open` in
+  // particular can hold the desktop shell's 20s command timeout on a slow
+  // page, which would otherwise stall every scene-mutating call from WebMCP,
+  // a plugin or the desktop MCP bridge behind it for that whole window.
+  "browse_open",
+  "browse_act",
+  "browse_find_images",
 ];
 
 const unserialized = new Set(UNSERIALIZED_TOOL_NAMES);

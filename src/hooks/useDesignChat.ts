@@ -34,6 +34,19 @@ import {
 
 const STREAM_RENDER_THROTTLE_MS = 50;
 
+// Told to the backend on every request so it can gate the browse_* tools
+// into the per-request tool set (pen-editor-desktop's docs/superpowers/
+// specs/2026-09-18-builtin-browser-design.md §6/§7). Derived ONCE at module
+// scope, not per render or per request: `window.penDesktop.browser` cannot
+// appear or disappear mid-session, and the tool set this flag controls is
+// part of the cached request prefix — a value that changed request to
+// request would invalidate prompt caching the same way a rebuilt
+// canvasContext did before that was fixed (root CLAUDE.md's "prompt-cache
+// invariants").
+const CLIENT_CAPABILITIES = {
+  desktopBrowser: Boolean(window.penDesktop?.browser),
+} as const;
+
 // Whether `model` is an OpenCode BYOK route (pen-editor-backend
 // docs/specs/2026-09-18-opencode-byok-design.md), i.e. one of the two
 // slash-prefixed ids OpenCode's own config uses ("opencode-go/<id>",
@@ -177,6 +190,7 @@ export function buildCanvasContext(sessionId?: string): object {
     }),
     model,
     userId: getUserId(),
+    clientCapabilities: CLIENT_CAPABILITIES,
   };
 }
 

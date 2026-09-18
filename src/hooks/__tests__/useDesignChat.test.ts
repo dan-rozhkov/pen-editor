@@ -472,6 +472,51 @@ describe("buildCanvasContext", () => {
   });
 });
 
+// clientCapabilities is the single switch that makes the browse_* tools
+// exist at all — prepareChatTurn deletes them from the per-request tool set
+// when it's falsy (root CLAUDE.md's "prompt-cache invariants" /
+// docs/superpowers/specs/2026-09-18-builtin-browser-design.md). It's derived
+// ONCE at useDesignChat's module scope from window.penDesktop, so this must
+// control window.penDesktop *before* the module is imported — hence
+// vi.resetModules() + a dynamic import rather than mutating window.penDesktop
+// around the already-imported buildCanvasContext used by the rest of this
+// file (see src/lib/__tests__/chatModels.test.ts for the same pattern).
+describe("clientCapabilities", () => {
+  afterEach(() => {
+    delete window.penDesktop;
+  });
+
+  it("returns clientCapabilities at the top level of the body, with desktopBrowser true when window.penDesktop.browser is present at import time", async () => {
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: {
+        open: async () => ({}),
+        act: async () => ({}),
+        findImages: async () => ({}),
+      },
+    };
+    vi.resetModules();
+    const fresh = await import("@/hooks/useDesignChat");
+
+    const context = fresh.buildCanvasContext() as Record<string, unknown>;
+
+    expect(context.clientCapabilities).toEqual({ desktopBrowser: true });
+    // Not nested inside the stringified canvasContext.
+    const canvas = JSON.parse((context as { canvasContext: string }).canvasContext);
+    expect(canvas.clientCapabilities).toBeUndefined();
+  });
+
+  it("desktopBrowser is false when window.penDesktop is absent at import time", async () => {
+    delete window.penDesktop;
+    vi.resetModules();
+    const fresh = await import("@/hooks/useDesignChat");
+
+    const context = fresh.buildCanvasContext() as Record<string, unknown>;
+
+    expect(context.clientCapabilities).toEqual({ desktopBrowser: false });
+  });
+});
+
 describe("resolveChatApiUrl", () => {
   it("falls back to /api/chat when no env override is set", () => {
     // Test env has neither VITE_AI_API_URL nor VITE_DESIGN_AGENT_BACKEND_URL.

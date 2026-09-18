@@ -55,6 +55,9 @@ const EXPECTED_CLIENT_TOOLS = [
   "read_design_repo",
   "read_repo_files",
   "attach_local_repo",
+  "browse_open",
+  "browse_act",
+  "browse_find_images",
 ];
 
 // Tools whose schema also has a backend `execute` — they run server-side, the

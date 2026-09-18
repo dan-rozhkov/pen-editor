@@ -30,6 +30,23 @@ export interface PenDesktopApi {
     /** Routes a call through executeToolCall; resolves, never rejects. */
     onCall(name: string, args: unknown): Promise<string>;
   }): () => void;
+  /**
+   * Preload surface for the desktop shell's built-in browser tab (docs/
+   * superpowers/specs/2026-09-18-builtin-browser-design.md §5). Optional —
+   * absent on the web and on desktop builds older than this feature; the
+   * three browse_* tool handlers (src/lib/tools/browser/) guard with `?.`
+   * and degrade to a documented error string when it's missing. Each call
+   * is `ipcRenderer.invoke("browser:command", ...)` under the hood and
+   * always resolves (main is the trust boundary and validates everything),
+   * never rejects with anything the handler needs to catch specially — but
+   * the handlers still wrap every call in try/catch defensively, matching
+   * every other ToolHandler's "always resolves" contract.
+   */
+  browser?: {
+    open(args: { url: string }): Promise<unknown>;
+    act(args: Record<string, unknown>): Promise<unknown>;
+    findImages(args: Record<string, unknown>): Promise<unknown>;
+  };
 }
 
 declare global {
