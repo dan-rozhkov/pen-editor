@@ -10,7 +10,6 @@ import {
   LineSegmentIcon,
   HexagonIcon,
   HashStraight,
-  CodeIcon,
   FlowArrow,
   ScissorsIcon,
   ImageSquareIcon,
@@ -146,7 +145,7 @@ export const NodeIcon = ({
     case "polygon":
       return <HexagonIcon size={16} className={iconClass} weight="regular" />;
     case "embed":
-      return <CodeIcon size={16} className={iconClass} weight="regular" />;
+      return <HashStraight size={16} className={iconClass} weight="regular" />;
     case "connector":
       return <FlowArrow size={16} className={iconClass} weight="regular" />;
     default:
