@@ -9,6 +9,7 @@ function stubBrowser(overrides: Partial<PenDesktopBrowser>): PenDesktopBrowser {
     open: async () => ({}),
     act: async () => ({}),
     findImages: async () => ({}),
+    read: async () => ({}),
     snapshot: async () => ({
       url: "https://example.com",
       title: "Example",

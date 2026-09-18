@@ -70,6 +70,7 @@ export const toolDisplayNames: Record<string, string> = {
   browse_open: "Open Browser",
   browse_act: "Browse",
   browse_find_images: "Find Images in Browser",
+  browse_read: "Read Page",
   browse_task: "Browse Task",
   web_search: "Search the Web",
   fetch_url: "Read Web Pages",

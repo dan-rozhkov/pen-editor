@@ -61,6 +61,10 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   "browse_open",
   "browse_act",
   "browse_find_images",
+  // browse_read (Addendum 2, §2 of the same design doc) is the same kind of
+  // thin forwarder — it holds its connection while a page settles, and
+  // never touches the scene graph.
+  "browse_read",
   // browse_task (docs/superpowers/specs/2026-09-18-browse-task-jev-loop-
   // design.md) runs a whole snapshot/step/perform loop bounded by a 90s
   // deadline — it holds its connection far longer than the other three

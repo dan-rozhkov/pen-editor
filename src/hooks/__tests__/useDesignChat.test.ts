@@ -493,6 +493,7 @@ describe("clientCapabilities", () => {
         open: async () => ({}),
         act: async () => ({}),
         findImages: async () => ({}),
+        read: async () => ({}),
         snapshot: async () => ({}),
         perform: async () => ({}),
       },

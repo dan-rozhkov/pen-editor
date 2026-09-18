@@ -124,7 +124,7 @@ describe("repo-reading tools are not serialized", () => {
 // a whole snapshot/step/perform loop bounded by a 90s deadline — so
 // serializing it would be the worst case of that same stall.
 describe("browse_* tools are not serialized", () => {
-  it.each(["browse_open", "browse_act", "browse_find_images", "browse_task"])("%s skips the queue", (name) => {
+  it.each(["browse_open", "browse_act", "browse_find_images", "browse_read", "browse_task"])("%s skips the queue", (name) => {
     expect(UNSERIALIZED_TOOL_NAMES).toContain(name);
     expect(isSerializedTool(name)).toBe(false);
   });

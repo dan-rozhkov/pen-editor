@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { browseOpen } from "@/lib/tools/browser/browseOpen";
 import { browseAct } from "@/lib/tools/browser/browseAct";
 import { browseFindImages } from "@/lib/tools/browser/browseFindImages";
+import { browseRead } from "@/lib/tools/browser/browseRead";
 import { BROWSER_NOT_AVAILABLE_ERROR } from "@/lib/tools/browser/shared";
 
 type PenDesktopBrowser = NonNullable<NonNullable<typeof window.penDesktop>["browser"]>;
@@ -11,6 +12,7 @@ function stubBrowser(overrides: Partial<PenDesktopBrowser>): PenDesktopBrowser {
     open: async () => ({}),
     act: async () => ({}),
     findImages: async () => ({}),
+    read: async () => ({}),
     snapshot: async () => ({}),
     perform: async () => ({}),
     ...overrides,
@@ -172,5 +174,60 @@ describe("browse_find_images", () => {
     const result = JSON.parse(await browseFindImages({}));
 
     expect(result).toEqual({ error: "page script threw" });
+  });
+});
+
+describe("browse_read", () => {
+  it("forwards args to window.penDesktop.browser.read and returns the result", async () => {
+    let received: unknown;
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        read: async (args) => {
+          received = args;
+          return {
+            url: "https://example.com",
+            title: "Example",
+            headings: ["Welcome"],
+            text: "Example page body text.",
+            links: [{ label: "About", href: "https://example.com/about" }],
+            truncated: false,
+          };
+        },
+      }),
+    };
+
+    const result = JSON.parse(await browseRead({ maxChars: 4000 }));
+
+    expect(received).toEqual({ maxChars: 4000 });
+    expect(result).toEqual({
+      url: "https://example.com",
+      title: "Example",
+      headings: ["Welcome"],
+      text: "Example page body text.",
+      links: [{ label: "About", href: "https://example.com/about" }],
+      truncated: false,
+    });
+  });
+
+  it("returns the documented error when window.penDesktop.browser is absent", async () => {
+    const result = JSON.parse(await browseRead({}));
+
+    expect(result).toEqual({ error: BROWSER_NOT_AVAILABLE_ERROR });
+  });
+
+  it("catches a rejecting preload call and returns it as a JSON error", async () => {
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        read: async () => {
+          throw new Error("no browser tab open");
+        },
+      }),
+    };
+
+    const result = JSON.parse(await browseRead({ selector: "#missing" }));
+
+    expect(result).toEqual({ error: "no browser tab open" });
   });
 });

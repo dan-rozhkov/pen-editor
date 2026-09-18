@@ -1,7 +1,9 @@
 /**
- * Shared plumbing for the three browse_* tools (browse_open, browse_act,
- * browse_find_images — docs/superpowers/specs/2026-09-18-builtin-browser-design.md
- * §4/§6). All three are client-executed, thin forwarders onto
+ * Shared plumbing for the browse_* forwarding tools (browse_open, browse_act,
+ * browse_find_images, browse_read — docs/superpowers/specs/
+ * 2026-09-18-builtin-browser-design.md §4/§6 and the browse_read addendum in
+ * 2026-09-18-browse-task-jev-loop-design.md). All are client-executed, thin
+ * forwarders onto
  * `window.penDesktop.browser.*` (the preload surface described in §5): the
  * real work happens in the Electron main process's `BrowserController`.
  *

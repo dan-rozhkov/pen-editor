@@ -47,6 +47,12 @@ export interface PenDesktopApi {
     act(args: Record<string, unknown>): Promise<unknown>;
     findImages(args: Record<string, unknown>): Promise<unknown>;
     /**
+     * browse_read (docs/superpowers/specs/2026-09-18-browse-task-jev-loop-
+     * design.md, Addendum 2 §2) — a readable digest of the current page:
+     * headings, capped visible text, and links.
+     */
+    read(args: Record<string, unknown>): Promise<unknown>;
+    /**
      * browse_task loop internals (docs/superpowers/specs/
      * 2026-09-18-browse-task-jev-loop-design.md §1/§3). Not exposed as their
      * own chat tools — `snapshot` returns the page's element table stamped
