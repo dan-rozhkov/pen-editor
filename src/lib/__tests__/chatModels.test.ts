@@ -53,9 +53,13 @@ describe("chatModels fallback", () => {
     ]);
   });
 
-  // Not every shipped model reads images: the text-only ones (tencent/hy4-preview,
-  // z-ai/glm-5.3, z-ai/glm-5.2) carry supportsVision: false, and without a
-  // backend vision fallback canSendImages() must follow that flag.
+  // Not every shipped model reads images, and without a backend vision
+  // fallback canSendImages() must follow that flag. The three OpenCode
+  // entries here answered a test image with an EMPTY completion 3/3 when
+  // measured live (2026-09-18) — see the comment above DEFAULT_MODELS in
+  // pen-editor-backend/src/config.ts. Vision on that route is an endpoint
+  // property, so this list is a measurement, not something derivable from
+  // the model names.
   it("reports each shipped model's own vision support", () => {
     for (const option of getModelOptions()) {
       expect(modelSupportsVision(option.value)).toBe(option.supportsVision);
@@ -67,13 +71,9 @@ describe("chatModels fallback", () => {
       "tencent/hy4-preview",
       "z-ai/glm-5.3",
       "z-ai/glm-5.2",
-      "opencode-go/deepseek-v4.1-flash",
-      "opencode-go/glm-5.3-flash",
       "opencode-go/glm-5.3",
       "opencode-go/glm-5.2",
       "opencode/deepseek-v4-flash",
-      "opencode/glm-5.3-flash",
-      "opencode/kimi-k2.7-code",
     ]);
   });
 

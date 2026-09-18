@@ -68,7 +68,7 @@ const FALLBACK_MODELS: ChatModelOption[] = [
   {
     value: "opencode-go/deepseek-v4.1-flash",
     label: "DeepSeek V4.1 Flash · Go",
-    supportsVision: false,
+    supportsVision: true,
     requiresUserKey: true,
   },
   {
@@ -80,7 +80,7 @@ const FALLBACK_MODELS: ChatModelOption[] = [
   {
     value: "opencode-go/glm-5.3-flash",
     label: "GLM 5.3 Flash · Go",
-    supportsVision: false,
+    supportsVision: true,
     requiresUserKey: true,
   },
   {
@@ -104,13 +104,13 @@ const FALLBACK_MODELS: ChatModelOption[] = [
   {
     value: "opencode/glm-5.3-flash",
     label: "GLM 5.3 Flash · Zen",
-    supportsVision: false,
+    supportsVision: true,
     requiresUserKey: true,
   },
   {
     value: "opencode/kimi-k2.7-code",
     label: "Kimi K2.7 Code · Zen",
-    supportsVision: false,
+    supportsVision: true,
     requiresUserKey: true,
   },
 ];
