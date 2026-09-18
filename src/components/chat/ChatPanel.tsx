@@ -22,6 +22,7 @@ import { useModelOptions } from "@/hooks/useModelOptions";
 import { useAgentActivityToast } from "@/hooks/useAgentActivityToast";
 import { getUserId } from "@/lib/userId";
 import { hasOpenCodeKey, subscribeOpenCodeKey } from "@/lib/opencodeKey";
+import { useOpenCodeKeyDialogStore } from "@/store/openCodeKeyDialogStore";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { ChatList } from "./ChatList";
@@ -413,7 +414,8 @@ export function ChatPanelContent() {
   const activeChatId = useChatStore((s) => s.activeChatId);
   const isAgentsSectionActive = useLeftSidebarStore((s) => s.activeSection === "agents");
   const [isSkillsPanelOpen, setSkillsPanelOpen] = useState(false);
-  const [isOpenCodeDialogOpen, setOpenCodeDialogOpen] = useState(false);
+  const isOpenCodeDialogOpen = useOpenCodeKeyDialogStore((s) => s.open);
+  const setOpenCodeDialogOpen = useOpenCodeKeyDialogStore((s) => s.setOpen);
   const ensureSkillsHydrated = useUserSkillStore((s) => s.ensureHydrated);
   // Re-renders the picker the moment a key is saved/removed in the dialog,
   // so a just-unlocked model becomes selectable without a reload.
