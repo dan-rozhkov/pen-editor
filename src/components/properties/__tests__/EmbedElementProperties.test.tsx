@@ -138,7 +138,7 @@ describe("<EmbedElementProperties />", () => {
     render(<EmbedElementProperties />);
     await flushRaf();
 
-    expect(screen.getByText("div.card")).toBeTruthy();
+    expect(screen.getByText("hi", { exact: true })).toBeTruthy();
     // Typography section (native `TypographySection`) — font-size.
     expect(screen.getByDisplayValue("14")).toBeTruthy();
     // Fill section (native `FillSection`) — background color hex. The text
@@ -272,7 +272,7 @@ describe("<EmbedElementProperties />", () => {
     expect(screen.getByText(/element unavailable/i)).toBeTruthy();
   });
 
-  it("PropertiesPanel shows the element panel instead of the embed's normal editor when a selection exists", async () => {
+  it("PropertiesPanel shows the Layers-panel name without element controls when an element is selected", async () => {
     const html = `<div class="card">hi</div>`;
     seedEmbedNode(html);
     const { shadow } = mountEmbedHost(html);
@@ -282,8 +282,13 @@ describe("<EmbedElementProperties />", () => {
     render(<PropertiesPanel />);
     await flushRaf();
 
-    expect(screen.getByText("div.card")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Back to embed" })).toBeTruthy();
+    // A text-leaf div is labelled by its text in the Layers panel; the
+    // inspector must show exactly that friendly layer name, not `div.card`.
+    expect(screen.getByText("hi", { exact: true })).toBeTruthy();
+    expect(screen.queryByText("Element", { exact: true })).toBeNull();
+    expect(screen.queryByText("div.card", { exact: true })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit inline" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Back to embed" })).toBeNull();
   });
 
   it("changing only the stroke color keeps the existing border-width (regression: used to null out untouched longhands)", async () => {
@@ -732,31 +737,6 @@ describe("<EmbedElementProperties />", () => {
     // ...so the control must not present a "locked" state that has nothing
     // behind it.
     expect(screen.queryByRole("button", { name: "Unlock aspect ratio" })).toBeNull();
-  });
-
-  it("has its own 'Edit inline' button that opens InlineEmbedEditor without deselecting the element first", async () => {
-    // Regression: after EmbedActionBar's removal, EmbedContentSection's
-    // "Edit inline" button was the ONLY way to reach startEditing(id,
-    // "embed") — but PropertiesPanel swaps this component in for the embed's
-    // normal PropertyEditor (and thus EmbedContentSection) the instant an
-    // element is picked, which is the normal first click on any embed now
-    // that picking is always-on. That left the button reachable only via
-    // Escape first. This panel needs its own entry point wired to the same
-    // action.
-    const html = `<div class="card">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
-
-    fireEvent.click(screen.getByRole("button", { name: "Edit inline" }));
-
-    const { editingMode, editingNodeId } = useSelectionStore.getState();
-    expect(editingMode).toBe("embed");
-    expect(editingNodeId).toBe(EMBED_ID);
   });
 
   it("PropertiesPanel shows the normal embed editor when there is no element selection", () => {

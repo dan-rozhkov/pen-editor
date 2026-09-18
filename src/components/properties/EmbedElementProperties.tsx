@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CaretLeftIcon, PencilSimpleLineIcon } from "@phosphor-icons/react";
 import {
   embedElementToSyntheticNode,
   syntheticNodeToCssDeclarations,
@@ -12,12 +11,10 @@ import { BACKGROUND_STYLE_KEYS } from "@/lib/designToHtml/styleGeneration";
 import { getFills } from "@/utils/fillUtils";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useSceneStore } from "@/store/sceneStore";
-import { useSelectionStore } from "@/store/selectionStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useThemeStore } from "@/store/themeStore";
 import { getThemeFromAncestorFrames, type FlatParentContext } from "@/utils/nodeUtils";
 import { useReadOnly } from "@/hooks/useReadOnly";
-import { IconButton } from "@/components/ui/IconButton";
 import { PropertySection, TextInput } from "@/components/ui/PropertyInputs";
 import { SizeSection } from "@/components/properties/SizeSection";
 import { AutoLayoutSection } from "@/components/properties/AutoLayoutSection";
@@ -28,6 +25,11 @@ import { EffectsSection } from "@/components/properties/EffectsSection";
 import { TypographySection } from "@/components/properties/TypographySection";
 import type { Effect, SceneNode, TextNode } from "@/types/scene";
 import type { FillKind } from "@/components/properties/fillSectionUtils";
+import {
+  getEmbedLayerTree,
+  normalizeShadowPathToSourcePath,
+  type EmbedElementLayer,
+} from "@/lib/embedLayerTree";
 
 
 /**
@@ -49,6 +51,18 @@ const ALLOWED_FILL_KINDS: FillKind[] = ["solid", "linear", "radial", "image", "p
  * doc comment. Shadows, layer blur and background/backdrop blur all round-trip
  * through plain CSS (`box-shadow`/`filter`/`backdrop-filter`). */
 const ALLOWED_EFFECT_TYPES: Effect["type"][] = ["shadow", "blur", "background-blur"];
+
+function findEmbedLayerName(
+  layers: EmbedElementLayer[],
+  sourcePath: string,
+): string | null {
+  for (const layer of layers) {
+    if (layer.sourcePath === sourcePath) return layer.name;
+    const childName = findEmbedLayerName(layer.children, sourcePath);
+    if (childName) return childName;
+  }
+  return null;
+}
 
 /**
  * Properties panel for a single element picked *inside* an embed's HTML
@@ -91,17 +105,11 @@ const ALLOWED_EFFECT_TYPES: Effect["type"][] = ["shadow", "blur", "background-bl
 export function EmbedElementProperties() {
   const readOnly = useReadOnly();
   const selection = useEmbedPickerStore((s) => s.selection);
-  const clearSelection = useEmbedPickerStore((s) => s.clearSelection);
   // Selection is guaranteed non-null by the PropertiesPanel gate that
   // renders this component, but keep the hooks unconditional below by
   // deriving nullable locals instead of returning early here.
   const embedId = selection?.embedId ?? null;
   const path = selection?.path ?? null;
-
-  const handleEditInline = useCallback(() => {
-    if (!embedId) return;
-    useSelectionStore.getState().startEditing(embedId, "embed");
-  }, [embedId]);
 
   const htmlContent = useSceneStore((s) =>
     embedId ? ((s.nodesById[embedId] as { htmlContent?: string } | undefined)?.htmlContent ?? null) : null,
@@ -129,6 +137,17 @@ export function EmbedElementProperties() {
   // render the "element unavailable" state instead of a blank panel during
   // the first rAF tick.
   const [resolved, setResolved] = useState(false);
+
+  // Use the exact same label as the Layers panel. The picker identifies an
+  // element by its DOM path, while layers use a source-relative path, so
+  // normalize before looking it up. Fall back to a neutral label rather than
+  // exposing the HTML tag when a stale selection can no longer be resolved.
+  const layerName = useMemo(() => {
+    if (!selection || !htmlContent) return "Layer";
+    const sourcePath = normalizeShadowPathToSourcePath(selection.path, htmlContent);
+    if (sourcePath === null) return "Layer";
+    return findEmbedLayerName(getEmbedLayerTree(htmlContent), sourcePath) ?? "Layer";
+  }, [selection, htmlContent]);
 
   // The embed re-mounts its shadow DOM in its own `useEffect` (`EmbedLayer`)
   // whenever `htmlContent` changes, and effect ordering between sibling
@@ -325,49 +344,9 @@ export function EmbedElementProperties() {
 
   if (!selection) return null;
 
-  const elementLabel =
-    selection.tagName +
-    (selection.elementId ? `#${selection.elementId}` : "") +
-    (selection.classes.length > 0 ? `.${selection.classes.join(".")}` : "");
-
   return (
     <>
-      <PropertySection
-        title="Element"
-        action={
-          <div className="flex items-center gap-1">
-            <IconButton
-              tooltip="Edit inline"
-              aria-label="Edit inline"
-              variant="ghost"
-              size="icon-sm"
-              onClick={handleEditInline}
-            >
-              <PencilSimpleLineIcon />
-            </IconButton>
-            <IconButton
-              tooltip="Back to embed"
-              aria-label="Back to embed"
-              variant="ghost"
-              size="icon-sm"
-              onClick={clearSelection}
-            >
-              <CaretLeftIcon />
-            </IconButton>
-          </div>
-        }
-      >
-        <div className="flex flex-col gap-0.5 min-w-0">
-          <div className="text-xs font-medium text-text-primary truncate" title={elementLabel}>
-            {elementLabel}
-          </div>
-          {selection.textPreview && (
-            <div className="text-[11px] text-text-muted truncate" title={selection.textPreview}>
-              {selection.textPreview}
-            </div>
-          )}
-        </div>
-      </PropertySection>
+      <PropertySection title={layerName}>{null}</PropertySection>
 
       {!resolved ? null : !node ? (
         <div className="px-4 py-3 text-[11px] text-text-muted">
