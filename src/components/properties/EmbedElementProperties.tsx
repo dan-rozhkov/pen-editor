@@ -346,7 +346,9 @@ export function EmbedElementProperties() {
 
   return (
     <>
-      <PropertySection title={layerName}>{null}</PropertySection>
+      <div data-testid="embed-element-inspector-header">
+        <PropertySection title={layerName}>{null}</PropertySection>
+      </div>
 
       {!resolved ? null : !node ? (
         <div className="px-4 py-3 text-[11px] text-text-muted">

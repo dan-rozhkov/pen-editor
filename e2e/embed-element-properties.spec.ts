@@ -75,16 +75,15 @@ async function enterElementPicker(page: Page, id: string = EMBED_ID) {
   return host;
 }
 
-/** The inspector's element header (EmbedElementProperties renders the label
- * with a matching `title`). Matched by title rather than by text: the chat
- * composer shows the very same label in its attachment chip, so plain
- * `getByText` is a strict-mode violation. */
-function elementHeader(page: Page, selectedElement: string) {
-  return page.getByTitle(selectedElement, { exact: true });
+/** The inspector header displays the same friendly name as the Layers panel.
+ * Scope it to the dedicated header because the same text can appear in the
+ * embed itself or the chat composer. */
+function elementHeader(page: Page, layerName: string) {
+  return page.getByTestId("embed-element-inspector-header").getByText(layerName, { exact: true });
 }
 
-function sidebarFor(page: Page, selectedElement: string) {
-  return elementHeader(page, selectedElement).locator(
+function sidebarFor(page: Page) {
+  return page.getByTestId("embed-element-inspector-header").locator(
     'xpath=ancestor::div[contains(@class, "w-[300px]")]',
   );
 }
@@ -135,11 +134,11 @@ test("picked embed elements use the native inspector field layout", async ({ pag
   // regression surface here: native outside-label selects, the alignment
   // grid, and the compact T/R/B/L padding grid.
   await host.click({ position: { x: 12, y: 12 } });
-  await expect(elementHeader(page, "div#fixture-card")).toBeVisible();
+  await expect(elementHeader(page, "#fixture-card")).toBeVisible();
   await expect(page.getByText("Padding", { exact: true })).toBeVisible();
   await expect(page.getByText("Direction", { exact: true })).toBeVisible();
   await expect(page.getByText("Alignment", { exact: true })).toBeVisible();
-  const flexSidebar = sidebarFor(page, "div#fixture-card");
+  const flexSidebar = sidebarFor(page);
   await expect(flexSidebar).toBeVisible();
   await flexSidebar.screenshot({ path: test.info().outputPath("flex-element-properties.png") });
 
@@ -165,7 +164,7 @@ test("picked embed elements use the native inspector field layout", async ({ pag
       }, EMBED_ID),
     )
     .toBe("24px");
-  await expect(elementHeader(page, "div#fixture-card")).toBeVisible();
+  await expect(elementHeader(page, "#fixture-card")).toBeVisible();
 
   // Stroke's "Align" (Inside/Center/Outside) control no longer exists for an
   // embed element, live in a REAL browser: CSS has no border-alignment
@@ -187,18 +186,18 @@ test("picked embed elements use the native inspector field layout", async ({ pag
   // No Align control means no way for this edit to ever introduce an inline
   // `box-sizing` declaration.
   expect(await readFixtureCardStyle(page, "boxSizing")).toBeFalsy();
-  await expect(elementHeader(page, "div#fixture-card")).toBeVisible();
+  await expect(elementHeader(page, "#fixture-card")).toBeVisible();
 
   // Then select text and capture its editable typography/text state. Scrolling
   // the real 300px sidebar catches clipped or misaligned lower sections.
   await host.click({ position: { x: 88, y: 42 } });
-  await expect(elementHeader(page, "h2")).toBeVisible();
+  await expect(elementHeader(page, "Element panel heading")).toBeVisible();
   const propertiesScroll = page.locator(".layers-scrollbar").last();
   await propertiesScroll.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
   });
   await expect(page.locator('input[value="Element panel heading"]')).toBeVisible();
-  const textSidebar = sidebarFor(page, "h2");
+  const textSidebar = sidebarFor(page);
   await expect(textSidebar).toBeVisible();
   await textSidebar.screenshot({ path: test.info().outputPath("text-element-properties.png") });
 
@@ -253,9 +252,8 @@ const CLASS_BOX_SIZING_ELEMENT_ID = "reset-card";
 // carrying NO inline `box-sizing` at all — exactly the shape that used to
 // confuse the now-removed Align control (see `embedElementNode.ts`'s
 // `applyOutlineStroke` doc comment for why that control is gone rather than
-// fixed again). Targeted by id (not a class) so the picker's element label
-// stays a plain `div#reset-card` — a class attribute here would also show up
-// in the label alongside the id.
+// fixed again). Targeted by id (not a class) so the fixture remains easy to
+// resolve from source HTML; its text-leaf Layers-panel name is simply `hi`.
 const CLASS_BOX_SIZING_HTML = `
   <style>#${CLASS_BOX_SIZING_ELEMENT_ID} { box-sizing: border-box; }</style>
   <div id="${CLASS_BOX_SIZING_ELEMENT_ID}" style="width:200px; height:120px; border:1px solid #dddddd;">hi</div>
@@ -271,7 +269,7 @@ test("editing a bordered element under a class-authored box-sizing reset never w
   await addEmbedFixture(page, CLASS_BOX_SIZING_EMBED_ID, CLASS_BOX_SIZING_HTML);
   const host = await enterElementPicker(page, CLASS_BOX_SIZING_EMBED_ID);
   await host.click({ position: { x: 12, y: 12 } });
-  await expect(elementHeader(page, `div#${CLASS_BOX_SIZING_ELEMENT_ID}`)).toBeVisible();
+  await expect(elementHeader(page, "hi")).toBeVisible();
 
   const strokeSection = page
     .getByText("Stroke", { exact: true })
@@ -321,7 +319,7 @@ test("editing an outline-sourced stroke resets the live outline instead of paint
   await addEmbedFixture(page, OUTLINE_STROKE_EMBED_ID, OUTLINE_STROKE_HTML);
   const host = await enterElementPicker(page, OUTLINE_STROKE_EMBED_ID);
   await host.click({ position: { x: 12, y: 12 } });
-  await expect(elementHeader(page, `div#${OUTLINE_STROKE_ELEMENT_ID}`)).toBeVisible();
+  await expect(elementHeader(page, "hi")).toBeVisible();
 
   const strokeSection = page
     .getByText("Stroke", { exact: true })
@@ -350,7 +348,7 @@ test("removing an outline-sourced stroke actually removes it, and a fresh picker
   await addEmbedFixture(page, OUTLINE_STROKE_EMBED_ID, OUTLINE_STROKE_HTML);
   const host = await enterElementPicker(page, OUTLINE_STROKE_EMBED_ID);
   await host.click({ position: { x: 12, y: 12 } });
-  await expect(elementHeader(page, `div#${OUTLINE_STROKE_ELEMENT_ID}`)).toBeVisible();
+  await expect(elementHeader(page, "hi")).toBeVisible();
 
   const strokeSection = page
     .getByText("Stroke", { exact: true })
@@ -380,7 +378,7 @@ test("removing an outline-sourced stroke actually removes it, and a fresh picker
   // leaving the assertions below to re-check state that had already settled.
   await host.click({ position: { x: 40, y: 200 } });
   await host.click({ position: { x: 12, y: 12 } });
-  await expect(elementHeader(page, `div#${OUTLINE_STROKE_ELEMENT_ID}`)).toBeVisible();
+  await expect(elementHeader(page, "hi")).toBeVisible();
   await expect(strokeSection.getByRole("button", { name: "Add stroke" })).toBeVisible();
   await expect(strokeSection.getByRole("button", { name: "Remove stroke" })).toHaveCount(0);
 });
