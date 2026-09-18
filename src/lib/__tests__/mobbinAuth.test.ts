@@ -458,7 +458,7 @@ describe("connect (OAuth popup handshake)", () => {
   // still gets the chance to resolve between checks.
   async function flushUntilFakeTimers(
     check: () => boolean,
-    maxIters = 50,
+    maxIters = 200,
   ): Promise<void> {
     for (let i = 0; i < maxIters; i++) {
       if (check()) return;
@@ -467,12 +467,28 @@ describe("connect (OAuth popup handshake)", () => {
     throw new Error("condition never became true");
   }
 
+  // CI runs with `retry: 1`. A first attempt that fails part-way abandons its
+  // `connect()` promise while it is still pending: the message listener is
+  // registered only after the `/api/mobbin/register` fetch resolves, so that
+  // registration can land inside the NEXT attempt's `stubPopup` listener list
+  // and then reject with a state mismatch the moment that attempt dispatches
+  // its own callback. Nothing awaits the abandoned promise any more, so the
+  // rejection surfaces as an unhandled error and reddens the whole run even
+  // though every test passed (seen in CI: run 35344352742). Attaching a no-op
+  // catch up front marks it handled without changing what the test's own
+  // `await` / `.rejects` assertions observe.
+  function startConnect(): Promise<void> {
+    const promise = connect();
+    promise.catch(() => {});
+    return promise;
+  }
+
   it("stores tokens after a valid, same-origin, state-matched callback", async () => {
     const fetchMock = stubBackendRegisterAndToken();
     vi.stubGlobal("fetch", fetchMock);
     const { popup, dispatch } = stubPopup();
 
-    const connectPromise = connect();
+    const connectPromise = startConnect();
 
     // Let register() resolve and the state get generated before dispatching.
     await vi.waitFor(() => {
@@ -495,7 +511,7 @@ describe("connect (OAuth popup handshake)", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { popup, dispatch } = stubPopup();
 
-    const connectPromise = connect();
+    const connectPromise = startConnect();
     await vi.waitFor(() => {
       expect((popup as unknown as { location: { href: string } }).location.href).not.toBe("");
     });
@@ -528,7 +544,7 @@ describe("connect (OAuth popup handshake)", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { popup, dispatch } = stubPopup();
 
-    const connectPromise = connect();
+    const connectPromise = startConnect();
     await vi.waitFor(() => {
       expect((popup as unknown as { location: { href: string } }).location.href).not.toBe("");
     });
@@ -560,7 +576,7 @@ describe("connect (OAuth popup handshake)", () => {
     // did — would still pass a "was it ever called" check; this instead
     // asserts on the argument (about:blank, not the authorize URL, which
     // isn't known yet at this point) and the fact that it already happened.
-    const connectPromise = connect();
+    const connectPromise = startConnect();
 
     expect(window.open).toHaveBeenCalledTimes(1);
     expect(window.open).toHaveBeenCalledWith(
@@ -642,7 +658,7 @@ describe("connect (OAuth popup handshake)", () => {
     Object.defineProperty(window, "localStorage", { value: throwingStorage, configurable: true });
 
     try {
-      const connectPromise = connect();
+      const connectPromise = startConnect();
       await vi.waitFor(() => {
         expect((popup as unknown as { location: { href: string } }).location.href).not.toBe("");
       });
@@ -667,7 +683,7 @@ describe("connect (OAuth popup handshake)", () => {
       vi.stubGlobal("fetch", fetchMock);
       const { popup, dispatch } = stubPopup();
 
-      const connectPromise = connect();
+      const connectPromise = startConnect();
       await flushUntilFakeTimers(
         () => (popup as unknown as { location: { href: string } }).location.href !== "",
       );
@@ -696,7 +712,7 @@ describe("connect (OAuth popup handshake)", () => {
       vi.stubGlobal("fetch", fetchMock);
       const { popup } = stubPopup();
 
-      const connectPromise = connect();
+      const connectPromise = startConnect();
       // Attach a handler immediately: the promise rejects DURING the
       // advanceTimersByTimeAsync call below, before this test gets a chance
       // to `await expect(...).rejects...` — without a handler already
@@ -729,7 +745,7 @@ describe("connect (OAuth popup handshake)", () => {
       vi.stubGlobal("fetch", fetchMock);
       const { popup } = stubPopup();
 
-      const connectPromise = connect();
+      const connectPromise = startConnect();
       // See the grace-period test above: attach a handler before advancing
       // timers, since the rejection happens during that call.
       const rejection = connectPromise.catch((err: unknown) => err);
