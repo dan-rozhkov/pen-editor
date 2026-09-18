@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within, act } from "@testing-library/react";
 import type { UIMessage } from "ai";
 
 // --- Mock the chat hook so ChatPanel is driven by deterministic state ---
@@ -482,5 +482,83 @@ describe("<ChatPanelContent /> OpenCode BYOK picker", () => {
     fireEvent.click(connectItem);
 
     expect(await screen.findByText("OpenCode key")).toBeTruthy();
+  });
+
+  // Defect 1 (code review): `composerControls` used to have
+  // `<OpenCodeKeyDialog>` embedded in its OWN returned JSX, which is invoked
+  // from inside `ChatSession` (`ChatPanel.tsx`'s "Keep all sessions mounted"
+  // block maps every open chat to a `<ChatSession>`). In this codebase,
+  // `ChatSession` already early-returns `null` for a session that isn't
+  // `isActive` (a pre-existing perf guard, unrelated to this feature — see
+  // the "do not update a hidden message tree" comment), so composerControls
+  // in practice never renders for more than one tab AT ONCE: the literal
+  // "several simultaneously-live dialogs from N open tabs" symptom the
+  // review flagged does not reproduce through `chats.map` as it stands.
+  //
+  // What DOES reproduce, and is what this test pins: since the dialog's
+  // React component instance lived inside the ACTIVE tab's subtree, opening
+  // it and then switching the active tab unmounted `ChatSession` for the
+  // old tab (destroying the dialog instance, mid-interaction) and mounted a
+  // BRAND NEW one for the newly-active tab — silently discarding whatever
+  // the user had typed, and, had a check been in flight, orphaning that
+  // fetch's `setState` calls against an unmounted component. Hoisting the
+  // dialog to the `ChatPanelContent` root (this file, next to `SkillsPanel`,
+  // which already used this exact pattern) makes it a single component
+  // instance for the panel's whole lifetime, independent of which tab is
+  // active — so it now survives a tab switch intact, which is what this
+  // test asserts. The duplicate-node checks the review specifically asked
+  // for (single input, single `#opencode-key-dialog-description`) are kept
+  // too, as a standing invariant, even though they do not by themselves
+  // discriminate the fixed code from the buggy one in this codebase.
+  it("keeps the OpenCode key dialog's in-progress state across a chat-tab switch, as a single instance", async () => {
+    clearOpenCodeKey();
+    useChatStore.setState({
+      chats: [
+        makeChat({ id: "tab-1", model: "deepseek/deepseek-v4.1-flash" }),
+        makeChat({ id: "tab-2", model: "deepseek/deepseek-v4.1-flash" }),
+      ],
+      activeChatId: "tab-1",
+      model: "deepseek/deepseek-v4.1-flash",
+    });
+    render(<ChatPanelContent />);
+
+    fireEvent.click(screen.getByLabelText("Model: DeepSeek V4.1 Flash"));
+    const connectItem = await screen.findByText("Connect OpenCode…");
+    fireEvent.click(connectItem);
+    await screen.findByText("OpenCode key");
+    // `getByLabelText` also matches the dialog's own `role="dialog"`
+    // container (labelled via `aria-labelledby` -> the title), so query the
+    // actual <input> directly rather than via the looser accessible-name
+    // match.
+    const getInput = () =>
+      document.querySelector<HTMLInputElement>(
+        'input[aria-label="OpenCode key"]',
+      );
+
+    const input = getInput();
+    expect(input).toBeTruthy();
+    fireEvent.change(input!, { target: { value: "sk-in-progress" } });
+    expect(getInput()!.value).toBe("sk-in-progress");
+
+    // Switch the active tab WHILE the dialog is open and mid-edit — this is
+    // exactly the interaction the old placement lost.
+    act(() => {
+      useChatStore.getState().openChat("tab-2");
+    });
+
+    const inputAfterSwitch = getInput();
+    expect(inputAfterSwitch).toBeTruthy();
+    expect(inputAfterSwitch!.value).toBe("sk-in-progress");
+
+    // Still exactly one live dialog/input/description node, not one
+    // destroyed-and-recreated pair or (were the old per-session placement
+    // ever reintroduced without the isActive guard) several.
+    expect(
+      document.querySelectorAll('input[aria-label="OpenCode key"]'),
+    ).toHaveLength(1);
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(
+      document.querySelectorAll("#opencode-key-dialog-description"),
+    ).toHaveLength(1);
   });
 });

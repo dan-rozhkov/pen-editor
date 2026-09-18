@@ -23,6 +23,33 @@ vi.mock("@/lib/chatModels", async (importOriginal) => {
   };
 });
 
+// Captures every `DefaultChatTransport` construction so the "merges the
+// transport's base headers" test (defect 4) can grab the real
+// `prepareSendMessagesRequest` useDesignChat.ts builds and call it directly.
+// A plain `vi.spyOn` on the "ai" module's export doesn't work here — its
+// namespace object isn't configurable in Vitest's ESM handling (see the
+// TypeError it throws: "Cannot spy on export... Module namespace is not
+// configurable in ESM") — so this wraps the real class in `vi.mock` instead,
+// which every other test in this file also relies on behaving identically to
+// the unmocked export.
+const { capturedTransportOptions } = vi.hoisted(() => ({
+  capturedTransportOptions: [] as unknown[],
+}));
+vi.mock("ai", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("ai")>();
+  class SpyingDefaultChatTransport<
+    UI_MESSAGE extends import("ai").UIMessage,
+  > extends actual.DefaultChatTransport<UI_MESSAGE> {
+    constructor(
+      options: ConstructorParameters<typeof actual.DefaultChatTransport<UI_MESSAGE>>[0],
+    ) {
+      capturedTransportOptions.push(options);
+      super(options);
+    }
+  }
+  return { ...actual, DefaultChatTransport: SpyingDefaultChatTransport };
+});
+
 import {
   executeToolCall,
   buildCanvasContext,
@@ -625,6 +652,48 @@ describe("useDesignChat (hook + UI message stream)", () => {
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
       expect(seenHeaders[0].has("X-OpenCode-Key")).toBe(false);
+    });
+
+    // Defect 4 (code review): prepareSendMessagesRequest used to return
+    // `{ headers: { "X-OpenCode-Key": key } }` outright, which REPLACES the
+    // transport's own base headers rather than adding to them (see
+    // HttpChatTransport.sendMessages in node_modules/ai/dist/index.mjs —
+    // `headers = preparedRequest.headers !== undefined ? ... : baseHeaders`,
+    // no merge). Harmless while nothing else sets a header, but silently
+    // dropping is exactly the kind of bug that's invisible until someone
+    // adds a transport-level header later and it mysteriously vanishes only
+    // on OpenCode turns. This spies on the real `DefaultChatTransport`
+    // constructor to capture the actual `prepareSendMessagesRequest`
+    // callback useDesignChat builds, then calls it directly the way
+    // HttpChatTransport.sendMessages does — with a non-empty `headers`
+    // (its computed base headers) — and asserts the base header survives
+    // alongside X-OpenCode-Key.
+    it("merges the transport's base headers with X-OpenCode-Key rather than replacing them", async () => {
+      setOpenCodeKey("sk-test-merge");
+      useChatStore.setState({ model: "opencode-go/glm-5.3-flash" });
+
+      capturedTransportOptions.length = 0;
+      renderHook(() => useDesignChat({ sessionId: "opencode-header-merge" }));
+      const options = capturedTransportOptions.at(-1) as
+        | { prepareSendMessagesRequest?: (args: unknown) => unknown }
+        | undefined;
+      expect(options?.prepareSendMessagesRequest).toBeTruthy();
+
+      const prepared = (await options!.prepareSendMessagesRequest!({
+        api: "/api/chat",
+        id: "chat-1",
+        messages: [],
+        body: { model: "opencode-go/glm-5.3-flash" },
+        headers: { "X-Transport-Base": "base-value" },
+        credentials: undefined,
+        requestMetadata: undefined,
+        trigger: "submit-message",
+        messageId: undefined,
+      })) as { headers?: HeadersInit };
+
+      const resultHeaders = new Headers(prepared.headers);
+      expect(resultHeaders.get("X-Transport-Base")).toBe("base-value");
+      expect(resultHeaders.get("X-OpenCode-Key")).toBe("sk-test-merge");
     });
   });
 

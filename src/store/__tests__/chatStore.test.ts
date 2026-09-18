@@ -1,6 +1,8 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { reconcileModels, useChatStore, type ChatSummary } from "@/store/chatStore";
 import { getDefaultModel, getModelOptions } from "@/lib/chatModels";
+import { clearOpenCodeKey, setOpenCodeKey } from "@/lib/opencodeKey";
+import { assertDefined } from "@/test/assertions";
 
 function makeChat(overrides: Partial<ChatSummary> & { id: string }): ChatSummary {
   return {
@@ -343,5 +345,52 @@ describe("chatStore — model selection", () => {
     reconcileModels();
 
     expect(useChatStore.getState().model).toBe(valid);
+  });
+
+  // Defect 2 (code review): removing the OpenCode key used to leave an
+  // opencode-* selection active, so the very next turn hit the backend's
+  // 400 opencode_key_required instead of falling back — the exact scenario
+  // reconcileModels()'s own header comment claims is prevented. The fix
+  // subscribes reconcileModels to opencodeKey.ts's change notifications
+  // (chatStore.ts, module scope) rather than relying on a specific button
+  // handler to call it, so ANY clearOpenCodeKey() caller is covered.
+  describe("reacts to OpenCode key changes (defect 2)", () => {
+    afterEach(() => {
+      clearOpenCodeKey();
+    });
+
+    it("falls back to the default model when the key backing the active selection is removed", () => {
+      const opencodeModel = getModelOptions().find((o) => o.requiresUserKey)?.value;
+      assertDefined(opencodeModel, "fixture assumes a requiresUserKey model exists");
+
+      setOpenCodeKey("sk-test-defect2");
+      useChatStore.setState((s) => ({
+        model: opencodeModel,
+        chats: s.chats.map((c) => ({ ...c, model: opencodeModel })),
+      }));
+      expect(useChatStore.getState().model).toBe(opencodeModel);
+
+      // No direct reconcileModels() call here — clearOpenCodeKey() alone
+      // must trigger it via the subscription.
+      clearOpenCodeKey();
+
+      const state = useChatStore.getState();
+      expect(state.model).toBe(getDefaultModel());
+      expect(state.chats.every((c) => c.model === getDefaultModel())).toBe(true);
+    });
+
+    it("leaves the current selection alone when a key is saved", () => {
+      const valid = getModelOptions().find((o) => !o.requiresUserKey)?.value;
+      assertDefined(valid, "fixture assumes a non-opencode model exists");
+
+      useChatStore.setState((s) => ({
+        model: valid,
+        chats: s.chats.map((c) => ({ ...c, model: valid })),
+      }));
+
+      setOpenCodeKey("sk-test-defect2-save");
+
+      expect(useChatStore.getState().model).toBe(valid);
+    });
   });
 });

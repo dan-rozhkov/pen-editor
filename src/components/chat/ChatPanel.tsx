@@ -500,10 +500,6 @@ export function ChatPanelContent() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <OpenCodeKeyDialog
-        open={isOpenCodeDialogOpen}
-        onOpenChange={setOpenCodeDialogOpen}
-      />
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
@@ -649,6 +645,19 @@ export function ChatPanelContent() {
       ))}
 
       <SkillsPanel open={isSkillsPanelOpen} onOpenChange={setSkillsPanelOpen} />
+      {/* Mounted once here, not inside `composerControls` — that renderer runs
+          once per mounted ChatSession (every open chat tab, not just the
+          active one, so switching tabs doesn't reset session state), so a
+          dialog embedded in its returned JSX would mount once per tab.
+          With N open chats that's N stacked backdrops, N focus traps, and N
+          copies of `id="opencode-key-dialog-description"` (invalid DOM, and
+          aria-describedby only ever resolves to the first). The open/close
+          state already lived at this level for the same reason SkillsPanel's
+          does. */}
+      <OpenCodeKeyDialog
+        open={isOpenCodeDialogOpen}
+        onOpenChange={setOpenCodeDialogOpen}
+      />
     </div>
   );
 }

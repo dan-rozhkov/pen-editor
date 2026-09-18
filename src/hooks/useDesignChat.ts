@@ -332,7 +332,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
         api: resolveChatApiUrl(),
         fetch: createRetryingFetch({ onRetryStateChange: setRetryState }),
         body: () => buildCanvasContext(sessionId),
-        prepareSendMessagesRequest: ({ id, messages, body, trigger, messageId }) => {
+        prepareSendMessagesRequest: ({ id, messages, body, headers: baseHeaders, trigger, messageId }) => {
           // Images always ride along regardless of the selected model's
           // vision support — the backend decides native-vs-described per
           // model
@@ -351,12 +351,43 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
           // forever (see the spec's "Поток ключа"). Sent ONLY when this
           // turn's model is actually an OpenCode route: on every OpenRouter
           // turn the key must never leave the browser at all.
+          //
+          // `baseHeaders` (renamed from this callback's own `headers` param)
+          // is what HttpChatTransport.sendMessages already computed as the
+          // request's base header set (its `headers` option merged with
+          // whatever `sendMessage` was called with) before invoking us —
+          // see node_modules/ai/dist/index.mjs, `sendMessages`. Whatever we
+          // return here becomes the request's ENTIRE header set if we
+          // return one at all; it does not get merged on top of
+          // `baseHeaders` for us. Returning `{ "X-OpenCode-Key": key }`
+          // alone would silently drop every header the transport itself
+          // would otherwise send — harmless today since nothing sets any,
+          // but a future transport-level header would then vanish only on
+          // OpenCode turns, which is a hard bug to spot from the symptom.
+          // Spread `baseHeaders` first so ours only adds to it.
           const model = (body as { model?: unknown } | undefined)?.model;
-          const headers =
+          const openCodeHeaders =
             typeof model === "string" && isOpenCodeModel(model)
               ? (() => {
                   const key = getOpenCodeKey();
                   return key ? { "X-OpenCode-Key": key } : undefined;
+                })()
+              : undefined;
+          // `Headers` also satisfies `HeadersInit` for the return value, and
+          // its constructor accepts every shape `HeadersInit` allows
+          // (another `Headers`, a `[k, v][]`, or a plain object) — so
+          // building one is a shape-agnostic way to merge `baseHeaders`
+          // (whatever form the SDK handed us) with ours.
+          const headers =
+            baseHeaders || openCodeHeaders
+              ? (() => {
+                  const merged = new Headers(baseHeaders);
+                  if (openCodeHeaders) {
+                    for (const [key, value] of Object.entries(openCodeHeaders)) {
+                      merged.set(key, value);
+                    }
+                  }
+                  return merged;
                 })()
               : undefined;
           return {

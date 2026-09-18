@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { deriveChatTitle } from "@/lib/chatTitle";
 import { canUseModel, getDefaultModel } from "@/lib/chatModels";
+import { subscribeOpenCodeKey } from "@/lib/opencodeKey";
 import type { AttachedImage, ChatLaunchPayload, QueuedChatMessage } from "@/types/chat";
 
 /** Stable empty reference so the per-session selector never returns a fresh
@@ -162,6 +163,19 @@ export function reconcileModels() {
     if (!isValid(model)) setModel(getDefaultModel());
   }
 }
+
+// Re-run reconcileModels() on EVERY change to the OpenCode key — saved or
+// removed, from the dialog or anywhere else that ever calls
+// setOpenCodeKey/clearOpenCodeKey (opencodeKey.ts is the single point of
+// truth for both). A key removal is exactly the case reconcileModels()'s own
+// comment calls out ("a user who deletes their key... would hit a 400 on
+// every turn instead of falling back"), but before this subscription that
+// guarantee only held at app boot (App.tsx's loadModels().then(...) call) —
+// nothing re-ran it when the key changed mid-session. Subscribing here,
+// rather than having OpenCodeKeyDialog's "Remove key" button call
+// reconcileModels() directly, means the guarantee holds for every future
+// caller of clearOpenCodeKey too, not just today's one button.
+subscribeOpenCodeKey(reconcileModels);
 
 function normalizeParallelCount(count: string | null): ParallelCount {
   if (count === "2") return 2;

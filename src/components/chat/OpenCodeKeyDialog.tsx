@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { resolveApiUrl } from "@/lib/apiBase";
 import {
   clearOpenCodeKey,
@@ -51,6 +51,48 @@ const VALIDATE_TIMEOUT_MS = 15_000;
 export function OpenCodeKeyDialog({ open, onOpenChange }: OpenCodeKeyDialogProps) {
   const [inputValue, setInputValue] = useState("");
   const [result, setResult] = useState<ValidateResult>({ kind: "idle" });
+  // Drives the Check button's disabled/"Checking…" state. Deliberately
+  // separate from `result` (which onChange resets to "idle" on every
+  // keystroke, including mid-flight edits) — the button must stay blocked
+  // for as long as a request is actually in flight, not just until the
+  // user next types.
+  const [isVerifying, setIsVerifying] = useState(false);
+
+  // Defect 3 (code review): handleCheck is async, so its response can land
+  // after the world it was asked about has moved on — the input was edited
+  // to an unchecked key, or the dialog was closed (and possibly reopened,
+  // which resets state during render — see the `wasOpen` block below). Two
+  // refs, read/written synchronously (unlike state, no batching delay)
+  // rather than closed-over `inputValue`/`open`, which would still read
+  // stale values from the render that started the request:
+  //   - `checkedKeyRef` holds the key the LATEST handleCheck call started
+  //     for. A response is applied only if it matches both this (no newer
+  //     check superseded it) and the live input (no untracked edit happened
+  //     without going through a new check).
+  //   - `openRef` mirrors the `open` prop; a response arriving while closed
+  //     must never write state that a reopen is about to reset.
+  // `isCheckingRef` blocks a second concurrent request from firing at all —
+  // stronger than disabling the button on `result.kind === "checking"`,
+  // which is a state read and could theoretically still race a second
+  // synchronous call before that state commits.
+  //
+  // `openRef`/`inputValueRef` are synced via `useEffect`, not written
+  // directly in the render body — react-hooks/refs (the lint rule backing
+  // the React Compiler's rules) forbids mutating `ref.current` during
+  // render. An effect still lands the new value before any fetch this
+  // component starts could possibly resolve (real network latency dwarfs
+  // one commit-and-effect cycle), so there is no race reintroduced by the
+  // one-tick delay.
+  const checkedKeyRef = useRef<string | null>(null);
+  const isCheckingRef = useRef(false);
+  const openRef = useRef(open);
+  const inputValueRef = useRef(inputValue);
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+  useEffect(() => {
+    inputValueRef.current = inputValue;
+  }, [inputValue]);
 
   // Whether a key is currently saved — read directly from storage on every
   // render rather than cached in its own state: a Save/Remove click already
@@ -75,12 +117,21 @@ export function OpenCodeKeyDialog({ open, onOpenChange }: OpenCodeKeyDialogProps
     if (open) {
       setInputValue("");
       setResult({ kind: "idle" });
+      // No `checkedKeyRef.current = null` here (and it can't be written here
+      // anyway — this runs during render): resetting `inputValue` to "" is
+      // enough on its own. Once the `inputValueRef` effect above syncs to
+      // "", handleCheck's stale-response guard (`inputValueRef.current.trim()
+      // !== key`) already discards any response for the old key, since "" never
+      // equals a non-empty checked key.
     }
   }
 
   const handleCheck = async () => {
     const key = inputValue.trim();
-    if (!key) return;
+    if (!key || isCheckingRef.current) return;
+    isCheckingRef.current = true;
+    checkedKeyRef.current = key;
+    setIsVerifying(true);
     setResult({ kind: "checking" });
     try {
       const res = await fetch(resolveApiUrl("/api/opencode/validate"), {
@@ -95,6 +146,18 @@ export function OpenCodeKeyDialog({ open, onOpenChange }: OpenCodeKeyDialogProps
       const data = (await res.json().catch(() => undefined)) as
         | ValidateResponse
         | undefined;
+      // Stale response guard: only apply it if this is still the key the
+      // (live) input holds, the dialog is still open, and no newer check
+      // has since started for a different key. An edit mid-flight, a close,
+      // or a fresh check for another key must all leave this response
+      // discarded rather than painting a verdict onto the wrong key.
+      if (
+        checkedKeyRef.current !== key ||
+        inputValueRef.current.trim() !== key ||
+        !openRef.current
+      ) {
+        return;
+      }
       if (data?.ok) {
         setResult({ kind: "valid", modelCount: data.models?.length ?? 0 });
       } else if (data?.reason === "invalid_key") {
@@ -103,7 +166,16 @@ export function OpenCodeKeyDialog({ open, onOpenChange }: OpenCodeKeyDialogProps
         setResult({ kind: "upstream_error" });
       }
     } catch {
-      setResult({ kind: "upstream_error" });
+      if (
+        checkedKeyRef.current === key &&
+        inputValueRef.current.trim() === key &&
+        openRef.current
+      ) {
+        setResult({ kind: "upstream_error" });
+      }
+    } finally {
+      isCheckingRef.current = false;
+      setIsVerifying(false);
     }
   };
 
@@ -113,15 +185,17 @@ export function OpenCodeKeyDialog({ open, onOpenChange }: OpenCodeKeyDialogProps
     setOpenCodeKey(key);
     setInputValue("");
     setResult({ kind: "idle" });
+    checkedKeyRef.current = null;
   };
 
   const handleRemove = () => {
     clearOpenCodeKey();
     setInputValue("");
     setResult({ kind: "idle" });
+    checkedKeyRef.current = null;
   };
 
-  const isChecking = result.kind === "checking";
+  const isChecking = isVerifying;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
