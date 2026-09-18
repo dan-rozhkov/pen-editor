@@ -61,6 +61,13 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   "browse_open",
   "browse_act",
   "browse_find_images",
+  // browse_task (docs/superpowers/specs/2026-09-18-browse-task-jev-loop-
+  // design.md) runs a whole snapshot/step/perform loop bounded by a 90s
+  // deadline — it holds its connection far longer than the other three
+  // browse_* tools, so serializing it behind the scene-mutation queue would
+  // be the worst case of the head-of-line stall this list already exists to
+  // avoid.
+  "browse_task",
 ];
 
 const unserialized = new Set(UNSERIALIZED_TOOL_NAMES);

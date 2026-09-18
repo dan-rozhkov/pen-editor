@@ -46,6 +46,21 @@ export interface PenDesktopApi {
     open(args: { url: string }): Promise<unknown>;
     act(args: Record<string, unknown>): Promise<unknown>;
     findImages(args: Record<string, unknown>): Promise<unknown>;
+    /**
+     * browse_task loop internals (docs/superpowers/specs/
+     * 2026-09-18-browse-task-jev-loop-design.md §1/§3). Not exposed as their
+     * own chat tools — `snapshot` returns the page's element table stamped
+     * with a `snapshotId`, and `perform` acts by index against that same
+     * snapshot, rejecting a stale id. Only `src/lib/tools/browser/
+     * browseTask.ts` calls these; the model never sees them directly.
+     */
+    snapshot(): Promise<unknown>;
+    perform(args: {
+      snapshotId: string;
+      index?: number;
+      operation: string;
+      text?: string;
+    }): Promise<unknown>;
   };
 }
 

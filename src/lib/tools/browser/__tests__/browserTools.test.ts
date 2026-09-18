@@ -11,6 +11,8 @@ function stubBrowser(overrides: Partial<PenDesktopBrowser>): PenDesktopBrowser {
     open: async () => ({}),
     act: async () => ({}),
     findImages: async () => ({}),
+    snapshot: async () => ({}),
+    perform: async () => ({}),
     ...overrides,
   };
 }

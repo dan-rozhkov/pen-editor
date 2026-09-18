@@ -10,6 +10,7 @@ import {
   ChatCircleDotsIcon,
   ChatCircleTextIcon,
   CheckCircleIcon,
+  CompassIcon,
   CrosshairIcon,
   CursorClickIcon,
   EraserIcon,
@@ -101,6 +102,7 @@ const toolIcons: Record<string, Icon> = {
   browse_open: BrowserIcon,
   browse_act: CursorClickIcon,
   browse_find_images: ImagesSquareIcon,
+  browse_task: CompassIcon,
   web_search: GlobeIcon,
   fetch_url: LinkIcon,
   // Every Mobbin-served tool carries the Mobbin mark instead of a

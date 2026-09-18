@@ -42,6 +42,7 @@ import { attachLocalRepo } from "./tools/attachLocalRepo";
 import { browseOpen } from "./tools/browser/browseOpen";
 import { browseAct } from "./tools/browser/browseAct";
 import { browseFindImages } from "./tools/browser/browseFindImages";
+import { browseTask } from "./tools/browser/browseTask";
 
 /**
  * Per-call metadata threaded through to handlers that need to correlate
@@ -113,4 +114,8 @@ export const toolHandlers: Record<string, ToolHandler> = {
   browse_open: browseOpen,
   browse_act: browseAct,
   browse_find_images: browseFindImages,
+  // Jev-driven browsing loop (docs/superpowers/specs/
+  // 2026-09-18-browse-task-jev-loop-design.md) — a client-side loop, not a
+  // single forwarded call. See browseTask.ts's header comment.
+  browse_task: browseTask,
 };

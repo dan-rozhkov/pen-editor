@@ -58,6 +58,7 @@ const EXPECTED_CLIENT_TOOLS = [
   "browse_open",
   "browse_act",
   "browse_find_images",
+  "browse_task",
 ];
 
 // Tools whose schema also has a backend `execute` — they run server-side, the

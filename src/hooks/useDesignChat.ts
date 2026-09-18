@@ -223,6 +223,14 @@ const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
   // ceiling documented anywhere yet).
   remove_background: 60_000,
   vectorize_image: 60_000,
+  // browse_task (docs/superpowers/specs/2026-09-18-browse-task-jev-loop-
+  // design.md §3) runs a whole snapshot/step/perform loop internally bounded
+  // by its own BROWSE_TASK_DEADLINE_MS = 90_000. That would not fit under
+  // the 30s default — this client-side timeout would fire and report a
+  // misleading "Tool call timed out" while the loop kept running underneath
+  // it. 100s gives the loop's own deadline room to win the race and return
+  // a normal transcript instead.
+  browse_task: 100_000,
 };
 
 function getToolCallTimeoutMs(toolName: string): number {
