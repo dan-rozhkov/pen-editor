@@ -78,27 +78,48 @@ export const getStyleGuideTags: ToolHandler = async () => {
   });
 };
 
+// Local fallback for the desktop bridge, when get_style_guide runs in the page
+// instead of on the server. The backend (pen-editor-backend/src/ai/tools.ts,
+// getStyleGuideImpl) is the source of truth and composes a real tag-keyed guide
+// from per-axis tables; that machinery is deliberately NOT duplicated here —
+// two copies of ~200 lines of lookup tables would drift, and unlike
+// get_guidelines there is no byte-identity test holding them together.
+//
+// What this copy must not do is hand back the values it used to: Inter as both
+// the heading and the body face, and #8B5CF6 as `secondary` — the "AI purple"
+// that every design skill in the backend bans by name. A tool that exists to
+// supply inspiration was supplying the generic-AI default instead. So the
+// fallback stays a neutral, unopinionated skeleton and says so in `note`,
+// rather than pretending to be taste.
 export const getStyleGuide: ToolHandler = async (args) => {
   const tags = (Array.isArray(args.tags) ? args.tags : []) as string[];
   const name = args.name as string | undefined;
   return JSON.stringify({
     name: name ?? "Generated Style Guide",
     basedOn: tags,
+    note:
+      "Local fallback: a neutral skeleton, not a design direction, and not keyed to your tags — " +
+      "the server-side guide is. Pick the typeface, palette and shape for this design yourself; " +
+      "shipping these values unchanged is the tell of a generic AI output.",
     typography: {
-      headingFont: "Inter",
+      // A display voice against a reading face, rather than one generic sans
+      // doing both jobs.
+      headingFont: "Space Grotesk",
       bodyFont: "Inter",
       sizes: { h1: 48, h2: 36, h3: 24, h4: 18, body: 16, small: 14, caption: 12 },
       weights: { heading: "700", body: "400", emphasis: "600" },
     },
     colors: {
-      primary: "#3B82F6",
-      secondary: "#8B5CF6",
-      accent: "#F59E0B",
+      // Neutral ramp only — no brand hue is invented here, because inventing
+      // one is exactly the decision this fallback has no basis to make.
+      primary: "#18181B",
+      secondary: "#52525B",
+      accent: "#0E7490",
       background: "#FFFFFF",
-      surface: "#F8FAFC",
-      text: "#0F172A",
-      textMuted: "#64748B",
-      border: "#E2E8F0",
+      surface: "#FAFAFA",
+      text: "#18181B",
+      textMuted: "#71717A",
+      border: "#E4E4E7",
       success: "#22C55E",
       error: "#EF4444",
       warning: "#F59E0B",
