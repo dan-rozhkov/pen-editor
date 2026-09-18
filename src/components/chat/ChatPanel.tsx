@@ -86,7 +86,7 @@ function OpenChatHeader({ chatId }: { chatId: string }) {
   const activeActions = useChatStore((s) => s.sessionActions[chatId]);
 
   return (
-    <div className="flex shrink-0 items-center gap-1 border-b border-border-default px-1 py-1.5">
+    <div className="flex shrink-0 items-center gap-1 border-b border-border-default px-2 py-1.5">
       <IconButton
         data-testid="back-to-chat-list"
         variant="ghost"

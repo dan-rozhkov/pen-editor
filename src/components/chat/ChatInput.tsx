@@ -4,7 +4,6 @@ import {
   StopIcon,
   ImageIcon,
   XIcon,
-  FrameCornersIcon,
   CodeIcon,
 } from "@phosphor-icons/react";
 import { SlashCommandMenu } from "./SlashCommandMenu";
@@ -20,6 +19,7 @@ import { useEmbedElementContext } from "@/hooks/useEmbedElementContext";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { OFFLINE_SEND_TITLE } from "@/lib/apiBase";
 import { downscaleImageDataUrl } from "@/lib/tools/screenshotDownscale";
+import { NodeIcon } from "@/components/layers/LayerIcons";
 import {
   Tooltip,
   TooltipTrigger,
@@ -383,9 +383,9 @@ export function ChatInput({
           No remove button, same reasoning as the reference-only canvas
           chips below — the picker selection keeps riding in canvasContext
           regardless of anything dismissed in the composer. */}
-      {embedElementContext && (
-        <div className="mb-2">
-          <div className="flex gap-2 flex-wrap">
+      {(embedElementContext || selectionContext.length > 0) && (
+        <div className="mb-2 flex flex-wrap gap-2 pl-2">
+          {embedElementContext && (
             <div
               title={
                 embedElementContext.selection.textPreview
@@ -393,42 +393,40 @@ export function ChatInput({
                   : `${embedElementContext.label} in ${embedElementContext.embedName}`
               }
               aria-label={`Selected embed element: ${embedElementContext.label}`}
-              className="flex items-center gap-1 h-12 pl-2 pr-2 rounded-md bg-secondary text-xs text-text-muted"
+              className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent-selection)] px-2 py-1 text-xs text-[var(--color-accent-primary)]"
             >
               <CodeIcon size={14} />
               <span className="max-w-24 truncate">{embedElementContext.label}</span>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* Selected canvas nodes, shown as reference context only — no
-          screenshot, no remove button (see the `selectionContext` doc
-          comment above: the id keeps riding in canvasContext regardless of
-          anything dismissed here). */}
-      {selectionContext.length > 0 && (
-        <div className="mb-2">
-          <div className="flex gap-2 flex-wrap">
-            {selectionContext.slice(0, MAX_SELECTION_CHIPS).map((sel) => (
-              <div
-                key={sel.nodeId}
-                title={sel.name}
-                aria-label={sel.name}
-                className="flex items-center gap-1 h-12 pl-2 pr-2 rounded-md bg-secondary text-xs text-text-muted"
-              >
-                <FrameCornersIcon size={14} />
-                <span className="max-w-24 truncate">{sel.name}</span>
-              </div>
-            ))}
-            {selectionContext.length > MAX_SELECTION_CHIPS && (
-              <div
-                aria-label={`${selectionContext.length - MAX_SELECTION_CHIPS} more selected nodes`}
-                className="flex items-center h-12 px-2 rounded-md bg-secondary text-xs text-text-muted"
-              >
-                +{selectionContext.length - MAX_SELECTION_CHIPS} more
-              </div>
-            )}
-          </div>
+          {/* Selected canvas nodes, shown as reference context only — no
+              screenshot, no remove button (see the `selectionContext` doc
+              comment above: the id keeps riding in canvasContext regardless of
+              anything dismissed here). */}
+          {selectionContext.length > 0 && (
+            <>
+              {selectionContext.slice(0, MAX_SELECTION_CHIPS).map((sel) => (
+                <div
+                  key={sel.nodeId}
+                  title={sel.name}
+                  aria-label={sel.name}
+                  className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent-selection)] px-2 py-1 text-xs text-[var(--color-accent-primary)] [&_svg]:!text-[var(--color-accent-primary)]"
+                >
+                  <NodeIcon type={sel.type} />
+                  <span className="max-w-24 truncate">{sel.name}</span>
+                </div>
+              ))}
+              {selectionContext.length > MAX_SELECTION_CHIPS && (
+                <div
+                  aria-label={`${selectionContext.length - MAX_SELECTION_CHIPS} more selected nodes`}
+                  className="inline-flex items-center rounded-md bg-[var(--color-accent-selection)] px-2 py-1 text-xs text-[var(--color-accent-primary)]"
+                >
+                  +{selectionContext.length - MAX_SELECTION_CHIPS} more
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 

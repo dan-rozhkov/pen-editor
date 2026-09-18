@@ -1,11 +1,12 @@
 import { useMemo } from "react";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
+import type { SceneNode } from "@/types/scene";
 
 export interface SelectionContextItem {
   nodeId: string;
   name: string;
-  type: string;
+  type: SceneNode["type"];
 }
 
 // Stable identity so consumers that memo on the returned array don't re-run

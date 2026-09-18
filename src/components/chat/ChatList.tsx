@@ -3,6 +3,7 @@ import { PlusIcon, XIcon } from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
 import type { ChatSummary } from "@/store/chatStore";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { PanelEmptyState } from "@/components/PanelEmptyState";
 
@@ -61,7 +62,7 @@ function ChatListRow({ chat }: { chat: ChatSummary }) {
           </span>
         )}
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-sm text-text-primary">{chat.title}</span>
+          <span className="truncate text-xs font-semibold text-text-primary">{chat.title}</span>
           <ChatStatus chat={chat} />
         </span>
       </button>
@@ -73,7 +74,7 @@ function ChatListRow({ chat }: { chat: ChatSummary }) {
           e.stopPropagation();
           closeChat(chat.id);
         }}
-        className="mr-2 flex size-6 shrink-0 items-center justify-center rounded text-text-muted opacity-0 transition-opacity hover:bg-secondary group-hover:opacity-100 focus-visible:opacity-100"
+        className="mr-2 flex size-6 shrink-0 items-center justify-center rounded text-text-muted opacity-0 hover:bg-secondary group-hover:opacity-100 focus-visible:opacity-100"
       >
         <XIcon size={12} />
       </button>
@@ -90,15 +91,16 @@ export function ChatList() {
   return (
     <div data-testid="chat-list" className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="p-2">
-        <button
+        <Button
           type="button"
           data-testid="chat-list-new"
           onClick={() => createChat()}
-          className="flex w-full items-center gap-2 rounded-lg border border-border-default px-2 py-2 text-sm text-text-primary hover:bg-secondary"
+          variant="outline"
+          className="w-full"
         >
-          <PlusIcon size={16} weight="light" />
+          <PlusIcon weight="light" />
           New chat
-        </button>
+        </Button>
       </div>
       {sortedChats.length === 0 ? (
         <PanelEmptyState icon={<PlusIcon size={24} weight="light" />}>

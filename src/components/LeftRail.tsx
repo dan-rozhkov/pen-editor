@@ -7,7 +7,7 @@ import {
   TextAaIcon,
   PaintBrushIcon,
   ChatCircleIcon,
-  ToolboxIcon,
+  PuzzlePieceIcon,
 } from "@phosphor-icons/react";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import type { LeftSection } from "@/store/leftSidebarStore";
@@ -58,7 +58,7 @@ const SECTIONS: {
   { section: "pages", testid: "rail-pages", title: "Pages", icon: <FileIcon size={20} weight="light" /> },
   { section: "slides", testid: "rail-slides", title: "Slides", icon: <CardsIcon size={20} weight="light" /> },
   { section: "agents", testid: "rail-agents", title: "Agents", icon: <SparkleIcon size={20} weight="light" /> },
-  { section: "toolbox", testid: "rail-toolbox", title: "Plugins", icon: <ToolboxIcon size={20} weight="light" /> },
+  { section: "toolbox", testid: "rail-toolbox", title: "Plugins", icon: <PuzzlePieceIcon size={20} weight="light" /> },
   { section: "comments", testid: "rail-comments", title: "Threads", icon: <ChatCircleIcon size={20} weight="light" /> },
 ];
 
