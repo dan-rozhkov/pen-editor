@@ -71,6 +71,7 @@ describe("buildRenderableSvgPrefix", () => {
   it("yields a parseable document at every prefix of a real response", () => {
     let nulls = 0;
     let checked = 0;
+    let lastParsed: string | null = null;
     for (let i = 1; i <= REAL_SAMPLE.length; i += 7) {
       const { svg } = buildRenderableSvgPrefix(REAL_SAMPLE.slice(0, i));
       if (svg === null) {
@@ -78,6 +79,11 @@ describe("buildRenderableSvgPrefix", () => {
         continue;
       }
       checked += 1;
+      // Neighbouring prefixes collapse onto the same truncated document — the
+      // output only grows when an element completes. Re-parsing an identical
+      // string proves nothing and cost ~4s of the 5s budget under coverage.
+      if (svg === lastParsed) continue;
+      lastParsed = svg;
       expect(parses(svg), `prefix length ${i} produced unparseable SVG`).toBe(true);
     }
     expect(checked).toBeGreaterThan(2000);
