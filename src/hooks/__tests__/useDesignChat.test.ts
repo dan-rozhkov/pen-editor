@@ -211,6 +211,29 @@ describe("executeToolCall", () => {
     expect(JSON.parse(result)).toEqual({ error: "Tool call timed out" });
   });
 
+  it("does not time out generate_vector at the default 30s budget", async () => {
+    vi.useFakeTimers();
+    const saved = toolHandlers.generate_vector;
+    toolHandlers.generate_vector = () => new Promise<string>(() => {});
+
+    const pending = executeToolCall("generate_vector", {});
+    // A real Quiver generation runs 20-90s. At the 30s default this fired on
+    // almost every call, the model was told it timed out and retried it,
+    // while the first generation had already committed its nodes.
+    await vi.advanceTimersByTimeAsync(95_001);
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(185_001 - 95_001);
+    const result = await pending;
+    expect(JSON.parse(result)).toEqual({ error: "Tool call timed out" });
+    toolHandlers.generate_vector = saved;
+  });
+
   it("emits agent_tool_executed with ok:false and error_kind:'timeout' on timeout", async () => {
     vi.useFakeTimers();
     toolHandlers[TEST_TOOL] = () => new Promise<string>(() => {});

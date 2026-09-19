@@ -68,6 +68,36 @@ That is why the importer work prioritized shape primitives and radial gradients 
 group/transform baking: the latter matters only for the file-drop path this importer also
 serves, where hand-authored and Figma-exported SVGs do use groups.
 
+## Measured: the stream is silence, then a burst
+
+The feature was designed around "watch the agent draw." For `arrow-2` that premise
+**does not hold**, and it was measured rather than assumed.
+
+Timing a live generation frame by frame, straight from Quiver's own API:
+
+```
+first 'draft' event at +17.69s
+first 'content' event at +18.99s
+ANY byte first seen at +17.69s
+event types: {'draft': 89, 'content': 1}
+```
+
+Nothing at all arrives for the first ~18 seconds — no keepalive, no `reasoning`
+event, not one byte. Then every delta lands inside ~1.3 s and the document is done.
+Our backend adds ~0.7 s of proxy overhead and nothing else: measured through
+`/api/vector/generate`, the first frame arrived at +18.93 s and all 108 frames
+within 1.50 s.
+
+What the user actually sees, therefore: roughly 18 seconds of empty canvas (the chat
+panel does show "Generate Vector Running…"), then the artwork revealing itself element
+by element over about a second and a half, then the commit.
+
+Streaming still earns its place — the reveal is real, partial output survives a
+failure, and it costs nothing — but the throttled preview is a short flourish at the
+end, not a drawing you watch being made. Anything that depends on a long visible
+drawing phase (a progress affordance on the canvas, say) has to be built separately,
+because the model does not provide one.
+
 ## Shape of the implementation
 
 ### Backend
@@ -106,7 +136,9 @@ Two constraints fall out of that choice:
   operations.
 - **Re-rasterizing on all ~270 deltas would be absurd.** A frame is emitted only when the
   count of complete elements grows. That is also the honest visual unit: one finished
-  `<path>` is one brush stroke appearing. ~36 frames for a detailed illustration.
+  `<path>` is one brush stroke appearing. ~36 frames for a detailed illustration — and
+  since the deltas all land inside ~1.5 s (see the measurement above), this throttle is
+  what keeps that burst from becoming hundreds of rasterizations in a single second.
 
 The existing `aiVectorPreviewStore` is not reused: it holds one `ParsedVectorDraft` —
 a single shape with a single fill and an anchor list — and a Quiver illustration is dozens

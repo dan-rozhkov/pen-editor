@@ -231,6 +231,15 @@ const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
   // it. 100s gives the loop's own deadline room to win the race and return
   // a normal transcript instead.
   browse_task: 100_000,
+  // generate_vector hands the prompt to QuiverAI's arrow-2, which draws the
+  // SVG token by token: measured 20s for a simple icon and ~90s for a
+  // detailed illustration, against the backend's own QUIVER_TIMEOUT_MS =
+  // 180_000. At the 30s default this fired on almost every real call — the
+  // model was told the generation "timed out" and retried it, paying twice,
+  // while the first generation had in fact finished and committed its nodes
+  // to the canvas. 185s sits just above the backend ceiling so the server's
+  // clean 504 wins the race, same reasoning as generate_image above.
+  generate_vector: 185_000,
 };
 
 function getToolCallTimeoutMs(toolName: string): number {
