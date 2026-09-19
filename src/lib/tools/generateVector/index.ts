@@ -97,6 +97,20 @@ export const generateVector: ToolHandler = async (
     ? useChatStore.getState().abortControllers[context.sessionId]?.signal
     : undefined;
 
+  // Claim the spot before the model has produced a single byte. Quiver sends
+  // nothing at all for ~18s, so without this the canvas stays blank for the
+  // whole think phase and the user has no idea where the artwork will appear.
+  if (key && context?.sessionId && context.toolCallId) {
+    preview.upsert({
+      sessionId: context.sessionId,
+      toolCallId: context.toolCallId,
+      svg: "",
+      completeElements: 0,
+      bounds,
+      phase: "waiting",
+    });
+  }
+
   try {
     const svg = await streamQuiverVector({
       prompt,

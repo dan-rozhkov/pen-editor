@@ -1,9 +1,10 @@
-import { Container, Sprite, Texture } from "pixi.js";
+import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import { svgTextToDataUrl } from "@/lib/htmlToDesign/svgHandling";
 import { getSvgIntrinsicSize } from "@/utils/svgUtils";
 import { computeUniformFit, type FitResult } from "@/lib/quiverVector/fit";
 import { useAiSvgPreviewStore, type AiSvgPreviewDraft } from "@/store/aiSvgPreviewStore";
 import { useViewportStore } from "@/store/viewportStore";
+import { drawDashedRect } from "./selectionOverlay/helpers";
 import { requestCanvasRender } from "./renderScheduler";
 
 /**
@@ -22,9 +23,15 @@ import { requestCanvasRender } from "./renderScheduler";
  * decode on it — and the draft re-rasterizes ~140 times over one generation. */
 const MAX_RASTER_PX = 2048;
 
+/** Same accent the `draw_vector` preview overlay uses, so in-flight agent work
+ * reads as one family rather than two unrelated affordances. */
+const PLACEHOLDER_COLOR = 0x0d99ff;
+
 interface PreviewEntry {
   container: Container;
   sprite: Sprite;
+  /** Dashed outline shown until the first rasterized frame replaces it. */
+  placeholder: Graphics;
   /** The document this entry's texture was built from, to skip redundant work. */
   renderedSvg: string | null;
   /**
@@ -108,6 +115,7 @@ export function createAiSvgPreviewLayer(overlayContainer: Container): () => void
     root.removeChild(entry.container);
     // The sprite owns a canvas-backed texture nothing else references.
     entry.sprite.texture?.destroy(true);
+    entry.placeholder.destroy();
     entry.container.destroy({ children: true });
   }
 
@@ -126,6 +134,21 @@ export function createAiSvgPreviewLayer(overlayContainer: Container): () => void
     // Dim slightly once the real nodes are being built, so the swap from
     // raster preview to committed vector art does not read as a flash.
     entry.container.alpha = draft.phase === "committing" ? 0.6 : 1;
+
+    // Until a frame has actually been rasterized there is nothing to show but
+    // the box the artwork is going to occupy. Drawn every time because the
+    // dash length is baked at the current viewport scale — without redrawing
+    // on zoom the dashes would stretch (the same trap the draw_vector overlay
+    // hit with its anchor markers).
+    entry.placeholder.clear();
+    if (entry.sprite.texture === Texture.EMPTY) {
+      drawDashedRect(
+        entry.placeholder,
+        { x: 0, y: 0, width: fit.width, height: fit.height },
+        PLACEHOLDER_COLOR,
+        useViewportStore.getState().scale || 1,
+      );
+    }
   }
 
   function syncEntry(key: string, draft: AiSvgPreviewDraft): void {
@@ -135,7 +158,9 @@ export function createAiSvgPreviewLayer(overlayContainer: Container): () => void
       const sprite = new Sprite(Texture.EMPTY);
       container.addChild(sprite);
       root.addChild(container);
-      entry = { container, sprite, renderedSvg: null, fit: null, token: 0 };
+      const placeholder = new Graphics();
+      container.addChild(placeholder);
+      entry = { container, sprite, placeholder, renderedSvg: null, fit: null, token: 0 };
       entries.set(key, entry);
     }
 
@@ -144,6 +169,11 @@ export function createAiSvgPreviewLayer(overlayContainer: Container): () => void
 
     entry.renderedSvg = draft.svg;
     entry.token += 1;
+    if (draft.svg.length === 0) {
+      // "waiting": nothing has arrived yet, so there is no document to
+      // rasterize — the dashed box drawn above is the whole frame.
+      return;
+    }
     const token = entry.token;
     const current = entry;
 

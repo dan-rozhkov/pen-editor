@@ -87,6 +87,38 @@ describe("generate_vector handler", () => {
     ).toBe(true);
   });
 
+  it("stages a placeholder before the model has sent anything", async () => {
+    // Quiver is silent for ~18s before its first byte. The dashed box has to
+    // be on the canvas during that window, not after the first frame.
+    let stagedDuringCall: { phase: string; svg: string; bounds: unknown } | null = null;
+    streamQuiverVector.mockImplementation(async () => {
+      const draft =
+        useAiSvgPreviewStore.getState().drafts[svgPreviewKey("s1", "call-1")];
+      stagedDuringCall = draft
+        ? { phase: draft.phase, svg: draft.svg, bounds: draft.bounds }
+        : null;
+      return ARTWORK;
+    });
+
+    await generateVector({ prompt: "a mark", x: 10, y: 20, width: 160, height: 160 }, CONTEXT);
+
+    expect(stagedDuringCall).not.toBeNull();
+    expect(stagedDuringCall!.phase).toBe("waiting");
+    // Nothing has been drawn yet, so there is no document to rasterize.
+    expect(stagedDuringCall!.svg).toBe("");
+    // It must claim the spot the artwork will actually land in.
+    expect(stagedDuringCall!.bounds).toEqual({ x: 10, y: 20, width: 160, height: 160 });
+  });
+
+  it("does not stage a placeholder without an execution context", async () => {
+    streamQuiverVector.mockImplementation(async () => {
+      expect(useAiSvgPreviewStore.getState().drafts).toEqual({});
+      return ARTWORK;
+    });
+    const result = JSON.parse(await generateVector({ prompt: "a mark", x: 0, y: 0 }));
+    expect(result.success).toBe(true);
+  });
+
   it("clears the preview when generation fails", async () => {
     streamQuiverVector.mockRejectedValue(new Error("Invalid API key"));
 

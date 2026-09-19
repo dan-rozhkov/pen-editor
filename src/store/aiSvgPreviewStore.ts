@@ -16,13 +16,22 @@ import { create } from "zustand";
 export interface AiSvgPreviewDraft {
   sessionId: string;
   toolCallId: string;
-  /** A well-formed SVG document covering every element that has arrived. */
+  /**
+   * A well-formed SVG document covering every element that has arrived, or an
+   * empty string while `phase` is "waiting" and nothing has been drawn yet.
+   */
   svg: string;
   /** Grows as elements finish; the layer redraws only when it changes. */
   completeElements: number;
   /** Where the artwork sits on the canvas, in scene coordinates. */
   bounds: { x: number; y: number; width: number; height: number };
-  phase: "streaming" | "committing";
+  /**
+   * "waiting" covers the dead time before the model emits anything — for
+   * arrow-2 that is ~18 seconds of total silence (no keepalive, no reasoning
+   * event), during which the canvas would otherwise sit empty with no hint
+   * that anything is coming or where it will land.
+   */
+  phase: "waiting" | "streaming" | "committing";
 }
 
 interface AiSvgPreviewState {
