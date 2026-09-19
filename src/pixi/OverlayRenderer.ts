@@ -22,6 +22,7 @@ import { formatMeasureLine } from "@/lib/inspect/units";
 import { getMarqueeRect, subscribeOverlayState } from "./pixiOverlayState";
 import { createOverlayHelpers } from "./selectionOverlay/helpers";
 import { createAiVectorPreviewLayer } from "./aiVectorPreviewLayer";
+import { createAiSvgPreviewLayer } from "./aiSvgPreviewLayer";
 import {
   getAnchorScreenPoints,
   getEditedAnchorTarget,
@@ -128,6 +129,7 @@ export function createOverlayRenderer(
   // from useAiVectorPreviewStore rather than participating in this file's
   // redraw functions.
   const destroyAiVectorPreviewLayer = createAiVectorPreviewLayer(overlayContainer);
+  const destroyAiSvgPreviewLayer = createAiSvgPreviewLayer(overlayContainer);
 
   const pathEditGfx = new Graphics();
   pathEditGfx.label = "path-edit";
@@ -794,6 +796,7 @@ export function createOverlayRenderer(
     unsubSceneForPathEdit();
     unsubViewport();
     destroyAiVectorPreviewLayer();
+    destroyAiSvgPreviewLayer();
     pixelGridGfx.destroy();
     guidesGfx.destroy();
     persistentGuidesGfx.destroy();

@@ -42,6 +42,7 @@ import { useRenderModeStore } from "@/store/renderModeStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { useDevModeStore } from "@/store/devModeStore";
 import { useAiVectorPreviewStore } from "@/store/aiVectorPreviewStore";
+import { useAiSvgPreviewStore } from "@/store/aiSvgPreviewStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { subscribeOverlayState } from "./pixiOverlayState";
 
@@ -162,6 +163,7 @@ export function setupRenderScheduler(app: Application): () => void {
     // cached scene frames — without this the repaint would only land on the
     // next safety tick, same class of bug as the pen-tool-lag fix above.
     useAiVectorPreviewStore.subscribe(markActivity),
+    useAiSvgPreviewStore.subscribe(markActivity),
     // Picking an element inside the selected embed hides that embed's Pixi
     // size badge (drawSelection.ts's `pickedElementOwnsSingleEmbed`) in favor
     // of EmbedElementHighlight's own box — a Pixi Graphics change that writes

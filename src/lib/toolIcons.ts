@@ -70,6 +70,9 @@ const toolIcons: Record<string, Icon> = {
   apply_effect_style: MagicWandIcon,
   batch_design: PencilSimpleIcon,
   draw_vector: BezierCurveIcon,
+  // Wand rather than the pen nib: the artwork is generated from a
+  // description, not drawn coordinate by coordinate like draw_vector.
+  generate_vector: MagicWandIcon,
   rename_layers: PencilLineIcon,
   read_embed_html: BinocularsIcon,
   edit_embed_html: NotePencilIcon,

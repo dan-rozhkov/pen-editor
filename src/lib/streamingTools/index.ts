@@ -12,11 +12,13 @@ import type { StreamingToolAdapter } from "@/lib/streamingTools/types";
 import { vectorStreamingToolAdapter } from "@/lib/streamingTools/vectorAdapter";
 import { batchDesignStreamingAdapter } from "@/lib/streamingTools/batchDesignAdapter";
 import { editEmbedHtmlAdapter } from "@/lib/streamingTools/editEmbedHtmlAdapter";
+import { generateVectorStreamingAdapter } from "@/lib/streamingTools/generateVectorAdapter";
 
 export const streamingToolAdapters: readonly StreamingToolAdapter[] = [
   vectorStreamingToolAdapter,
   batchDesignStreamingAdapter,
   editEmbedHtmlAdapter,
+  generateVectorStreamingAdapter,
 ];
 
 /** Tool names every registered adapter cares about, for `extractStreamingToolInputs`. */

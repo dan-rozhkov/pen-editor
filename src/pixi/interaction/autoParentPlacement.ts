@@ -26,8 +26,18 @@ export function addDrawnNodeWithAutoParenting(
   if (targetFrame) {
     sceneState.addChildToFrame(targetFrame.frame.id, {
       ...node,
-      x: bbox.x - targetFrame.absoluteX,
-      y: bbox.y - targetFrame.absoluteY,
+      // Derive the parent-relative position from the node's OWN placement
+      // (`node.x/y`), not the caller's hit-test `bbox`. For every existing
+      // caller (pencil/pen tools, `draw_vector`) these are identical, so
+      // this is a no-op there. But `generate_vector` bakes an intra-SVG
+      // offset into `node.x/y` (`scaleAndOffsetNode`'s `minX * fit`, when
+      // the artwork's content doesn't start at its own viewBox origin) that
+      // `bbox` — the target box used only for the auto-parent hit-test —
+      // does not carry. Using `bbox.x/y` here silently discarded that
+      // offset, landing the drawing at a different spot depending on
+      // whether it fell into this branch or the `addNode` one below.
+      x: node.x - targetFrame.absoluteX,
+      y: node.y - targetFrame.absoluteY,
     });
   } else {
     sceneState.addNode(node);

@@ -37,6 +37,7 @@ export const toolDisplayNames: Record<string, string> = {
   apply_effect_style: "Apply Effect Style",
   batch_design: "Design",
   draw_vector: "Draw Vector",
+  generate_vector: "Generate Vector",
   rename_layers: "Rename Layers",
   read_embed_html: "Explore Design",
   edit_embed_html: "Make Changes to Design",

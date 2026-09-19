@@ -48,6 +48,7 @@ const EXPECTED_CLIENT_TOOLS = [
   "list_plugins",
   "ask_user",
   "draw_vector",
+  "generate_vector",
   "analyze_image",
   "publish_to_showcase",
   "remove_background",

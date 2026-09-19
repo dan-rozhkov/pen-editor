@@ -2,6 +2,110 @@ import type { PathNode, GroupNode, SceneNode, GradientFill } from "@/types/scene
 import { generateId } from "@/types/scene";
 
 /**
+ * A 2D affine matrix in SVG's `matrix(a,b,c,d,e,f)` convention:
+ * `x' = a*x + c*y + e`, `y' = b*x + d*y + f`.
+ */
+interface Matrix2D {
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+  e: number;
+  f: number;
+}
+
+const IDENTITY_MATRIX: Matrix2D = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+
+function isIdentityMatrix(m: Matrix2D): boolean {
+  return m.a === 1 && m.b === 0 && m.c === 0 && m.d === 1 && m.e === 0 && m.f === 0;
+}
+
+function multiplyMatrix(m1: Matrix2D, m2: Matrix2D): Matrix2D {
+  return {
+    a: m1.a * m2.a + m1.c * m2.b,
+    b: m1.b * m2.a + m1.d * m2.b,
+    c: m1.a * m2.c + m1.c * m2.d,
+    d: m1.b * m2.c + m1.d * m2.d,
+    e: m1.a * m2.e + m1.c * m2.f + m1.e,
+    f: m1.b * m2.e + m1.d * m2.f + m1.f,
+  };
+}
+
+function applyMatrixToPoint(m: Matrix2D, x: number, y: number): { x: number; y: number } {
+  return { x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f };
+}
+
+/**
+ * Parse an SVG `transform`/`gradientTransform` attribute value into a single
+ * composed `Matrix2D`. Supports `translate`, `scale`, `rotate` (with or
+ * without a pivot), `matrix`, `skewX`/`skewY`. Unknown function names or
+ * malformed argument lists are skipped (identity contribution) rather than
+ * throwing, so a partially-malformed transform list degrades gracefully.
+ */
+function parseTransformAttribute(transform: string | null | undefined): Matrix2D {
+  if (!transform) return IDENTITY_MATRIX;
+  let result = IDENTITY_MATRIX;
+  const re = /([a-zA-Z]+)\s*\(([^)]*)\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(transform))) {
+    const fn = match[1].toLowerCase();
+    const args = match[2]
+      .trim()
+      .split(/[\s,]+/)
+      .filter(Boolean)
+      .map(Number)
+      .filter((n) => Number.isFinite(n));
+    let m: Matrix2D | null = null;
+    if (fn === "translate" && args.length >= 1) {
+      m = { a: 1, b: 0, c: 0, d: 1, e: args[0], f: args[1] ?? 0 };
+    } else if (fn === "scale" && args.length >= 1) {
+      const sx = args[0];
+      const sy = args.length > 1 ? args[1] : sx;
+      m = { a: sx, b: 0, c: 0, d: sy, e: 0, f: 0 };
+    } else if (fn === "rotate" && args.length >= 1) {
+      const rad = (args[0] * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const rot: Matrix2D = { a: cos, b: sin, c: -sin, d: cos, e: 0, f: 0 };
+      if (args.length >= 3) {
+        const [, cx, cy] = args;
+        const toOrigin: Matrix2D = { a: 1, b: 0, c: 0, d: 1, e: -cx, f: -cy };
+        const back: Matrix2D = { a: 1, b: 0, c: 0, d: 1, e: cx, f: cy };
+        m = multiplyMatrix(multiplyMatrix(back, rot), toOrigin);
+      } else {
+        m = rot;
+      }
+    } else if (fn === "matrix" && args.length === 6) {
+      m = { a: args[0], b: args[1], c: args[2], d: args[3], e: args[4], f: args[5] };
+    } else if (fn === "skewx" && args.length >= 1) {
+      m = { a: 1, b: 0, c: Math.tan((args[0] * Math.PI) / 180), d: 1, e: 0, f: 0 };
+    } else if (fn === "skewy" && args.length >= 1) {
+      m = { a: 1, b: Math.tan((args[0] * Math.PI) / 180), c: 0, d: 1, e: 0, f: 0 };
+    }
+    if (m) result = multiplyMatrix(result, m);
+  }
+  return result;
+}
+
+/**
+ * Singular values of the 2x2 linear part of a matrix, via the closed-form
+ * "E,F,G,H" 2x2 SVD trick. Used to approximate an elliptical radial gradient
+ * (non-uniform scale/rotation baked into `gradientTransform`) as a single
+ * circular radius: `sqrt(s1*s2)` preserves the ellipse's area-equivalent
+ * radius, and `s2/s1` measures how far from circular it actually is (used to
+ * decide whether to warn about the approximation).
+ */
+function svdSingularValues(m: Matrix2D): { s1: number; s2: number } {
+  const E = (m.a + m.d) / 2;
+  const F = (m.a - m.d) / 2;
+  const G = (m.b + m.c) / 2;
+  const H = (m.b - m.c) / 2;
+  const Q = Math.hypot(E, H);
+  const R = Math.hypot(F, G);
+  return { s1: Math.max(0, Q + R), s2: Math.max(0, Q - R) };
+}
+
+/**
  * Measure bounding box of an SVG path data string using an offscreen SVG element.
  */
 export function getPathBBox(pathData: string): { x: number; y: number; width: number; height: number } {
@@ -29,11 +133,28 @@ function getGroupTranslate(el: SVGElement): { tx: number; ty: number } {
   const transform = el.getAttribute("transform");
   if (!transform) return { tx: 0, ty: 0 };
 
-  const translateMatch = transform.match(/translate\(\s*([^,\s]+)[,\s]+([^)]+)\)/);
+  // The second argument is optional per the SVG spec (`translate(10)` means
+  // `translate(10, 0)`) — the previous `[,\s]+([^)]+)` group required it,
+  // silently reading a single-argument translate as {tx: 0, ty: 0}.
+  const translateMatch = transform.match(/translate\(\s*([^,\s)]+)\s*(?:[,\s]+([^)]+))?\)/);
   if (translateMatch) {
-    return { tx: parseFloat(translateMatch[1]) || 0, ty: parseFloat(translateMatch[2]) || 0 };
+    const tx = parseFloat(translateMatch[1]) || 0;
+    const ty = translateMatch[2] !== undefined ? parseFloat(translateMatch[2]) || 0 : 0;
+    return { tx, ty };
   }
   return { tx: 0, ty: 0 };
+}
+
+/**
+ * Does a `transform` attribute contain any function other than `translate`?
+ * Used to warn about `<g>` transforms this importer can't bake into
+ * geometry — checked against every function in the list, not just the
+ * first, so `translate(5,5) scale(2)` (common Figma/Illustrator output)
+ * is caught instead of being misread as "starts with translate, so fine".
+ */
+function hasNonTranslateTransformFunction(transform: string): boolean {
+  const names = Array.from(transform.matchAll(/([a-zA-Z]+)\s*\(/g)).map((m) => m[1].toLowerCase());
+  return names.some((name) => name !== "translate");
 }
 
 /** Inherited SVG style properties passed down from parent elements */
@@ -99,32 +220,140 @@ function parseGradientUrl(value: string | undefined): string | null {
   return match ? match[1] : null;
 }
 
-function parseGradientCoord(
+/** Raw (pre-normalization, pre-gradientTransform) coordinate parsing, shared
+ * by linear and radial gradients. Unlike `parseGradientCoord`, this returns a
+ * value in the gradient's own raw coordinate space (fraction for
+ * objectBoundingBox, user units for userSpaceOnUse) so a `gradientTransform`
+ * matrix — which operates in that same raw space — can be applied before the
+ * final per-axis normalization. */
+function parseGradientRawCoord(
   value: string | null,
-  fallback: number,
+  rawFallback: number,
   axisSize: number,
   units: string,
 ): number {
-  if (!value) return fallback;
+  if (!value) return rawFallback;
   const raw = value.trim();
   if (raw.endsWith("%")) {
     const pct = parseFloat(raw);
-    return Number.isFinite(pct) ? pct / 100 : fallback;
+    if (!Number.isFinite(pct)) return rawFallback;
+    return units === "userSpaceOnUse" ? (pct / 100) * axisSize : pct / 100;
   }
   const n = parseFloat(raw);
-  if (!Number.isFinite(n)) return fallback;
-  if (units === "userSpaceOnUse") {
-    return axisSize > 0 ? n / axisSize : fallback;
+  return Number.isFinite(n) ? n : rawFallback;
+}
+
+function clamp01(n: number): number {
+  return Math.max(0, Math.min(1, n));
+}
+
+/**
+ * A gradient definition, parsed once from `<defs>` and left in its own raw
+ * coordinate space (`gradientTransform` already baked in for radial
+ * gradients' center/radius, and for linear gradients' endpoints) — NOT yet
+ * normalized to 0-1. A `userSpaceOnUse` gradient can only be turned into the
+ * shape-local 0-1 fractions the renderer expects once the *referencing
+ * shape's* bounding box is known (see `resolveGradientForShape`), so that
+ * step happens per-use instead of once here.
+ */
+type RawGradientDef =
+  | {
+      kind: "linear";
+      units: string;
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      stops: GradientFill["stops"];
+    }
+  | {
+      kind: "radial";
+      units: string;
+      cx: number;
+      cy: number;
+      r: number;
+      stops: GradientFill["stops"];
+    };
+
+/**
+ * Resolve a raw gradient definition into shape-local 0-1 `GradientFill`
+ * coordinates, using `bbox` — the same local (untranslated) bounding box
+ * `collectPaths` already computes for the referencing shape via
+ * `getPathBBox`.
+ *
+ * `objectBoundingBox` (the SVG default) needs no shape knowledge: its
+ * coordinates are already fractions of the shape's own bbox by definition.
+ * `userSpaceOnUse` coordinates are in the same user-coordinate system as the
+ * shape's geometry, so they are made shape-local by subtracting the bbox
+ * origin and dividing by the bbox size — never by the SVG viewport, which is
+ * an unrelated coordinate system once a shape isn't the same size as its
+ * document (see the regression this fixes: a small shape in a large SVG had
+ * its gradient normalized against the whole canvas instead of itself).
+ */
+function resolveGradientForShape(
+  def: RawGradientDef,
+  bbox: { x: number; y: number; width: number; height: number },
+): GradientFill {
+  const userSpace = def.units === "userSpaceOnUse";
+
+  if (def.kind === "linear") {
+    const startX = userSpace ? (bbox.width > 0 ? (def.x1 - bbox.x) / bbox.width : def.x1) : def.x1;
+    const startY = userSpace ? (bbox.height > 0 ? (def.y1 - bbox.y) / bbox.height : def.y1) : def.y1;
+    const endX = userSpace ? (bbox.width > 0 ? (def.x2 - bbox.x) / bbox.width : def.x2) : def.x2;
+    const endY = userSpace ? (bbox.height > 0 ? (def.y2 - bbox.y) / bbox.height : def.y2) : def.y2;
+    return {
+      type: "linear",
+      stops: def.stops,
+      startX: clamp01(startX),
+      startY: clamp01(startY),
+      endX: clamp01(endX),
+      endY: clamp01(endY),
+    };
   }
-  return n;
+
+  const startX = userSpace ? (bbox.width > 0 ? (def.cx - bbox.x) / bbox.width : def.cx) : def.cx;
+  const startY = userSpace ? (bbox.height > 0 ? (def.cy - bbox.y) / bbox.height : def.cy) : def.cy;
+  // Radius is normalized against width only, matching how this repo's
+  // renderer scales `endRadius` (`fillStrokeHelpers.ts`: `endRadius * width`).
+  const endRadius = userSpace ? (bbox.width > 0 ? def.r / bbox.width : def.r) : def.r;
+
+  return {
+    type: "radial",
+    stops: def.stops,
+    startX: clamp01(startX),
+    startY: clamp01(startY),
+    endX: clamp01(startX),
+    endY: clamp01(startY),
+    startRadius: 0,
+    endRadius: Math.max(0, endRadius),
+  };
+}
+
+function parseGradientStops(gradientEl: Element): GradientFill["stops"] {
+  return Array.from(gradientEl.querySelectorAll("stop"))
+    .map((stopEl) => {
+      const offsetRaw = getAttrOrStyle(stopEl, "offset") ?? "0%";
+      const offset = offsetRaw.trim().endsWith("%")
+        ? parseFloat(offsetRaw) / 100
+        : parseFloat(offsetRaw);
+      const stopColor = getAttrOrStyle(stopEl, "stop-color") ?? "#000000";
+      const stopOpacityRaw = getAttrOrStyle(stopEl, "stop-opacity");
+      const stopOpacity = stopOpacityRaw != null ? parseFloat(stopOpacityRaw) : undefined;
+      return {
+        color: stopColor,
+        position: Number.isFinite(offset) ? Math.max(0, Math.min(1, offset)) : 0,
+        ...(Number.isFinite(stopOpacity ?? NaN) ? { opacity: Math.max(0, Math.min(1, stopOpacity!)) } : {}),
+      };
+    })
+    .sort((a, b) => a.position - b.position);
 }
 
 function collectLinearGradients(
   doc: Document,
   svgWidth: number,
   svgHeight: number,
-): Map<string, GradientFill> {
-  const gradients = new Map<string, GradientFill>();
+): Map<string, RawGradientDef> {
+  const gradients = new Map<string, RawGradientDef>();
   const gradientEls = doc.querySelectorAll("linearGradient");
 
   for (const gradientEl of Array.from(gradientEls)) {
@@ -132,37 +361,100 @@ function collectLinearGradients(
     if (!id) continue;
 
     const units = gradientEl.getAttribute("gradientUnits") ?? "objectBoundingBox";
-    const startX = parseGradientCoord(gradientEl.getAttribute("x1"), 0, svgWidth, units);
-    const startY = parseGradientCoord(gradientEl.getAttribute("y1"), 0, svgHeight, units);
-    const endX = parseGradientCoord(gradientEl.getAttribute("x2"), 1, svgWidth, units);
-    const endY = parseGradientCoord(gradientEl.getAttribute("y2"), 0, svgHeight, units);
+    const matrix = parseTransformAttribute(gradientEl.getAttribute("gradientTransform"));
 
-    const stops = Array.from(gradientEl.querySelectorAll("stop"))
-      .map((stopEl) => {
-        const offsetRaw = getAttrOrStyle(stopEl, "offset") ?? "0%";
-        const offset = offsetRaw.trim().endsWith("%")
-          ? parseFloat(offsetRaw) / 100
-          : parseFloat(offsetRaw);
-        const stopColor = getAttrOrStyle(stopEl, "stop-color") ?? "#000000";
-        const stopOpacityRaw = getAttrOrStyle(stopEl, "stop-opacity");
-        const stopOpacity = stopOpacityRaw != null ? parseFloat(stopOpacityRaw) : undefined;
-        return {
-          color: stopColor,
-          position: Number.isFinite(offset) ? Math.max(0, Math.min(1, offset)) : 0,
-          ...(Number.isFinite(stopOpacity ?? NaN) ? { opacity: Math.max(0, Math.min(1, stopOpacity!)) } : {}),
-        };
-      })
-      .sort((a, b) => a.position - b.position);
+    const rawX1 = parseGradientRawCoord(gradientEl.getAttribute("x1"), 0, svgWidth, units);
+    const rawY1 = parseGradientRawCoord(gradientEl.getAttribute("y1"), 0, svgHeight, units);
+    const rawX2 = parseGradientRawCoord(
+      gradientEl.getAttribute("x2"),
+      units === "userSpaceOnUse" ? svgWidth : 1,
+      svgWidth,
+      units,
+    );
+    const rawY2 = parseGradientRawCoord(gradientEl.getAttribute("y2"), 0, svgHeight, units);
 
+    // `gradientTransform` operates in the gradient's own raw coordinate
+    // space (fraction for objectBoundingBox, user units for
+    // userSpaceOnUse) — apply it here, before this def is stored, so the
+    // per-shape resolution step later only has to do the unit conversion.
+    const p1 = applyMatrixToPoint(matrix, rawX1, rawY1);
+    const p2 = applyMatrixToPoint(matrix, rawX2, rawY2);
+
+    const stops = parseGradientStops(gradientEl);
     if (stops.length === 0) continue;
 
     gradients.set(id, {
-      type: "linear",
+      kind: "linear",
+      units,
+      x1: p1.x,
+      y1: p1.y,
+      x2: p2.x,
+      y2: p2.y,
       stops,
-      startX: Math.max(0, Math.min(1, startX)),
-      startY: Math.max(0, Math.min(1, startY)),
-      endX: Math.max(0, Math.min(1, endX)),
-      endY: Math.max(0, Math.min(1, endY)),
+    });
+  }
+
+  return gradients;
+}
+
+/**
+ * Collect `<radialGradient>` defs into the same raw shape used for linear
+ * gradients. This repo's `GradientFill`/renderer model only supports a
+ * single (circular) radius (see `pixi/renderers/fillStrokeHelpers.ts`), so an
+ * elliptical result — from a non-uniform-scale/rotation `gradientTransform`,
+ * which QuiverAI emits (e.g. `translate(...) rotate(...) scale(sx,sy)`) — is
+ * approximated by its area-equivalent circular radius (`sqrt(s1*s2)` of the
+ * transform's singular values) and a warning is pushed when the two axes
+ * differ enough to matter.
+ */
+function collectRadialGradients(
+  doc: Document,
+  svgWidth: number,
+  svgHeight: number,
+  warnings: string[],
+): Map<string, RawGradientDef> {
+  const gradients = new Map<string, RawGradientDef>();
+  const gradientEls = doc.querySelectorAll("radialGradient");
+
+  for (const gradientEl of Array.from(gradientEls)) {
+    const id = gradientEl.getAttribute("id");
+    if (!id) continue;
+
+    const units = gradientEl.getAttribute("gradientUnits") ?? "objectBoundingBox";
+    const matrix = parseTransformAttribute(gradientEl.getAttribute("gradientTransform"));
+
+    const rawCx = parseGradientRawCoord(gradientEl.getAttribute("cx"), units === "userSpaceOnUse" ? svgWidth * 0.5 : 0.5, svgWidth, units);
+    const rawCy = parseGradientRawCoord(gradientEl.getAttribute("cy"), units === "userSpaceOnUse" ? svgHeight * 0.5 : 0.5, svgHeight, units);
+    const rawR = parseGradientRawCoord(gradientEl.getAttribute("r"), units === "userSpaceOnUse" ? svgWidth * 0.5 : 0.5, svgWidth, units);
+
+    let centerX = rawCx;
+    let centerY = rawCy;
+    let radius = rawR;
+
+    if (!isIdentityMatrix(matrix)) {
+      const center = applyMatrixToPoint(matrix, rawCx, rawCy);
+      centerX = center.x;
+      centerY = center.y;
+      const { s1, s2 } = svdSingularValues(matrix);
+      // Area-equivalent circular radius of the transformed ellipse.
+      radius = rawR * Math.sqrt(Math.max(0, s1 * s2));
+      if (s1 > 0 && s2 / s1 < 0.85) {
+        warnings.push(
+          `Radial gradient "${id}" is elliptical (its gradientTransform has non-uniform scale/rotation); approximated as a circle.`,
+        );
+      }
+    }
+
+    const stops = parseGradientStops(gradientEl);
+    if (stops.length === 0) continue;
+
+    gradients.set(id, {
+      kind: "radial",
+      units,
+      cx: centerX,
+      cy: centerY,
+      r: radius,
+      stops,
     });
   }
 
@@ -309,13 +601,36 @@ function collectClipPaths(doc: Document): Map<string, ClipPathDef> {
  * Recursively collect path elements from an SVG element, accumulating parent translate offsets
  * and inheriting fill/stroke from parent elements.
  */
+// Containers whose children are definitions/masking geometry, never directly
+// visible content: recursing into them would double-render clip-path/mask
+// shapes as if they were real drawable paths (a real pre-existing bug —
+// `<defs><clipPath><path .../></clipPath></defs>` used to fall through to
+// the generic "recurse into anything" branch below and get collected twice,
+// once correctly via `collectClipPaths` and once bogusly as a visible node).
+//
+// `symbol` is deliberately NOT in this set, even though the SVG spec says a
+// `<symbol>`'s content is only rendered once instanced by a `<use>`. `<use>`
+// itself is unsupported here (see `UNSUPPORTED_LEAF_TAGS`, warned and
+// skipped), so treating `symbol` as non-rendering made a whole class of
+// documents — sprite sheets, some Illustrator exports that put their actual
+// artwork inside a single `<symbol>` — import as an empty scene with zero
+// warning, which is worse than a misplaced-but-visible import for an editor
+// whose whole point is letting the user then fix placement by hand. See the
+// `symbol` branch below for the tradeoff this makes explicit via a warning.
+const NON_RENDERING_CONTAINER_TAGS = new Set(["defs", "clippath", "mask", "pattern", "filter"]);
+// Recognized elements this importer cannot convert to a path. Skipped with a
+// warning instead of silently vanishing (or, worse, being misread by the
+// generic container-recursion fallback).
+const UNSUPPORTED_LEAF_TAGS = new Set(["text", "image", "use", "foreignobject"]);
+
 function collectPaths(
   el: Element,
   offsetX: number,
   offsetY: number,
   inherited: InheritedStyle,
   clipPaths: Map<string, ClipPathDef>,
-  gradientDefs: Map<string, GradientFill>,
+  gradientDefs: Map<string, RawGradientDef>,
+  warnings: string[],
   inheritedClipId: string | null = null,
 ): PathNode[] {
   const results: PathNode[] = [];
@@ -390,90 +705,156 @@ function collectPaths(
   const shapeTagNames = new Set(["path", "rect", "circle", "ellipse", "line", "polygon", "polyline"]);
 
   for (const child of Array.from(el.children)) {
-    // Check for clip-path on this element (inherits to children)
-    const localClipId = parseClipPathUrl(child.getAttribute("clip-path")) ?? inheritedClipId;
     const childTag = child.tagName.toLowerCase();
 
-    if (shapeTagNames.has(childTag)) {
-      const d = shapeToPathData(child);
-      if (!d) continue;
+    // Definitions/masking containers are harvested separately (gradients,
+    // clip-paths) — recursing into them would re-collect their shape
+    // children as bogus visible content.
+    if (NON_RENDERING_CONTAINER_TAGS.has(childTag)) continue;
 
-      // Resolve fill and stroke with inheritance
-      const localFill = getAttrOrStyle(child, "fill");
-      const localStroke = getAttrOrStyle(child, "stroke");
-      const resolvedFill = resolveInheritedColor(localFill, inherited.fill);
-      const resolvedStroke = resolveInheritedColor(localStroke, inherited.stroke);
-      const resolvedStrokeWidth = getAttrOrStyle(child, "stroke-width") ?? inherited.strokeWidth;
-      const resolvedLinejoin = getAttrOrStyle(child, "stroke-linejoin") ?? inherited.strokeLinejoin;
-      const resolvedLinecap = getAttrOrStyle(child, "stroke-linecap") ?? inherited.strokeLinecap;
+    if (UNSUPPORTED_LEAF_TAGS.has(childTag)) {
+      warnings.push(`Skipped unsupported <${childTag}> element (not convertible to a vector path).`);
+      continue;
+    }
 
-      // Resolve opacity values with inheritance
-      const localOpacity = getAttrOrStyle(child, "opacity");
-      const localFillOpacity = getAttrOrStyle(child, "fill-opacity");
-      const localStrokeOpacity = getAttrOrStyle(child, "stroke-opacity");
-      const resolvedOpacity = localOpacity ?? inherited.opacity;
-      const resolvedFillOpacity = localFillOpacity ?? inherited.fillOpacity;
-      const resolvedStrokeOpacity = localStrokeOpacity ?? inherited.strokeOpacity;
-      const resolvedFillRule = getAttrOrStyle(child, "fill-rule") ?? inherited.fillRule;
-      const fillGradientId = parseGradientUrl(resolvedFill);
-      const fillGradient = fillGradientId ? gradientDefs.get(fillGradientId) : undefined;
-      const hasSolidFill = !!resolvedFill && !fillGradientId;
+    try {
+      // Check for clip-path on this element (inherits to children)
+      const localClipId = parseClipPathUrl(child.getAttribute("clip-path")) ?? inheritedClipId;
 
-      // Skip fully invisible paths (no fill AND no stroke)
-      if (!hasSolidFill && !fillGradient && !resolvedStroke) continue;
+      if (shapeTagNames.has(childTag)) {
+        const d = shapeToPathData(child);
+        if (!d) continue;
 
-      const shouldSplitSubpaths =
-        !!resolvedStroke &&
-        !hasSolidFill &&
-        !fillGradient &&
-        (d.match(/[Mm]/g)?.length ?? 0) > 1;
-      const pathParts = shouldSplitSubpaths ? splitIntoSubpaths(d) : [d];
+        // Resolve fill and stroke with inheritance
+        const localFill = getAttrOrStyle(child, "fill");
+        const localStroke = getAttrOrStyle(child, "stroke");
+        const resolvedFill = resolveInheritedColor(localFill, inherited.fill);
+        let resolvedStroke = resolveInheritedColor(localStroke, inherited.stroke);
+        const resolvedStrokeWidth = getAttrOrStyle(child, "stroke-width") ?? inherited.strokeWidth;
+        const resolvedLinejoin = getAttrOrStyle(child, "stroke-linejoin") ?? inherited.strokeLinejoin;
+        const resolvedLinecap = getAttrOrStyle(child, "stroke-linecap") ?? inherited.strokeLinecap;
 
-      for (let part of pathParts) {
-        let bbox = getPathBBox(part);
-        // Skip zero-size paths (e.g. bounding box rectangles like "M0 0h24v24H0z")
-        if (bbox.width === 0 && bbox.height === 0) continue;
-
-        // Detect dot/point paths (near-zero area, e.g. from <line x1=9 y1=9 x2=9.01 y2=9>).
-        // In SVG these render as filled circles via stroke-linecap:round.
-        // Convert to a filled circle path using stroke color as fill, no stroke.
-        const isDot = bbox.width < 0.5 && bbox.height < 0.5 && resolvedStroke;
-        if (isDot) {
-          const sw = resolvedStrokeWidth ? parseFloat(resolvedStrokeWidth) : 1;
-          const r = sw / 2;
-          const cx = bbox.x + bbox.width / 2;
-          const cy = bbox.y + bbox.height / 2;
-          const k = 0.5522847498;
-          part = `M${cx - r},${cy} C${cx - r},${cy - k * r} ${cx - k * r},${cy - r} ${cx},${cy - r} C${cx + k * r},${cy - r} ${cx + r},${cy - k * r} ${cx + r},${cy} C${cx + r},${cy + k * r} ${cx + k * r},${cy + r} ${cx},${cy + r} C${cx - k * r},${cy + r} ${cx - r},${cy + k * r} ${cx - r},${cy} Z`;
-          bbox = getPathBBox(part);
+        if (resolvedStroke && /^url\(/i.test(resolvedStroke)) {
+          warnings.push(`Element <${childTag}> uses an unsupported gradient/pattern stroke; used a solid fallback color instead.`);
+          resolvedStroke = "#808080";
         }
 
-        results.push(createPathNode(
-          part,
-          bbox,
-          // For dots, use stroke color as fill (SVG renders dots as filled circles)
-          isDot ? resolvedStroke : (hasSolidFill ? resolvedFill : undefined),
-          fillGradient,
-          localClipId,
-          resolvedFillRule,
-          resolvedOpacity,
-          resolvedFillOpacity,
-          resolvedStrokeOpacity,
-          // For dots, remove stroke (the fill circle already represents the dot)
-          isDot ? undefined : resolvedStroke,
-          isDot ? undefined : resolvedStrokeWidth,
-          resolvedLinejoin,
-          resolvedLinecap,
-        ));
+        // Resolve opacity values with inheritance
+        const localOpacity = getAttrOrStyle(child, "opacity");
+        const localFillOpacity = getAttrOrStyle(child, "fill-opacity");
+        const localStrokeOpacity = getAttrOrStyle(child, "stroke-opacity");
+        const resolvedOpacity = localOpacity ?? inherited.opacity;
+        const resolvedFillOpacity = localFillOpacity ?? inherited.fillOpacity;
+        const resolvedStrokeOpacity = localStrokeOpacity ?? inherited.strokeOpacity;
+        const resolvedFillRule = getAttrOrStyle(child, "fill-rule") ?? inherited.fillRule;
+        const fillGradientId = parseGradientUrl(resolvedFill);
+        const gradientDef = fillGradientId ? gradientDefs.get(fillGradientId) : undefined;
+        let hasSolidFill = !!resolvedFill && !fillGradientId;
+        let effectiveFill = hasSolidFill ? resolvedFill : undefined;
+
+        // A `url(#id)` fill that doesn't resolve (unsupported paint type like
+        // a pattern/mesh gradient, or a dangling reference) must never drop
+        // the shape — fall back to a solid color and say so.
+        if (fillGradientId && !gradientDef) {
+          warnings.push(`Element <${childTag}> references unresolved paint "url(#${fillGradientId})"; used a solid fallback color instead.`);
+          effectiveFill = "#808080";
+          hasSolidFill = true;
+        }
+
+        // Skip fully invisible paths (no fill AND no stroke)
+        if (!hasSolidFill && !gradientDef && !resolvedStroke) continue;
+
+        const shouldSplitSubpaths =
+          !!resolvedStroke &&
+          !hasSolidFill &&
+          !gradientDef &&
+          (d.match(/[Mm]/g)?.length ?? 0) > 1;
+        const pathParts = shouldSplitSubpaths ? splitIntoSubpaths(d) : [d];
+
+        for (let part of pathParts) {
+          let bbox = getPathBBox(part);
+          // Skip zero-size paths (e.g. bounding box rectangles like "M0 0h24v24H0z")
+          if (bbox.width === 0 && bbox.height === 0) continue;
+
+          // Detect dot/point paths (near-zero area, e.g. from <line x1=9 y1=9 x2=9.01 y2=9>).
+          // In SVG these render as filled circles via stroke-linecap:round.
+          // Convert to a filled circle path using stroke color as fill, no stroke.
+          const isDot = bbox.width < 0.5 && bbox.height < 0.5 && resolvedStroke;
+          if (isDot) {
+            const sw = resolvedStrokeWidth ? parseFloat(resolvedStrokeWidth) : 1;
+            const r = sw / 2;
+            const cx = bbox.x + bbox.width / 2;
+            const cy = bbox.y + bbox.height / 2;
+            const k = 0.5522847498;
+            part = `M${cx - r},${cy} C${cx - r},${cy - k * r} ${cx - k * r},${cy - r} ${cx},${cy - r} C${cx + k * r},${cy - r} ${cx + r},${cy - k * r} ${cx + r},${cy} C${cx + r},${cy + k * r} ${cx + k * r},${cy + r} ${cx},${cy + r} C${cx - k * r},${cy + r} ${cx - r},${cy + k * r} ${cx - r},${cy} Z`;
+            bbox = getPathBBox(part);
+          }
+
+          // Resolve the gradient against THIS part's own bbox — not the SVG
+          // viewport — now that it is finally known. See
+          // `resolveGradientForShape`'s doc comment for why this can't
+          // happen once, up front, for a `userSpaceOnUse` gradient.
+          const fillGradient = gradientDef ? resolveGradientForShape(gradientDef, bbox) : undefined;
+
+          results.push(createPathNode(
+            part,
+            bbox,
+            // For dots, use stroke color as fill (SVG renders dots as filled circles)
+            isDot ? resolvedStroke : effectiveFill,
+            fillGradient,
+            localClipId,
+            resolvedFillRule,
+            resolvedOpacity,
+            resolvedFillOpacity,
+            resolvedStrokeOpacity,
+            // For dots, remove stroke (the fill circle already represents the dot)
+            isDot ? undefined : resolvedStroke,
+            isDot ? undefined : resolvedStrokeWidth,
+            resolvedLinejoin,
+            resolvedLinecap,
+          ));
+        }
+      } else if (child.tagName === "g") {
+        // Known limitation: only `translate` is honored on `<g>` — `scale`/
+        // `rotate`/`matrix` on a group are ignored (the group's children keep
+        // their original size/orientation). QuiverAI itself never emits `<g>`
+        // (verified against three real generations), so this only affects
+        // the file-drop import path for hand-authored/Figma-exported SVGs.
+        // Baking a general transform into `PathNode.geometry` correctly
+        // (arcs in particular) needs a full path-data tokenizer/rewriter,
+        // which is a much larger, separate change — left as future work
+        // rather than risking the working translate-only path here.
+        const { tx, ty } = getGroupTranslate(child as SVGElement);
+        const transformAttr = child.getAttribute("transform");
+        if (transformAttr && hasNonTranslateTransformFunction(transformAttr)) {
+          warnings.push(`<g transform="${transformAttr}"> uses scale/rotate/matrix, which is not baked into child geometry (only translation is applied).`);
+        }
+        const childStyle = getInheritedStyle(child, inherited);
+        results.push(...collectPaths(child, offsetX + tx, offsetY + ty, childStyle, clipPaths, gradientDefs, warnings, localClipId));
+      } else if (childTag === "symbol") {
+        // Per spec this content is invisible until a `<use>` instances it,
+        // but `<use>` is unsupported here (skipped with its own warning
+        // below), so honoring the spec literally would silently import
+        // nothing for a document whose real content lives entirely inside a
+        // `<symbol>`. Importing it directly — at the symbol's own
+        // coordinates, un-repeated, un-transformed by whatever `<use>`
+        // would have applied — is a deliberate tradeoff: misplaced but
+        // visible beats correct-per-spec but empty for this editor.
+        warnings.push(
+          `<symbol${child.getAttribute("id") ? ` id="${child.getAttribute("id")}"` : ""}> content was imported directly; any <use> that would normally position/scale/repeat it is not supported, so placement may not match the original file.`,
+        );
+        const childStyle = getInheritedStyle(child, inherited);
+        results.push(...collectPaths(child, offsetX, offsetY, childStyle, clipPaths, gradientDefs, warnings, localClipId));
+      } else {
+        // Recurse into other elements (like <svg>, <a>, <switch>, etc.)
+        const childStyle = getInheritedStyle(child, inherited);
+        results.push(...collectPaths(child, offsetX, offsetY, childStyle, clipPaths, gradientDefs, warnings, localClipId));
       }
-    } else if (child.tagName === "g") {
-      const { tx, ty } = getGroupTranslate(child as SVGElement);
-      const childStyle = getInheritedStyle(child, inherited);
-      results.push(...collectPaths(child, offsetX + tx, offsetY + ty, childStyle, clipPaths, gradientDefs, localClipId));
-    } else {
-      // Recurse into other elements (like <svg>, <defs> siblings, etc.)
-      const childStyle = getInheritedStyle(child, inherited);
-      results.push(...collectPaths(child, offsetX, offsetY, childStyle, clipPaths, gradientDefs, localClipId));
+    } catch (err) {
+      // Never let one malformed element take down the whole document.
+      warnings.push(
+        `Skipped <${childTag}> due to a parse error: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -482,83 +863,131 @@ function collectPaths(
 
 /**
  * Parse an SVG file string and return scene nodes (PathNodes, possibly wrapped in a GroupNode).
- * Returns a single SceneNode ready to add to the scene.
+ * Returns a single SceneNode ready to add to the scene, or `null` when the
+ * document is unparseable/empty of drawable content — this never throws.
+ *
+ * `warnings` is additive (existing callers that only destructure
+ * `{ node, svgWidth, svgHeight }` are unaffected): it reports non-fatal
+ * degradations — unresolved paint references falling back to a solid color,
+ * an elliptical radial gradient approximated as a circle, unsupported
+ * elements skipped, or a `<g>` transform whose scale/rotate component
+ * couldn't be baked in (see `collectPaths`'s known limitation there).
  */
-export function parseSvgToNodes(svgText: string): { node: SceneNode; svgWidth: number; svgHeight: number } | null {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(svgText, "image/svg+xml");
-
-  const svgEl = doc.querySelector("svg");
-  if (!svgEl) return null;
-
-  // Get SVG dimensions from viewBox or width/height attributes
-  let svgWidth = 100;
-  let svgHeight = 100;
+/** Read an SVG's own intrinsic size from its `viewBox` (preferred) or its
+ * `width`/`height` attributes, falling back to 100x100 when neither is
+ * present or parseable — the same default `parseSvgToNodes` has always
+ * used. Factored out so callers that only need the size (the live preview
+ * layer's uniform-fit calculation) don't have to duplicate this parsing or
+ * run the full node conversion. */
+function getSvgElementIntrinsicSize(svgEl: Element): { width: number; height: number } {
+  let width = 100;
+  let height = 100;
 
   const viewBox = svgEl.getAttribute("viewBox");
   if (viewBox) {
     const parts = viewBox.split(/[\s,]+/).map(Number);
     if (parts.length === 4) {
-      svgWidth = parts[2];
-      svgHeight = parts[3];
+      width = parts[2];
+      height = parts[3];
     }
   } else {
     const w = svgEl.getAttribute("width");
     const h = svgEl.getAttribute("height");
-    if (w) svgWidth = parseFloat(w) || 100;
-    if (h) svgHeight = parseFloat(h) || 100;
+    if (w) width = parseFloat(w) || 100;
+    if (h) height = parseFloat(h) || 100;
   }
 
-  // Build inherited style from root <svg> element attributes
-  const rootStyle: InheritedStyle = {
-    fill: getAttrOrStyle(svgEl, "fill") ?? undefined,
-    stroke: getAttrOrStyle(svgEl, "stroke") ?? undefined,
-    strokeWidth: getAttrOrStyle(svgEl, "stroke-width") ?? undefined,
-    strokeLinejoin: getAttrOrStyle(svgEl, "stroke-linejoin") ?? undefined,
-    strokeLinecap: getAttrOrStyle(svgEl, "stroke-linecap") ?? undefined,
-    opacity: getAttrOrStyle(svgEl, "opacity") ?? undefined,
-    fillOpacity: getAttrOrStyle(svgEl, "fill-opacity") ?? undefined,
-    strokeOpacity: getAttrOrStyle(svgEl, "stroke-opacity") ?? undefined,
-    fillRule: getAttrOrStyle(svgEl, "fill-rule") ?? undefined,
-  };
+  return { width, height };
+}
 
-  // Collect clip-path definitions from <defs>
-  const clipPathDefs = collectClipPaths(doc);
-  const gradientDefs = collectLinearGradients(doc, svgWidth, svgHeight);
-
-  const pathNodes = collectPaths(svgEl, 0, 0, rootStyle, clipPathDefs, gradientDefs, null);
-  if (pathNodes.length === 0) return null;
-
-  if (pathNodes.length === 1) {
-    return { node: pathNodes[0], svgWidth, svgHeight };
+/**
+ * Text-parsing wrapper around `getSvgElementIntrinsicSize`, for callers that
+ * only have the raw SVG string — e.g. the `generate_vector` live preview,
+ * which rasterizes a streamed SVG prefix and needs its natural size to fit
+ * it the same way the eventual committed scene nodes will be fit (see
+ * `computeUniformFit` in `lib/quiverVector/fit.ts`). Returns `null` rather
+ * than throwing on unparseable input, same convention as `parseSvgToNodes`.
+ */
+export function getSvgIntrinsicSize(svgText: string): { width: number; height: number } | null {
+  try {
+    const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
+    const svgEl = doc.querySelector("svg");
+    return svgEl ? getSvgElementIntrinsicSize(svgEl) : null;
+  } catch {
+    return null;
   }
+}
 
-  // Multiple paths — wrap in a group
-  // Compute bounding box of all paths
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const p of pathNodes) {
-    minX = Math.min(minX, p.x);
-    minY = Math.min(minY, p.y);
-    maxX = Math.max(maxX, p.x + p.width);
-    maxY = Math.max(maxY, p.y + p.height);
+export function parseSvgToNodes(
+  svgText: string,
+): { node: SceneNode; svgWidth: number; svgHeight: number; warnings: string[] } | null {
+  const warnings: string[] = [];
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(svgText, "image/svg+xml");
+
+    const svgEl = doc.querySelector("svg");
+    if (!svgEl) return null;
+
+    // Get SVG dimensions from viewBox or width/height attributes
+    const { width: svgWidth, height: svgHeight } = getSvgElementIntrinsicSize(svgEl);
+
+    // Build inherited style from root <svg> element attributes
+    const rootStyle: InheritedStyle = {
+      fill: getAttrOrStyle(svgEl, "fill") ?? undefined,
+      stroke: getAttrOrStyle(svgEl, "stroke") ?? undefined,
+      strokeWidth: getAttrOrStyle(svgEl, "stroke-width") ?? undefined,
+      strokeLinejoin: getAttrOrStyle(svgEl, "stroke-linejoin") ?? undefined,
+      strokeLinecap: getAttrOrStyle(svgEl, "stroke-linecap") ?? undefined,
+      opacity: getAttrOrStyle(svgEl, "opacity") ?? undefined,
+      fillOpacity: getAttrOrStyle(svgEl, "fill-opacity") ?? undefined,
+      strokeOpacity: getAttrOrStyle(svgEl, "stroke-opacity") ?? undefined,
+      fillRule: getAttrOrStyle(svgEl, "fill-rule") ?? undefined,
+    };
+
+    // Collect clip-path and gradient definitions from <defs>
+    const clipPathDefs = collectClipPaths(doc);
+    const gradientDefs = collectLinearGradients(doc, svgWidth, svgHeight);
+    const radialGradientDefs = collectRadialGradients(doc, svgWidth, svgHeight, warnings);
+    for (const [id, gradient] of radialGradientDefs) gradientDefs.set(id, gradient);
+
+    const pathNodes = collectPaths(svgEl, 0, 0, rootStyle, clipPathDefs, gradientDefs, warnings, null);
+    if (pathNodes.length === 0) return null;
+
+    if (pathNodes.length === 1) {
+      return { node: pathNodes[0], svgWidth, svgHeight, warnings };
+    }
+
+    // Multiple paths — wrap in a group
+    // Compute bounding box of all paths
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const p of pathNodes) {
+      minX = Math.min(minX, p.x);
+      minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x + p.width);
+      maxY = Math.max(maxY, p.y + p.height);
+    }
+
+    // Offset children relative to group origin
+    for (const p of pathNodes) {
+      p.x -= minX;
+      p.y -= minY;
+    }
+
+    const group: GroupNode = {
+      id: generateId(),
+      type: "group",
+      name: "SVG",
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+      children: pathNodes,
+    };
+
+    return { node: group, svgWidth, svgHeight, warnings };
+  } catch {
+    // Never throw on malformed input — treat as "nothing importable".
+    return null;
   }
-
-  // Offset children relative to group origin
-  for (const p of pathNodes) {
-    p.x -= minX;
-    p.y -= minY;
-  }
-
-  const group: GroupNode = {
-    id: generateId(),
-    type: "group",
-    name: "SVG",
-    x: minX,
-    y: minY,
-    width: maxX - minX,
-    height: maxY - minY,
-    children: pathNodes,
-  };
-
-  return { node: group, svgWidth, svgHeight };
 }

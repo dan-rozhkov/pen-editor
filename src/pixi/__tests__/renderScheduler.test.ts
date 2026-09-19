@@ -7,6 +7,7 @@ import { useEditorModeStore } from "@/store/editorModeStore";
 import { useDevModeStore } from "@/store/devModeStore";
 import { useMeasurementsStore } from "@/store/measurementsStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
+import { useAiSvgPreviewStore } from "@/store/aiSvgPreviewStore";
 import { requestCanvasRender, setupRenderScheduler } from "../renderScheduler";
 
 describe("requestCanvasRender", () => {
@@ -249,6 +250,34 @@ describe("setupRenderScheduler invalidation sources", () => {
     tick();
     expect(render).toHaveBeenCalledTimes(1);
 
+    cleanup();
+  });
+  it("renders promptly after an aiSvgPreviewStore change (generate_vector previews aren't scene mutations)", () => {
+    const now = vi.spyOn(performance, "now");
+
+    now.mockReturnValue(0);
+    const { app, render, tick } = makeFakeApp();
+    const cleanup = setupRenderScheduler(app);
+
+    now.mockReturnValue(5000);
+    tick();
+    render.mockClear();
+
+    now.mockReturnValue(5100);
+    useAiSvgPreviewStore.getState().upsert({
+      sessionId: "s1",
+      toolCallId: "call-1",
+      svg: '<svg viewBox="0 0 10 10"><rect width="4" height="4"/></svg>',
+      completeElements: 1,
+      bounds: { x: 0, y: 0, width: 100, height: 100 },
+      phase: "streaming",
+    });
+
+    now.mockReturnValue(5116);
+    tick();
+    expect(render).toHaveBeenCalledTimes(1);
+
+    useAiSvgPreviewStore.getState().reset();
     cleanup();
   });
 });

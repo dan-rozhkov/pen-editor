@@ -31,6 +31,7 @@ import { updatePlugin } from "./tools/plugins/updatePlugin";
 import { listPlugins } from "./tools/plugins/listPlugins";
 import { askUser } from "./tools/askUser";
 import { drawVector } from "./tools/drawVector";
+import { generateVector } from "./tools/generateVector";
 import { publishToShowcase } from "./tools/publishToShowcase";
 import { readEmbedHtml } from "./tools/readEmbedHtml";
 import { editEmbedHtml } from "./tools/editEmbedHtml";
@@ -99,6 +100,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
   list_plugins: listPlugins,
   ask_user: askUser,
   draw_vector: drawVector,
+  generate_vector: generateVector,
   analyze_image: analyzeImage,
   publish_to_showcase: publishToShowcase,
   remove_background: removeBackground,
