@@ -3,7 +3,8 @@ import type { SceneState } from "@/store/sceneStore";
 import { useMeasurementsStore } from "@/store/measurementsStore";
 import { createSnapshot, saveHistory } from "@/store/sceneStore/helpers/history";
 import type { HistorySnapshot } from "@/types/scene";
-import type { ToolHandler } from "../../toolRegistry";
+import { useAiPendingScreenStore, pendingScreenKey } from "@/store/aiPendingScreenStore";
+import type { ToolExecutionContext, ToolHandler } from "../../toolRegistry";
 import type { ExecutionContext, ParsedOperation } from "./types";
 import { parseOperations, MAX_OPERATIONS } from "./parser";
 import { executeOperation, serializeCreatedNodes } from "./executor";
@@ -415,6 +416,30 @@ function runFreshFromLive(
 }
 
 export const batchDesign: ToolHandler = async (args, context) => {
+  // Dashed placeholders (aiPendingScreenStore) are staged per-frame while
+  // this call's input streams in (see batchDesignAdapter.ts's `onFrame`);
+  // that adapter's own `onAbandon` only fires for a call that never
+  // completes at all (abort/error/truncation — see StreamingToolAdapter's
+  // doc comment), so THIS handler, on every exit path, is what has to
+  // finalize the key for the ordinary success path. finalizeCall is a
+  // no-op if nothing is staged, so this is safe to run unconditionally.
+  const pendingScreenCallKey =
+    context?.sessionId && context?.toolCallId
+      ? pendingScreenKey(context.sessionId, context.toolCallId)
+      : undefined;
+  try {
+    return await runBatchDesign(args, context);
+  } finally {
+    if (pendingScreenCallKey) {
+      useAiPendingScreenStore.getState().finalizeCall(pendingScreenCallKey);
+    }
+  }
+};
+
+async function runBatchDesign(
+  args: Record<string, unknown>,
+  context: ToolExecutionContext | undefined,
+): Promise<string> {
   const operationsStr = args.operations as string | undefined;
 
   const takeSessionIfAny = (): ProgressiveBatchSession | undefined =>
@@ -483,4 +508,4 @@ export const batchDesign: ToolHandler = async (args, context) => {
   }
 
   return runFreshFromLive(executable, remaining, truncated, operationsSubmitted, { lenient });
-};
+}

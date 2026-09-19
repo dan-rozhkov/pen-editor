@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { clearDraftReducer, clearSessionReducer, finalizeCallReducer } from "./keyedDraftLifecycle";
 
 /**
  * Transient previews for `generate_vector`, one per in-flight tool call.
@@ -87,46 +88,21 @@ export const useAiSvgPreviewStore = create<AiSvgPreviewState>((set) => ({
       return { drafts: { ...state.drafts, [key]: { ...existing, phase: "committing" } } };
     }),
 
-  clearDraft: (key) =>
-    set((state) => {
-      if (!(key in state.drafts)) return state;
-      const next = { ...state.drafts };
-      delete next[key];
-      return { drafts: next };
-    }),
+  clearDraft: (key) => set((state) => clearDraftReducer(state, key)),
 
-  clearSession: (sessionId) =>
-    set((state) => {
-      const prefix = `${sessionId}:`;
-      const keys = Object.keys(state.drafts).filter((key) => key.startsWith(prefix));
-      if (keys.length === 0) return state;
-      const next = { ...state.drafts };
-      // Must also finalize, matching `finalizeCall`'s invariant ("a
-      // finalized call must never be revived"): a call that never rendered
-      // an `input-streaming` tool part (so it's absent from
-      // `seenStreamingCallsRef`) reaches cleanup only through this method,
-      // never through `onAbandon`'s `finalizeCall`. Deleting without
-      // finalizing left its key open, so a `generate_vector` frame still in
-      // flight from the abandoned generation could `upsert` a fresh draft
-      // right back in — repainting a preview nothing would ever clear again
-      // until the ~90s generation itself finished.
-      const finalizedKeys = new Set(state.finalizedKeys);
-      for (const key of keys) {
-        delete next[key];
-        finalizedKeys.add(key);
-      }
-      return { drafts: next, finalizedKeys };
-    }),
+  // Must also finalize, matching `finalizeCall`'s invariant ("a finalized
+  // call must never be revived"): a call that never rendered an
+  // `input-streaming` tool part (so it's absent from
+  // `seenStreamingCallsRef`) reaches cleanup only through this method,
+  // never through `onAbandon`'s `finalizeCall`. Deleting without finalizing
+  // left its key open, so a `generate_vector` frame still in flight from
+  // the abandoned generation could `upsert` a fresh draft right back in —
+  // repainting a preview nothing would ever clear again until the ~90s
+  // generation itself finished. See `clearSessionReducer` for the shared
+  // implementation this and `aiPendingScreenStore` both rely on.
+  clearSession: (sessionId) => set((state) => clearSessionReducer(state, sessionId)),
 
-  finalizeCall: (key) =>
-    set((state) => {
-      const finalizedKeys = new Set(state.finalizedKeys);
-      finalizedKeys.add(key);
-      if (!(key in state.drafts)) return { finalizedKeys };
-      const next = { ...state.drafts };
-      delete next[key];
-      return { drafts: next, finalizedKeys };
-    }),
+  finalizeCall: (key) => set((state) => finalizeCallReducer(state, key)),
 
   reset: () => set({ drafts: {}, finalizedKeys: new Set<string>() }),
 }));

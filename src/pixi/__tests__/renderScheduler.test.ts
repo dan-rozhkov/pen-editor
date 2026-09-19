@@ -8,6 +8,7 @@ import { useDevModeStore } from "@/store/devModeStore";
 import { useMeasurementsStore } from "@/store/measurementsStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useAiSvgPreviewStore } from "@/store/aiSvgPreviewStore";
+import { useAiPendingScreenStore } from "@/store/aiPendingScreenStore";
 import { requestCanvasRender, setupRenderScheduler } from "../renderScheduler";
 
 describe("requestCanvasRender", () => {
@@ -278,6 +279,32 @@ describe("setupRenderScheduler invalidation sources", () => {
     expect(render).toHaveBeenCalledTimes(1);
 
     useAiSvgPreviewStore.getState().reset();
+    cleanup();
+  });
+
+  it("renders promptly after an aiPendingScreenStore change (dashed batch_design placeholders)", () => {
+    const now = vi.spyOn(performance, "now");
+
+    now.mockReturnValue(0);
+    const { app, render, tick } = makeFakeApp();
+    const cleanup = setupRenderScheduler(app);
+
+    now.mockReturnValue(5000);
+    tick();
+    render.mockClear();
+
+    now.mockReturnValue(5100);
+    useAiPendingScreenStore.getState().upsert({
+      sessionId: "s1",
+      toolCallId: "call-1",
+      screens: [{ name: "Login", x: 0, y: 0, width: 390, height: 844 }],
+    });
+
+    now.mockReturnValue(5116);
+    tick();
+    expect(render).toHaveBeenCalledTimes(1);
+
+    useAiPendingScreenStore.getState().reset();
     cleanup();
   });
 });

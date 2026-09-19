@@ -23,6 +23,7 @@ import { getMarqueeRect, subscribeOverlayState } from "./pixiOverlayState";
 import { createOverlayHelpers } from "./selectionOverlay/helpers";
 import { createAiVectorPreviewLayer } from "./aiVectorPreviewLayer";
 import { createAiSvgPreviewLayer } from "./aiSvgPreviewLayer";
+import { createAiPendingScreenLayer } from "./aiPendingScreenLayer";
 import {
   getAnchorScreenPoints,
   getEditedAnchorTarget,
@@ -130,6 +131,7 @@ export function createOverlayRenderer(
   // redraw functions.
   const destroyAiVectorPreviewLayer = createAiVectorPreviewLayer(overlayContainer);
   const destroyAiSvgPreviewLayer = createAiSvgPreviewLayer(overlayContainer);
+  const destroyAiPendingScreenLayer = createAiPendingScreenLayer(overlayContainer);
 
   const pathEditGfx = new Graphics();
   pathEditGfx.label = "path-edit";
@@ -797,6 +799,7 @@ export function createOverlayRenderer(
     unsubViewport();
     destroyAiVectorPreviewLayer();
     destroyAiSvgPreviewLayer();
+    destroyAiPendingScreenLayer();
     pixelGridGfx.destroy();
     guidesGfx.destroy();
     persistentGuidesGfx.destroy();

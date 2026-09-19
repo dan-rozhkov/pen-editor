@@ -15,6 +15,13 @@ import {
   abandonProgressiveBatchSession,
   clearProgressiveBatchSessions,
 } from "@/lib/tools/batchDesign/progressive";
+import { parseCompleteOperationsPrefix } from "@/lib/tools/batchDesign/parser";
+import {
+  useAiPendingScreenStore,
+  pendingScreenKey,
+} from "@/store/aiPendingScreenStore";
+import { parsePendingScreenHeaders } from "./pendingScreenHeaders";
+import { isStreamingMutationsEnabled } from "./types";
 import type { StreamingToolAdapter, StreamingToolFrame, StreamingToolCallRef } from "./types";
 
 /**
@@ -51,6 +58,67 @@ function extractOperationsScript(input: Record<string, unknown>): string | undef
   return undefined;
 }
 
+/**
+ * How many of the syntactically-complete operations at the head of the
+ * script already created an embed node — i.e. how many dashed placeholders
+ * (in header order) are stale because progressive application already
+ * turned them into real nodes.
+ *
+ * Read-only: reuses `parseCompleteOperationsPrefix`, the exact boundary
+ * `progressive.ts` itself trusts, rather than a separate notion of
+ * "complete". Never throws — a parse hiccup here must only cost a
+ * placeholder, never touch what `applyStreamingBatchDesign` does above.
+ */
+function countAppliedEmbeds(operations: string): number {
+  try {
+    const complete = parseCompleteOperationsPrefix(operations);
+    let count = 0;
+    for (const op of complete) {
+      if (op.op !== "I") continue;
+      const nodeData = op.args[1];
+      if (nodeData?.kind === "json" && isEmbedNodeData(nodeData.value)) count++;
+    }
+    return count;
+  } catch {
+    return 0;
+  }
+}
+
+function isEmbedNodeData(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { type?: unknown }).type === "embed"
+  );
+}
+
+/**
+ * Compute and stage the dashed placeholders for this frame's operations
+ * string. Purely additive: called strictly after the real
+ * `applyStreamingBatchDesign` call above, reads the same string it read,
+ * and any failure here shows nothing rather than throwing — see this
+ * module's and `pendingScreenHeaders.ts`'s doc comments for why.
+ */
+function updatePendingScreens(sessionId: string, toolCallId: string, operations: string): void {
+  try {
+    const headers = parsePendingScreenHeaders(operations);
+    if (headers.length === 0) return;
+
+    // With progressive application on, the first N headers (by source
+    // order, which is what parsePendingScreenHeaders and
+    // parseCompleteOperationsPrefix both preserve) are already real nodes
+    // on canvas — only the ones after that are still "pending". With the
+    // `pen.streamingMutations=off` kill switch, nothing at all has been
+    // applied yet, so every header still needs a box.
+    const appliedEmbeds = isStreamingMutationsEnabled() ? countAppliedEmbeds(operations) : 0;
+    const screens = headers.slice(appliedEmbeds);
+
+    useAiPendingScreenStore.getState().upsert({ sessionId, toolCallId, screens });
+  } catch {
+    // Never let a placeholder-computation bug affect the tool call itself.
+  }
+}
+
 export const batchDesignStreamingAdapter: StreamingToolAdapter = {
   toolName: "batch_design",
 
@@ -58,13 +126,16 @@ export const batchDesignStreamingAdapter: StreamingToolAdapter = {
     const operations = extractOperationsScript(input);
     if (operations === undefined) return;
     applyStreamingBatchDesign({ sessionId, toolCallId, operations });
+    updatePendingScreens(sessionId, toolCallId, operations);
   },
 
   onAbandon({ sessionId, toolCallId }: StreamingToolCallRef): void {
     abandonProgressiveBatchSession(sessionId, toolCallId);
+    useAiPendingScreenStore.getState().finalizeCall(pendingScreenKey(sessionId, toolCallId));
   },
 
   onSessionClear(sessionId: string): void {
     clearProgressiveBatchSessions(sessionId);
+    useAiPendingScreenStore.getState().clearSession(sessionId);
   },
 };
