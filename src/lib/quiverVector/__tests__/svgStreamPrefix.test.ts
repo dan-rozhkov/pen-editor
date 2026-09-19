@@ -89,7 +89,10 @@ describe("buildRenderableSvgPrefix", () => {
     expect(checked).toBeGreaterThan(2000);
     // Only the very beginning, before the root tag closes, may be null.
     expect(nulls).toBeLessThan(40);
-  });
+    // ~2600 prefixes of an 18KB document is deliberate, deterministic CPU work:
+    // no hang can hide behind this timeout, and the default 5s left so little
+    // headroom under v8 coverage that a busy runner alone turned it red.
+  }, 30_000);
 
   it("grows monotonically and ends at the real element count", () => {
     let previous = 0;
