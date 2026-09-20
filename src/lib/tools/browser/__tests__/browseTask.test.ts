@@ -387,4 +387,118 @@ describe("browse_task", () => {
     expect(parsed).toHaveProperty("title");
     expect(receivedBody).toMatchObject({ goal: "find a red sneaker" });
   });
+  // Upstream jev-ultrafast PR #40, ported: a rejected act must be recorded
+  // as a no-op (the bridge resolves `{ error }`, it never rejects), and
+  // three consecutive steps that land nothing end the task instead of
+  // spending a paid Jev call per cycle until maxSteps runs out.
+  it("records a perform that resolved with { error } as a failed step, not a landed action", async () => {
+    let stepCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        stepCalls++;
+        return {
+          ok: true,
+          json: async () =>
+            stepCalls === 1
+              ? { outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }
+              : { outcome: "done", confidence: 1, model: "jev" },
+        };
+      })
+    );
+
+    const perform = vi
+      .fn()
+      .mockResolvedValueOnce({ error: "Stale or unknown snapshotId — the page may have changed." })
+      .mockResolvedValue({});
+    const browser = stubBrowser({ perform });
+
+    const transcript = await runBrowseTaskLoop("accept cookies", 12, browser);
+
+    expect(transcript.steps).toEqual([
+      {
+        operation: "CLICK",
+        label: "Stale or unknown snapshotId — the page may have changed.",
+        ok: false,
+        index: 0,
+      },
+    ]);
+  });
+
+  it("stops with status:stalled after three consecutive steps that land nothing", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    // A persistently stale target: every act is rejected by the desktop
+    // controller, so the loop would otherwise run all 12 steps.
+    const perform = vi.fn(async () => ({ error: "target is gone or occluded" }));
+    const browser = stubBrowser({ perform });
+
+    const transcript = await runBrowseTaskLoop("click the popover", 12, browser);
+
+    expect(transcript.status).toBe("stalled");
+    expect(transcript.reason).toMatch(/no progress/i);
+    expect(transcript.steps).toHaveLength(3);
+    expect(perform).toHaveBeenCalledTimes(3);
+    // Three decisions paid for, not twelve.
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("resets the no-progress count on a step that did land", async () => {
+    let stepCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        stepCalls++;
+        return {
+          ok: true,
+          json: async () =>
+            stepCalls >= 6
+              ? { outcome: "done", confidence: 1, model: "jev" }
+              : { outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" },
+        };
+      })
+    );
+
+    // fail, fail, land, fail, fail — never three in a row, so the task runs
+    // to its own conclusion.
+    const perform = vi
+      .fn()
+      .mockResolvedValueOnce({ error: "target is gone" })
+      .mockResolvedValueOnce({ error: "target is gone" })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ error: "target is gone" })
+      .mockResolvedValue({ error: "target is gone" });
+    const browser = stubBrowser({ perform });
+
+    const transcript = await runBrowseTaskLoop("click something", 12, browser);
+
+    expect(transcript.status).toBe("done");
+    expect(transcript.steps.map((step) => step.ok)).toEqual([false, false, true, false, false]);
+  });
+
+  it("surfaces a snapshot that resolved with { error } instead of reporting it as malformed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ outcome: "done", confidence: 1, model: "jev" }),
+      }))
+    );
+
+    const snapshot = vi.fn(async () => ({ error: "No browser tab is open — call browse_open first." }));
+    const browser = stubBrowser({ snapshot });
+
+    const transcript = await runBrowseTaskLoop("accept cookies", 12, browser);
+
+    expect(transcript.status).toBe("stalled");
+    expect(transcript.steps).toEqual([
+      { operation: "SNAPSHOT", label: "No browser tab is open — call browse_open first.", ok: false },
+      { operation: "SNAPSHOT", label: "No browser tab is open — call browse_open first.", ok: false },
+      { operation: "SNAPSHOT", label: "No browser tab is open — call browse_open first.", ok: false },
+    ]);
+  });
 });
