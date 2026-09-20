@@ -18,7 +18,10 @@ import { useSelectionContext } from "@/hooks/useSelectionContext";
 import { useEmbedElementContext } from "@/hooks/useEmbedElementContext";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { OFFLINE_SEND_TITLE } from "@/lib/apiBase";
-import { downscaleImageDataUrl } from "@/lib/tools/screenshotDownscale";
+import {
+  downscaleImageDataUrl,
+  MAX_ATTACHMENT_SIDE,
+} from "@/lib/tools/screenshotDownscale";
 import { NodeIcon } from "@/components/layers/LayerIcons";
 import {
   Tooltip,
@@ -115,7 +118,10 @@ async function processFiles(files: FileList | File[]): Promise<AttachedImage[]> 
         // A phone photo (or other high-res drop/paste) can exceed the
         // backend's data-URL size cap unscaled — same fix as get_screenshot
         // and captureNodeScreenshot (screenshotDownscale.ts).
-        return { dataUrl: await downscaleImageDataUrl(dataUrl), name: f.name };
+        return {
+          dataUrl: await downscaleImageDataUrl(dataUrl, MAX_ATTACHMENT_SIDE),
+          name: f.name,
+        };
       })
   );
 }

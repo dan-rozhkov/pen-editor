@@ -6,6 +6,10 @@ import { useChatStore } from "@/store/chatStore";
 import type { ChatLaunchPayload } from "@/types/chat";
 import type { SelectionContextItem } from "@/hooks/useSelectionContext";
 import type { EmbedElementContext } from "@/hooks/useEmbedElementContext";
+import {
+  MAX_ATTACHMENT_SIDE,
+  MAX_SCREENSHOT_SIDE,
+} from "@/lib/tools/screenshotDownscale";
 
 // Controllable selection context — the real hook reads sceneStore/selectionStore.
 let mockSelection: SelectionContextItem[] = [];
@@ -26,10 +30,21 @@ vi.mock("@/hooks/useEmbedElementContext", () => ({
 // data-URL size cap unscaled. Stub it so the test doesn't depend on a real
 // canvas/Image decode (happy-dom has neither) and can assert it was called.
 const downscaleImageDataUrl = vi.fn(async (dataUrl: string, _maxSide?: number) => `${dataUrl}-downscaled`);
-vi.mock("@/lib/tools/screenshotDownscale", () => ({
-  downscaleImageDataUrl: (dataUrl: string, maxSide?: number) =>
-    downscaleImageDataUrl(dataUrl, maxSide),
-}));
+vi.mock("@/lib/tools/screenshotDownscale", async (importOriginal) => {
+  // Only downscaleImageDataUrl is stubbed (it needs a real canvas/Image
+  // decode). The limits come from the REAL module: a hardcoded copy here
+  // would make the wiring assertion below pass forever, including after
+  // someone changes the real constant — which is the one thing it exists to
+  // catch.
+  const actual = await importOriginal<
+    typeof import("@/lib/tools/screenshotDownscale")
+  >();
+  return {
+    ...actual,
+    downscaleImageDataUrl: (dataUrl: string, maxSide?: number) =>
+      downscaleImageDataUrl(dataUrl, maxSide),
+  };
+});
 
 // The shipped model reads images natively, so the "no native vision but the
 // backend has an auxiliary vision fallback" case has no real fixture — these
@@ -303,6 +318,11 @@ describe("<ChatInput />", () => {
 
     await waitFor(() => expect(screen.getByAltText("photo.png")).toBeTruthy());
     expect(downscaleImageDataUrl).toHaveBeenCalledTimes(1);
+    // A user-attached reference is downscaled by the attachment limit, not by
+    // the tighter screenshot one — the agent can re-take a screenshot it blurred
+    // away, but it cannot re-take the mockup the user handed it.
+    expect(downscaleImageDataUrl.mock.calls[0][1]).toBe(MAX_ATTACHMENT_SIDE);
+    expect(MAX_ATTACHMENT_SIDE).toBeGreaterThan(MAX_SCREENSHOT_SIDE);
 
     fireEvent.click(screen.getByLabelText("Send"));
     const payload = onSubmit.mock.calls[0][0] as ChatLaunchPayload;
