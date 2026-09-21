@@ -38,9 +38,13 @@ vi.mock("../TextStylesPanel", () => ({
 vi.mock("../StylesPanel", () => ({
   StylesPanelContent: () => <div data-testid="styles-shim" />,
 }));
+vi.mock("@/hooks/useIsMobile", () => ({
+  useIsMobile: vi.fn(() => false),
+}));
 
 import { LeftSidebar } from "../LeftSidebar";
 import { OFFLINE_DOCUMENT_TITLE } from "@/lib/apiBase";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 function setOnline(online: boolean) {
   Object.defineProperty(navigator, "onLine", {
@@ -78,16 +82,22 @@ describe("<LeftSidebar />", () => {
     useLeftSidebarStore.setState({ activeSection: "pages" });
     setPages(1);
     setOnline(true);
+    vi.mocked(useIsMobile).mockReturnValue(false);
   });
 
   afterEach(() => {
     cleanup();
-    useLeftSidebarStore.setState({ activeSection: "pages", isExpanded: false });
+    useLeftSidebarStore.setState({
+      activeSection: "pages",
+      isExpanded: false,
+      isPanelOpen: false,
+    });
     useSharedViewStore.setState({ isSharedView: false });
     usePageStore.setState({
       pages: baselinePages.pages,
       activePageId: baselinePages.activePageId,
     });
+    vi.mocked(useIsMobile).mockReturnValue(false);
   });
 
   it("renders the Toolbar and the Pages section (pages + layers) by default", () => {
@@ -225,5 +235,83 @@ describe("<LeftSidebar />", () => {
 
     const chatWrapper = screen.getByTestId("chat-shim").parentElement;
     expect(chatWrapper?.className).not.toContain("hidden");
+  });
+
+  // Regression: closing the left panel on mobile used to unmount the whole
+  // sidebar (`if (isMobile && !isPanelOpen) return null`), which destroyed
+  // the Agents chat living inside it — chat state survives only by staying
+  // mounted (see ChatPanel's per-session `hidden` panes above). The closed
+  // mobile state must now stay mounted and merely be visually hidden via
+  // `display: none`, the same idiom `hidden` uses elsewhere in this file.
+  it("keeps the sidebar mounted (not unmounted) on mobile when the panel is closed", () => {
+    vi.mocked(useIsMobile).mockReturnValue(true);
+    useLeftSidebarStore.setState({ activeSection: "agents", isPanelOpen: false });
+
+    const { container } = render(<LeftSidebar />);
+
+    // The Agents chat subtree is still in the DOM...
+    expect(screen.getByTestId("chat-shim")).toBeTruthy();
+    // ...but the whole sidebar is visually hidden and can't capture pointer
+    // events, via `display: none` rather than being removed.
+    const root = container.firstElementChild as HTMLElement;
+    expect(root).toBeTruthy();
+    expect(root.style.display).toBe("none");
+  });
+
+  it("shows the mobile sidebar (not display: none) once the panel is open", () => {
+    vi.mocked(useIsMobile).mockReturnValue(true);
+    useLeftSidebarStore.setState({ activeSection: "agents", isPanelOpen: true });
+
+    const { container } = render(<LeftSidebar />);
+
+    const root = container.firstElementChild as HTMLElement;
+    expect(root).toBeTruthy();
+    expect(root.style.display).not.toBe("none");
+    expect(screen.getByTestId("chat-shim")).toBeTruthy();
+  });
+
+  // Code-review finding: keeping the whole sidebar mounted on mobile-closed
+  // must NOT also keep non-chat sections mounted — those aren't kept alive
+  // by anything and have no reason to keep running (SlidesPanel's
+  // useNodeThumbnails debounces Pixi `extract()` captures on every scene
+  // edit; LayersPanel keeps re-rendering) invisibly on a phone. Only the
+  // Agents subtree needs to survive close/reopen.
+  it("unmounts the Slides section (and the document header) while the mobile panel is closed, even though it was persisted active", () => {
+    vi.mocked(useIsMobile).mockReturnValue(true);
+    useLeftSidebarStore.setState({ activeSection: "slides", isPanelOpen: false });
+
+    render(<LeftSidebar />);
+
+    expect(screen.queryByTestId("slides-shim")).toBeNull();
+    expect(screen.queryByTestId("toolbar-shim")).toBeNull();
+  });
+
+  it("unmounts the Pages section while the mobile panel is closed", () => {
+    vi.mocked(useIsMobile).mockReturnValue(true);
+    useLeftSidebarStore.setState({ activeSection: "pages", isPanelOpen: false });
+
+    render(<LeftSidebar />);
+
+    expect(screen.queryByTestId("pages-shim")).toBeNull();
+    expect(screen.queryByTestId("layers-shim")).toBeNull();
+  });
+
+  it("still keeps the Agents chat subtree mounted while the mobile panel is closed", () => {
+    vi.mocked(useIsMobile).mockReturnValue(true);
+    useLeftSidebarStore.setState({ activeSection: "agents", isPanelOpen: false });
+
+    render(<LeftSidebar />);
+
+    expect(screen.getByTestId("chat-shim")).toBeTruthy();
+  });
+
+  it("remounts the Slides section once the mobile panel reopens", () => {
+    vi.mocked(useIsMobile).mockReturnValue(true);
+    useLeftSidebarStore.setState({ activeSection: "slides", isPanelOpen: true });
+
+    render(<LeftSidebar />);
+
+    expect(screen.getByTestId("slides-shim")).toBeTruthy();
+    expect(screen.getByTestId("toolbar-shim")).toBeTruthy();
   });
 });

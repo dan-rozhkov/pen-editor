@@ -15,6 +15,7 @@ import {
 } from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { useUserSkillStore } from "@/store/userSkillStore";
 import type { ChatSummary, ParallelCount } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
@@ -150,13 +151,18 @@ function OpenChatHeader({ chatId }: { chatId: string }) {
 function ChatSession({
   sessionId,
   isActive,
-  shouldFocus,
+  isVisible,
   composerControls,
   onManageSkills,
 }: {
   sessionId: string;
   isActive: boolean;
-  shouldFocus: boolean;
+  /** True while this session's chat is actually on screen — agents section
+   * active AND, on mobile, the left panel open. Drives MessageList's
+   * re-pin-to-bottom and ChatInput's autofocus/resize on becoming visible
+   * again (the mobile panel now stays mounted `display: none` rather than
+   * unmounting when closed). */
+  isVisible: boolean;
   composerControls: ComposerControlsRenderer;
   onManageSkills: () => void;
 }) {
@@ -363,6 +369,7 @@ function ChatSession({
         isLoading={isLoading}
         onRollback={isLoading ? undefined : handleRollback}
         addToolOutput={addToolOutput}
+        isVisible={isVisible}
       />
 
       {/* Queued-message panel — sits between the transcript and
@@ -388,7 +395,7 @@ function ChatSession({
           onSubmit={handleSubmit}
           isLoading={isLoading}
           stop={stop}
-          shouldFocus={shouldFocus}
+          shouldFocus={isVisible}
           awaitingAnswer={awaitingAnswer}
           onManageSkills={onManageSkills}
           renderFooter={(footerProps) => (
@@ -413,6 +420,15 @@ export function ChatPanelContent() {
   const chats = useChatStore((s) => s.chats);
   const activeChatId = useChatStore((s) => s.activeChatId);
   const isAgentsSectionActive = useLeftSidebarStore((s) => s.activeSection === "agents");
+  const isMobile = useIsMobile();
+  const isPanelOpen = useLeftSidebarStore((s) => s.isPanelOpen);
+  // Whether the Agents chat is actually on screen, not just the active
+  // section: on mobile the left panel can be closed while Agents stays the
+  // active section — and now that LeftSidebar keeps the chat subtree mounted
+  // (`display: none`) instead of unmounting it, MessageList's scroll
+  // position and ChatInput's focus/resize effects need this real visibility
+  // signal instead of a boolean that never changes across close/reopen.
+  const isChatVisible = isAgentsSectionActive && (!isMobile || isPanelOpen);
   const [isSkillsPanelOpen, setSkillsPanelOpen] = useState(false);
   const isOpenCodeDialogOpen = useOpenCodeKeyDialogStore((s) => s.open);
   const setOpenCodeDialogOpen = useOpenCodeKeyDialogStore((s) => s.setOpen);
@@ -639,7 +655,7 @@ export function ChatPanelContent() {
           <ChatSession
             sessionId={chat.id}
             isActive={chat.id === activeChatId}
-            shouldFocus={isAgentsSectionActive}
+            isVisible={isChatVisible}
             composerControls={composerControls}
             onManageSkills={() => setSkillsPanelOpen(true)}
           />

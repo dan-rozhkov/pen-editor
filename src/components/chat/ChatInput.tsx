@@ -51,6 +51,12 @@ interface ChatInputProps {
   stop: () => void;
   /** True while an ask_user question is unanswered — blocks sending so the answer isn't stranded. */
   awaitingAnswer?: boolean;
+  /** True while this composer is actually on screen (agents section active
+   * AND, on mobile, the left panel is open) — drives both autofocus and a
+   * re-measure of the textarea height on becoming visible. The mobile panel
+   * now stays mounted `display: none` rather than unmounting when closed, so
+   * a value that only flips on section switches would no longer re-fire
+   * either effect on close/reopen. */
   shouldFocus?: boolean;
   renderFooter?: (props: ChatInputFooterProps) => ReactNode;
   /** Opens the "Manage skills" modal — forwarded to the slash menu's footer
@@ -244,6 +250,16 @@ export function ChatInput({
   useEffect(() => {
     resize();
   }, [input, resize]);
+
+  // Re-measure when the composer becomes visible again. While hidden behind
+  // `display: none` (mobile panel closed), `scrollHeight` reads 0, so a
+  // resize triggered by an `input` change while hidden (e.g. handleRollback
+  // restoring a multi-line draft) collapses the textarea to `height: 0px`
+  // until the next keystroke. `shouldFocus` doubles as the visibility signal
+  // here (see prop doc above).
+  useEffect(() => {
+    if (shouldFocus) resize();
+  }, [shouldFocus, resize]);
 
   const addImages = useCallback(
     async (files: FileList | File[]) => {

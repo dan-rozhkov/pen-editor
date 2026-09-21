@@ -125,4 +125,43 @@ describe("<MessageList />", () => {
     );
     expect(screen.queryByLabelText("Roll back to this message")).toBeNull();
   });
+
+  // Code-review finding: the mobile Agents panel now stays mounted
+  // (`display: none`) instead of unmounting on close, which collapses the
+  // scroll box and silently resets `scrollTop` to 0. Neither `messages` nor
+  // `isLoading` necessarily change on reopen, so the fix re-pins to the
+  // bottom off a dedicated `isVisible` signal. happy-dom always reports
+  // `scrollHeight`/`clientHeight` as 0, so asserting the resulting value
+  // would be vacuous — instead this spies on the `scrollTop` setter to
+  // confirm the effect actually attempts the write when `isVisible` flips
+  // from false to true.
+  it("re-pins the transcript to the bottom when it becomes visible again", () => {
+    const { container, rerender } = render(
+      <MessageList
+        messages={[userMessage("u1", "hi")]}
+        isLoading={false}
+        isVisible={false}
+      />
+    );
+    const scrollBox = container.querySelector(
+      ".layers-scrollbar"
+    ) as HTMLDivElement;
+    expect(scrollBox).toBeTruthy();
+    const scrollTopSetter = vi.fn();
+    Object.defineProperty(scrollBox, "scrollTop", {
+      configurable: true,
+      get: () => 0,
+      set: scrollTopSetter,
+    });
+
+    rerender(
+      <MessageList
+        messages={[userMessage("u1", "hi")]}
+        isLoading={false}
+        isVisible={true}
+      />
+    );
+
+    expect(scrollTopSetter).toHaveBeenCalled();
+  });
 });

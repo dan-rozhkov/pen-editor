@@ -84,6 +84,7 @@ interface HarnessProps {
   stop?: () => void;
   initialInput?: string;
   sessionId?: string;
+  shouldFocus?: boolean;
 }
 
 /** Wrap ChatInput with local input state, mirroring the real parent wiring. */
@@ -93,6 +94,7 @@ function Harness({
   stop = () => {},
   initialInput = "",
   sessionId = "test-session",
+  shouldFocus,
 }: HarnessProps) {
   const [input, setInput] = useState(initialInput);
   return (
@@ -103,6 +105,7 @@ function Harness({
       onSubmit={onSubmit}
       isLoading={isLoading}
       stop={stop}
+      shouldFocus={shouldFocus}
     />
   );
 }
@@ -564,6 +567,32 @@ describe("<ChatInput />", () => {
       expect(screen.getByText("div")).toBeTruthy();
       expect(screen.queryByLabelText("Remove from context")).toBeNull();
     });
+  });
+
+  // Code-review finding: the mobile Agents panel now stays mounted
+  // (`display: none`) instead of remounting ChatInput on reopen, so
+  // `shouldFocus` must be driven by a real visibility signal (computed by
+  // the parent as agents-active AND, on mobile, panel-open) rather than a
+  // boolean that stays true across close/reopen — otherwise the focus
+  // effect (keyed on `[shouldFocus]`) never re-fires.
+  it("focuses the textarea when shouldFocus flips from false to true (panel reopened)", () => {
+    const { rerender } = render(
+      <Harness onSubmit={vi.fn()} shouldFocus={false} />
+    );
+    const textarea = screen.getByRole("textbox");
+    expect(document.activeElement).not.toBe(textarea);
+
+    rerender(<Harness onSubmit={vi.fn()} shouldFocus={true} />);
+    expect(document.activeElement).toBe(textarea);
+  });
+
+  it("does not focus the textarea while shouldFocus stays false", () => {
+    const { rerender } = render(
+      <Harness onSubmit={vi.fn()} shouldFocus={false} />
+    );
+    const textarea = screen.getByRole("textbox");
+    rerender(<Harness onSubmit={vi.fn()} isLoading shouldFocus={false} />);
+    expect(document.activeElement).not.toBe(textarea);
   });
 
   it("outlines an attached image chip's wrapper with the shared img-outline utility and no separate border", () => {

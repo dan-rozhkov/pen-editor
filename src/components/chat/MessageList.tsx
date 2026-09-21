@@ -198,9 +198,21 @@ interface MessageListProps {
   isLoading: boolean;
   onRollback?: (messageId: string) => void;
   addToolOutput?: (o: { tool: string; toolCallId: string; output: string }) => void;
+  /** Whether this transcript is actually on screen. The mobile Agents panel
+   * now stays mounted (`display: none`) rather than unmounting when closed
+   * (so the chat stream survives close/reopen), which collapses the scroll
+   * box and resets `scrollTop` to 0. Defaults to true for callers that are
+   * always visible. */
+  isVisible?: boolean;
 }
 
-export function MessageList({ messages, isLoading, onRollback, addToolOutput }: MessageListProps) {
+export function MessageList({
+  messages,
+  isLoading,
+  onRollback,
+  addToolOutput,
+  isVisible = true,
+}: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isAutoScrollRef = useRef(true);
 
@@ -218,6 +230,21 @@ export function MessageList({ messages, isLoading, onRollback, addToolOutput }: 
       el.scrollTop = el.scrollHeight;
     }
   }, [messages, isLoading]);
+
+  // Becoming visible again (e.g. reopening the mobile panel) must re-pin the
+  // transcript to the latest message: `display: none` collapsed the scroll
+  // box while hidden, silently resetting `scrollTop` to 0, and neither
+  // `messages` nor `isLoading` necessarily changed in the meantime to
+  // trigger the effect above. Mirrors the old unmount/remount behavior,
+  // where a freshly mounted MessageList always started pinned to bottom.
+  useEffect(() => {
+    if (!isVisible) return;
+    const el = containerRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
+    isAutoScrollRef.current = true;
+  }, [isVisible]);
 
   const lastMessage = messages[messages.length - 1];
   const showTrailingIndicator =

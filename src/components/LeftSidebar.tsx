@@ -53,11 +53,23 @@ export function LeftSidebar() {
   // On mobile the panel is hidden until the rail opens it, then it covers the
   // full screen width to the right of the rail. On desktop it is a
   // user-resizable column (via LeftSidebarResizer) that is always visible.
-  if (isMobile && !isPanelOpen) return null;
+  //
+  // The closed-mobile state must stay MOUNTED (not unmounted) so that the
+  // Agents chat subtree inside it — kept alive only by staying mounted, same
+  // as ChatPanel's per-session `hidden` panes — survives closing/reopening
+  // the panel. `display: none` keeps it visually absent and unable to
+  // capture pointer events, same as the `hidden` idiom used elsewhere below.
+  const isMobileClosed = isMobile && !isPanelOpen;
 
   return (
     <div
-      style={isMobile ? undefined : { width }}
+      style={
+        isMobile
+          ? isMobileClosed
+            ? { display: "none" }
+            : undefined
+          : { width }
+      }
       className={
         isMobile
           ? "fixed top-0 left-14 right-0 bottom-0 z-50 flex flex-col bg-surface-panel"
@@ -66,15 +78,16 @@ export function LeftSidebar() {
     >
       {!isMobile && <LeftSidebarResizer />}
       {/* Pages and Slides share the document header; Agents has its own header
-          (inside the chat). */}
-      {(activeSection === "pages" || activeSection === "slides") && (
+          (inside the chat). Gated on !isMobileClosed: only the Agents subtree
+          below needs to stay mounted while the mobile panel is closed. */}
+      {!isMobileClosed && (activeSection === "pages" || activeSection === "slides") && (
         <div className="flex flex-row items-center gap-0 pr-1">
           <div className="flex-1 min-w-0">
             <Toolbar />
           </div>
         </div>
       )}
-      {(activeSection === "pages" || activeSection === "slides") && (
+      {!isMobileClosed && (activeSection === "pages" || activeSection === "slides") && (
         <div className="px-2 pb-2 flex items-center gap-1">
           <EditableText
             value={displayName}
@@ -95,7 +108,7 @@ export function LeftSidebar() {
       )}
       <div className="flex-1 relative overflow-hidden">
         {/* Pages section: pages list + layer tree of the active page */}
-        {activeSection === "pages" && (
+        {!isMobileClosed && activeSection === "pages" && (
           <div className="absolute inset-0 flex flex-col overflow-hidden">
             <PagesPanelSection />
             <div className="flex items-center justify-between px-4 pt-3 pb-1">
@@ -124,7 +137,7 @@ export function LeftSidebar() {
         )}
 
         {/* Toolbox (plugins) section */}
-        {activeSection === "toolbox" && (
+        {!isMobileClosed && activeSection === "toolbox" && (
           <div className="absolute inset-0 flex flex-col overflow-hidden">
             <PluginsPanel />
           </div>
@@ -132,7 +145,7 @@ export function LeftSidebar() {
 
         {/* Slides section: one-per-row previews of top-level frames, no
             layer tree — a separate section from Pages, not a toggle inside it. */}
-        {activeSection === "slides" && (
+        {!isMobileClosed && activeSection === "slides" && (
           <div className="absolute inset-0 flex flex-col overflow-hidden">
             <SlidesPanel />
           </div>
@@ -154,7 +167,7 @@ export function LeftSidebar() {
 
         {/* Variables section — inline within the body, or fixed full-canvas
             overlay when expanded (same pattern as Agents). */}
-        {activeSection === "variables" && (
+        {!isMobileClosed && activeSection === "variables" && (
           <div
             className={
               isPanelExpanded
@@ -167,7 +180,7 @@ export function LeftSidebar() {
         )}
 
         {/* Text styles section */}
-        {activeSection === "textStyles" && (
+        {!isMobileClosed && activeSection === "textStyles" && (
           <div
             className={
               isPanelExpanded
@@ -180,7 +193,7 @@ export function LeftSidebar() {
         )}
 
         {/* Styles section */}
-        {activeSection === "styles" && (
+        {!isMobileClosed && activeSection === "styles" && (
           <div
             className={
               isPanelExpanded
@@ -193,7 +206,7 @@ export function LeftSidebar() {
         )}
 
         {/* Comments section (cmt-01) */}
-        {activeSection === "comments" && (
+        {!isMobileClosed && activeSection === "comments" && (
           <div className="absolute inset-0 flex flex-col overflow-hidden">
             <CommentsPanelContent />
           </div>
