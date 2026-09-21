@@ -79,21 +79,41 @@ export function EmbedPromptHost({ nodeId }: { nodeId: string }) {
     el.style.height = `${el.scrollHeight}px`;
   }, []);
 
+  // Select this embed the moment the user engages with the composer, not
+  // only when they submit. Two reasons, and neither is cosmetic:
+  //
+  //  - An empty embed draws nothing in Pixi (`createEmbedContainer` returns
+  //    an empty container), so until it is selected the node has no visible
+  //    bounds at all — the composer appears to float on bare canvas and
+  //    there is no way to tell WHICH layer you are typing into. Selecting
+  //    brings up the ordinary selection outline and highlights the row in
+  //    the layers panel, exactly as clicking any other node would.
+  //  - `handlePointerDown` stops propagation so a click here can't start a
+  //    canvas marquee or clear the selection — which also means the canvas
+  //    never gets the chance to select the node itself. We have to do it.
+  //
+  // Both entry points are covered: pointer (click into the card) and focus
+  // (Tab into the textarea, or an autofocus), since neither implies the
+  // other.
+  const selectSelf = useCallback(() => {
+    useSelectionStore.getState().select(nodeId);
+  }, [nodeId]);
+
   const submit = useCallback(() => {
     if (sending) return;
     const trimmed = text.trim();
     if (!trimmed) return;
-    // `launchEmbedAgentChat` -> `launchNodeAgentChat(nodeId, text, {
-    // attachScreenshot: false })` never actually reads `nodeId` on that
-    // path — with no screenshot to attach, the agent learns which node to
-    // work on only from the CURRENT SELECTION carried in `canvasContext`.
-    // This composer renders for every empty embed at once (unlike the other
-    // callers of `launchNodeAgentChat`, which only render for an
-    // already-selected node), and `handlePointerDown` below stops
-    // propagation so clicking into it never selects the node on its own —
-    // so without this, typing here while a DIFFERENT embed is selected would
-    // make the agent write into that other embed instead of this one.
-    useSelectionStore.getState().select(nodeId);
+    // Re-assert the selection right before launching. `launchEmbedAgentChat`
+    // -> `launchNodeAgentChat(nodeId, text, { attachScreenshot: false })`
+    // never actually reads `nodeId` on that path — with no screenshot to
+    // attach, the agent learns which node to work on only from the CURRENT
+    // SELECTION carried in `canvasContext`. Engaging with the composer
+    // already selects this node (see `selectSelf` above), so this is
+    // normally a no-op; it stays because the selection can move between
+    // then and now (the layers panel, a palette command, another embed's
+    // composer) while this textarea keeps its value, and sending the prompt
+    // into a DIFFERENT embed is silent, expensive and hard to undo.
+    selectSelf();
     setSending(true);
     const launched = launchEmbedAgentChat(nodeId, trimmed);
     // `launchEmbedAgentChat` returns `Promise<boolean>`; wrap in
@@ -107,7 +127,7 @@ export function EmbedPromptHost({ nodeId }: { nodeId: string }) {
     // ""), but its inline height was set imperatively by `resize()` above,
     // so it needs an imperative reset too.
     requestAnimationFrame(resize);
-  }, [text, nodeId, resize, sending]);
+  }, [text, nodeId, resize, sending, selectSelf]);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -144,11 +164,15 @@ export function EmbedPromptHost({ nodeId }: { nodeId: string }) {
     e.stopPropagation();
   }, []);
 
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    // Keep a click in the composer from also starting a canvas
-    // marquee/drag or clearing selection.
-    e.stopPropagation();
-  }, []);
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      selectSelf();
+      // Keep a click in the composer from also starting a canvas
+      // marquee/drag or clearing selection.
+      e.stopPropagation();
+    },
+    [selectSelf],
+  );
 
   // Present mode, any read-only surface (shared view, `?view`), and Dev/
   // inspect mode all withhold the composer — an empty embed on someone
@@ -255,6 +279,7 @@ export function EmbedPromptHost({ nodeId }: { nodeId: string }) {
                       resize();
                     }}
                     rows={1}
+                    onFocus={selectSelf}
                     placeholder="Ask the design agent..."
                     disabled={sending}
                     className="flex-1 resize-none bg-transparent pl-2 text-sm text-text-primary placeholder:text-text-disabled outline-none min-h-[29px] max-h-[96px] py-1 leading-normal"

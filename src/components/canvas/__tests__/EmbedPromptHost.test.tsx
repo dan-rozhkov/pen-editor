@@ -96,6 +96,31 @@ describe("<EmbedPromptHost />", () => {
     expect(mockLaunch).not.toHaveBeenCalled();
   });
 
+  it("selects this node on pointerdown, so the layer reads as selected while typing", () => {
+    useSelectionStore.getState().select("someone-else");
+    render(<EmbedPromptHost nodeId="e1" />);
+    fireEvent.pointerDown(screen.getByPlaceholderText("Ask the design agent..."));
+    expect(useSelectionStore.getState().selectedIds).toEqual(["e1"]);
+  });
+
+  it("selects this node when the textarea takes focus (keyboard entry)", () => {
+    useSelectionStore.getState().select("someone-else");
+    render(<EmbedPromptHost nodeId="e1" />);
+    fireEvent.focus(screen.getByPlaceholderText("Ask the design agent..."));
+    expect(useSelectionStore.getState().selectedIds).toEqual(["e1"]);
+  });
+
+  it("re-asserts the selection at submit if it moved away while typing", () => {
+    render(<EmbedPromptHost nodeId="e1" />);
+    const textarea = screen.getByPlaceholderText("Ask the design agent...");
+    fireEvent.pointerDown(textarea);
+    fireEvent.change(textarea, { target: { value: "make a login screen" } });
+    // Something else takes the selection between typing and sending.
+    useSelectionStore.getState().select("someone-else");
+    fireEvent.click(screen.getByLabelText("Send"));
+    expect(useSelectionStore.getState().selectedIds).toEqual(["e1"]);
+  });
+
   it("selects this node before launching, so the chat is scoped to it", () => {
     render(<EmbedPromptHost nodeId="e1" />);
     const textarea = screen.getByPlaceholderText("Ask the design agent...");
