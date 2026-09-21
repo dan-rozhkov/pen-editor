@@ -29,6 +29,7 @@ import { ChatInput } from "./ChatInput";
 import { ChatList } from "./ChatList";
 import { QueuedMessagePanel } from "./QueuedMessagePanel";
 import { SkillsPanel } from "./SkillsPanel";
+import { ContextMeter } from "./ContextMeter";
 import { OpenCodeKeyDialog } from "./OpenCodeKeyDialog";
 import { hasPendingAskUser } from "./pendingAskUser";
 import { InlineAlert } from "@/components/ui/inline-alert";
@@ -286,6 +287,9 @@ function ChatSession({
         // the auto-drain effect in useDesignChat sends a "cleared" message
         // into the now-empty session once the in-flight turn finishes.
         useChatStore.getState().clearMessageQueue(sessionId);
+        // An empty transcript has no context usage yet — leaving the old
+        // reading would show a stale meter over nothing.
+        useChatStore.getState().clearContextTokens(sessionId);
       },
     });
     return () => unregisterSessionActions(sessionId);
@@ -332,6 +336,11 @@ function ChatSession({
 
     setMessages(messages.slice(0, index));
     setInput(text);
+    // The transcript just shrank, so the last measured context size (taken
+    // before the rollback) no longer describes this chat — leaving it would
+    // show a near-full, red meter over a three-message session until the
+    // next turn finishes. Same reasoning as clearChat above.
+    useChatStore.getState().clearContextTokens(sessionId);
   };
 
   return (
@@ -474,50 +483,53 @@ export function ChatPanelContent() {
       >
         <ImageIcon size={18} weight="light" />
       </IconButton>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <IconButton
-              type="button"
-              variant="ghost"
-              size="icon"
-              tooltip={`Model: ${activeModelLabel}`}
-              className="ml-auto size-[30px] text-text-muted hover:bg-secondary"
-            >
-              <SphereIcon size={18} weight="light" />
-            </IconButton>
-          }
-        />
-        <DropdownMenuContent side="top" align="end" className="w-56">
-          <DropdownMenuRadioGroup value={model} onValueChange={setModel}>
-            {modelOptions.map((option) => {
-              const locked = Boolean(option.requiresUserKey) && !hasKey;
-              return (
-                <DropdownMenuRadioItem
-                  key={option.value}
-                  value={option.value}
-                  disabled={locked}
-                >
-                  <span className="flex min-w-0 flex-1 items-center gap-2">
-                    <span className="truncate">{option.label}</span>
-                    {locked && (
-                      <LockIcon
-                        size={12}
-                        weight="light"
-                        className="shrink-0 text-text-muted"
-                      />
-                    )}
-                  </span>
-                </DropdownMenuRadioItem>
-              );
-            })}
-          </DropdownMenuRadioGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => setOpenCodeDialogOpen(true)}>
-            {hasKey ? "OpenCode key" : "Connect OpenCode…"}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="ml-auto flex items-center gap-1">
+        <ContextMeter />
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <IconButton
+                type="button"
+                variant="ghost"
+                size="icon"
+                tooltip={`Model: ${activeModelLabel}`}
+                className="size-[30px] text-text-muted hover:bg-secondary"
+              >
+                <SphereIcon size={18} weight="light" />
+              </IconButton>
+            }
+          />
+          <DropdownMenuContent side="top" align="end" className="w-56">
+            <DropdownMenuRadioGroup value={model} onValueChange={setModel}>
+              {modelOptions.map((option) => {
+                const locked = Boolean(option.requiresUserKey) && !hasKey;
+                return (
+                  <DropdownMenuRadioItem
+                    key={option.value}
+                    value={option.value}
+                    disabled={locked}
+                  >
+                    <span className="flex min-w-0 flex-1 items-center gap-2">
+                      <span className="truncate">{option.label}</span>
+                      {locked && (
+                        <LockIcon
+                          size={12}
+                          weight="light"
+                          className="shrink-0 text-text-muted"
+                        />
+                      )}
+                    </span>
+                  </DropdownMenuRadioItem>
+                );
+              })}
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setOpenCodeDialogOpen(true)}>
+              {hasKey ? "OpenCode key" : "Connect OpenCode…"}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
       <DropdownMenu>
         <DropdownMenuTrigger
           render={

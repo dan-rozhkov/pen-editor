@@ -84,6 +84,16 @@ interface ChatState {
    * goes inactive (inactive ChatSessions render null for performance).
    */
   attachedImages: Record<string, AttachedImage[]>;
+  /**
+   * The last completed turn's actual input-token count for a chat, keyed by
+   * chat id — set from the `/api/chat` `finish` chunk's `messageMetadata.
+   * contextTokens` (useDesignChat's onFinish). Per chat, not global, for the
+   * same reason as `model`: a background session finishing a turn must not
+   * overwrite the meter the user is currently looking at. Drives
+   * ContextMeter (components/chat/ContextMeter.tsx) alongside
+   * chatModels.ts's `getModelContextWindow`.
+   */
+  contextTokens: Record<string, number>;
   toggleOpen: () => void;
   open: () => void;
   close: () => void;
@@ -130,6 +140,12 @@ interface ChatState {
     chatId: string,
     update: AttachedImage[] | ((prev: AttachedImage[]) => AttachedImage[]),
   ) => void;
+
+  setContextTokens: (chatId: string, tokens: number) => void;
+  /** Drops a chat's context-usage reading — called wherever a fresh context
+   * begins for that chat (closeChat's replacement, and clearing a chat's
+   * messages), so a stale percentage doesn't linger over an empty transcript. */
+  clearContextTokens: (chatId: string) => void;
 
 }
 
@@ -235,6 +251,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messageQueue: {},
   sessionActions: {},
   attachedImages: {},
+  contextTokens: {},
 
   toggleOpen: () => set((s) => ({ isOpen: !s.isOpen })),
   open: () => set({ isOpen: true }),
@@ -290,6 +307,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       launchQueue,
       messageQueue,
       attachedImages,
+      contextTokens,
     } = get();
 
     // Abort any ongoing request for this chat
@@ -311,6 +329,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       delete newMessageQueue[chatId];
       const newAttachedImages = { ...attachedImages };
       delete newAttachedImages[chatId];
+      const newContextTokens = { ...contextTokens };
+      delete newContextTokens[chatId];
       set({
         chats: [makeChat(newId, "Chat 1", model, parallelCount)],
         // Only jump into the replacement chat if the user was already looking
@@ -323,6 +343,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         launchQueue: newLaunchQueue,
         messageQueue: newMessageQueue,
         attachedImages: newAttachedImages,
+        contextTokens: newContextTokens,
       });
       return;
     }
@@ -332,10 +353,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const newLaunchQueue = { ...launchQueue };
     const newMessageQueue = { ...messageQueue };
     const newAttachedImages = { ...attachedImages };
+    const newContextTokens = { ...contextTokens };
     delete newControllers[chatId];
     delete newLaunchQueue[chatId];
     delete newMessageQueue[chatId];
     delete newAttachedImages[chatId];
+    delete newContextTokens[chatId];
 
     // Closing the open chat returns to the chat list rather than jumping to a
     // sibling chat.
@@ -348,6 +371,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       launchQueue: newLaunchQueue,
       messageQueue: newMessageQueue,
       attachedImages: newAttachedImages,
+      contextTokens: newContextTokens,
     });
   },
 
@@ -538,6 +562,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
         nextMap[chatId] = next;
       }
       return { attachedImages: nextMap };
+    });
+  },
+
+  setContextTokens: (chatId, tokens) => {
+    set((s) => ({
+      contextTokens: { ...s.contextTokens, [chatId]: tokens },
+    }));
+  },
+
+  clearContextTokens: (chatId) => {
+    set((s) => {
+      if (!(chatId in s.contextTokens)) return s;
+      const next = { ...s.contextTokens };
+      delete next[chatId];
+      return { contextTokens: next };
     });
   },
 

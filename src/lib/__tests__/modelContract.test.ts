@@ -30,6 +30,7 @@ describe.runIf(backendExists)("chat model fallback contract", () => {
       label: string;
       supportsVision: boolean;
       requiresUserKey?: boolean;
+      contextWindow?: number;
     }[];
     envSchema: { shape: { CHAT_MODEL: { parse: (v: undefined) => string } } };
   }> {
@@ -50,6 +51,11 @@ describe.runIf(backendExists)("chat model fallback contract", () => {
         // is actually constructed (an absent key, not an explicit
         // `undefined` value) — see chatModels.ts's FALLBACK_MODELS.
         ...(model.requiresUserKey ? { requiresUserKey: true } : {}),
+        // Same "only when the backend set it" convention as requiresUserKey
+        // above — see chatModels.ts's FALLBACK_MODELS/loadModels().
+        ...(typeof model.contextWindow === "number"
+          ? { contextWindow: model.contextWindow }
+          : {}),
       }))
     );
   });

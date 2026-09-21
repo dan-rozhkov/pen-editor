@@ -246,6 +246,22 @@ function getToolCallTimeoutMs(toolName: string): number {
   return TOOL_CALL_TIMEOUT_MS_OVERRIDES[toolName] ?? DEFAULT_TOOL_CALL_TIMEOUT_MS;
 }
 
+// The finished message's `metadata` is typed `unknown` (useChat isn't given
+// a messageMetadataSchema) — this is the sole place that trusts its shape.
+// `contextTokens` is the backend's actual input-token count for the turn's
+// last step (see chat.ts's `finish` chunk); a non-positive or missing value
+// means "nothing to report" rather than a real reading of zero context use.
+// Exported for tests.
+export function extractContextTokens(metadata: unknown): number | undefined {
+  if (typeof metadata !== "object" || metadata === null) {
+    return undefined;
+  }
+  const { contextTokens } = metadata as { contextTokens?: unknown };
+  return typeof contextTokens === "number" && contextTokens > 0
+    ? contextTokens
+    : undefined;
+}
+
 // Exported for tests. `source` distinguishes the chat UI path from the MCP
 // WebSocket/desktop IPC bridge paths (`src/lib/mcpDispatch.ts`), which all
 // funnel through this single choke point but can't otherwise be told apart
@@ -458,6 +474,8 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     [sessionId]
   );
 
+  const setContextTokens = useChatStore((s) => s.setContextTokens);
+
   const chat = useChat({
     id: sessionId,
     transport,
@@ -466,6 +484,16 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     // feeling continuous, especially when multiple sessions run in parallel.
     experimental_throttle: STREAM_RENDER_THROTTLE_MS,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    // Feeds ContextMeter (components/chat/ContextMeter.tsx). This session's
+    // OWN id, not the active chat — a background session finishing a turn
+    // must update its own reading, never whatever chat the user happens to
+    // be looking at (same reasoning as resolveSessionModel above).
+    onFinish: ({ message }) => {
+      const contextTokens = extractContextTokens(message.metadata);
+      if (contextTokens !== undefined) {
+        setContextTokens(sessionId, contextTokens);
+      }
+    },
     onToolCall: async ({ toolCall }) => {
       // ask_user is answered by the in-chat form (AskUserForm), which calls
       // addToolOutput on submit. Leaving the part unresolved keeps the turn

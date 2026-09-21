@@ -25,6 +25,15 @@ export interface ChatModelOption {
    * `GET /api/models`' payload can be forwarded with no translation.
    */
   requiresUserKey?: boolean;
+  /**
+   * The model's context window in tokens, when the backend reports one.
+   * Absent (not `undefined`-valued, actually missing) for a model the
+   * backend hasn't sized — same "include the key only when we have it"
+   * convention as `requiresUserKey` above. Drives ContextMeter
+   * (components/chat/ContextMeter.tsx); a model with no known window never
+   * shows a meter rather than guessing at a default.
+   */
+  contextWindow?: number;
 }
 
 // First-paint/offline safety net, mirroring the backend's DEFAULT_MODELS
@@ -38,84 +47,127 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     value: "meta/muse-spark-1.3-contributor",
     label: "Muse Spark 1.3",
     supportsVision: true,
+    contextWindow: 1048576,
   },
-  { value: "qwen/qwen3.8-flash", label: "Qwen3.8 Flash", supportsVision: true },
-  { value: "z-ai/glm-5.3-flash", label: "GLM 5.3 Flash", supportsVision: true },
+  {
+    value: "qwen/qwen3.8-flash",
+    label: "Qwen3.8 Flash",
+    supportsVision: true,
+    contextWindow: 1000000,
+  },
+  {
+    value: "z-ai/glm-5.3-flash",
+    label: "GLM 5.3 Flash",
+    supportsVision: true,
+    contextWindow: 1310720,
+  },
   {
     value: "deepseek/deepseek-v4.1-flash",
     label: "DeepSeek V4.1 Flash",
     supportsVision: true,
+    contextWindow: 1048576,
   },
   {
     value: "google/gemini-3.8-flash",
     label: "Gemini 3.8 Flash",
     supportsVision: true,
+    contextWindow: 1048576,
   },
-  { value: "tencent/hy4-preview", label: "Hy4 Preview", supportsVision: false },
-  { value: "z-ai/glm-5.3", label: "GLM 5.3", supportsVision: false },
+  {
+    value: "tencent/hy4-preview",
+    label: "Hy4 Preview",
+    supportsVision: false,
+    contextWindow: 1048576,
+  },
+  {
+    value: "z-ai/glm-5.3",
+    label: "GLM 5.3",
+    supportsVision: false,
+    contextWindow: 1310720,
+  },
   {
     value: "openai/gpt-5.6-luna",
     label: "GPT-5.6 Luna",
     supportsVision: true,
+    contextWindow: 1050000,
   },
-  { value: "z-ai/glm-5.2", label: "GLM 5.2", supportsVision: false },
+  {
+    value: "z-ai/glm-5.2",
+    label: "GLM 5.2",
+    supportsVision: false,
+    contextWindow: 1048576,
+  },
   // Known caveat, kept in sync with the backend's note on this id: on the
   // design-agent prompt MiniMax M3 fairly often ends a turn with reasoning
   // only and no tool call, and nothing retries that (the retry fires only
   // before the first content chunk). An empty-looking turn here is the model.
-  { value: "minimax/minimax-m3", label: "MiniMax M3", supportsVision: true },
+  {
+    value: "minimax/minimax-m3",
+    label: "MiniMax M3",
+    supportsVision: true,
+    contextWindow: 1048576,
+  },
   // --- OpenCode BYOK (pen-editor-backend docs/specs/2026-09-18-opencode-
   // byok-design.md) --- Nine entries mirroring the backend's DEFAULT_MODELS
-  // verbatim (id, label, supportsVision) — modelContract.test.ts pins the
-  // two lists against each other from the sibling checkout, so a drift here
-  // fails that test rather than silently mismatching the picker.
+  // verbatim (id, label, supportsVision, contextWindow) —
+  // modelContract.test.ts pins the two lists against each other from the
+  // sibling checkout, so a drift here fails that test rather than silently
+  // mismatching the picker.
   {
     value: "opencode-go/deepseek-v4.1-flash",
     label: "DeepSeek V4.1 Flash · Go",
     supportsVision: true,
     requiresUserKey: true,
+    contextWindow: 1048576,
   },
   {
     value: "opencode-go/deepseek-v4-flash-vision-exp",
     label: "DeepSeek V4 Flash Vision · Go",
     supportsVision: true,
     requiresUserKey: true,
+    contextWindow: 1048576,
   },
   {
     value: "opencode-go/glm-5.3-flash",
     label: "GLM 5.3 Flash · Go",
     supportsVision: true,
     requiresUserKey: true,
+    contextWindow: 1310720,
   },
   {
     value: "opencode-go/glm-5.3",
     label: "GLM 5.3 · Go",
     supportsVision: false,
     requiresUserKey: true,
+    contextWindow: 1310720,
   },
   {
     value: "opencode-go/glm-5.2",
     label: "GLM 5.2 · Go",
     supportsVision: false,
     requiresUserKey: true,
+    contextWindow: 1048576,
   },
   {
     value: "opencode/deepseek-v4-flash",
     label: "DeepSeek V4 Flash · Zen",
     supportsVision: false,
     requiresUserKey: true,
+    contextWindow: 1048576,
   },
   {
     value: "opencode/glm-5.3-flash",
     label: "GLM 5.3 Flash · Zen",
     supportsVision: true,
     requiresUserKey: true,
+    contextWindow: 1310720,
   },
   {
     value: "opencode/kimi-k2.7-code",
     label: "Kimi K2.7 Code · Zen",
     supportsVision: true,
     requiresUserKey: true,
+    contextWindow: 262144,
   },
   // supportsVision is deliberately conservative-false here, unlike its
   // OpenRouter twin above — nobody has run the live vision smoke against
@@ -125,6 +177,7 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     label: "MiniMax M3 · Zen",
     supportsVision: false,
     requiresUserKey: true,
+    contextWindow: 1048576,
   },
 ];
 
@@ -139,6 +192,7 @@ interface ModelsResponse {
     label: string;
     supportsVision: boolean;
     requiresUserKey?: boolean;
+    contextWindow?: number;
   }[];
   default: string;
   visionFallback: boolean;
@@ -194,6 +248,16 @@ export function canSendImages(model: string): boolean {
   return modelSupportsVision(model) || visionFallback;
 }
 
+/**
+ * `model`'s context window in tokens, or `undefined` when the backend
+ * hasn't reported one (an id it doesn't know, or an older backend that
+ * predates this field). Never a guessed default — ContextMeter treats
+ * `undefined` as "don't show a meter" rather than picking a number.
+ */
+export function getModelContextWindow(model: string): number | undefined {
+  return currentModels.find((option) => option.value === model)?.contextWindow;
+}
+
 // Whether `model` is currently selectable at all: known to the backend list
 // (an unknown id is harmless to pick — the backend just ignores it and runs
 // its default — but there is no reason to let the picker show one that
@@ -241,6 +305,7 @@ export function loadModels(): Promise<void> {
           label: m.label,
           supportsVision: m.supportsVision,
           ...(m.requiresUserKey ? { requiresUserKey: true } : {}),
+          ...(typeof m.contextWindow === "number" ? { contextWindow: m.contextWindow } : {}),
         }));
       }
       if (data.default) defaultModel = data.default;

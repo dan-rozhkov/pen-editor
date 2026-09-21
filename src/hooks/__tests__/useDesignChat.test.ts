@@ -53,6 +53,7 @@ vi.mock("ai", async (importOriginal) => {
 import {
   executeToolCall,
   buildCanvasContext,
+  extractContextTokens,
   resolveChatApiUrl,
   useDesignChat,
 } from "@/hooks/useDesignChat";
@@ -543,6 +544,22 @@ describe("clientCapabilities", () => {
   });
 });
 
+describe("extractContextTokens", () => {
+  it("returns the numeric contextTokens field", () => {
+    expect(extractContextTokens({ contextTokens: 12_345 })).toBe(12_345);
+  });
+
+  it("returns undefined for missing, non-numeric, zero, or negative values", () => {
+    expect(extractContextTokens(undefined)).toBeUndefined();
+    expect(extractContextTokens(null)).toBeUndefined();
+    expect(extractContextTokens({})).toBeUndefined();
+    expect(extractContextTokens({ contextTokens: "42" })).toBeUndefined();
+    expect(extractContextTokens({ contextTokens: 0 })).toBeUndefined();
+    expect(extractContextTokens({ contextTokens: -5 })).toBeUndefined();
+    expect(extractContextTokens("not an object")).toBeUndefined();
+  });
+});
+
 describe("resolveChatApiUrl", () => {
   it("falls back to /api/chat when no env override is set", () => {
     // Test env has neither VITE_AI_API_URL nor VITE_DESIGN_AGENT_BACKEND_URL.
@@ -630,6 +647,60 @@ describe("useDesignChat (hook + UI message stream)", () => {
 
     expect(requests[0].model).toBe("qwen/qwen3.8-flash");
     expect(requests[0]).not.toHaveProperty("agentMode");
+  });
+
+  // The `finish` chunk's messageMetadata.contextTokens feeds ContextMeter
+  // (components/chat/ContextMeter.tsx) via chatStore.setContextTokens.
+  describe("context-usage metadata (onFinish)", () => {
+    it("records contextTokens from the finish chunk's messageMetadata, keyed by this session", async () => {
+      const fetchMock = vi.fn(async () =>
+        sseResponse([
+          { type: "start" },
+          { type: "start-step" },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "ok" },
+          { type: "text-end", id: "t1" },
+          { type: "finish-step" },
+          { type: "finish", messageMetadata: { contextTokens: 42_000 } },
+        ])
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `ctx-session-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+      act(() => result.current.setInput("hello"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+      await waitFor(() => expect(result.current.status).toBe("ready"));
+
+      expect(useChatStore.getState().contextTokens[sessionId]).toBe(42_000);
+    });
+
+    it("ignores a finish chunk with no contextTokens (older backend)", async () => {
+      const fetchMock = vi.fn(async () =>
+        sseResponse([
+          { type: "start" },
+          { type: "start-step" },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "ok" },
+          { type: "text-end", id: "t1" },
+          { type: "finish-step" },
+          { type: "finish" },
+        ])
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `ctx-session-none-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+      act(() => result.current.setInput("hello"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+      await waitFor(() => expect(result.current.status).toBe("ready"));
+
+      expect(useChatStore.getState().contextTokens[sessionId]).toBeUndefined();
+    });
   });
 
   // OpenCode BYOK (pen-editor-backend docs/specs/2026-09-18-opencode-byok-

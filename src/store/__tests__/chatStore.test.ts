@@ -138,6 +138,67 @@ describe("chatStore — message queue", () => {
       const newChatId = useChatStore.getState().activeChatId!;
       expect(useChatStore.getState().messageQueue[newChatId]).toBeUndefined();
     });
+
+    it("clears contextTokens when closing one of several chats", () => {
+      useChatStore.setState({
+        chats: [makeChat({ id: "tab-A" }), makeChat({ id: "tab-B" })],
+        activeChatId: "tab-A",
+      });
+      useChatStore.getState().setContextTokens("tab-A", 12345);
+
+      useChatStore.getState().closeChat("tab-A");
+
+      expect(useChatStore.getState().contextTokens["tab-A"]).toBeUndefined();
+    });
+
+    it("clears contextTokens when closing the last remaining chat", () => {
+      useChatStore.setState({
+        chats: [makeChat({ id: "tab-only" })],
+        activeChatId: "tab-only",
+      });
+      useChatStore.getState().setContextTokens("tab-only", 12345);
+
+      useChatStore.getState().closeChat("tab-only");
+
+      expect(useChatStore.getState().contextTokens["tab-only"]).toBeUndefined();
+      const newChatId = useChatStore.getState().activeChatId!;
+      expect(useChatStore.getState().contextTokens[newChatId]).toBeUndefined();
+    });
+  });
+});
+
+describe("chatStore — contextTokens", () => {
+  beforeEach(() => {
+    useChatStore.setState({ contextTokens: {} });
+  });
+
+  it("setContextTokens writes per chat, not globally", () => {
+    const { setContextTokens } = useChatStore.getState();
+    setContextTokens("tab-A", 1000);
+    setContextTokens("tab-B", 2000);
+
+    expect(useChatStore.getState().contextTokens).toEqual({
+      "tab-A": 1000,
+      "tab-B": 2000,
+    });
+  });
+
+  it("setContextTokens overwrites a chat's previous reading", () => {
+    const { setContextTokens } = useChatStore.getState();
+    setContextTokens("tab-A", 1000);
+    setContextTokens("tab-A", 5000);
+
+    expect(useChatStore.getState().contextTokens["tab-A"]).toBe(5000);
+  });
+
+  it("clearContextTokens drops only the targeted chat", () => {
+    const { setContextTokens, clearContextTokens } = useChatStore.getState();
+    setContextTokens("tab-A", 1000);
+    setContextTokens("tab-B", 2000);
+
+    clearContextTokens("tab-A");
+
+    expect(useChatStore.getState().contextTokens).toEqual({ "tab-B": 2000 });
   });
 });
 

@@ -3,6 +3,7 @@ import {
   canSendImages,
   canUseModel,
   getDefaultModel,
+  getModelContextWindow,
   getModelOptions,
   modelSupportsVision,
 } from "@/lib/chatModels";
@@ -213,5 +214,58 @@ describe("chatModels imageOps capabilities", () => {
 
     expect(fresh.canRemoveBackground()).toBe(false);
     expect(fresh.canVectorize()).toBe(false);
+  });
+});
+
+describe("getModelContextWindow", () => {
+  it("returns the fallback window for a known model", () => {
+    expect(getModelContextWindow("deepseek/deepseek-v4.1-flash")).toBe(1048576);
+    expect(getModelContextWindow("opencode/kimi-k2.7-code")).toBe(262144);
+  });
+
+  it("returns undefined for an unknown model id", () => {
+    expect(getModelContextWindow("nobody/knows-this-model")).toBeUndefined();
+  });
+
+  it("returns undefined once the backend reports a model with no contextWindow", async () => {
+    vi.resetModules();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          models: [{ id: "m", label: "M", supportsVision: true }],
+          default: "m",
+          visionFallback: false,
+        }),
+      })),
+    );
+
+    const fresh = await import("@/lib/chatModels");
+    await fresh.loadModels();
+
+    expect(fresh.getModelContextWindow("m")).toBeUndefined();
+  });
+
+  it("picks up a contextWindow the backend reports", async () => {
+    vi.resetModules();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          models: [
+            { id: "m", label: "M", supportsVision: true, contextWindow: 777_000 },
+          ],
+          default: "m",
+          visionFallback: false,
+        }),
+      })),
+    );
+
+    const fresh = await import("@/lib/chatModels");
+    await fresh.loadModels();
+
+    expect(fresh.getModelContextWindow("m")).toBe(777_000);
   });
 });
