@@ -87,7 +87,11 @@ jobs:
         working-directory: pen-editor-backend
       # The desktop menu contract needs no npm ci over there: menu.ts imports
       # only a type from electron, so it loads with nothing installed.
-      - run: npx vitest run src/lib/__tests__/toolContract.test.ts src/lib/plugins/__tests__/pluginAllowlistContract.test.ts src/lib/__tests__/desktopMenuContract.test.ts
+      # modelContract belongs here and NOWHERE else: it self-skips
+      # (describe.runIf) when ../pen-editor-backend is absent, which is every
+      # run of the ordinary test job, so leaving it out of this list meant
+      # picker/DEFAULT_MODELS drift shipped green in both repos.
+      - run: npx vitest run src/lib/__tests__/toolContract.test.ts src/lib/plugins/__tests__/pluginAllowlistContract.test.ts src/lib/__tests__/desktopMenuContract.test.ts src/lib/__tests__/modelContract.test.ts
         working-directory: pen-editor
         env:
           CONTRACT_REQUIRE_BACKEND: "1"

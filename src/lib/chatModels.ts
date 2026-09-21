@@ -59,8 +59,13 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     supportsVision: true,
   },
   { value: "z-ai/glm-5.2", label: "GLM 5.2", supportsVision: false },
+  // Known caveat, kept in sync with the backend's note on this id: on the
+  // design-agent prompt MiniMax M3 fairly often ends a turn with reasoning
+  // only and no tool call, and nothing retries that (the retry fires only
+  // before the first content chunk). An empty-looking turn here is the model.
+  { value: "minimax/minimax-m3", label: "MiniMax M3", supportsVision: true },
   // --- OpenCode BYOK (pen-editor-backend docs/specs/2026-09-18-opencode-
-  // byok-design.md) --- Eight entries mirroring the backend's DEFAULT_MODELS
+  // byok-design.md) --- Nine entries mirroring the backend's DEFAULT_MODELS
   // verbatim (id, label, supportsVision) — modelContract.test.ts pins the
   // two lists against each other from the sibling checkout, so a drift here
   // fails that test rather than silently mismatching the picker.
@@ -110,6 +115,15 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     value: "opencode/kimi-k2.7-code",
     label: "Kimi K2.7 Code · Zen",
     supportsVision: true,
+    requiresUserKey: true,
+  },
+  // supportsVision is deliberately conservative-false here, unlike its
+  // OpenRouter twin above — nobody has run the live vision smoke against
+  // Zen's minimax-m3 yet. See the backend's config.ts for the full note.
+  {
+    value: "opencode/minimax-m3",
+    label: "MiniMax M3 · Zen",
+    supportsVision: false,
     requiresUserKey: true,
   },
 ];

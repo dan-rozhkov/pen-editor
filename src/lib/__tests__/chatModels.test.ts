@@ -24,6 +24,7 @@ describe("chatModels fallback", () => {
       "z-ai/glm-5.3",
       "openai/gpt-5.6-luna",
       "z-ai/glm-5.2",
+      "minimax/minimax-m3",
       "opencode-go/deepseek-v4.1-flash",
       "opencode-go/deepseek-v4-flash-vision-exp",
       "opencode-go/glm-5.3-flash",
@@ -32,11 +33,12 @@ describe("chatModels fallback", () => {
       "opencode/deepseek-v4-flash",
       "opencode/glm-5.3-flash",
       "opencode/kimi-k2.7-code",
+      "opencode/minimax-m3",
     ]);
     expect(getDefaultModel()).toBe("deepseek/deepseek-v4.1-flash");
   });
 
-  it("marks exactly the eight OpenCode BYOK entries as requiresUserKey", () => {
+  it("marks exactly the nine OpenCode BYOK entries as requiresUserKey", () => {
     const requiresKey = getModelOptions()
       .filter((option) => option.requiresUserKey)
       .map((option) => option.value);
@@ -49,6 +51,7 @@ describe("chatModels fallback", () => {
       "opencode/deepseek-v4-flash",
       "opencode/glm-5.3-flash",
       "opencode/kimi-k2.7-code",
+      "opencode/minimax-m3",
     ]);
   });
 
@@ -73,6 +76,7 @@ describe("chatModels fallback", () => {
       "opencode-go/glm-5.3",
       "opencode-go/glm-5.2",
       "opencode/deepseek-v4-flash",
+      "opencode/minimax-m3",
     ]);
   });
 
@@ -150,7 +154,7 @@ describe("chatModels visionFallback", () => {
     await fresh.loadModels();
 
     expect(fresh.getDefaultModel()).toBe("deepseek/deepseek-v4.1-flash");
-    expect(fresh.getModelOptions()).toHaveLength(17);
+    expect(fresh.getModelOptions()).toHaveLength(19);
     expect(fresh.canSendImages("deepseek/deepseek-v4.1-flash")).toBe(true);
   });
 });
