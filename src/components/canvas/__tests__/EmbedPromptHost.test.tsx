@@ -129,6 +129,34 @@ describe("<EmbedPromptHost />", () => {
     expect(useSelectionStore.getState().selectedIds).toEqual(["e1"]);
   });
 
+  it("outlines the empty embed with a dashed border", () => {
+    const { container } = render(<EmbedPromptHost nodeId="e1" />);
+    const host = container.querySelector("[data-embed-outline]");
+    expect(host).not.toBeNull();
+    expect(host?.className).toContain("border-dashed");
+  });
+
+  it("keeps the outline for a node too small to hold the composer", () => {
+    seedEmptyEmbed({ width: 90, height: 40 } as Partial<FlatSceneNode>);
+    const { container } = render(<EmbedPromptHost nodeId="e1" />);
+    // The composer is withheld here — the outline is the ONLY thing marking
+    // the node, which is exactly why it must not be gated on the composer.
+    expect(screen.queryByPlaceholderText("Ask the design agent...")).toBeNull();
+    expect(container.querySelector("[data-embed-outline]")).not.toBeNull();
+  });
+
+  it("keeps the outline on a read-only canvas", () => {
+    useEditorModeStore.setState({ mode: "view" });
+    const { container } = render(<EmbedPromptHost nodeId="e1" />);
+    expect(container.querySelector("[data-embed-outline]")).not.toBeNull();
+  });
+
+  it("drops the outline in present mode", () => {
+    useEditorModeStore.setState({ mode: "present" });
+    const { container } = render(<EmbedPromptHost nodeId="e1" />);
+    expect(container.querySelector("[data-embed-outline]")).toBeNull();
+  });
+
   it("withholds the composer in a non-editable editor mode", () => {
     useEditorModeStore.setState({ mode: "view" });
     render(<EmbedPromptHost nodeId="e1" />);

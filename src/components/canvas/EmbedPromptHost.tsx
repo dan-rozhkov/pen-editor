@@ -189,6 +189,22 @@ export function EmbedPromptHost({ nodeId }: { nodeId: string }) {
   // Also withheld for a node too small to hold the card without clipping —
   // see `MIN_COMPOSER_WIDTH`/`MIN_COMPOSER_HEIGHT`'s doc comment.
   const isEmbedNode = node?.type === "embed";
+
+  // An empty embed draws NOTHING in Pixi (`createEmbedContainer` returns an
+  // empty container), so without this the node has no visible bounds at all
+  // until it is selected — the composer looks like it floats on bare canvas,
+  // and an embed too small for the composer is invisible outright.
+  //
+  // Deliberately NOT gated on `showComposer`: the small-node case is exactly
+  // the one that needs the outline most, and a read-only viewer seeing where
+  // an empty node sits is honest, not an editing affordance. Present mode is
+  // the one exception — a dashed editor box has no business in a slideshow.
+  //
+  // Neutral grey, not the blue `aiPendingScreenLayer` paints: that blue
+  // already means "the agent is building this screen right now". An embed
+  // waiting for a prompt is not that, and the two must stay tellable apart.
+  const showOutline = isEmbedNode && mode !== "present";
+
   const showComposer =
     isEmbedNode &&
     canEditScene(mode) &&
@@ -237,10 +253,18 @@ export function EmbedPromptHost({ nodeId }: { nodeId: string }) {
       ref={hostRef}
       data-embed-id={nodeId}
       data-embed-prompt
+      data-embed-outline={showOutline ? "" : undefined}
+      // `box-sizing: border-box` so the dashed edge lands ON the node's
+      // bounds rather than 1px outside them — `useOverlayHostRect` sets this
+      // host's width/height to the node's on-screen rect. The border lives on
+      // the host, not the scaled content div below it, so it stays 1px at
+      // every zoom like the rest of the editor's chrome.
+      className={showOutline ? "border border-dashed border-border-hover" : undefined}
       style={{
         position: "absolute",
         overflow: "hidden",
         pointerEvents: "none",
+        boxSizing: "border-box",
       }}
     >
       {showComposer && (
