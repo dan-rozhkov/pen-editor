@@ -156,4 +156,38 @@ describe("<EmbedLayer />", () => {
     expect(container.querySelector('[data-embed-id="root"]')).toBeNull();
     expect(container.querySelector('[data-embed-id="nested"]')).not.toBeNull();
   });
+
+  // An embed with no htmlContent yet gets the prompt composer instead of
+  // the shadow-DOM host — see EmbedPromptHost's doc comment for why that has
+  // to be a whole separate component rather than a mode inside EmbedHost.
+  it("renders the prompt composer for an embed with empty htmlContent, not the shadow-DOM host", () => {
+    // The preceding "presenting" test leaves editorModeStore in "present"
+    // mode (it restores presentIndex but not mode) — reset explicitly so
+    // this test's embed isn't filtered out by the present-mode active-slide
+    // check regardless of run order.
+    useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
+    useSceneStore.setState({
+      nodesById: {
+        empty: { id: "empty", type: "embed", name: "Empty", x: 0, y: 0, width: 320, height: 200, htmlContent: "" } as unknown as FlatSceneNode,
+      },
+      parentById: { empty: null },
+      childrenById: {},
+      rootIds: ["empty"],
+      _cachedTree: null,
+    });
+
+    const { container } = render(<EmbedLayer />);
+    const host = container.querySelector<HTMLElement>('[data-embed-id="empty"]');
+    expect(host).not.toBeNull();
+    expect(host!.hasAttribute("data-embed-prompt")).toBe(true);
+    expect(host!.shadowRoot).toBeNull();
+  });
+
+  it("renders the shadow-DOM host, not the prompt composer, for an embed with real htmlContent", () => {
+    useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
+    const { container } = render(<EmbedLayer />);
+    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]');
+    expect(host).not.toBeNull();
+    expect(host!.hasAttribute("data-embed-prompt")).toBe(false);
+  });
 });

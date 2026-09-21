@@ -18,6 +18,9 @@ import { findHiddenSelfOrAncestor } from "@/utils/nodeUtils";
 import type { EmbedNode } from "@/types/scene";
 import { topLevelAncestorId } from "@/utils/topLevelAncestor";
 import { useOverlayHostRect } from "./useOverlayHostRect";
+import { isEmbedContentEmpty } from "@/lib/embedDefaults";
+import { EmbedPromptHost } from "./EmbedPromptHost";
+import { redispatchWheelAt } from "./forwardWheelToPixiCanvas";
 import {
   buildElementPath,
   describeEmbedElement,
@@ -1488,22 +1491,7 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
       e.preventDefault();
       const canvas = findPixiCanvas();
       if (!canvas) return;
-      canvas.dispatchEvent(
-        new WheelEvent("wheel", {
-          deltaX: e.deltaX,
-          deltaY: e.deltaY,
-          deltaZ: e.deltaZ,
-          deltaMode: e.deltaMode,
-          clientX: e.clientX,
-          clientY: e.clientY,
-          ctrlKey: e.ctrlKey,
-          metaKey: e.metaKey,
-          shiftKey: e.shiftKey,
-          altKey: e.altKey,
-          bubbles: true,
-          cancelable: true,
-        }),
-      );
+      redispatchWheelAt(canvas, e);
     };
 
     // Multitouch (pan/zoom) forwarding. `pixiInteractionCore.handlePointerDown`
@@ -1737,9 +1725,21 @@ export function EmbedLayer() {
         zIndex: 10,
       }}
     >
-      {embedIds.map((id) => (
-        <EmbedHost key={id} nodeId={id} />
-      ))}
+      {embedIds.map((id) =>
+        // An empty embed gets the prompt composer instead of the live HTML
+        // host. This is a per-node branch (not a prop on EmbedHost) because
+        // EmbedHost attaches a shadow root to mount htmlContent, and a
+        // shadow root can never be detached once attached — so the moment
+        // content lands and the node stops being "empty", it must be a
+        // brand-new host component (a fresh <div>), not the same one
+        // switching modes. Same `key={id}` in both branches keeps React's
+        // reconciliation honest across that swap.
+        isEmbedContentEmpty((nodesById[id] as EmbedNode).htmlContent) ? (
+          <EmbedPromptHost key={id} nodeId={id} />
+        ) : (
+          <EmbedHost key={id} nodeId={id} />
+        ),
+      )}
     </div>
   );
 }

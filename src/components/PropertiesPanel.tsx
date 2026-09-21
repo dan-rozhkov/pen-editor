@@ -16,7 +16,7 @@ import type {
   SceneNode,
 } from "@/types/scene";
 import { generateId } from "@/types/scene";
-import { DEFAULT_EMBED_HTML } from "@/lib/embedDefaults";
+import { EMPTY_EMBED_HTML } from "@/lib/embedDefaults";
 import {
   getAbsolutePositionFlat,
   getParentContextFlat,
@@ -149,7 +149,7 @@ function SizePresetsPanel({ kind }: { kind: "frame" | "embed" }) {
             width: preset.width,
             height: preset.height,
             name: preset.name,
-            htmlContent: DEFAULT_EMBED_HTML,
+            htmlContent: EMPTY_EMBED_HTML,
           };
 
     // Deliberately a root-level node, unlike the draw tools (which nest what
