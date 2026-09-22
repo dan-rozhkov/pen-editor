@@ -86,8 +86,8 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     contextWindow: 1310720,
   },
   {
-    value: "openai/gpt-5.6-luna",
-    label: "GPT-5.6 Luna",
+    value: "openai/gpt-6-luna",
+    label: "GPT-6 Luna",
     supportsVision: true,
     contextWindow: 1050000,
   },

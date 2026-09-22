@@ -23,7 +23,7 @@ describe("chatModels fallback", () => {
       "google/gemini-3.8-flash",
       "tencent/hy4-preview",
       "z-ai/glm-5.3",
-      "openai/gpt-5.6-luna",
+      "openai/gpt-6-luna",
       "z-ai/glm-5.2",
       "minimax/minimax-m3",
       "xiaomi/mimo-v2.6-pro",
