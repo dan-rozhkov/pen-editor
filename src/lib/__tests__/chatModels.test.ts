@@ -26,6 +26,8 @@ describe("chatModels fallback", () => {
       "openai/gpt-5.6-luna",
       "z-ai/glm-5.2",
       "minimax/minimax-m3",
+      "xiaomi/mimo-v2.6-pro",
+      "xiaomi/mimo-v2.6-flash",
       "opencode-go/deepseek-v4.1-flash",
       "opencode-go/deepseek-v4-flash-vision-exp",
       "opencode-go/glm-5.3-flash",
@@ -155,7 +157,7 @@ describe("chatModels visionFallback", () => {
     await fresh.loadModels();
 
     expect(fresh.getDefaultModel()).toBe("deepseek/deepseek-v4.1-flash");
-    expect(fresh.getModelOptions()).toHaveLength(19);
+    expect(fresh.getModelOptions()).toHaveLength(21);
     expect(fresh.canSendImages("deepseek/deepseek-v4.1-flash")).toBe(true);
   });
 });

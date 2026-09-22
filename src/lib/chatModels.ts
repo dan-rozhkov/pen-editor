@@ -107,6 +107,18 @@ const FALLBACK_MODELS: ChatModelOption[] = [
     supportsVision: true,
     contextWindow: 1048576,
   },
+  {
+    value: "xiaomi/mimo-v2.6-pro",
+    label: "MiMo V2.6 Pro",
+    supportsVision: true,
+    contextWindow: 1048576,
+  },
+  {
+    value: "xiaomi/mimo-v2.6-flash",
+    label: "MiMo V2.6 Flash",
+    supportsVision: true,
+    contextWindow: 1048576,
+  },
   // --- OpenCode BYOK (pen-editor-backend docs/specs/2026-09-18-opencode-
   // byok-design.md) --- Nine entries mirroring the backend's DEFAULT_MODELS
   // verbatim (id, label, supportsVision, contextWindow) —
