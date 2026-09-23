@@ -232,12 +232,27 @@ const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
   // a normal transcript instead.
   browse_task: 100_000,
   // browse_act (docs/superpowers/specs/2026-09-23-full-browser-use-design.md,
-  // "act gains actions and index targeting") now includes a `wait` action
-  // that can itself run up to 15s (its own cap on top of the desktop shell's
-  // ~20s command budget), plus press/hover's CDP round-trip. The 30s default
-  // no longer has headroom for that combination — 45s covers the worst case
-  // (wait's 15s + the command budget) without reaching browse_task's 100s.
-  browse_act: 45_000,
+  // "act gains actions and index targeting"). Two worst cases, and this
+  // must cover both:
+  //   - Plain act (index/target, no `element`): the desktop shell's own
+  //     BROWSER_COMMAND_TIMEOUT_MS = 20s bounds every command, including
+  //     `wait`'s hard cap of 15s (`wait` polls WITHIN that same 20s command
+  //     budget, not on top of it). 15s + 5s margin lands on that same 20s —
+  //     this override must be at least that.
+  //   - The `element` natural-language targeting path (same design doc's
+  //     follow-up) does three things in sequence before the model sees a
+  //     result: (1) browser.snapshot() — up to the desktop's 20s command
+  //     budget; (2) an /api/browse/locate round trip — bounded by shared.ts's
+  //     BROWSE_BACKEND_REQUEST_TIMEOUT_MS = 20s, which (per shared.ts's
+  //     fetchBrowseBackend) now covers the response body read too, not just
+  //     the fetch; (3) the act command itself — the desktop's 20s command
+  //     budget plus its ~1.5s cursor-move budget (CURSOR_TIMEOUT_MS in
+  //     pen-editor-desktop/src/main/browser/controller.ts) for a
+  //     click/type/select/hover/press that moves the visible cursor first.
+  //     20 + 20 + 21.5 = 61.5s worst case.
+  // 65s covers both (61.5s plus ~3.5s margin), while staying comfortably
+  // under browse_task's 100s.
+  browse_act: 65_000,
   // browse_tabs (same design doc) with `action: "new"` and a `url` reuses
   // browse_open's full ~45s command budget (a fresh navigation can be slow),
   // so it needs the same headroom as browse_open would if browse_open had

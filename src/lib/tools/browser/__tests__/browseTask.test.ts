@@ -480,6 +480,346 @@ describe("browse_task", () => {
     expect(transcript.steps.map((step) => step.ok)).toEqual([false, false, true, false, false]);
   });
 
+  // Full browser use (docs/superpowers/specs/
+  // 2026-09-23-full-browser-use-design.md): PRESS_ENTER/PRESS_ESCAPE and
+  // HOVER dispatch through browser.act, not browser.perform.
+  it("dispatches PRESS_ENTER as browser.act({action:'press', key:'Enter'}) right after a landed TYPE_TEXT", async () => {
+    let stepCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        stepCalls++;
+        return {
+          ok: true,
+          json: async () => {
+            if (stepCalls === 1) {
+              return {
+                outcome: "act",
+                operation: "TYPE_TEXT",
+                index: 0,
+                text: "headphones",
+                confidence: 0.9,
+                model: "jev",
+              };
+            }
+            if (stepCalls === 2) {
+              return { outcome: "act", operation: "PRESS_ENTER", confidence: 0.9, model: "jev" };
+            }
+            return { outcome: "done", confidence: 1, model: "jev" };
+          },
+        };
+      })
+    );
+
+    const act = vi.fn(async () => ({}));
+    const perform = vi.fn(async () => ({}));
+    const browser = stubBrowser({ act, perform });
+    const transcript = await runBrowseTaskLoop("submit the form", 12, browser);
+
+    expect(act).toHaveBeenCalledTimes(1);
+    expect(act).toHaveBeenCalledWith({ action: "press", key: "Enter" });
+    expect(perform).toHaveBeenCalledTimes(1);
+    expect(transcript.steps).toEqual([
+      { operation: "TYPE_TEXT", label: "Accept all", ok: true, index: 0 },
+      { operation: "PRESS_ENTER", label: "press Enter", ok: true },
+    ]);
+  });
+
+  it("refuses PRESS_ENTER without calling the bridge when the last landed step was not TYPE_TEXT", async () => {
+    let stepCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        stepCalls++;
+        return {
+          ok: true,
+          json: async () =>
+            stepCalls === 1
+              ? { outcome: "act", operation: "PRESS_ENTER", confidence: 0.9, model: "jev" }
+              : { outcome: "done", confidence: 1, model: "jev" },
+        };
+      })
+    );
+
+    const act = vi.fn(async () => ({}));
+    const browser = stubBrowser({ act });
+    const transcript = await runBrowseTaskLoop("submit the form", 12, browser);
+
+    expect(act).not.toHaveBeenCalled();
+    expect(transcript.steps).toEqual([
+      {
+        operation: "PRESS_ENTER",
+        label: "Enter is only pressed right after typing into a field",
+        ok: false,
+      },
+    ]);
+  });
+
+  it("refuses a second PRESS_ENTER right after the first (a landed PRESS_ENTER is not TYPE_TEXT)", async () => {
+    let stepCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        stepCalls++;
+        return {
+          ok: true,
+          json: async () => {
+            if (stepCalls === 1) {
+              return {
+                outcome: "act",
+                operation: "TYPE_TEXT",
+                index: 0,
+                text: "headphones",
+                confidence: 0.9,
+                model: "jev",
+              };
+            }
+            // PRESS_ENTER decided twice in a row.
+            return { outcome: "act", operation: "PRESS_ENTER", confidence: 0.9, model: "jev" };
+          },
+        };
+      })
+    );
+
+    const act = vi.fn(async () => ({}));
+    const perform = vi.fn(async () => ({}));
+    const browser = stubBrowser({ act, perform });
+    const transcript = await runBrowseTaskLoop("submit the form", 3, browser);
+
+    expect(act).toHaveBeenCalledTimes(1); // only the first PRESS_ENTER lands
+    expect(transcript.steps[0]).toEqual({ operation: "TYPE_TEXT", label: "Accept all", ok: true, index: 0 });
+    expect(transcript.steps[1]).toEqual({ operation: "PRESS_ENTER", label: "press Enter", ok: true });
+    expect(transcript.steps[2]).toEqual({
+      operation: "PRESS_ENTER",
+      label: "Enter is only pressed right after typing into a field",
+      ok: false,
+    });
+  });
+
+  it("dispatches PRESS_ESCAPE as browser.act({action:'press', key:'Escape'})", async () => {
+    let stepCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        stepCalls++;
+        return {
+          ok: true,
+          json: async () =>
+            stepCalls === 1
+              ? { outcome: "act", operation: "PRESS_ESCAPE", confidence: 0.9, model: "jev" }
+              : { outcome: "done", confidence: 1, model: "jev" },
+        };
+      })
+    );
+
+    const act = vi.fn(async () => ({}));
+    const browser = stubBrowser({ act });
+    const transcript = await runBrowseTaskLoop("close the modal", 12, browser);
+
+    expect(act).toHaveBeenCalledTimes(1);
+    expect(act).toHaveBeenCalledWith({ action: "press", key: "Escape" });
+    expect(transcript.steps).toEqual([{ operation: "PRESS_ESCAPE", label: "press Escape", ok: true }]);
+  });
+
+  it("dispatches HOVER as browser.act({action:'hover', index, snapshotId}) using the current step's snapshotId", async () => {
+    let stepCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        stepCalls++;
+        return {
+          ok: true,
+          json: async () =>
+            stepCalls === 1
+              ? { outcome: "act", operation: "HOVER", index: 0, confidence: 0.9, model: "jev" }
+              : { outcome: "done", confidence: 1, model: "jev" },
+        };
+      })
+    );
+
+    const act = vi.fn(async () => ({}));
+    const browser = stubBrowser({ act });
+    const transcript = await runBrowseTaskLoop("reveal the menu", 12, browser);
+
+    expect(act).toHaveBeenCalledTimes(1);
+    expect(act).toHaveBeenCalledWith({ action: "hover", index: 0, snapshotId: "snap-1" });
+    expect(transcript.steps).toEqual([{ operation: "HOVER", label: "Accept all", ok: true, index: 0 }]);
+  });
+
+  it("records a HOVER decision missing its index as a failed step and never calls act", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ outcome: "act", operation: "HOVER", confidence: 0.9, model: "jev" }),
+      }))
+    );
+
+    const act = vi.fn(async () => ({}));
+    const browser = stubBrowser({ act });
+    const transcript = await runBrowseTaskLoop("hover something", 1, browser);
+
+    expect(act).not.toHaveBeenCalled();
+    expect(transcript.steps).toEqual([
+      { operation: "HOVER", label: "missing index for a non-scroll operation", ok: false },
+    ]);
+  });
+
+  it("records a { error }-resolved act (PRESS_ENTER/HOVER) as a failed step, not a landed action", async () => {
+    let stepCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        stepCalls++;
+        return {
+          ok: true,
+          json: async () => {
+            if (stepCalls === 1) {
+              return {
+                outcome: "act",
+                operation: "TYPE_TEXT",
+                index: 0,
+                text: "headphones",
+                confidence: 0.9,
+                model: "jev",
+              };
+            }
+            if (stepCalls === 2) {
+              return { outcome: "act", operation: "PRESS_ENTER", confidence: 0.9, model: "jev" };
+            }
+            return { outcome: "done", confidence: 1, model: "jev" };
+          },
+        };
+      })
+    );
+
+    const act = vi.fn(async () => ({ error: "nothing is focused" }));
+    const perform = vi.fn(async () => ({}));
+    const browser = stubBrowser({ act, perform });
+    const transcript = await runBrowseTaskLoop("submit", 12, browser);
+
+    expect(transcript.steps).toEqual([
+      { operation: "TYPE_TEXT", label: "Accept all", ok: true, index: 0 },
+      { operation: "PRESS_ENTER", label: "nothing is focused", ok: false },
+    ]);
+  });
+
+  it("counts a changed:false act result (PRESS_ESCAPE/HOVER/PRESS_ENTER) as unproductive for stall detection", async () => {
+    // Escape with nothing open to close: the act "succeeds" (no `{error}`)
+    // but reports changed:false — must be treated like a rejected act for
+    // the no-progress counter, or a persistently no-op Escape would run out
+    // the whole step budget the same way a persistently stale CLICK target
+    // used to before PR #40.
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ outcome: "act", operation: "PRESS_ESCAPE", confidence: 0.9, model: "jev" }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const act = vi.fn(async () => ({ changed: false }));
+    const browser = stubBrowser({ act });
+    const transcript = await runBrowseTaskLoop("close the modal", 12, browser);
+
+    expect(transcript.status).toBe("stalled");
+    expect(transcript.steps).toHaveLength(3);
+    expect(act).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(transcript.steps.every((step) => step.ok === false)).toBe(true);
+  });
+
+  it("folds openedTab into the step label/history when an act or perform result carries one", async () => {
+    let stepCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        stepCalls++;
+        return {
+          ok: true,
+          json: async () =>
+            stepCalls === 1
+              ? { outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }
+              : { outcome: "done", confidence: 1, model: "jev" },
+        };
+      })
+    );
+
+    const perform = vi.fn(async () => ({
+      openedTab: { tabId: 7, url: "https://example.com/new", title: "New Tab" },
+    }));
+    const browser = stubBrowser({ perform });
+    const transcript = await runBrowseTaskLoop("open a link", 12, browser);
+
+    expect(transcript.steps).toEqual([
+      { operation: "CLICK", label: "Accept all → opened tab: New Tab", ok: true, index: 0 },
+    ]);
+  });
+
+  it("folds dialogs into the step label/history when a result carries them", async () => {
+    let stepCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        stepCalls++;
+        return {
+          ok: true,
+          json: async () =>
+            stepCalls === 1
+              ? { outcome: "act", operation: "PRESS_ESCAPE", confidence: 0.9, model: "jev" }
+              : { outcome: "done", confidence: 1, model: "jev" },
+        };
+      })
+    );
+
+    const act = vi.fn(async () => ({
+      dialogs: [{ tabId: 1, type: "alert", message: "Saved!" }],
+    }));
+    const browser = stubBrowser({ act });
+    const transcript = await runBrowseTaskLoop("submit", 12, browser);
+
+    expect(transcript.steps).toEqual([
+      { operation: "PRESS_ESCAPE", label: "press Escape (dialog auto-handled: alert: Saved!)", ok: true },
+    ]);
+  });
+
+  it("truncates an over-long opened-tab title/dialog message so the resulting history label stays within the backend's 200-char cap", async () => {
+    const receivedBodies: Array<{ history?: Array<{ label: string }> }> = [];
+    let stepCalls = 0;
+    const longTitle = "T".repeat(300);
+    const longMessage = "M".repeat(300);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        stepCalls++;
+        receivedBodies.push(JSON.parse(init.body as string));
+        return {
+          ok: true,
+          json: async () =>
+            stepCalls === 1
+              ? { outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }
+              : { outcome: "done", confidence: 1, model: "jev" },
+        };
+      })
+    );
+
+    const perform = vi.fn(async () => ({
+      openedTab: { tabId: 7, url: "https://example.com/new", title: longTitle },
+      dialogs: [{ type: "alert", message: longMessage }],
+    }));
+    const browser = stubBrowser({ perform });
+    const transcript = await runBrowseTaskLoop("open a link", 12, browser);
+
+    expect(transcript.status).toBe("done");
+    expect(transcript.steps[0].label.length).toBeLessThanOrEqual(200);
+
+    // The SECOND /api/browse/step request body carries the history entry
+    // for step one — this is the request that would 400 against the
+    // backend's `label: z.string().max(200)` schema if truncation didn't
+    // happen.
+    const secondRequestHistory = receivedBodies[1]?.history ?? [];
+    expect(secondRequestHistory).toHaveLength(1);
+    expect(secondRequestHistory[0]!.label.length).toBeLessThanOrEqual(200);
+  });
+
   it("surfaces a snapshot that resolved with { error } instead of reporting it as malformed", async () => {
     vi.stubGlobal(
       "fetch",

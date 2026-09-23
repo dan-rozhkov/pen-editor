@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { browseOpen } from "@/lib/tools/browser/browseOpen";
 import { browseAct } from "@/lib/tools/browser/browseAct";
 import { browseFindImages } from "@/lib/tools/browser/browseFindImages";
@@ -27,6 +27,7 @@ function stubBrowser(overrides: Partial<PenDesktopBrowser>): PenDesktopBrowser {
 
 afterEach(() => {
   delete window.penDesktop;
+  vi.unstubAllGlobals();
 });
 
 describe("browse_open", () => {
@@ -168,6 +169,323 @@ describe("browse_act", () => {
       await browseAct({ action, index: 1, snapshotId: "snap-1" });
       expect(received).toEqual({ action, index: 1, snapshotId: "snap-1" });
     }
+  });
+});
+
+describe("browse_act element targeting", () => {
+  function stubSnapshotBrowser(overrides: Partial<PenDesktopBrowser> = {}): PenDesktopBrowser {
+    return stubBrowser({
+      snapshot: async () => ({
+        url: "https://example.com",
+        title: "Example",
+        elements: [{ index: 2, tag: "button", label: "Search" }],
+        snapshotId: "snap-1",
+      }),
+      ...overrides,
+    });
+  }
+
+  it("resolves `element` via snapshot + /api/browse/locate, then calls act with index+snapshotId and without element/target", async () => {
+    let receivedUrl: string | undefined;
+    let receivedBody: unknown;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        receivedUrl = url;
+        receivedBody = JSON.parse(init.body as string);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ outcome: "found", index: 2, label: "Search", confidence: 0.87, model: "jev" }),
+        };
+      })
+    );
+
+    let receivedActArgs: unknown;
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubSnapshotBrowser({
+        act: async (args) => {
+          receivedActArgs = args;
+          return { url: "https://example.com", title: "Example", matched: "Search" };
+        },
+      }),
+    };
+
+    const result = JSON.parse(
+      await browseAct({ action: "click", element: "the search button in the header" })
+    );
+
+    expect(receivedUrl).toContain("/api/browse/locate");
+    expect(receivedBody).toEqual({
+      description: "the search button in the header",
+      operation: "CLICK",
+      url: "https://example.com",
+      title: "Example",
+      elements: [{ index: 2, tag: "button", label: "Search" }],
+    });
+    expect(receivedActArgs).toEqual({ action: "click", index: 2, snapshotId: "snap-1" });
+    expect(result).toEqual({
+      url: "https://example.com",
+      title: "Example",
+      matched: "Search",
+      resolved: {
+        index: 2,
+        label: "Search",
+        confidence: 0.87,
+        snapshotId: "snap-1",
+        note: expect.stringContaining("stale"),
+      },
+    });
+  });
+
+  it("includes `resolved` (with the fresh snapshotId) on an error result when the act itself fails after a successful locate", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ outcome: "found", index: 2, label: "Search", confidence: 0.9, model: "jev" }),
+      }))
+    );
+
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubSnapshotBrowser({
+        act: async () => {
+          throw new Error("target is gone or occluded");
+        },
+      }),
+    };
+
+    const result = JSON.parse(
+      await browseAct({ action: "click", element: "the search button in the header" })
+    );
+
+    expect(result.error).toBe("target is gone or occluded");
+    expect(result.resolved).toEqual({
+      index: 2,
+      label: "Search",
+      confidence: 0.9,
+      snapshotId: "snap-1",
+      note: expect.stringContaining("stale"),
+    });
+  });
+
+  it("maps action to the locate operation vocabulary (type/select/hover/press)", async () => {
+    const receivedOperations: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        receivedOperations.push((JSON.parse(init.body as string) as { operation: string }).operation);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ outcome: "found", index: 2, label: "Search", confidence: 0.9, model: "jev" }),
+        };
+      })
+    );
+
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubSnapshotBrowser({ act: async () => ({}) }),
+    };
+
+    await browseAct({ action: "type", element: "the search box", text: "hello" });
+    await browseAct({ action: "select", element: "the country dropdown", text: "Canada" });
+    await browseAct({ action: "hover", element: "the menu item" });
+    await browseAct({ action: "press", element: "the email field", key: "Enter" });
+
+    // press resolves as FOCUS, not CLICK — see ACTION_TO_LOCATE_OPERATION's
+    // comment: FOCUS accepts any of CLICK/TYPE_TEXT/SELECT as a candidate,
+    // so Enter can be resolved onto a text input, not just a button.
+    expect(receivedOperations).toEqual(["TYPE_TEXT", "SELECT", "HOVER", "FOCUS"]);
+  });
+
+  it("rejects a type/select element call missing `text`, and a press call missing `key`, without calling fetch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubSnapshotBrowser(),
+    };
+
+    const typeResult = JSON.parse(await browseAct({ action: "type", element: "the search box" }));
+    const selectResult = JSON.parse(
+      await browseAct({ action: "select", element: "the country dropdown" })
+    );
+    const pressResult = JSON.parse(await browseAct({ action: "press", element: "the email field" }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(typeResult.error).toMatch(/"text"/);
+    expect(selectResult.error).toMatch(/"text"/);
+    expect(pressResult.error).toMatch(/"key"/);
+  });
+
+  it("returns a 'no element matched' error naming target/index as the fallback when outcome is not_found", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ outcome: "not_found", reason: "no candidate matched the description" }),
+      }))
+    );
+
+    const act = vi.fn(async () => ({}));
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubSnapshotBrowser({ act }),
+    };
+
+    const result = JSON.parse(await browseAct({ action: "click", element: "a purple elephant" }));
+
+    expect(act).not.toHaveBeenCalled();
+    expect(result.error).toMatch(/No element matched "a purple elephant"/);
+    expect(result.error).toMatch(/no candidate matched the description/);
+    expect(result.error).toMatch(/browse_snapshot/);
+  });
+
+  it("returns a clear error and does not call act when outcome is retry", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ outcome: "retry", reason: "ambiguous, matched two candidates" }),
+      }))
+    );
+
+    const act = vi.fn(async () => ({}));
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubSnapshotBrowser({ act }),
+    };
+
+    const result = JSON.parse(await browseAct({ action: "click", element: "a button" }));
+
+    expect(act).not.toHaveBeenCalled();
+    expect(result.error).toMatch(/target or index/i);
+    expect(result.error).toMatch(/ambiguous, matched two candidates/);
+  });
+
+  it("returns a clear error when /api/browse/locate responds 503 (no fast model configured)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 503,
+        json: async () => ({}),
+      }))
+    );
+
+    const act = vi.fn(async () => ({}));
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubSnapshotBrowser({ act }),
+    };
+
+    const result = JSON.parse(await browseAct({ action: "click", element: "a button" }));
+
+    expect(act).not.toHaveBeenCalled();
+    expect(result.error).toMatch(/not available/i);
+    expect(result.error).toMatch(/target or index/i);
+  });
+
+  it("returns a clear error on a fetch failure resolving /api/browse/locate", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network down");
+      })
+    );
+
+    const act = vi.fn(async () => ({}));
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubSnapshotBrowser({ act }),
+    };
+
+    const result = JSON.parse(await browseAct({ action: "click", element: "a button" }));
+
+    expect(act).not.toHaveBeenCalled();
+    expect(result.error).toMatch(/network down/);
+    expect(result.error).toMatch(/target or index/i);
+  });
+
+  it("returns a clear error when the pre-locate snapshot resolves { error }, without calling fetch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        snapshot: async () => ({ error: "No browser tab is open — call browse_open first." }),
+      }),
+    };
+
+    const result = JSON.parse(await browseAct({ action: "click", element: "a button" }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.error).toContain("No browser tab is open");
+  });
+
+  it("returns an error for an action that does not support `element` (e.g. scroll)", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubSnapshotBrowser(),
+    };
+
+    const result = JSON.parse(await browseAct({ action: "scroll", amount: 1, element: "the page" }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.error).toMatch(/element/i);
+  });
+
+  it("prefers an explicit index over `element` and never calls /api/browse/locate", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    let receivedActArgs: unknown;
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubSnapshotBrowser({
+        act: async (args) => {
+          receivedActArgs = args;
+          return { matched: "by index" };
+        },
+      }),
+    };
+
+    await browseAct({ action: "click", index: 5, snapshotId: "snap-9", element: "the search button" });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(receivedActArgs).toEqual({ action: "click", index: 5, snapshotId: "snap-9" });
+  });
+
+  it("prefers an explicit target over `element` and never calls /api/browse/locate", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    let receivedActArgs: unknown;
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubSnapshotBrowser({
+        act: async (args) => {
+          receivedActArgs = args;
+          return { matched: "Search" };
+        },
+      }),
+    };
+
+    await browseAct({ action: "click", target: "Search", element: "the search button" });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(receivedActArgs).toEqual({ action: "click", target: "Search" });
   });
 });
 

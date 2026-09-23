@@ -1,6 +1,11 @@
 import type { ToolHandler } from "../../toolRegistry";
-import { resolveApiUrl } from "../../apiBase";
-import { BROWSER_NOT_AVAILABLE_ERROR } from "./shared";
+import {
+  BROWSER_NOT_AVAILABLE_ERROR,
+  fetchBrowseBackend,
+  resultError,
+  takeSnapshot,
+  type SnapshotResult,
+} from "./shared";
 
 /**
  * browse_task — a Jev-driven browsing loop
@@ -49,21 +54,54 @@ const MAX_CONSECUTIVE_UNPRODUCTIVE_STEPS = 3;
  */
 const WAIT_SLEEP_MS = 400;
 
+/**
+ * pen-editor-backend/src/routes/browseStep.ts's `historyEntrySchema` caps
+ * `label` at 200 chars (`label: z.string().max(200)`) — every step this
+ * loop records is appended to `history` and sent right back up on the
+ * NEXT /api/browse/step call, so a label over that limit 400s that next
+ * request and silently stalls the whole task (the loop's own error
+ * handling treats a non-ok response as a thrown error, so this looked like
+ * "the backend broke" rather than "our own label was too long"). The two
+ * repos don't share code, so this is a plain mirrored constant, not an
+ * import — keep it in sync with the backend schema if that cap ever moves.
+ */
+const HISTORY_LABEL_MAX_CHARS = 200;
+
+/**
+ * Per-fragment cap for a side-effect description folded into a step label
+ * (an opened tab's title, an auto-handled dialog's message — both are
+ * page-derived text with no length guarantee of their own). Generous
+ * enough to stay informative while leaving room for the base label plus
+ * whichever OTHER side-effect fragment rides along, so two long fragments
+ * together still can't blow past HISTORY_LABEL_MAX_CHARS on their own —
+ * recordStep's hard truncation is the final backstop regardless.
+ */
+const SIDE_EFFECT_FRAGMENT_MAX_CHARS = 60;
+
+/** Truncates `value` to at most `max` characters, replacing anything cut
+ * with a single ellipsis character so the cap is still exactly `max`. */
+function truncateToChars(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+}
+
 /** The operations `perform` actually accepts (addendum A: WAIT never reaches it). */
 type PerformOperation = "CLICK" | "TYPE_TEXT" | "SELECT" | "SCROLL_UP" | "SCROLL_DOWN";
 
+/**
+ * The operations dispatched through `browser.act` instead of `browser.perform`
+ * (docs/superpowers/specs/2026-09-23-full-browser-use-design.md, "act gains
+ * actions and index targeting"). PRESS_ENTER/PRESS_ESCAPE act on whatever
+ * currently has focus — right after TYPE_TEXT that's the field just typed
+ * into — and carry no index; HOVER targets an element by index like CLICK
+ * does.
+ */
+type ActOperation = "PRESS_ENTER" | "PRESS_ESCAPE" | "HOVER";
+
 /** Everything a step response's `operation` may name. */
-type StepOperation = PerformOperation | "WAIT";
+type StepOperation = PerformOperation | ActOperation | "WAIT";
 
 /** Addendum B: the step response's explicit terminal/transient signal. */
 type StepOutcome = "act" | "done" | "blocked" | "retry";
-
-interface SnapshotResult {
-  url: string;
-  title: string;
-  elements: unknown[];
-  snapshotId: string;
-}
 
 interface StepHistoryEntry {
   operation: string;
@@ -99,31 +137,6 @@ interface Transcript {
   reason?: string;
 }
 
-function isSnapshotResult(value: unknown): value is SnapshotResult {
-  return (
-    !!value &&
-    typeof value === "object" &&
-    typeof (value as SnapshotResult).url === "string" &&
-    typeof (value as SnapshotResult).title === "string" &&
-    Array.isArray((value as SnapshotResult).elements) &&
-    typeof (value as SnapshotResult).snapshotId === "string"
-  );
-}
-
-/**
- * The desktop bridge never rejects: `window.penDesktop.browser.*` resolves
- * with `{ error: "..." }` for every refusal the controller makes, including
- * the stale-snapshotId guard that fires when the page re-rendered between
- * snapshot and perform (PR #40's case). Read as a bare success, such a
- * result got recorded as `ok: true` — telling both the transcript and Jev
- * that an action landed when nothing happened at all.
- */
-function resultError(value: unknown): string | null {
-  if (!value || typeof value !== "object") return null;
-  const err = (value as { error?: unknown }).error;
-  return typeof err === "string" && err !== "" ? err : null;
-}
-
 function labelForElement(elements: unknown[], index: number | undefined): string {
   if (index == null) return "";
   const el = elements[index] as { label?: unknown } | undefined;
@@ -135,31 +148,93 @@ async function requestStep(
   snapshot: SnapshotResult,
   history: StepHistoryEntry[]
 ): Promise<StepResponse> {
-  const res = await fetch(resolveApiUrl("/api/browse/step"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      goal,
-      url: snapshot.url,
-      title: snapshot.title,
-      elements: snapshot.elements,
-      history: history.slice(-HISTORY_LIMIT),
-    }),
+  const res = await fetchBrowseBackend("/api/browse/step", {
+    goal,
+    url: snapshot.url,
+    title: snapshot.title,
+    elements: snapshot.elements,
+    history: history.slice(-HISTORY_LIMIT),
   });
   if (!res.ok) {
     throw new Error(`/api/browse/step responded ${res.status}`);
   }
-  return (await res.json()) as StepResponse;
+  return res.body as StepResponse;
 }
 
-/** Records a step and appends it to the running history in one go. */
+/**
+ * `openedTab`/`dialogs` (docs/superpowers/specs/
+ * 2026-09-23-full-browser-use-design.md, "Desktop bridge") can ride along on
+ * any `act`/`perform` result. Folded into the step's label (and therefore
+ * into both the transcript and the history Jev sees on the next request) so
+ * a tab switch or an auto-handled JS dialog isn't silently invisible to the
+ * next decision — Jev needs to know the page it's driving just changed out
+ * from under it.
+ */
+function describeSideEffects(value: unknown): string {
+  if (!value || typeof value !== "object") return "";
+  const parts: string[] = [];
+
+  const openedTab = (value as { openedTab?: unknown }).openedTab;
+  if (openedTab && typeof openedTab === "object") {
+    const title = (openedTab as { title?: unknown }).title;
+    const url = (openedTab as { url?: unknown }).url;
+    const name =
+      typeof title === "string" && title ? title : typeof url === "string" ? url : "new tab";
+    parts.push(`→ opened tab: ${truncateToChars(name, SIDE_EFFECT_FRAGMENT_MAX_CHARS)}`);
+  }
+
+  const dialogs = (value as { dialogs?: unknown }).dialogs;
+  if (Array.isArray(dialogs) && dialogs.length > 0) {
+    const summary = dialogs
+      .map((d: unknown) => {
+        const type = d && typeof d === "object" && typeof (d as { type?: unknown }).type === "string"
+          ? (d as { type: string }).type
+          : "dialog";
+        const message =
+          d && typeof d === "object" && typeof (d as { message?: unknown }).message === "string"
+            ? truncateToChars((d as { message: string }).message, SIDE_EFFECT_FRAGMENT_MAX_CHARS)
+            : "";
+        return message ? `${type}: ${message}` : type;
+      })
+      .join("; ");
+    parts.push(`(dialog auto-handled: ${summary})`);
+  }
+
+  return parts.length > 0 ? ` ${parts.join(" ")}` : "";
+}
+
+/** True when a `browser.act` result explicitly reports `changed: false` —
+ * the action ran (no `{ error }`) but altered nothing. See its call site's
+ * comment for why that must count as an unproductive step for stall
+ * detection, same as a rejected act. A result with no `changed` field at
+ * all (a bridge that predates the `{ changed, changes }` diff, or a result
+ * shape that doesn't carry it) is NOT treated as no-effect — only an
+ * explicit `false` is, so this stays a strict tightening rather than a
+ * behavior change for bridges that don't report it. */
+function isNoEffectResult(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  return (value as { changed?: unknown }).changed === false;
+}
+
+/**
+ * Records a step and appends it to the running history in one go —
+ * hard-truncating `label` to HISTORY_LABEL_MAX_CHARS first. This is the
+ * backstop, not describeSideEffects' per-fragment truncation above: the
+ * BASE label (an element's own text, or an error message from the bridge/
+ * backend) has no length guarantee either, so the cap has to apply here,
+ * after everything is concatenated, not just to the side-effect fragments.
+ */
 function recordStep(
   steps: TranscriptStep[],
   history: StepHistoryEntry[],
   entry: TranscriptStep
 ): void {
-  steps.push(entry);
-  history.push({ operation: entry.operation, label: entry.label, ok: entry.ok });
+  const truncated: TranscriptStep = {
+    ...entry,
+    label: truncateToChars(entry.label, HISTORY_LABEL_MAX_CHARS),
+  };
+  steps.push(truncated);
+  history.push({ operation: truncated.operation, label: truncated.label, ok: truncated.ok });
 }
 
 /**
@@ -189,12 +264,20 @@ export async function runBrowseTaskLoop(
   // the no-op in `history`, or it re-picks the same dead target), but three
   // in a row end the task instead of grinding out the whole budget.
   let unproductive = 0;
+  /** The most recent SUCCESSFULLY landed step's `operation` — used to gate
+   * PRESS_ENTER (see its dispatch below: Enter is only pressed right after
+   * a TYPE_TEXT that landed, since a perform CLICK never moves focus, and a
+   * WAIT/SCROLL in between means Enter would submit whatever the page
+   * happens to have focus on, not the field Jev meant). `null` until the
+   * first step lands. */
+  let lastLandedOperation: string | null = null;
   /** recordStep plus the no-progress check. Returns the transcript to
    * return when the loop has stalled, or null to carry on. */
   const note = (entry: TranscriptStep): Transcript | null => {
     recordStep(steps, history, entry);
     if (entry.ok) {
       unproductive = 0;
+      lastLandedOperation = entry.operation;
       return null;
     }
     unproductive++;
@@ -213,26 +296,17 @@ export async function runBrowseTaskLoop(
       return { status: "budget", steps, url: lastUrl, title: lastTitle, reason: "deadline exceeded" };
     }
 
-    let snapshot: SnapshotResult;
-    try {
-      const raw = await browser.snapshot();
-      const bridgeError = resultError(raw);
-      if (bridgeError) {
-        throw new Error(bridgeError);
-      }
-      if (!isSnapshotResult(raw)) {
-        throw new Error("Malformed snapshot result");
-      }
-      snapshot = raw;
-    } catch (err) {
+    const snapshotResult = await takeSnapshot(browser);
+    if ("error" in snapshotResult) {
       const stalled = note({
         operation: "SNAPSHOT",
-        label: err instanceof Error ? err.message : "snapshot failed",
+        label: snapshotResult.error,
         ok: false,
       });
       if (stalled) return stalled;
       continue;
     }
+    const snapshot: SnapshotResult = snapshotResult;
 
     lastUrl = snapshot.url;
     lastTitle = snapshot.title;
@@ -300,19 +374,95 @@ export async function runBrowseTaskLoop(
       continue;
     }
 
-    const isScroll = operation === "SCROLL_UP" || operation === "SCROLL_DOWN";
+    // Full browser use (docs/superpowers/specs/
+    // 2026-09-23-full-browser-use-design.md): PRESS_ENTER/PRESS_ESCAPE are
+    // targetless (they act on whatever already has focus — right after
+    // TYPE_TEXT that's the field just typed into), same as a scroll. HOVER
+    // targets an element by index, same as CLICK.
+    const isTargetless =
+      operation === "SCROLL_UP" ||
+      operation === "SCROLL_DOWN" ||
+      operation === "PRESS_ENTER" ||
+      operation === "PRESS_ESCAPE";
     const label = labelForElement(snapshot.elements, decision.index);
 
-    // Addendum A / item 3: CLICK/TYPE_TEXT/SELECT require an index; a scroll
-    // legitimately carries none. A non-scroll decision arriving without an
-    // index is recorded as a failed step rather than forwarded to `perform`.
-    if (!isScroll && decision.index == null) {
+    // Addendum A / item 3: CLICK/TYPE_TEXT/SELECT/HOVER require an index; a
+    // scroll or a targetless press legitimately carries none. A non-scroll,
+    // non-targetless decision arriving without an index is recorded as a
+    // failed step rather than forwarded to `perform`/`act`.
+    if (!isTargetless && decision.index == null) {
       const stalled = note({
         operation,
         label: label || "missing index for a non-scroll operation",
         ok: false,
       });
       if (stalled) return stalled;
+      continue;
+    }
+
+    if (operation === "PRESS_ENTER" || operation === "PRESS_ESCAPE" || operation === "HOVER") {
+      // Full browser use follow-up (finding: Enter is only meaningful right
+      // after typing into a field). The backend already refuses PRESS_ENTER
+      // when a password field is anywhere on the page, but it has no way to
+      // know WHICH element currently has focus — that's client-side state.
+      // A perform CLICK never moves focus, so the only step that reliably
+      // leaves the right field focused is a just-landed TYPE_TEXT; anything
+      // else (including a WAIT/SCROLL taken in between) means Enter would
+      // submit whatever the page happens to have focus on, not the field
+      // Jev meant. Refused without ever calling the bridge — recorded as a
+      // failed (not stale-target) step so Jev sees why and picks something
+      // else next cycle.
+      if (operation === "PRESS_ENTER" && lastLandedOperation !== "TYPE_TEXT") {
+        const stalled = note({
+          operation,
+          label: "Enter is only pressed right after typing into a field",
+          ok: false,
+          index: decision.index,
+        });
+        if (stalled) return stalled;
+        continue;
+      }
+
+      const actArgs: Record<string, unknown> =
+        operation === "HOVER"
+          ? { action: "hover", index: decision.index, snapshotId: snapshot.snapshotId }
+          : { action: "press", key: operation === "PRESS_ENTER" ? "Enter" : "Escape" };
+      const actLabel =
+        operation === "HOVER" ? label : operation === "PRESS_ENTER" ? "press Enter" : "press Escape";
+
+      try {
+        const acted = await browser.act(actArgs);
+        // Same PR #40 contract as `perform`: the bridge resolves `{ error }`
+        // rather than rejecting.
+        const rejected = resultError(acted);
+        // Finding: a `changed: false` result (see the desktop bridge's
+        // `{ changed, changes }` diff) landed with no error but altered
+        // nothing — e.g. Escape with nothing open to close, or hovering an
+        // element that has no hover-revealed state. That is exactly the
+        // "no progress" case the consecutive-unproductive-steps counter
+        // exists to catch, so it must count the same way a rejected act
+        // does, not as a landed action.
+        const noEffect = !rejected && isNoEffectResult(acted);
+        const stalled = note(
+          rejected
+            ? { operation, label: rejected, ok: false, index: decision.index }
+            : {
+                operation,
+                label: `${actLabel}${describeSideEffects(acted)}`,
+                ok: !noEffect,
+                index: decision.index,
+              }
+        );
+        if (stalled) return stalled;
+      } catch (err) {
+        const stalled = note({
+          operation,
+          label: err instanceof Error ? err.message : "act failed",
+          ok: false,
+          index: decision.index,
+        });
+        if (stalled) return stalled;
+      }
       continue;
     }
 
@@ -343,7 +493,7 @@ export async function runBrowseTaskLoop(
       const stalled = note(
         rejected
           ? { operation, label: rejected, ok: false, index: decision.index }
-          : { operation, label, ok: true, index: decision.index }
+          : { operation, label: `${label}${describeSideEffects(performed)}`, ok: true, index: decision.index }
       );
       if (stalled) return stalled;
     } catch (err) {
