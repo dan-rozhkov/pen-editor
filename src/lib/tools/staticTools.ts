@@ -7,8 +7,8 @@ import type { ToolHandler } from "../toolRegistry";
 export const guidelines: Record<string, string> = {
   "design-system":
     "## Sizing & Auto-Layout Rules\n" +
-    "CRITICAL: When creating frames with layout (vertical/horizontal), you MUST explicitly set width and height. " +
-    "Never leave them as default — the default is a fixed pixel size which breaks auto-layout.\n" +
+    "When creating frames with layout (vertical/horizontal), set width and height explicitly: " +
+    "the default is a fixed pixel size, which breaks auto-layout.\n" +
     "- Use `width: \"fill_container\"` for children that should stretch to parent width.\n" +
     "- Use `height: \"fill_container\"` for children that should stretch to parent height.\n" +
     "- Use `width: \"fit_content\"` or `height: \"fit_content\"` for content-sized elements.\n" +
@@ -27,10 +27,8 @@ export const guidelines: Record<string, string> = {
     "- Card grids: horizontal frame with `gap: 16-24`, cards with `width: \"fill_container\"`.\n" +
     "- Form fields: vertical frame with `gap: 16`, inputs with `width: \"fill_container\"`.\n\n" +
     "## Design Tokens\n" +
-    "- Always use `$--variable` tokens for colors, never hardcode hex values.\n" +
-    "- Colors: `$--background`, `$--foreground`, `$--muted-foreground`, `$--primary`, `$--border`, `$--card`.\n" +
-    "- Typography: `$--font-primary` (headings), `$--font-secondary` (body).\n" +
-    "- Border radius: `$--radius-none`, `$--radius-m`, `$--radius-pill`.\n\n" +
+    "- Reference colors, fonts and radii through `$--variable` tokens so a theme change propagates, using only names that `get_variables` actually returns.\n" +
+    "- If the document has no suitable tokens yet, create them with `set_variables` (e.g. background/foreground/primary/border colors, heading/body fonts, a radius scale) before referencing them.\n\n" +
     "## Spacing Reference\n" +
     "- Screen sections gap: 24-32. Card grid gap: 16-24. Form fields gap: 16.\n" +
     "- Inside cards padding: 24. Page content padding: 32. Button padding: [10, 16].\n" +

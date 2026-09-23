@@ -112,7 +112,7 @@ export const WEBMCP_TOOL_SPECS: readonly WebMcpToolSpec[] = [
         include_schema: {
           type: "boolean",
           description:
-            "Whether to include the .pen file schema in the response. Set true if you need to understand the node format.",
+            "Currently ignored: no schema is returned either way (pass false). Node shapes are documented in batch_design's description.",
         },
       },
       required: ["include_schema"],
@@ -514,7 +514,7 @@ export const WEBMCP_TOOL_SPECS: readonly WebMcpToolSpec[] = [
         },
         width: { type: "number", description: "Required width of empty space." },
         height: { type: "number", description: "Required height of empty space." },
-        padding: { type: "number", description: "Minimum distance from other elements." },
+        padding: { type: "number", description: "Gap in px between the reference bounds and the returned region (50 is a sensible value)." },
         nodeId: {
           type: "string",
           description: "Reference node to search around. Omit to search around entire canvas content.",
