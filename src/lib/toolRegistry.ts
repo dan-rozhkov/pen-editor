@@ -44,6 +44,9 @@ import { browseOpen } from "./tools/browser/browseOpen";
 import { browseAct } from "./tools/browser/browseAct";
 import { browseFindImages } from "./tools/browser/browseFindImages";
 import { browseRead } from "./tools/browser/browseRead";
+import { browseSnapshot } from "./tools/browser/browseSnapshot";
+import { browseScreenshot } from "./tools/browser/browseScreenshot";
+import { browseTabs } from "./tools/browser/browseTabs";
 import { browseTask } from "./tools/browser/browseTask";
 
 /**
@@ -118,6 +121,14 @@ export const toolHandlers: Record<string, ToolHandler> = {
   browse_act: browseAct,
   browse_find_images: browseFindImages,
   browse_read: browseRead,
+  // browse_snapshot/browse_screenshot/browse_tabs (docs/superpowers/specs/
+  // 2026-09-23-full-browser-use-design.md) — full-browser-use additions:
+  // an indexed element table exposed directly to the main model, a viewport
+  // capture (optionally set-of-marks annotated), and tab list/switch/close/
+  // open. Same conventions as the browse_* siblings above.
+  browse_snapshot: browseSnapshot,
+  browse_screenshot: browseScreenshot,
+  browse_tabs: browseTabs,
   // Jev-driven browsing loop (docs/superpowers/specs/
   // 2026-09-18-browse-task-jev-loop-design.md) — a client-side loop, not a
   // single forwarded call. See browseTask.ts's header comment.

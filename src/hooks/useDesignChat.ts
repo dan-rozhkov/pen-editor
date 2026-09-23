@@ -231,6 +231,18 @@ const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
   // it. 100s gives the loop's own deadline room to win the race and return
   // a normal transcript instead.
   browse_task: 100_000,
+  // browse_act (docs/superpowers/specs/2026-09-23-full-browser-use-design.md,
+  // "act gains actions and index targeting") now includes a `wait` action
+  // that can itself run up to 15s (its own cap on top of the desktop shell's
+  // ~20s command budget), plus press/hover's CDP round-trip. The 30s default
+  // no longer has headroom for that combination — 45s covers the worst case
+  // (wait's 15s + the command budget) without reaching browse_task's 100s.
+  browse_act: 45_000,
+  // browse_tabs (same design doc) with `action: "new"` and a `url` reuses
+  // browse_open's full ~45s command budget (a fresh navigation can be slow),
+  // so it needs the same headroom as browse_open would if browse_open had
+  // its own override — 60s leaves margin above that budget.
+  browse_tabs: 60_000,
   // generate_vector hands the prompt to QuiverAI's arrow-2, which draws the
   // SVG token by token: measured 20s for a simple icon and ~90s for a
   // detailed illustration, against the backend's own QUIVER_TIMEOUT_MS =

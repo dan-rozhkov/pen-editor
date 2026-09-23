@@ -65,6 +65,14 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   // thin forwarder — it holds its connection while a page settles, and
   // never touches the scene graph.
   "browse_read",
+  // browse_snapshot/browse_screenshot/browse_tabs (docs/superpowers/specs/
+  // 2026-09-23-full-browser-use-design.md) are the same kind of thin
+  // forwarder as the four browse_* tools above — they read/control the
+  // browser tab (element table, a pixel capture, tab list/switch/close/open)
+  // and never touch the scene graph.
+  "browse_snapshot",
+  "browse_screenshot",
+  "browse_tabs",
   // browse_task (docs/superpowers/specs/2026-09-18-browse-task-jev-loop-
   // design.md) runs a whole snapshot/step/perform loop bounded by a 90s
   // deadline — it holds its connection far longer than the other three

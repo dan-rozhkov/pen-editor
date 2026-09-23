@@ -16,17 +16,36 @@ export const BROWSER_NOT_AVAILABLE_ERROR =
   "The built-in browser is only available in the Pineapple Editor desktop app.";
 
 /**
+ * `window.penDesktop.browser` exists (an older desktop build is running) but
+ * the specific method a tool needs (`screenshot`/`tabs`, added in
+ * docs/superpowers/specs/2026-09-23-full-browser-use-design.md) is not on
+ * it. Distinct from `BROWSER_NOT_AVAILABLE_ERROR` — that one means "no
+ * built-in browser at all" (web build, or no desktop shell), this one means
+ * "there is a browser, but this command is newer than it" — so the model
+ * gets an actionable message instead of a generic "not available" that
+ * would suggest retrying is pointless for the wrong reason.
+ */
+export const BROWSER_BRIDGE_METHOD_MISSING_ERROR =
+  "This browser command needs a newer version of the Pineapple Editor desktop app.";
+
+/**
  * Runs `call` against the desktop's browser bridge and stringifies the
  * result. Never throws: a missing bridge or a rejecting preload call both
  * come back as a JSON `{"error": "..."}` string, the same shape every other
  * tool handler in this project uses to report failure.
+ *
+ * `unavailableMessage` lets a caller substitute
+ * `BROWSER_BRIDGE_METHOD_MISSING_ERROR` for the default when `call` is
+ * `undefined` because the bridge exists but lacks this particular method,
+ * rather than because the bridge is absent entirely.
  */
 export async function callBrowserBridge(
   call: ((args: Record<string, unknown>) => Promise<unknown>) | undefined,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  unavailableMessage: string = BROWSER_NOT_AVAILABLE_ERROR
 ): Promise<string> {
   if (!call) {
-    return JSON.stringify({ error: BROWSER_NOT_AVAILABLE_ERROR });
+    return JSON.stringify({ error: unavailableMessage });
   }
   try {
     const result = await call(args);

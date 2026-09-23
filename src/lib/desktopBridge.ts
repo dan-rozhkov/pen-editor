@@ -67,6 +67,29 @@ export interface PenDesktopApi {
       operation: string;
       text?: string;
     }): Promise<unknown>;
+    /**
+     * browse_screenshot (docs/superpowers/specs/
+     * 2026-09-23-full-browser-use-design.md, "Desktop bridge") — a viewport
+     * capture of the current browser tab, downscaled and JPEG-encoded on
+     * the main-process side. `annotate: true` additionally takes a fresh
+     * snapshot and overlays numbered labels (set-of-marks), returning
+     * `snapshotId`/`elements` alongside the image so a following
+     * `browse_act`/`browse_snapshot` call can act by index against it.
+     * Optional — absent on desktop builds older than this feature; see the
+     * class doc above for why every `browser` method is guarded with `?.`.
+     */
+    screenshot?(args?: { annotate?: boolean }): Promise<unknown>;
+    /**
+     * browse_tabs (same design doc) — list/switch/close/open the desktop
+     * shell's browser tabs. `new` optionally loads `url` with `open`'s
+     * semantics and makes the new tab the agent's current tab. Optional —
+     * absent on desktop builds older than this feature.
+     */
+    tabs?(args: {
+      action: "list" | "switch" | "close" | "new";
+      tabId?: number;
+      url?: string;
+    }): Promise<unknown>;
   };
 }
 

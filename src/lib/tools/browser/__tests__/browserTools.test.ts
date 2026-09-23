@@ -3,7 +3,13 @@ import { browseOpen } from "@/lib/tools/browser/browseOpen";
 import { browseAct } from "@/lib/tools/browser/browseAct";
 import { browseFindImages } from "@/lib/tools/browser/browseFindImages";
 import { browseRead } from "@/lib/tools/browser/browseRead";
-import { BROWSER_NOT_AVAILABLE_ERROR } from "@/lib/tools/browser/shared";
+import { browseSnapshot } from "@/lib/tools/browser/browseSnapshot";
+import { browseScreenshot } from "@/lib/tools/browser/browseScreenshot";
+import { browseTabs } from "@/lib/tools/browser/browseTabs";
+import {
+  BROWSER_BRIDGE_METHOD_MISSING_ERROR,
+  BROWSER_NOT_AVAILABLE_ERROR,
+} from "@/lib/tools/browser/shared";
 
 type PenDesktopBrowser = NonNullable<NonNullable<typeof window.penDesktop>["browser"]>;
 
@@ -128,6 +134,203 @@ describe("browse_act", () => {
     const result = JSON.parse(await browseAct({ action: "back" }));
 
     expect(result).toEqual({ error: "no browser tab open" });
+  });
+
+  // Full browser use (docs/superpowers/specs/
+  // 2026-09-23-full-browser-use-design.md) widens `act`'s argument shape —
+  // index targeting, press/hover/select/reload/wait. browseAct is a thin,
+  // untyped forwarder, so every new field must reach the bridge untouched.
+  it("forwards index/snapshotId/key/ms and the new action values untouched", async () => {
+    let received: unknown;
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        act: async (args) => {
+          received = args;
+          return { found: true };
+        },
+      }),
+    };
+
+    const args = {
+      action: "press",
+      index: 3,
+      snapshotId: "snap-1",
+      key: "Enter",
+      ms: 5000,
+      text: "hello",
+    };
+    await browseAct(args);
+    expect(received).toEqual(args);
+
+    for (const action of ["hover", "select", "reload", "wait"]) {
+      received = undefined;
+      await browseAct({ action, index: 1, snapshotId: "snap-1" });
+      expect(received).toEqual({ action, index: 1, snapshotId: "snap-1" });
+    }
+  });
+});
+
+describe("browse_snapshot", () => {
+  it("forwards to window.penDesktop.browser.snapshot and returns the result", async () => {
+    let called = false;
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        snapshot: async () => {
+          called = true;
+          return { snapshotId: "snap-1", elements: [{ index: 0, tag: "button", text: "Search" }] };
+        },
+      }),
+    };
+
+    const result = JSON.parse(await browseSnapshot({}));
+
+    expect(called).toBe(true);
+    expect(result).toEqual({
+      snapshotId: "snap-1",
+      elements: [{ index: 0, tag: "button", text: "Search" }],
+    });
+  });
+
+  it("returns the documented error when window.penDesktop.browser is absent", async () => {
+    const result = JSON.parse(await browseSnapshot({}));
+
+    expect(result).toEqual({ error: BROWSER_NOT_AVAILABLE_ERROR });
+  });
+
+  it("catches a rejecting preload call and returns it as a JSON error", async () => {
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        snapshot: async () => {
+          throw new Error("no browser tab open");
+        },
+      }),
+    };
+
+    const result = JSON.parse(await browseSnapshot({}));
+
+    expect(result).toEqual({ error: "no browser tab open" });
+  });
+});
+
+describe("browse_screenshot", () => {
+  it("forwards args to window.penDesktop.browser.screenshot and returns the result", async () => {
+    let received: unknown;
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        screenshot: async (args) => {
+          received = args;
+          return { imageData: "data:image/jpeg;base64,AAAA", width: 800, height: 600, url: "https://example.com", title: "Example" };
+        },
+      }),
+    };
+
+    const result = JSON.parse(await browseScreenshot({ annotate: true }));
+
+    expect(received).toEqual({ annotate: true });
+    expect(result).toEqual({
+      imageData: "data:image/jpeg;base64,AAAA",
+      width: 800,
+      height: 600,
+      url: "https://example.com",
+      title: "Example",
+    });
+  });
+
+  it("returns the documented error when window.penDesktop.browser is absent (web build)", async () => {
+    expect(window.penDesktop).toBeUndefined();
+
+    const result = JSON.parse(await browseScreenshot({}));
+
+    expect(result).toEqual({ error: BROWSER_NOT_AVAILABLE_ERROR });
+  });
+
+  it("returns a 'needs a newer desktop app' error when the bridge exists but lacks .screenshot (older desktop app)", async () => {
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({}),
+    };
+    expect(window.penDesktop.browser?.screenshot).toBeUndefined();
+
+    const result = JSON.parse(await browseScreenshot({}));
+
+    expect(result).toEqual({ error: BROWSER_BRIDGE_METHOD_MISSING_ERROR });
+  });
+
+  it("catches a rejecting preload call and returns it as a JSON error", async () => {
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        screenshot: async () => {
+          throw new Error("capture failed");
+        },
+      }),
+    };
+
+    const result = JSON.parse(await browseScreenshot({}));
+
+    expect(result).toEqual({ error: "capture failed" });
+  });
+});
+
+describe("browse_tabs", () => {
+  it("forwards args to window.penDesktop.browser.tabs and returns the result", async () => {
+    let received: unknown;
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        tabs: async (args) => {
+          received = args;
+          return {
+            tabs: [{ tabId: "t1", url: "https://example.com", title: "Example", current: true }],
+            current: "t1",
+          };
+        },
+      }),
+    };
+
+    const result = JSON.parse(await browseTabs({ action: "new", url: "https://example.com" }));
+
+    expect(received).toEqual({ action: "new", url: "https://example.com" });
+    expect(result.current).toBe("t1");
+  });
+
+  it("returns the documented error when window.penDesktop.browser is absent (web build)", async () => {
+    expect(window.penDesktop).toBeUndefined();
+
+    const result = JSON.parse(await browseTabs({ action: "list" }));
+
+    expect(result).toEqual({ error: BROWSER_NOT_AVAILABLE_ERROR });
+  });
+
+  it("returns a 'needs a newer desktop app' error when the bridge exists but lacks .tabs (older desktop app)", async () => {
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({}),
+    };
+    expect(window.penDesktop.browser?.tabs).toBeUndefined();
+
+    const result = JSON.parse(await browseTabs({ action: "list" }));
+
+    expect(result).toEqual({ error: BROWSER_BRIDGE_METHOD_MISSING_ERROR });
+  });
+
+  it("catches a rejecting preload call and returns it as a JSON error", async () => {
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        tabs: async () => {
+          throw new Error("no such tab");
+        },
+      }),
+    };
+
+    const result = JSON.parse(await browseTabs({ action: "close", tabId: "t1" }));
+
+    expect(result).toEqual({ error: "no such tab" });
   });
 });
 

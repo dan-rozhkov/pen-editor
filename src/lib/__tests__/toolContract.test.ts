@@ -60,6 +60,9 @@ const EXPECTED_CLIENT_TOOLS = [
   "browse_act",
   "browse_find_images",
   "browse_read",
+  "browse_snapshot",
+  "browse_screenshot",
+  "browse_tabs",
   "browse_task",
 ];
 
