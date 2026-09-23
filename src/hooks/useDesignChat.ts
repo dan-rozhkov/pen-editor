@@ -23,7 +23,10 @@ import { useChatStore, NO_QUEUED_MESSAGES } from "@/store/chatStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { toolHandlers, type ToolExecutionContext } from "@/lib/toolRegistry";
 import { runToolCall } from "@/lib/toolCallQueue";
+import { runTasteCheckForToolCall } from "@/lib/tools/tasteCheck";
+import { hasTouchedEmbeds } from "@/lib/tools/tasteCheckRegistry";
 import type { ChatLaunchPayload } from "@/types/chat";
+import type { UIMessage } from "ai";
 import { hasPendingAskUser } from "@/components/chat/pendingAskUser";
 import { extractStreamingToolInputs } from "@/hooks/streamingToolParts";
 import {
@@ -372,6 +375,25 @@ export async function executeToolCall(
   }
 }
 
+// Exported for tests. Joins the text parts of the LAST user-role message in
+// `messages` — this is the `brief` handed to a Jev taste check
+// (tasteCheck.ts truncates it to 4000 chars itself), so the check has some
+// idea what the user actually asked for. Returns undefined for a history
+// with no user message yet (shouldn't happen once a tool call exists, but
+// cheap to guard).
+export function getLastUserMessageText(messages: UIMessage[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.role !== "user") continue;
+    const text = message.parts
+      .filter((p): p is { type: "text"; text: string } => p.type === "text")
+      .map((p) => p.text)
+      .join("\n");
+    return text || undefined;
+  }
+  return undefined;
+}
+
 interface UseDesignChatOptions {
   sessionId: string;
 }
@@ -503,6 +525,17 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
 
   const setContextTokens = useChatStore((s) => s.setContextTokens);
 
+  // True from a terminal-abandonment path (`clearStreamingToolSession`: user
+  // Stop, external abort, failed request, unmount) until the next request
+  // starts (the "submitted" effect below resets it). `Chat.stop()` settles
+  // `status` to "ready" while `onToolCall` may still be awaiting a Jev taste
+  // check, and the `addToolOutput` it then issues would otherwise satisfy
+  // `sendAutomaticallyWhen` and resume the turn the user just stopped. The
+  // output itself must still be written (an `input-available` part with no
+  // output makes every later request fail with MissingToolResultsError), so
+  // the gate is on the auto-send, not on `addToolOutput`.
+  const turnStoppedRef = useRef(false);
+
   const chat = useChat({
     id: sessionId,
     transport,
@@ -510,7 +543,8 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     // short throttle keeps active Markdown rendering responsive while still
     // feeling continuous, especially when multiple sessions run in parallel.
     experimental_throttle: STREAM_RENDER_THROTTLE_MS,
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    sendAutomaticallyWhen: (options) =>
+      !turnStoppedRef.current && lastAssistantMessageIsCompleteWithToolCalls(options),
     // Feeds ContextMeter (components/chat/ContextMeter.tsx). This session's
     // OWN id, not the active chat — a background session finishing a turn
     // must update its own reading, never whatever chat the user happens to
@@ -529,16 +563,67 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       if (toolCall.toolName === "ask_user") {
         return;
       }
-      const result = await executeToolCall(
+      const handlerResult = await executeToolCall(
         toolCall.toolName,
         toolCall.input,
         { sessionId, toolCallId: toolCall.toolCallId },
         "chat"
       );
+      let output = handlerResult;
+      // Jev taste check (src/lib/tools/tasteCheck.ts): a no-op for every
+      // tool except batch_design/edit_embed_html, and even for those two
+      // only when the handler above actually recorded a touched embed
+      // (tasteCheckRegistry.ts) — `hasTouchedEmbeds` peeks that synchronously
+      // so every other call skips this block without paying for
+      // `getLastUserMessageText` or a registry round-trip.
+      //
+      // AWAITED, deliberately (unlike an earlier version of this feature
+      // that fired-and-forgot this call): `onToolCall`'s return is what the
+      // AI SDK's stream reader awaits before it can process the turn's next
+      // chunk (node_modules/ai/dist/index.mjs, `case
+      // "tool-input-available"`), so keeping this call in that await chain
+      // is what keeps `chat.status` at "streaming" for as long as the check
+      // takes (bounded by its own internal timeout). That in turn is what
+      // the queue-drain effect / Send / Rollback / Clear chat all key off to
+      // tell "turn in flight" apart from "turn done" — a detached check
+      // whose output arrived after `status` had already gone "ready" used to
+      // let all of those act on a turn that still had an unresolved tool
+      // part, and (via `sendAutomaticallyWhen`) risked silently resuming a
+      // turn the user had already stopped.
+      //
+      // Never allowed to throw: the taste check itself is fail-open by
+      // design (tasteCheck.ts's doc comment), but this try/catch is a second
+      // line of defense — `handlerResult`, the tool's real, already-
+      // committed result, must reach `chat.addToolOutput` even if something
+      // here misbehaves.
+      // `turnStoppedRef`: a Stop that landed while the handler itself was
+      // still running (e.g. queued behind other mutations) happened before
+      // any controller existed to abort, so don't start a check at all.
+      if (
+        (toolCall.toolName === "batch_design" || toolCall.toolName === "edit_embed_html") &&
+        !turnStoppedRef.current &&
+        hasTouchedEmbeds(toolCall.toolCallId)
+      ) {
+        const controller = new AbortController();
+        pendingTasteCheckAbortsRef.current.add(controller);
+        try {
+          output = await runTasteCheckForToolCall(
+            toolCall.toolName,
+            toolCall.toolCallId,
+            handlerResult,
+            { brief: getLastUserMessageText(chat.messages) },
+            controller.signal,
+          );
+        } catch {
+          output = handlerResult;
+        } finally {
+          pendingTasteCheckAbortsRef.current.delete(controller);
+        }
+      }
       chat.addToolOutput({
         tool: toolCall.toolName,
         toolCallId: toolCall.toolCallId,
-        output: result,
+        output,
       });
       // Record that this streaming-tool call's handler actually ran (see
       // `completedStreamingCallKeysRef` below) — the "ready" sweep effect
@@ -580,6 +665,20 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const awaitingAnswer = hasPendingAskUser(chat.messages);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Every Jev taste-check `AbortController` currently in flight for this
+  // session (one per batch_design/edit_embed_html call awaiting a check
+  // inside `onToolCall` above) — a Set, not a single controller, because
+  // more than one such call can overlap. `clearStreamingToolSession` below
+  // aborts every entry on every terminal-abandonment path for this session
+  // (user Stop, an external abort e.g. closing this chat tab, a failed
+  // request, and unmount), so a check still running when the turn is
+  // stopped returns promptly (tasteCheck.ts's fail-open catch) instead of
+  // running out its own ~8s timeout — `onToolCall`'s await then resolves
+  // with the tool's real, already-committed result. Each entry is removed
+  // (by `onToolCall`'s own `finally`) once its check settles, so this never
+  // grows across a session's lifetime.
+  const pendingTasteCheckAbortsRef = useRef<Set<AbortController>>(new Set());
+
   // Every `${toolName}:${toolCallId}` this session has ever staged a
   // streaming frame for (across every registered streaming-tool adapter,
   // src/lib/streamingTools/), and the subset that were abandoned
@@ -620,7 +719,18 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   // owns commit-before-clear on success, and a paused ask_user turn is not a
   // terminal path at all. Each adapter's `onSessionClear` only touches THIS
   // session, so concurrent sessions are unaffected.
+  //
+  // Every one of this function's callers (the abort-controller's `onAbort`
+  // below, the user-facing `stop` callback further down, the "request
+  // failed" effect, and this hook's own unmount cleanup) is exactly the set
+  // of terminal paths on which any Jev taste check still in flight
+  // (`pendingTasteCheckAbortsRef` above) must be cut short, so those
+  // controllers are aborted here, once, rather than at each call site.
   const clearStreamingToolSession = useCallback(() => {
+    turnStoppedRef.current = true;
+    for (const controller of pendingTasteCheckAbortsRef.current) {
+      controller.abort();
+    }
     for (const [key, call] of seenStreamingCallsRef.current) {
       if (abandonedStreamingToolKeysRef.current.has(key)) continue;
       abandonedStreamingToolKeysRef.current.add(key);
@@ -633,6 +743,12 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       adapter.onSessionClear(sessionId);
     }
   }, [sessionId]);
+
+  // Any new request (a user send, the queue drain, a network retry) re-arms
+  // auto-continuation — see `turnStoppedRef`.
+  useEffect(() => {
+    if (chat.status === "submitted") turnStoppedRef.current = false;
+  }, [chat.status]);
 
   useEffect(() => {
     // Create an AbortController that calls chat.stop() when aborted

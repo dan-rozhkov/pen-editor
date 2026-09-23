@@ -17,6 +17,7 @@ import {
   cloneChildrenById,
   type ProgressiveBatchSession,
 } from "./progressive";
+import { recordTouchedEmbeds } from "@/lib/tools/tasteCheckRegistry";
 
 /** `${op.binding}=OP(...) [line N]`, the completedOperations format every error path uses. */
 function formatCompletedOps(ops: ParsedOperation[]): string[] {
@@ -67,8 +68,9 @@ function finalizeAndRespond(params: {
   truncated: boolean;
   operationsSubmitted: number;
   remaining: ParsedOperation[];
+  toolCallId: string | undefined;
 }): string {
-  const { ctx, historySnapshot, operationsExecuted, truncated, operationsSubmitted, remaining } =
+  const { ctx, historySnapshot, operationsExecuted, truncated, operationsSubmitted, remaining, toolCallId } =
     params;
 
   // Save history first (one undo entry for the entire batch, streamed part
@@ -156,6 +158,22 @@ function finalizeAndRespond(params: {
     }
   }
 
+  // Record whatever this batch created or gave new htmlContent to —
+  // `touchedEmbedIds`/`createdEmbedIds` are exactly those sets (see
+  // `normalizeEmbedNode`'s `htmlTouched`/`created` params and `executeCopy`
+  // in executor.ts) — so the CHAT PATH (useDesignChat.ts, via tasteCheck.ts)
+  // can run a Jev taste check against the eligible ones AFTER this handler
+  // (and the scene-mutation queue it ran inside) has returned.
+  // `createdEmbedIds` is what lets `runTasteCheckForToolCall` tell "the
+  // agent just made this screen" apart from "this U() touched the user's own,
+  // never-generated embed" — see `ExecutionContext.createdEmbedIds`'s doc
+  // comment in types.ts. This handler's own result is completely unaffected:
+  // no network call, no await, same JSON shape as before taste checks
+  // existed.
+  if (ctx.touchedEmbedIds.size > 0 || ctx.createdEmbedIds.size > 0) {
+    recordTouchedEmbeds(toolCallId, [...ctx.touchedEmbedIds], [...ctx.createdEmbedIds]);
+  }
+
   return JSON.stringify(response);
 }
 
@@ -177,6 +195,7 @@ function runRemainderAndFinalize(
   remaining: ParsedOperation[],
   truncated: boolean,
   operationsSubmitted: number,
+  toolCallId: string | undefined,
 ): string {
   const remainderOps = executable.slice(session.appliedRaw.length);
 
@@ -205,6 +224,7 @@ function runRemainderAndFinalize(
     truncated,
     operationsSubmitted,
     remaining,
+    toolCallId,
   });
 }
 
@@ -222,6 +242,7 @@ function finishAttachedSession(
   remaining: ParsedOperation[],
   truncated: boolean,
   operationsSubmitted: number,
+  toolCallId: string | undefined,
 ): string {
   // session.baseSnapshot is always set once a session exists: it is
   // written the moment the first statement is applied, which is also the
@@ -234,6 +255,7 @@ function finishAttachedSession(
     remaining,
     truncated,
     operationsSubmitted,
+    toolCallId,
   );
 }
 
@@ -270,6 +292,7 @@ function finishDetachedSession(
   remaining: ParsedOperation[],
   truncated: boolean,
   operationsSubmitted: number,
+  toolCallId: string | undefined,
 ): string {
   // Finding 2: a destructive foreign edit (most commonly an undo mid-stream)
   // can remove nodes THIS session created before it detached. The fork
@@ -295,7 +318,7 @@ function finishDetachedSession(
     // session already streamed is still baked into the live store. `lenient`
     // is unconditionally required here (third-review finding 2): the full
     // re-run below is guaranteed to re-encounter those same statements.
-    return runFreshFromLive(executable, remaining, truncated, operationsSubmitted, {
+    return runFreshFromLive(executable, remaining, truncated, operationsSubmitted, toolCallId, {
       lenient: true,
     });
   }
@@ -312,6 +335,7 @@ function finishDetachedSession(
     remaining,
     truncated,
     operationsSubmitted,
+    toolCallId,
   );
 }
 
@@ -348,6 +372,7 @@ function runFreshFromLive(
   remaining: ParsedOperation[],
   truncated: boolean,
   operationsSubmitted: number,
+  toolCallId: string | undefined,
   options?: { lenient?: boolean },
 ): string {
   const state: SceneState = useSceneStore.getState();
@@ -370,6 +395,8 @@ function runFreshFromLive(
     issues: [],
     removedIdsForMeasurementCleanup: new Set(),
     imageUrlRepairCount: 0,
+    touchedEmbedIds: new Set(),
+    createdEmbedIds: new Set(),
   };
 
   const completedOps: string[] = [];
@@ -412,6 +439,7 @@ function runFreshFromLive(
     truncated,
     operationsSubmitted,
     remaining,
+    toolCallId,
   });
 }
 
@@ -485,8 +513,22 @@ async function runBatchDesign(
     // last possible moment before an "attached" finalize would otherwise
     // clobber it.
     return isSessionAttachedToLive(session)
-      ? finishAttachedSession(session, executable, remaining, truncated, operationsSubmitted)
-      : finishDetachedSession(session, executable, remaining, truncated, operationsSubmitted);
+      ? finishAttachedSession(
+          session,
+          executable,
+          remaining,
+          truncated,
+          operationsSubmitted,
+          context?.toolCallId,
+        )
+      : finishDetachedSession(
+          session,
+          executable,
+          remaining,
+          truncated,
+          operationsSubmitted,
+          context?.toolCallId,
+        );
   }
 
   // Prefix diverged, or the session degraded mid-stream (a statement threw,
@@ -507,5 +549,7 @@ async function runBatchDesign(
     lenient = !fullyRestored;
   }
 
-  return runFreshFromLive(executable, remaining, truncated, operationsSubmitted, { lenient });
+  return runFreshFromLive(executable, remaining, truncated, operationsSubmitted, context?.toolCallId, {
+    lenient,
+  });
 }

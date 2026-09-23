@@ -13,6 +13,7 @@ import {
   isContainerNode,
   buildTree,
   collectDescendantIds,
+  flattenTree,
 } from "@/types/scene";
 import {
   insertTreeIntoFlat,
@@ -77,16 +78,34 @@ function resolveInheritedTheme(
  * update that never touched the HTML doesn't get rewritten/re-repaired on
  * every unrelated edit. I()/R() always carry a full nodeData including
  * htmlContent for an embed, so callers pass true there unconditionally.
+ *
+ * `created` says whether THIS operation is the one that brought the embed
+ * into existence (I()/R()) rather than merely editing an existing one (U()).
+ * `tasteCheck.ts`'s `runTasteCheckForToolCall` uses `ctx.createdEmbedIds` to
+ * keep a U() on an embed the agent never generated (the user's own screen)
+ * from starting a check — see `ExecutionContext.createdEmbedIds`'s doc
+ * comment in types.ts.
  */
 function normalizeEmbedNode(
   node: SceneNode | FlatSceneNode,
   ctx: ExecutionContext,
   htmlTouched: boolean,
+  created = false,
 ): void {
   if (node.type !== "embed") return;
   const embed = node as EmbedNode;
 
+  if (created) {
+    ctx.createdEmbedIds.add(embed.id);
+  }
+
   if (htmlTouched && embed.htmlContent) {
+    // Created (I/R) or updated-with-html (U) this batch — recorded into the
+    // tasteCheckRegistry by `index.ts`'s finalize step so the CHAT PATH
+    // (useDesignChat.ts's onToolCall, via tasteCheck.ts) can decide which
+    // screens to run a Jev taste check against, AFTER this handler returns.
+    ctx.touchedEmbedIds.add(embed.id);
+
     const issued = getIssuedImageUrls();
     if (issued.length > 0) {
       const { html, repairs, unresolved } = repairGeneratedImageUrls(
@@ -240,8 +259,9 @@ function executeInsert(op: ParsedOperation, ctx: ExecutionContext): void {
   const node = createNodeFromAiDataWithTheme(nodeData, inheritedTheme, ctx.issues);
 
   // Repair generated-image urls / expand document component tags in embed HTML.
-  // A fresh I() insert always supplies the embed's full htmlContent.
-  normalizeEmbedNode(node, ctx, true);
+  // A fresh I() insert always supplies the embed's full htmlContent, and
+  // always CREATES the embed.
+  normalizeEmbedNode(node, ctx, true, true);
 
   // Insert into flat storage
   insertTreeIntoFlat(
@@ -380,6 +400,35 @@ function executeCopy(op: ParsedOperation, ctx: ExecutionContext): void {
         cloned.x = sourceNode.x;
         cloned.y = sourceNode.y - cloned.height - pad;
         break;
+    }
+  }
+
+  // C() clones an existing subtree (fresh ids via cloneNodeWithNewId, but
+  // the SAME htmlContent modulo the override rewrite above) — this is
+  // deliberately NOT treated as a creation for taste-check purposes. Two
+  // cases, both wrong to mark `createdEmbedIds`:
+  //   - copying the USER'S OWN, never-generated screen must not start a
+  //     check on it — same reasoning as a bare U() on it (see
+  //     `normalizeEmbedNode`'s doc comment).
+  //   - copying a screen the agent already generated and had checked would
+  //     hand the copy a fresh round counter, resetting `MAX_CHECKS_PER_EMBED`
+  //     for HTML `runTasteCheckForEmbeds` has already judged.
+  // Only mark it touched. The clone gets a fresh id with no completed checks,
+  // so `runTasteCheckForToolCall` filters it out like a bare U() on the
+  // user's own embed: copies are never taste-checked (accepted trade-off — a
+  // variant derived by C() goes unchecked rather than risk checking the
+  // user's own screens). Reads the FINAL htmlContent (after the overrides above,
+  // which can rewrite it via directOverrides/descendantsOverrides). Doesn't
+  // run normalizeEmbedNode's image-url-repair/lint pass — that's for HTML
+  // the model just authored this call, not HTML that already went through it
+  // when the source embed was created.
+  for (const clonedNode of Object.values(flattenTree([cloned]).nodesById)) {
+    if (
+      clonedNode.type === "embed" &&
+      typeof (clonedNode as EmbedNode).htmlContent === "string" &&
+      (clonedNode as EmbedNode).htmlContent.length > 0
+    ) {
+      ctx.touchedEmbedIds.add(clonedNode.id);
     }
   }
 
@@ -591,8 +640,10 @@ function executeReplace(op: ParsedOperation, ctx: ExecutionContext): void {
 
   // Repair generated-image urls / expand document component tags in embed HTML.
   // R() replaces the node wholesale with a fresh nodeData that always
-  // supplies the embed's full htmlContent.
-  normalizeEmbedNode(newNode, ctx, true);
+  // supplies the embed's full htmlContent, and counts as CREATING it — the
+  // old node at this path is gone, replaced by a node the model just
+  // authored, exactly like I().
+  normalizeEmbedNode(newNode, ctx, true, true);
 
   // Find position in parent's children
   if (parentId !== null && parentId !== undefined) {

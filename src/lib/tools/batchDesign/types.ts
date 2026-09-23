@@ -42,4 +42,28 @@ export interface ExecutionContext {
    * response so the model knows its HTML got silently corrected.
    */
   imageUrlRepairCount: number;
+  /**
+   * Ids of embed nodes created (I/R), copied (C(), when the source is/holds
+   * an embed) or updated with new htmlContent (U) this batch — populated by
+   * `normalizeEmbedNode`/`executeCopy`, whose `htmlTouched` guard already
+   * draws exactly this line. `index.ts`'s finalize step hands this set (via
+   * `recordTouchedEmbeds`, `tasteCheckRegistry.ts`) to the CHAT PATH
+   * (`useDesignChat.ts`'s `onToolCall`), which is what actually calls
+   * `runTasteCheckForToolCall`/`runTasteCheckForEmbeds` — this module never
+   * runs a taste check itself.
+   */
+  touchedEmbedIds: Set<string>;
+  /**
+   * Subset of `touchedEmbedIds` that this batch CREATED — via I()/R() —
+   * as opposed to a U() that merely gave an existing embed new htmlContent,
+   * OR a C() copy (deliberately excluded — see `executeCopy`'s doc comment:
+   * a copy is never a creation for taste-check purposes, whether it copies
+   * the user's own screen or one the agent already had checked).
+   * `tasteCheck.ts`'s `runTasteCheckForToolCall` uses this to keep a U() (or
+   * a C()) on an embed the agent never generated (the user's own screen)
+   * from ever starting a check: a touched-but-not-created embed is only
+   * eligible once it already has a completed check from having been created
+   * earlier.
+   */
+  createdEmbedIds: Set<string>;
 }

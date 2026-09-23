@@ -55,6 +55,7 @@ import {
   buildCanvasContext,
   extractContextTokens,
   resolveChatApiUrl,
+  getLastUserMessageText,
   useDesignChat,
 } from "@/hooks/useDesignChat";
 import { toolHandlers, type ToolHandler } from "@/lib/toolRegistry";
@@ -66,6 +67,8 @@ import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useRepoContextStore } from "@/store/repoContextStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { useAiVectorPreviewStore, vectorPreviewKey } from "@/store/aiVectorPreviewStore";
+import { resetTasteCheckRounds, resetTasteCheckKillSwitch } from "@/lib/tools/tasteCheck";
+import { resetTouchedEmbedsRegistry } from "@/lib/tools/tasteCheckRegistry";
 import { resetStores, seedScene, seedVariables } from "@/test/fixtures";
 
 const TEST_TOOL = "__test_tool__";
@@ -2734,5 +2737,366 @@ describe("useDesignChat (hook + UI message stream)", () => {
       });
       expect(useHistoryStore.getState().past.length).toBe(pastBefore);
     });
+  });
+
+  // The Jev taste check (src/lib/tools/tasteCheck.ts) runs in THIS hook's
+  // onToolCall, AWAITED, after executeToolCall resolves — see the comment at
+  // that call site. These tests exercise the orchestration end to end: a
+  // real batch_design call, a stubbed /api/taste-check response, and the
+  // resulting merged tool output sent back on the follow-up /api/chat
+  // request.
+  describe("Jev taste check", () => {
+    beforeEach(() => {
+      resetTasteCheckRounds();
+      resetTasteCheckKillSwitch();
+      resetTouchedEmbedsRegistry();
+    });
+
+    it("merges taste-check feedback into the batch_design tool result sent back to the model", async () => {
+      const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        requests.push({ url, body: JSON.parse(String(init?.body)) });
+
+        if (url === "/api/taste-check") {
+          return new Response(
+            JSON.stringify({ outcome: "checked", feedback: "Increase contrast on the CTA." }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+
+        // /api/chat
+        const chatRequests = requests.filter((r) => r.url === "/api/chat");
+        if (chatRequests.length === 1) {
+          return sseResponse([
+            { type: "start" },
+            { type: "start-step" },
+            {
+              type: "tool-input-available",
+              toolCallId: "batch-taste-1",
+              toolName: "batch_design",
+              input: {
+                operations:
+                  's=I(document, {type: "embed", name: "Screen", width: 390, height: 844, htmlContent: "<div>Hi</div>"})',
+              },
+            },
+            { type: "finish-step" },
+            { type: "finish" },
+          ]);
+        }
+        return sseResponse([
+          { type: "start" },
+          { type: "start-step" },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "Done" },
+          { type: "text-end", id: "t1" },
+          { type: "finish-step" },
+          { type: "finish" },
+        ]);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `taste-check-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+
+      act(() => result.current.setInput("build me a simple landing screen"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+
+      // /api/chat (turn 1), /api/taste-check, /api/chat (turn 2, continuation).
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3), { timeout: 5000 });
+      await waitFor(() => expect(result.current.status).toBe("ready"), { timeout: 5000 });
+
+      const tasteCheckRequest = requests.find((r) => r.url === "/api/taste-check");
+      expect(tasteCheckRequest).toBeDefined();
+      expect(tasteCheckRequest!.body.brief).toBe("build me a simple landing screen");
+      expect((tasteCheckRequest!.body.screens as Array<{ html: string }>)[0].html).toContain("Hi");
+
+      const secondChatBody = requests.filter((r) => r.url === "/api/chat")[1].body;
+      const secondMessages = secondChatBody.messages as Array<{
+        role: string;
+        parts: Array<Record<string, unknown>>;
+      }>;
+      const assistant = secondMessages.find((m) => m.role === "assistant");
+      const toolPart = assistant!.parts.find((p) => p.type === "tool-batch_design");
+      expect(toolPart).toBeDefined();
+
+      const output = JSON.parse(String(toolPart!.output));
+      expect(output.success).toBe(true);
+      expect(output.tasteCheck).toBe("Increase contrast on the CTA.");
+    });
+
+    it("does not call /api/taste-check for a tool that touched no embeds", async () => {
+      const requests: string[] = [];
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        requests.push(String(input));
+        if (requests.filter((u) => u === "/api/chat").length === 1) {
+          return sseResponse([
+            { type: "start" },
+            { type: "start-step" },
+            {
+              type: "tool-input-available",
+              toolCallId: "call-vars-1",
+              toolName: "get_variables",
+              input: {},
+            },
+            { type: "finish-step" },
+            { type: "finish" },
+          ]);
+        }
+        return sseResponse([
+          { type: "start" },
+          { type: "start-step" },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "Done" },
+          { type: "text-end", id: "t1" },
+          { type: "finish-step" },
+          { type: "finish" },
+        ]);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `taste-check-noop-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+
+      act(() => result.current.setInput("list my variables"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), { timeout: 5000 });
+      await waitFor(() => expect(result.current.status).toBe("ready"), { timeout: 5000 });
+
+      expect(requests).not.toContain("/api/taste-check");
+    });
+
+    // `onToolCall` now AWAITS the taste check (a deliberate change from an
+    // earlier, detached version of this feature — see useDesignChat.ts's
+    // comment at the call site): the AI SDK's stream reader awaits
+    // `onToolCall` before it can process the turn's next chunk
+    // (node_modules/ai/dist/index.mjs, `case "tool-input-available"`), so
+    // `chat.status` cannot reach "ready" while /api/taste-check is still
+    // pending. That's exactly what keeps the queue-drain effect / Send /
+    // Rollback / Clear chat from acting on a turn whose tool part is still
+    // unresolved.
+    it("keeps status at 'streaming' while the taste check is pending, and settles once it resolves", async () => {
+      let resolveTasteCheck!: (value: Response) => void;
+      const tasteCheckPending = new Promise<Response>((resolve) => {
+        resolveTasteCheck = resolve;
+      });
+
+      const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        requests.push({ url, body: JSON.parse(String(init?.body)) });
+
+        if (url === "/api/taste-check") {
+          return tasteCheckPending;
+        }
+
+        const chatRequests = requests.filter((r) => r.url === "/api/chat");
+        if (chatRequests.length === 1) {
+          return sseResponse([
+            { type: "start" },
+            { type: "start-step" },
+            {
+              type: "tool-input-available",
+              toolCallId: "batch-pending-1",
+              toolName: "batch_design",
+              input: {
+                operations:
+                  's=I(document, {type: "embed", name: "Screen", width: 390, height: 844, htmlContent: "<div>Hi</div>"})',
+              },
+            },
+            { type: "finish-step" },
+            { type: "finish" },
+          ]);
+        }
+        return sseResponse([
+          { type: "start" },
+          { type: "start-step" },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "Done" },
+          { type: "text-end", id: "t1" },
+          { type: "finish-step" },
+          { type: "finish" },
+        ]);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `taste-check-pending-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+
+      act(() => result.current.setInput("build me a simple landing screen"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+
+      // The taste check has gone out, but its response is still pending —
+      // the turn's own stream is still blocked on `onToolCall`'s await, so
+      // status must NOT have settled to "ready" yet.
+      await waitFor(() => expect(requests.some((r) => r.url === "/api/taste-check")).toBe(true));
+      expect(result.current.status).not.toBe("ready");
+      expect(requests.filter((r) => r.url === "/api/chat")).toHaveLength(1);
+
+      resolveTasteCheck(
+        new Response(
+          JSON.stringify({ outcome: "checked", feedback: "Looks good." }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+
+      // Now the stream can finish, and the merged output drives the normal
+      // auto-continuation.
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3), { timeout: 5000 });
+      await waitFor(() => expect(result.current.status).toBe("ready"), { timeout: 5000 });
+    });
+
+    // Stop must cut a pending taste check short (via
+    // `pendingTasteCheckAbortsRef` in useDesignChat.ts) rather than leave it
+    // running: the tool call still needs exactly one output — the
+    // handler's own, unmerged result — so a later send never trips the AI
+    // SDK's `ignoreIncompleteToolCalls`/MissingToolResultsError on a tool
+    // part stuck at "input-available".
+    it("aborts a pending taste check on Stop and delivers the tool's unmerged result exactly once", async () => {
+      // Once `onToolCall` resolves (with the unmerged result, since the
+      // check was aborted) and calls `chat.addToolOutput`, every tool call in
+      // the last assistant message has an output, so without
+      // `turnStoppedRef` the SDK's `sendAutomaticallyWhen` would resume the
+      // turn the user just stopped. Guarded here: the check aborts promptly,
+      // the tool call ends up with EXACTLY ONE output (the handler's own
+      // unmerged result), and no follow-up /api/chat request is made.
+      let tasteCheckSignal: AbortSignal | undefined;
+      const requests: Array<{ url: string; body?: Record<string, unknown> }> = [];
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        requests.push({
+          url,
+          body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        });
+
+        if (url === "/api/taste-check") {
+          tasteCheckSignal = init?.signal ?? undefined;
+          return new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject(new DOMException("Aborted", "AbortError"));
+            });
+          });
+        }
+
+        const chatRequests = requests.filter((r) => r.url === "/api/chat");
+        if (chatRequests.length === 1) {
+          return sseResponse([
+            { type: "start" },
+            { type: "start-step" },
+            {
+              type: "tool-input-available",
+              toolCallId: "batch-abort-1",
+              toolName: "batch_design",
+              input: {
+                operations:
+                  's=I(document, {type: "embed", name: "Screen", width: 390, height: 844, htmlContent: "<div>Hi</div>"})',
+              },
+            },
+            { type: "finish-step" },
+            { type: "finish" },
+          ]);
+        }
+        // A possible auto-continuation once the (unmerged) output resolves —
+        // see the comment above. Same shape every other continuation in this
+        // describe block uses.
+        return sseResponse([
+          { type: "start" },
+          { type: "start-step" },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "Done" },
+          { type: "text-end", id: "t1" },
+          { type: "finish-step" },
+          { type: "finish" },
+        ]);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sessionId = `taste-check-abort-${Date.now()}`;
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+
+      act(() => result.current.setInput("build me a simple landing screen"));
+      await act(async () => {
+        result.current.sendMessage();
+      });
+
+      await waitFor(() => expect(requests.some((r) => r.url === "/api/taste-check")).toBe(true));
+      expect(tasteCheckSignal?.aborted).toBe(false);
+      // The turn is still blocked on the pending check.
+      expect(result.current.status).not.toBe("ready");
+
+      await act(async () => {
+        result.current.stop();
+      });
+
+      // Stop aborted the pending check's signal, letting `onToolCall`
+      // resolve with the unmerged result instead of hanging out its own
+      // ~8s timeout.
+      await waitFor(() => expect(tasteCheckSignal?.aborted).toBe(true));
+      await waitFor(() => expect(result.current.status).toBe("ready"), { timeout: 5000 });
+      // Exactly one output was recorded for the tool call (the part is not
+      // left `input-available`, which would break every later request), and
+      // it's the handler's own unmerged result — no `tasteCheck` field, since
+      // the check never got a response.
+      await waitFor(() => {
+        const assistant = result.current.messages.find((m) => m.role === "assistant");
+        const toolParts = (assistant?.parts ?? []).filter(
+          (p) => p.type === "tool-batch_design",
+        ) as Array<{ state: string; output?: unknown }>;
+        expect(toolParts).toHaveLength(1);
+        expect(toolParts[0].state).toBe("output-available");
+        const output = JSON.parse(String(toolParts[0].output));
+        expect(output.success).toBe(true);
+        expect(output.tasteCheck).toBeUndefined();
+      });
+
+      // ...and writing that output did NOT resume the turn the user stopped
+      // (`turnStoppedRef` gates `sendAutomaticallyWhen`).
+      await new Promise((r) => setTimeout(r, 100));
+      expect(requests.filter((r) => r.url === "/api/chat")).toHaveLength(1);
+    });
+  });
+});
+
+describe("getLastUserMessageText", () => {
+  it("joins the text parts of the last user message", () => {
+    const messages = [
+      { id: "1", role: "user" as const, parts: [{ type: "text" as const, text: "hello" }] },
+      { id: "2", role: "assistant" as const, parts: [{ type: "text" as const, text: "hi there" }] },
+      {
+        id: "3",
+        role: "user" as const,
+        parts: [
+          { type: "text" as const, text: "make it blue" },
+          { type: "text" as const, text: "and bigger" },
+        ],
+      },
+    ];
+    expect(getLastUserMessageText(messages)).toBe("make it blue\nand bigger");
+  });
+
+  it("returns undefined when there is no user message", () => {
+    const messages = [
+      { id: "1", role: "assistant" as const, parts: [{ type: "text" as const, text: "hi" }] },
+    ];
+    expect(getLastUserMessageText(messages)).toBeUndefined();
+  });
+
+  it("ignores non-text parts (e.g. file attachments)", () => {
+    const messages = [
+      {
+        id: "1",
+        role: "user" as const,
+        parts: [{ type: "file" as const, mediaType: "image/png", url: "data:image/png;base64,x" }],
+      },
+    ];
+    expect(getLastUserMessageText(messages)).toBeUndefined();
   });
 });

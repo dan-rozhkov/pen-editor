@@ -163,6 +163,8 @@ function buildContextFromLive(live: SceneState): ExecutionContext {
     issues: [],
     removedIdsForMeasurementCleanup: new Set(),
     imageUrlRepairCount: 0,
+    touchedEmbedIds: new Set(),
+    createdEmbedIds: new Set(),
   };
 }
 
@@ -184,6 +186,8 @@ function forkContextFromLive(live: SceneState, prev: ExecutionContext): Executio
     issues: [...prev.issues],
     removedIdsForMeasurementCleanup: new Set(prev.removedIdsForMeasurementCleanup),
     imageUrlRepairCount: prev.imageUrlRepairCount,
+    touchedEmbedIds: new Set(prev.touchedEmbedIds),
+    createdEmbedIds: new Set(prev.createdEmbedIds),
   };
 }
 

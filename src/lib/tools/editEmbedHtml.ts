@@ -9,6 +9,7 @@ import {
 } from "./editEmbedHtmlProgressive";
 import type { EmbedNode, FlatSceneNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
+import { recordTouchedEmbeds } from "./tasteCheckRegistry";
 
 export const editEmbedHtml: ToolHandler = async (args, context) => {
   const nodeId = typeof args.nodeId === "string" ? args.nodeId : "";
@@ -79,6 +80,14 @@ export const editEmbedHtml: ToolHandler = async (args, context) => {
 
   saveHistory(state);
   useSceneStore.setState({ nodesById: newNodesById, _cachedTree: null });
+
+  // Record this node as touched, on success only, so the CHAT PATH
+  // (useDesignChat.ts, via tasteCheck.ts) can run a Jev taste check against
+  // it AFTER this handler returns — see tasteCheckRegistry.ts's doc comment
+  // for why the check itself no longer runs in here. This is usually round 2
+  // for a screen batch_design already checked once (tasteCheck.ts only
+  // starts checking via an edit if the embed already had a completed round).
+  recordTouchedEmbeds(context?.toolCallId, [nodeId]);
 
   return JSON.stringify({
     nodeId,
