@@ -81,6 +81,23 @@ const MAX_CONSECUTIVE_UNPRODUCTIVE_STEPS = 3;
 const WAIT_SLEEP_MS = 400;
 
 /**
+ * Live bench finding (2026-09-24, fixture-shop run): Jev chose WAIT six
+ * times in a row at low confidence (0.37-0.57) before anything else
+ * happened. WAIT never reaches `perform`/`act` (addendum A), so it carries
+ * no `changed`/`pageChanged` signal of its own and always used to be
+ * recorded `ok: true` — the one signal that resets the
+ * MAX_CONSECUTIVE_UNPRODUCTIVE_STEPS counter — so an unbroken run of WAITs
+ * could never trip the stall detector no matter how long it went on.
+ * Consecutive WAIT decisions landing on the SAME url (nothing navigated
+ * between them, the only "did anything change" signal a targetless WAIT
+ * has) are capped at this many BEFORE a WAIT stops actually sleeping: the
+ * (N+1)th such WAIT is recorded as an unproductive step instead of being
+ * executed, so the general unproductive-step counter (`note`, above) starts
+ * advancing toward `stalled` rather than resetting on every idle WAIT.
+ */
+const MAX_CONSECUTIVE_SAME_URL_WAITS = 2;
+
+/**
  * pen-editor-backend/src/routes/browseStep.ts's `historyEntrySchema` caps
  * `label` at 200 chars (`label: z.string().max(200)`) — every step this
  * loop records is appended to `history` and sent right back up on the
@@ -424,6 +441,28 @@ function isNoEffectResult(value: unknown): boolean {
   return (value as { changed?: unknown }).changed === false;
 }
 
+/** Browse-speed contract (2026-09-24), frontend item 2: a `changed: false`
+ * result (see isNoEffectResult above) is NOT actually unproductive when it
+ * also reports `pageChanged: true` — the acted-on element's own signature
+ * didn't move, but something a user would see elsewhere on the page did
+ * (the canonical case: "Add to Cart" POSTs, then updates a separate
+ * `#cart-status` element's text — the button itself never changes). Without
+ * this, browse_task's loop recorded "(no effect)" and re-clicked the same
+ * control repeatedly until it stalled, even though the click worked. Only
+ * an explicit `pageChanged: true` counts — a missing field (a bridge that
+ * predates it) stays "(no effect)", same conservative default
+ * isNoEffectResult already uses for `changed`. Returns the label suffix to
+ * record in place of "(no effect)", or `null` when the result doesn't
+ * qualify. */
+function describePageUpdate(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as { pageChanged?: unknown; appeared?: unknown };
+  if (v.pageChanged !== true) return null;
+  const appeared = Array.isArray(v.appeared) ? v.appeared.filter((s): s is string => typeof s === "string") : [];
+  const first = appeared[0];
+  return first ? `(page updated: "${truncateToChars(first, SIDE_EFFECT_FRAGMENT_MAX_CHARS)}")` : "(page updated)";
+}
+
 /**
  * Records a step and appends it to the running history in one go —
  * hard-truncating `label` to HISTORY_LABEL_MAX_CHARS first. This is the
@@ -547,6 +586,12 @@ export async function runBrowseTaskLoop(
    * CLICK/SCROLL/etc. in between makes this stale value irrelevant even
    * though it isn't reset. */
   let lastTypeText: { index: number; text: string } | null = null;
+  /** How many consecutive WAIT decisions have landed on the SAME url as the
+   * previous WAIT (see MAX_CONSECUTIVE_SAME_URL_WAITS) — reset to 0 the
+   * moment the url changes or a non-WAIT operation is decided. `null` url
+   * means no WAIT has happened yet in the current streak. */
+  let sameUrlWaitStreak = 0;
+  let waitStreakUrl: string | null = null;
   /** recordStep plus the no-progress check. Returns the transcript to
    * return when the loop has stalled, or null to carry on. */
   const note = (entry: TranscriptStep): Transcript | null => {
@@ -649,6 +694,26 @@ export async function runBrowseTaskLoop(
     const cascadeVia: StepVia | undefined = decision.cascade ? "cascade" : undefined;
 
     if (decision.operation === "WAIT") {
+      const sameUrlAsLastWait = waitStreakUrl !== null && snapshot.url === waitStreakUrl;
+      sameUrlWaitStreak = sameUrlAsLastWait ? sameUrlWaitStreak + 1 : 1;
+      waitStreakUrl = snapshot.url;
+
+      if (sameUrlWaitStreak > MAX_CONSECUTIVE_SAME_URL_WAITS) {
+        // A 3rd (or later) consecutive WAIT landing on the same url as the
+        // last one is not executed — nothing changed the last two times we
+        // slept, so sleeping again is treated as the unproductive step it
+        // actually is (see MAX_CONSECUTIVE_SAME_URL_WAITS), letting the
+        // general no-progress counter advance instead of resetting.
+        const stalled = note({
+          operation: "WAIT",
+          label: "(waited, nothing changed)",
+          ok: false,
+          ...(cascadeVia ? { via: cascadeVia } : {}),
+        });
+        if (stalled) return stalled;
+        continue;
+      }
+
       // Addendum A: WAIT never reaches `perform` — the loop sleeps itself
       // and takes a fresh snapshot on the next iteration.
       note({
@@ -663,6 +728,8 @@ export async function runBrowseTaskLoop(
       await sleep(Math.max(0, Math.min(WAIT_SLEEP_MS, deadline - now())));
       continue;
     }
+    sameUrlWaitStreak = 0;
+    waitStreakUrl = null;
 
     let operation = decision.operation;
     if (!operation) {
@@ -771,13 +838,15 @@ export async function runBrowseTaskLoop(
         // "no progress" case the consecutive-unproductive-steps counter
         // exists to catch, so it must count the same way a rejected act
         // does, not as a landed action.
-        const noEffect = !rejected && isNoEffectResult(acted);
+        const noEffectRaw = !rejected && isNoEffectResult(acted);
+        const pageUpdate = noEffectRaw ? describePageUpdate(acted) : null;
+        const noEffect = noEffectRaw && !pageUpdate;
         const stalled = note(
           rejected
             ? { operation, label: rejected, ok: false, index: decision.index }
             : {
                 operation,
-                label: `${actLabel}${describeSideEffects(acted)}`,
+                label: `${actLabel}${describeSideEffects(acted)}${pageUpdate ? ` ${pageUpdate}` : ""}`,
                 ok: !noEffect,
                 index: decision.index,
                 ...(via ? { via } : {}),
@@ -825,7 +894,13 @@ export async function runBrowseTaskLoop(
       // landed nothing — same "no progress" case the act path already
       // counts via isNoEffectResult (see that function's comment), now
       // applied to perform too.
-      const noEffect = !rejected && isNoEffectResult(performed);
+      const noEffectRaw = !rejected && isNoEffectResult(performed);
+      // browse-speed-contract.md, "Frontend" item 2: `changed: false` +
+      // `pageChanged: true` (see describePageUpdate's doc comment) is not
+      // the "no progress" case — something the user would see did happen,
+      // just not on the acted-on element itself.
+      const pageUpdate = noEffectRaw ? describePageUpdate(performed) : null;
+      const noEffect = noEffectRaw && !pageUpdate;
       // Requirement 2 (typed-state awareness): a plain element label
       // ("Search") tells the NEXT decision nothing about what was already
       // typed there — the history sent back to /api/browse/step must say
@@ -842,7 +917,7 @@ export async function runBrowseTaskLoop(
               operation,
               label: noEffect
                 ? `${displayLabel}${describeSideEffects(performed)} (no effect)`
-                : `${displayLabel}${describeSideEffects(performed)}`,
+                : `${displayLabel}${describeSideEffects(performed)}${pageUpdate ? ` ${pageUpdate}` : ""}`,
               ok: !noEffect,
               index: decision.index,
               ...(via ? { via } : {}),

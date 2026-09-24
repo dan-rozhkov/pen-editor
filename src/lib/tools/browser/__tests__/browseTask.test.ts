@@ -175,6 +175,147 @@ describe("browse_task", () => {
     ]);
   });
 
+  // Live bench finding (2026-09-24): Jev chose WAIT six times in a row at
+  // low confidence before anything else happened. WAIT was always recorded
+  // `ok: true`, which resets MAX_CONSECUTIVE_UNPRODUCTIVE_STEPS on every
+  // cycle, so an unbroken run of WAITs could never trip the stall detector.
+  describe("consecutive WAIT decisions on an unchanging page (MAX_CONSECUTIVE_SAME_URL_WAITS)", () => {
+    it("stops actually sleeping on the 3rd consecutive WAIT with the same url, and eventually stalls", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({
+          ok: true,
+          json: async () => ({ outcome: "act", operation: "WAIT", confidence: 0.5, model: "jev" }),
+        }))
+      );
+
+      // Same url on every snapshot — nothing ever navigates.
+      const snapshot = vi.fn(async () => ({
+        url: "https://example.com",
+        title: "Example",
+        elements: [{ index: 0, tag: "button", label: "Accept all", ops: ["CLICK"] }],
+        snapshotId: "snap-fixed",
+      }));
+      const sleep = vi.fn(async () => {});
+      const browser = stubBrowser({ snapshot });
+
+      const transcript = await runBrowseTaskLoop(
+        "wait for the page to load",
+        12,
+        browser,
+        undefined,
+        sleep
+      );
+
+      expect(transcript.status).toBe("stalled");
+      // Two genuine sleeps (the pre-loop probe's snapshot is WAIT #1, the
+      // follow-up snapshot is WAIT #2), then WAIT #3-#5 are all recorded
+      // unproductive without sleeping again — three unproductive steps in a
+      // row is what actually stalls the loop.
+      expect(sleep).toHaveBeenCalledTimes(2);
+      expect(transcript.steps).toEqual([
+        { operation: "WAIT", label: "waiting for the page to settle", ok: true },
+        { operation: "WAIT", label: "waiting for the page to settle", ok: true },
+        { operation: "WAIT", label: "(waited, nothing changed)", ok: false },
+        { operation: "WAIT", label: "(waited, nothing changed)", ok: false },
+        { operation: "WAIT", label: "(waited, nothing changed)", ok: false },
+      ]);
+    });
+
+    it("keeps sleeping on every WAIT when the url changes between them (never caps)", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({
+          ok: true,
+          json: async () => ({ outcome: "act", operation: "WAIT", confidence: 0.5, model: "jev" }),
+        }))
+      );
+
+      let snapshotCalls = 0;
+      const snapshot = vi.fn(async () => {
+        snapshotCalls++;
+        return {
+          url: `https://example.com/page-${snapshotCalls}`,
+          title: "Example",
+          elements: [{ index: 0, tag: "button", label: "Accept all", ops: ["CLICK"] }],
+          snapshotId: `snap-${snapshotCalls}`,
+        };
+      });
+      const sleep = vi.fn(async () => {});
+      const browser = stubBrowser({ snapshot });
+
+      const transcript = await runBrowseTaskLoop(
+        "wait for navigation",
+        4,
+        browser,
+        undefined,
+        sleep
+      );
+
+      expect(transcript.status).toBe("budget");
+      expect(sleep).toHaveBeenCalledTimes(4);
+      expect(transcript.steps.every((step) => step.ok)).toBe(true);
+      expect(transcript.steps.every((step) => step.label === "waiting for the page to settle")).toBe(
+        true
+      );
+    });
+
+    it("resets the same-url WAIT streak once a non-WAIT operation lands in between", async () => {
+      let stepCalls = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => {
+          stepCalls++;
+          // WAIT, WAIT, CLICK (lands), then WAIT, WAIT, WAIT again — the
+          // CLICK in the middle must reset the streak so the next two WAITs
+          // are treated as the start of a fresh streak, not a continuation.
+          const sequence = ["WAIT", "WAIT", "CLICK", "WAIT", "WAIT", "WAIT"];
+          const operation = sequence[Math.min(stepCalls - 1, sequence.length - 1)];
+          return {
+            ok: true,
+            json: async () =>
+              operation === "CLICK"
+                ? { outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }
+                : { outcome: "act", operation: "WAIT", confidence: 0.5, model: "jev" },
+          };
+        })
+      );
+
+      const snapshot = vi.fn(async () => ({
+        url: "https://example.com",
+        title: "Example",
+        elements: [{ index: 0, tag: "button", label: "Accept all", ops: ["CLICK"] }],
+        snapshotId: "snap-fixed",
+      }));
+      const sleep = vi.fn(async () => {});
+      const perform = vi.fn(async () => ({}));
+      const browser = stubBrowser({ snapshot, perform });
+
+      const transcript = await runBrowseTaskLoop(
+        "wait around a click",
+        6,
+        browser,
+        undefined,
+        sleep
+      );
+
+      // Two sleeps before the CLICK, then two more after it (the streak
+      // reset) — the 6th and final decision (WAIT again) is the 3rd of that
+      // fresh streak and is skipped, but the loop simply runs out of
+      // maxSteps before enough unproductive steps accumulate to stall.
+      expect(sleep).toHaveBeenCalledTimes(4);
+      expect(transcript.status).toBe("budget");
+      expect(transcript.steps.map((step) => `${step.operation}:${step.ok}`)).toEqual([
+        "WAIT:true",
+        "WAIT:true",
+        "CLICK:true",
+        "WAIT:true",
+        "WAIT:true",
+        "WAIT:false",
+      ]);
+    });
+  });
+
   it("forwards a scroll decision to perform without an `index` key when none is given", async () => {
     stubFetchSequence([{ outcome: "act", operation: "SCROLL_DOWN", confidence: 0.9, model: "jev" }]);
 
@@ -630,6 +771,78 @@ describe("browse_task", () => {
     expect(transcript.steps).toEqual([
       { operation: "CLICK", label: "Accept all", ok: true, index: 0 },
     ]);
+  });
+
+  // browse-speed-contract.md, "Frontend" item 2: `changed: false` +
+  // `pageChanged: true` (the "Add to Cart" shape — the button itself
+  // doesn't change, but a separate #cart-status element does) is NOT
+  // unproductive.
+  it("treats a perform result with changed:false but pageChanged:true as productive, with the new text folded into the label", async () => {
+    let stepCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        stepCalls++;
+        return {
+          ok: true,
+          json: async () =>
+            stepCalls === 1
+              ? { outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }
+              : { outcome: "done", confidence: 1, model: "jev" },
+        };
+      })
+    );
+
+    const perform = vi.fn(async () => ({
+      changed: false,
+      pageChanged: true,
+      appeared: ["Added to cart (1 item)", "Go to cart"],
+    }));
+    const browser = stubBrowser({ perform });
+
+    const transcript = await runBrowseTaskLoop("add the item to the cart", 12, browser);
+
+    expect(transcript.status).toBe("done");
+    expect(transcript.steps).toEqual([
+      {
+        operation: "CLICK",
+        label: 'Accept all (page updated: "Added to cart (1 item)")',
+        ok: true,
+        index: 0,
+      },
+    ]);
+  });
+
+  it("treats an act result with changed:false but pageChanged:true as productive, with a plain '(page updated)' suffix when appeared is empty", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ outcome: "act", operation: "PRESS_ESCAPE", confidence: 0.9, model: "jev" }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const act = vi.fn(async () => ({ changed: false, pageChanged: true, appeared: [] }));
+    const browser = stubBrowser({ act });
+    const transcript = await runBrowseTaskLoop("close the modal", 12, browser);
+
+    expect(transcript.steps[0]!.ok).toBe(true);
+    expect(transcript.steps[0]!.label).toContain("(page updated)");
+  });
+
+  it("still treats changed:false, pageChanged:false as unproductive — pageChanged must be explicitly true, not just missing", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const perform = vi.fn(async () => ({ changed: false, pageChanged: false, appeared: [] }));
+    const browser = stubBrowser({ perform });
+
+    const transcript = await runBrowseTaskLoop("click the popover", 12, browser);
+
+    expect(transcript.status).toBe("stalled");
+    expect(transcript.steps.every((step) => step.ok === false)).toBe(true);
+    expect(transcript.steps[0]!.label).toMatch(/no effect/);
   });
 
   // browse-speed-contract.md, "Frontend" item 4.
