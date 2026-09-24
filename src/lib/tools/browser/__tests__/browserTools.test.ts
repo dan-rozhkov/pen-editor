@@ -10,20 +10,7 @@ import {
   BROWSER_BRIDGE_METHOD_MISSING_ERROR,
   BROWSER_NOT_AVAILABLE_ERROR,
 } from "@/lib/tools/browser/shared";
-
-type PenDesktopBrowser = NonNullable<NonNullable<typeof window.penDesktop>["browser"]>;
-
-function stubBrowser(overrides: Partial<PenDesktopBrowser>): PenDesktopBrowser {
-  return {
-    open: async () => ({}),
-    act: async () => ({}),
-    findImages: async () => ({}),
-    read: async () => ({}),
-    snapshot: async () => ({}),
-    perform: async () => ({}),
-    ...overrides,
-  };
-}
+import { setPenDesktop, stubBrowser, stubLocateFetch, type PenDesktopBrowser } from "./helpers";
 
 afterEach(() => {
   delete window.penDesktop;
@@ -33,15 +20,12 @@ afterEach(() => {
 describe("browse_open", () => {
   it("forwards args to window.penDesktop.browser.open and returns the result", async () => {
     let received: unknown;
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         open: async (args) => {
           received = args;
           return { url: "https://pinterest.com/search?q=modern%20kitchen", title: "Pinterest" };
         },
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseOpen({ url: "https://pinterest.com/search?q=modern kitchen" }));
 
@@ -61,14 +45,11 @@ describe("browse_open", () => {
   });
 
   it("catches a rejecting preload call and returns it as a JSON error, never throwing", async () => {
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         open: async () => {
           throw new Error("browser:command timed out");
         },
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseOpen({ url: "https://pinterest.com" }));
 
@@ -81,13 +62,10 @@ describe("browse_open", () => {
   // and executeToolCall calling .startsWith on a non-string throws a
   // TypeError that masks the real (empty) result as a bogus error.
   it("returns a real JSON string, not the value undefined, when the bridge resolves undefined", async () => {
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         open: async () => undefined as any,
-      }),
-    };
+      }));
 
     const result = await browseOpen({ url: "https://pinterest.com" });
 
@@ -100,15 +78,12 @@ describe("browse_open", () => {
 describe("browse_act", () => {
   it("forwards args to window.penDesktop.browser.act and returns the result", async () => {
     let received: unknown;
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         act: async (args) => {
           received = args;
           return { url: "https://pinterest.com", title: "Pinterest", matched: "Search" };
         },
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseAct({ action: "click", target: "Search" }));
 
@@ -123,14 +98,11 @@ describe("browse_act", () => {
   });
 
   it("catches a rejecting preload call and returns it as a JSON error", async () => {
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         act: async () => {
           throw new Error("no browser tab open");
         },
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseAct({ action: "back" }));
 
@@ -143,15 +115,12 @@ describe("browse_act", () => {
   // untyped forwarder, so every new field must reach the bridge untouched.
   it("forwards index/snapshotId/key/ms and the new action values untouched", async () => {
     let received: unknown;
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         act: async (args) => {
           received = args;
           return { found: true };
         },
-      }),
-    };
+      }));
 
     const args = {
       action: "press",
@@ -202,15 +171,12 @@ describe("browse_act element targeting", () => {
     );
 
     let receivedActArgs: unknown;
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubSnapshotBrowser({
+    setPenDesktop(stubSnapshotBrowser({
         act: async (args) => {
           receivedActArgs = args;
           return { url: "https://example.com", title: "Example", matched: "Search" };
         },
-      }),
-    };
+      }));
 
     const result = JSON.parse(
       await browseAct({ action: "click", element: "the search button in the header" })
@@ -255,23 +221,13 @@ describe("browse_act element targeting", () => {
   });
 
   it("includes `resolved` (with the fresh snapshotId) on an error result when the act itself fails after a successful locate", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({ outcome: "found", index: 2, label: "Search", confidence: 0.9, model: "jev" }),
-      }))
-    );
+    stubLocateFetch({ outcome: "found", index: 2, label: "Search", confidence: 0.9, model: "jev" });
 
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubSnapshotBrowser({
+    setPenDesktop(stubSnapshotBrowser({
         act: async () => {
           throw new Error("target is gone or occluded");
         },
-      }),
-    };
+      }));
 
     const result = JSON.parse(
       await browseAct({ action: "click", element: "the search button in the header" })
@@ -309,10 +265,7 @@ describe("browse_act element targeting", () => {
       })
     );
 
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubSnapshotBrowser({ act: async () => ({}) }),
-    };
+    setPenDesktop(stubSnapshotBrowser({ act: async () => ({}) }));
 
     await browseAct({ action: "type", element: "the search box", text: "hello" });
     await browseAct({ action: "select", element: "the country dropdown", text: "Canada" });
@@ -329,10 +282,7 @@ describe("browse_act element targeting", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubSnapshotBrowser(),
-    };
+    setPenDesktop(stubSnapshotBrowser());
 
     const typeResult = JSON.parse(await browseAct({ action: "type", element: "the search box" }));
     const selectResult = JSON.parse(
@@ -347,20 +297,10 @@ describe("browse_act element targeting", () => {
   });
 
   it("returns a 'no element matched' error naming target/index as the fallback when outcome is not_found", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({ outcome: "not_found", reason: "no candidate matched the description" }),
-      }))
-    );
+    stubLocateFetch({ outcome: "not_found", reason: "no candidate matched the description" });
 
     const act = vi.fn(async () => ({}));
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubSnapshotBrowser({ act }),
-    };
+    setPenDesktop(stubSnapshotBrowser({ act }));
 
     const result = JSON.parse(await browseAct({ action: "click", element: "a purple elephant" }));
 
@@ -370,70 +310,38 @@ describe("browse_act element targeting", () => {
     expect(result.error).toMatch(/browse_snapshot/);
   });
 
-  it("returns a clear error and does not call act when outcome is retry", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({ outcome: "retry", reason: "ambiguous, matched two candidates" }),
-      }))
-    );
+  it.each([
+    {
+      name: "returns a clear error and does not call act when outcome is retry",
+      setup: () => stubLocateFetch({ outcome: "retry", reason: "ambiguous, matched two candidates" }),
+      extraMatch: /ambiguous, matched two candidates/,
+    },
+    {
+      name: "returns a clear error when /api/browse/locate responds 503 (no fast model configured)",
+      setup: () => stubLocateFetch({}, 503),
+      extraMatch: /not available/i,
+    },
+    {
+      name: "returns a clear error on a fetch failure resolving /api/browse/locate",
+      setup: () =>
+        vi.stubGlobal(
+          "fetch",
+          vi.fn(async () => {
+            throw new Error("network down");
+          })
+        ),
+      extraMatch: /network down/,
+    },
+  ])("$name", async ({ setup, extraMatch }) => {
+    setup();
 
     const act = vi.fn(async () => ({}));
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubSnapshotBrowser({ act }),
-    };
+    setPenDesktop(stubSnapshotBrowser({ act }));
 
     const result = JSON.parse(await browseAct({ action: "click", element: "a button" }));
 
     expect(act).not.toHaveBeenCalled();
-    expect(result.error).toMatch(/target or index/i);
-    expect(result.error).toMatch(/ambiguous, matched two candidates/);
-  });
-
-  it("returns a clear error when /api/browse/locate responds 503 (no fast model configured)", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: false,
-        status: 503,
-        json: async () => ({}),
-      }))
-    );
-
-    const act = vi.fn(async () => ({}));
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubSnapshotBrowser({ act }),
-    };
-
-    const result = JSON.parse(await browseAct({ action: "click", element: "a button" }));
-
-    expect(act).not.toHaveBeenCalled();
-    expect(result.error).toMatch(/not available/i);
-    expect(result.error).toMatch(/target or index/i);
-  });
-
-  it("returns a clear error on a fetch failure resolving /api/browse/locate", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        throw new Error("network down");
-      })
-    );
-
-    const act = vi.fn(async () => ({}));
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubSnapshotBrowser({ act }),
-    };
-
-    const result = JSON.parse(await browseAct({ action: "click", element: "a button" }));
-
-    expect(act).not.toHaveBeenCalled();
-    expect(result.error).toMatch(/network down/);
+    expect(result.error).toMatch(extraMatch);
     expect(result.error).toMatch(/target or index/i);
   });
 
@@ -441,12 +349,9 @@ describe("browse_act element targeting", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         snapshot: async () => ({ error: "No browser tab is open — call browse_open first." }),
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseAct({ action: "click", element: "a button" }));
 
@@ -458,10 +363,7 @@ describe("browse_act element targeting", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubSnapshotBrowser(),
-    };
+    setPenDesktop(stubSnapshotBrowser());
 
     const result = JSON.parse(await browseAct({ action: "scroll", amount: 1, element: "the page" }));
 
@@ -474,15 +376,12 @@ describe("browse_act element targeting", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     let receivedActArgs: unknown;
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubSnapshotBrowser({
+    setPenDesktop(stubSnapshotBrowser({
         act: async (args) => {
           receivedActArgs = args;
           return { matched: "by index" };
         },
-      }),
-    };
+      }));
 
     await browseAct({ action: "click", index: 5, snapshotId: "snap-9", element: "the search button" });
 
@@ -495,15 +394,12 @@ describe("browse_act element targeting", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     let receivedActArgs: unknown;
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubSnapshotBrowser({
+    setPenDesktop(stubSnapshotBrowser({
         act: async (args) => {
           receivedActArgs = args;
           return { matched: "Search" };
         },
-      }),
-    };
+      }));
 
     await browseAct({ action: "click", target: "Search", element: "the search button" });
 
@@ -515,15 +411,12 @@ describe("browse_act element targeting", () => {
 describe("browse_snapshot", () => {
   it("forwards to window.penDesktop.browser.snapshot and returns the result", async () => {
     let called = false;
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         snapshot: async () => {
           called = true;
           return { snapshotId: "snap-1", elements: [{ index: 0, tag: "button", text: "Search" }] };
         },
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseSnapshot({}));
 
@@ -541,14 +434,11 @@ describe("browse_snapshot", () => {
   });
 
   it("catches a rejecting preload call and returns it as a JSON error", async () => {
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         snapshot: async () => {
           throw new Error("no browser tab open");
         },
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseSnapshot({}));
 
@@ -559,15 +449,12 @@ describe("browse_snapshot", () => {
 describe("browse_screenshot", () => {
   it("forwards args to window.penDesktop.browser.screenshot and returns the result", async () => {
     let received: unknown;
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         screenshot: async (args) => {
           received = args;
           return { imageData: "data:image/jpeg;base64,AAAA", width: 800, height: 600, url: "https://example.com", title: "Example" };
         },
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseScreenshot({ annotate: true }));
 
@@ -590,11 +477,8 @@ describe("browse_screenshot", () => {
   });
 
   it("returns a 'needs a newer desktop app' error when the bridge exists but lacks .screenshot (older desktop app)", async () => {
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({}),
-    };
-    expect(window.penDesktop.browser?.screenshot).toBeUndefined();
+    setPenDesktop(stubBrowser({}));
+    expect(window.penDesktop!.browser?.screenshot).toBeUndefined();
 
     const result = JSON.parse(await browseScreenshot({}));
 
@@ -602,14 +486,11 @@ describe("browse_screenshot", () => {
   });
 
   it("catches a rejecting preload call and returns it as a JSON error", async () => {
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         screenshot: async () => {
           throw new Error("capture failed");
         },
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseScreenshot({}));
 
@@ -620,9 +501,7 @@ describe("browse_screenshot", () => {
 describe("browse_tabs", () => {
   it("forwards args to window.penDesktop.browser.tabs and returns the result", async () => {
     let received: unknown;
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         tabs: async (args) => {
           received = args;
           return {
@@ -630,8 +509,7 @@ describe("browse_tabs", () => {
             current: "t1",
           };
         },
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseTabs({ action: "new", url: "https://example.com" }));
 
@@ -648,11 +526,8 @@ describe("browse_tabs", () => {
   });
 
   it("returns a 'needs a newer desktop app' error when the bridge exists but lacks .tabs (older desktop app)", async () => {
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({}),
-    };
-    expect(window.penDesktop.browser?.tabs).toBeUndefined();
+    setPenDesktop(stubBrowser({}));
+    expect(window.penDesktop!.browser?.tabs).toBeUndefined();
 
     const result = JSON.parse(await browseTabs({ action: "list" }));
 
@@ -660,14 +535,11 @@ describe("browse_tabs", () => {
   });
 
   it("catches a rejecting preload call and returns it as a JSON error", async () => {
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         tabs: async () => {
           throw new Error("no such tab");
         },
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseTabs({ action: "close", tabId: "t1" }));
 
@@ -678,9 +550,7 @@ describe("browse_tabs", () => {
 describe("browse_find_images", () => {
   it("forwards args to window.penDesktop.browser.findImages and returns the result", async () => {
     let received: unknown;
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         findImages: async (args) => {
           received = args;
           return {
@@ -689,8 +559,7 @@ describe("browse_find_images", () => {
             pageUrl: "https://pinterest.com",
           };
         },
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseFindImages({ minWidth: 200, minHeight: 200, limit: 30 }));
 
@@ -706,14 +575,11 @@ describe("browse_find_images", () => {
   });
 
   it("catches a rejecting preload call and returns it as a JSON error", async () => {
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         findImages: async () => {
           throw new Error("page script threw");
         },
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseFindImages({}));
 
@@ -724,9 +590,7 @@ describe("browse_find_images", () => {
 describe("browse_read", () => {
   it("forwards args to window.penDesktop.browser.read and returns the result", async () => {
     let received: unknown;
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         read: async (args) => {
           received = args;
           return {
@@ -738,8 +602,7 @@ describe("browse_read", () => {
             truncated: false,
           };
         },
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseRead({ maxChars: 4000 }));
 
@@ -761,14 +624,11 @@ describe("browse_read", () => {
   });
 
   it("catches a rejecting preload call and returns it as a JSON error", async () => {
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         read: async () => {
           throw new Error("no browser tab open");
         },
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseRead({ selector: "#missing" }));
 
@@ -792,16 +652,13 @@ const VALID_SNAPSHOT = {
 describe("browse_open snapshot attach", () => {
   it("attaches a fresh snapshot after a successful open", async () => {
     let snapshotCalls = 0;
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         open: async () => ({ url: "https://example.com", title: "Example" }),
         snapshot: async () => {
           snapshotCalls++;
           return VALID_SNAPSHOT;
         },
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseOpen({ url: "https://example.com" }));
 
@@ -815,13 +672,10 @@ describe("browse_open snapshot attach", () => {
 
   it("does not attach a snapshot when the open itself failed", async () => {
     const snapshot = vi.fn(async () => VALID_SNAPSHOT);
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         open: async () => ({ error: "navigation timed out" }),
         snapshot,
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseOpen({ url: "https://example.com" }));
 
@@ -830,13 +684,10 @@ describe("browse_open snapshot attach", () => {
   });
 
   it("does not fail the open when the follow-up snapshot itself fails", async () => {
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         open: async () => ({ url: "https://example.com", title: "Example" }),
         snapshot: async () => ({ error: "no browser tab open" }),
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseOpen({ url: "https://example.com" }));
 
@@ -847,13 +698,10 @@ describe("browse_open snapshot attach", () => {
 
 describe("browse_act snapshot attach", () => {
   it("attaches a fresh snapshot when the act result reports changed !== false", async () => {
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         act: async () => ({ matched: "Search", changed: true }),
         snapshot: async () => VALID_SNAPSHOT,
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseAct({ action: "click", target: "Search" }));
 
@@ -862,13 +710,10 @@ describe("browse_act snapshot attach", () => {
 
   it("does not attach a snapshot when the act result reports changed: false", async () => {
     const snapshot = vi.fn(async () => VALID_SNAPSHOT);
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         act: async () => ({ matched: "Search", changed: false }),
         snapshot,
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseAct({ action: "click", target: "Search" }));
 
@@ -877,13 +722,10 @@ describe("browse_act snapshot attach", () => {
   });
 
   it("always attaches a snapshot for wait, even when changed is false", async () => {
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         act: async () => ({ changed: false }),
         snapshot: async () => VALID_SNAPSHOT,
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseAct({ action: "wait", ms: 500 }));
 
@@ -891,13 +733,10 @@ describe("browse_act snapshot attach", () => {
   });
 
   it("always attaches a snapshot for scroll, even when changed is false", async () => {
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         act: async () => ({ changed: false }),
         snapshot: async () => VALID_SNAPSHOT,
-      }),
-    };
+      }));
 
     const result = JSON.parse(await browseAct({ action: "scroll", amount: 1 }));
 
@@ -906,18 +745,26 @@ describe("browse_act snapshot attach", () => {
 });
 
 describe("browse_act actions batch", () => {
-  it("runs actions sequentially, forwarding the top-level snapshotId to index-based entries", async () => {
+  // Records every args object passed to act() and answers { matched: "ok",
+  // changed: true } for each — the default "just tell me what was sent"
+  // shape reused across most of this describe block's happy-path tests.
+  function recordingActBrowser(overrides: Partial<PenDesktopBrowser> = {}) {
     const receivedActArgs: unknown[] = [];
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(
+      stubBrowser({
         act: async (args) => {
           receivedActArgs.push(args);
           return { matched: "ok", changed: true };
         },
         snapshot: async () => VALID_SNAPSHOT,
-      }),
-    };
+        ...overrides,
+      })
+    );
+    return receivedActArgs;
+  }
+
+  it("runs actions sequentially, forwarding the top-level snapshotId to index-based entries", async () => {
+    const receivedActArgs = recordingActBrowser();
 
     const result = JSON.parse(
       await browseAct({
@@ -942,9 +789,7 @@ describe("browse_act actions batch", () => {
 
   it("stops at the first entry that returns { error } and reports stoppedAt/completed", async () => {
     let callCount = 0;
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         act: async () => {
           callCount++;
           if (callCount === 2) {
@@ -953,8 +798,7 @@ describe("browse_act actions batch", () => {
           return { matched: "ok", changed: true };
         },
         snapshot: async () => VALID_SNAPSHOT,
-      }),
-    };
+      }));
 
     const result = JSON.parse(
       await browseAct({
@@ -983,17 +827,7 @@ describe("browse_act actions batch", () => {
     // [{type,index:3},{press,key:'Enter'}] used to fail at entry 1 because
     // the copied top-level snapshotId made the targetless press entry look
     // like an (invalid) index-mode call.
-    const receivedActArgs: unknown[] = [];
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
-        act: async (args) => {
-          receivedActArgs.push(args);
-          return { matched: "ok", changed: true };
-        },
-        snapshot: async () => VALID_SNAPSHOT,
-      }),
-    };
+    const receivedActArgs = recordingActBrowser();
 
     const result = JSON.parse(
       await browseAct({
@@ -1018,10 +852,7 @@ describe("browse_act actions batch", () => {
     const act = vi.fn(async (args: Record<string, unknown>) =>
       args.index === 1 ? { error: "Stale or unknown snapshotId — the page may have changed." } : { changed: true }
     );
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({ act, snapshot: async () => VALID_SNAPSHOT }),
-    };
+    setPenDesktop(stubBrowser({ act, snapshot: async () => VALID_SNAPSHOT }));
 
     const result = JSON.parse(
       await browseAct({
@@ -1047,10 +878,7 @@ describe("browse_act actions batch", () => {
 
   it("rejects an actions array with more than 10 entries without calling the bridge", async () => {
     const act = vi.fn(async () => ({}));
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({ act }),
-    };
+    setPenDesktop(stubBrowser({ act }));
 
     const actions = Array.from({ length: 11 }, (_, i) => ({ action: "click", index: i }));
     const result = JSON.parse(await browseAct({ actions }));
@@ -1061,10 +889,7 @@ describe("browse_act actions batch", () => {
 
   it("rejects an empty actions array without calling the bridge", async () => {
     const act = vi.fn(async () => ({}));
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({ act }),
-    };
+    setPenDesktop(stubBrowser({ act }));
 
     const result = JSON.parse(await browseAct({ actions: [] }));
 
@@ -1073,26 +898,9 @@ describe("browse_act actions batch", () => {
   });
 
   it("resolves `element` per-entry inside a batch, same as a single browse_act call", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({ outcome: "found", index: 2, label: "Search", confidence: 0.9, model: "jev" }),
-      }))
-    );
+    stubLocateFetch({ outcome: "found", index: 2, label: "Search", confidence: 0.9, model: "jev" });
 
-    const receivedActArgs: unknown[] = [];
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
-        snapshot: async () => VALID_SNAPSHOT,
-        act: async (args) => {
-          receivedActArgs.push(args);
-          return { matched: "ok", changed: true };
-        },
-      }),
-    };
+    const receivedActArgs = recordingActBrowser();
 
     const result = JSON.parse(
       await browseAct({ actions: [{ action: "click", element: "the search button" }] })
@@ -1109,10 +917,7 @@ describe("browse_act actions batch", () => {
     const act = vi.fn(async () => ({}));
     const snapshot = vi.fn(async () => VALID_SNAPSHOT);
     vi.stubGlobal("fetch", vi.fn());
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({ act, snapshot }),
-    };
+    setPenDesktop(stubBrowser({ act, snapshot }));
 
     const result = JSON.parse(
       await browseAct({
@@ -1129,26 +934,9 @@ describe("browse_act actions batch", () => {
   });
 
   it("allows an `element` entry as the LAST entry in a batch (order is fine)", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({ outcome: "found", index: 2, label: "Search", confidence: 0.9, model: "jev" }),
-      }))
-    );
+    stubLocateFetch({ outcome: "found", index: 2, label: "Search", confidence: 0.9, model: "jev" });
 
-    const receivedActArgs: unknown[] = [];
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
-        snapshot: async () => VALID_SNAPSHOT,
-        act: async (args) => {
-          receivedActArgs.push(args);
-          return { matched: "ok", changed: true };
-        },
-      }),
-    };
+    const receivedActArgs = recordingActBrowser();
 
     const result = JSON.parse(
       await browseAct({
@@ -1168,22 +956,12 @@ describe("browse_act actions batch", () => {
   });
 
   it("does not reject a batch where an `element` entry is followed only by target-based (non-index) entries", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({ outcome: "found", index: 2, label: "Search", confidence: 0.9, model: "jev" }),
-      }))
-    );
+    stubLocateFetch({ outcome: "found", index: 2, label: "Search", confidence: 0.9, model: "jev" });
 
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         snapshot: async () => VALID_SNAPSHOT,
         act: async () => ({ matched: "ok", changed: true }),
-      }),
-    };
+      }));
 
     const result = JSON.parse(
       await browseAct({
@@ -1203,9 +981,7 @@ describe("browse_act actions batch", () => {
   it("stops the batch once the deadline is reached, returning partial results with stoppedAt and an error", async () => {
     let now = 0;
     let callCount = 0;
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         act: async () => {
           callCount++;
           // Each entry "takes" 30s of wall-clock time — the deadline check
@@ -1215,12 +991,11 @@ describe("browse_act actions batch", () => {
           return { matched: "ok", changed: true };
         },
         snapshot: async () => VALID_SNAPSHOT,
-      }),
-    };
+      }));
 
     const result = JSON.parse(
       await runActionsBatch(
-        window.penDesktop.browser,
+        window.penDesktop!.browser!,
         [
           { action: "click", index: 0 },
           { action: "click", index: 1 },
@@ -1242,16 +1017,13 @@ describe("browse_act actions batch", () => {
   });
 
   it("still attaches the final snapshot when the batch finishes within the deadline", async () => {
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         act: async () => ({ matched: "ok", changed: true }),
         snapshot: async () => VALID_SNAPSHOT,
-      }),
-    };
+      }));
 
     const result = JSON.parse(
-      await runActionsBatch(window.penDesktop.browser, [{ action: "click", index: 0 }], "snap-top")
+      await runActionsBatch(window.penDesktop!.browser!, [{ action: "click", index: 0 }], "snap-top")
     );
 
     expect(result.error).toBeUndefined();
@@ -1260,9 +1032,7 @@ describe("browse_act actions batch", () => {
 
   it("skips the trailing snapshot when a single entry's own duration pushes past the deadline, even though it completed", async () => {
     let now = 0;
-    window.penDesktop = {
-      onMenuCommand: () => () => {},
-      browser: stubBrowser({
+    setPenDesktop(stubBrowser({
         act: async () => {
           // This single entry itself takes longer than the whole batch
           // deadline (60s) — it still completes (nothing aborts an
@@ -1272,12 +1042,11 @@ describe("browse_act actions batch", () => {
           return { matched: "ok", changed: true };
         },
         snapshot: async () => VALID_SNAPSHOT,
-      }),
-    };
+      }));
 
     const result = JSON.parse(
       await runActionsBatch(
-        window.penDesktop.browser,
+        window.penDesktop!.browser!,
         [{ action: "click", index: 0 }],
         "snap-top",
         () => now
