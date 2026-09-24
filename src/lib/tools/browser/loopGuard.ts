@@ -46,12 +46,18 @@ function isMutatingCall(toolName: string, args: Record<string, unknown>): boolea
 }
 
 /**
- * Deterministic, dependency-free 32-bit hash (FNV-1a) over the result
- * string. Good enough to distinguish result payloads for loop detection —
- * this is not a security hash and collisions merely mean an occasional
- * false "same result", which is the safe direction for a nudge like this.
+ * Deterministic, dependency-free 32-bit hash (FNV-1a) over an arbitrary
+ * string. Good enough to distinguish result payloads for loop detection, or
+ * (combined with itself twice, forward and reversed) cache keys in
+ * actionCache.ts — neither is a security use, so collisions merely mean an
+ * occasional false "same result"/cache key, which is the safe direction for
+ * both call sites (a loop-guard false positive is just a nudge; a cache-key
+ * collision is caught by actionCache.ts's separate `verify` check before
+ * ever being trusted — see that module's header comment). Exported so
+ * actionCache.ts can reuse this instead of duplicating the algorithm
+ * (check:dup).
  */
-function hashString(value: string): string {
+export function hashString(value: string): string {
   let hash = 0x811c9dc5;
   for (let i = 0; i < value.length; i++) {
     hash ^= value.charCodeAt(i);

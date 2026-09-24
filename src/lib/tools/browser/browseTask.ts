@@ -1,8 +1,26 @@
 import type { ToolHandler } from "../../toolRegistry";
 import {
+  buildStepCacheKey,
+  deleteCacheEntry,
+  findTextRangeInGoal,
+  hashCachedLabel,
+  isActionCacheEnabled,
+  isCacheableStepOperation,
+  isUnsafeCachedTarget,
+  looksSensitive,
+  lookupStepCache,
+  readTextFromRange,
+  resolveCachedIndex,
+  touchCacheEntry,
+  writeStepCacheEntry,
+  type CachedStep,
+  type CachedStepTarget,
+} from "./actionCache";
+import {
   BROWSER_NOT_AVAILABLE_ERROR,
   fetchBrowseBackend,
   filterElementsForBackend,
+  findElementByIndex,
   resultError,
   takeSnapshot,
   type PenDesktopBrowser,
@@ -153,8 +171,10 @@ type StepOutcome = "act" | "done" | "blocked" | "retry";
  * probability gate failed (see pen-editor-backend's cascadeStep). "rule": a
  * deterministic client-side guard overrode the decision entirely — e.g.
  * refusing to retype into the same search box twice in a row and pressing
- * Enter instead (see the TYPE_TEXT-dedup rule below `note`). */
-type StepVia = "cascade" | "rule";
+ * Enter instead (see the TYPE_TEXT-dedup rule below `note`). "cache": the
+ * local action cache (actionCache.ts) replayed a previously-successful
+ * step against a fresh snapshot without ever calling /api/browse/step. */
+type StepVia = "cascade" | "rule" | "cache";
 
 interface StepHistoryEntry {
   operation: string;
@@ -198,6 +218,12 @@ interface Transcript {
    * surfaced so the caller/model knows this `blocked` is a CAPTCHA/bot-check
    * wall specifically, not an ordinary open failure or a Jev refusal. */
   botCheck?: true;
+  /** How many steps this run resolved from the local action cache
+   * (actionCache.ts) instead of calling /api/browse/step — only present once
+   * the loop actually starts (the pre-loop "no tab open"/open-failure/
+   * bot-check returns end the task before any step, cached or not, could
+   * happen). */
+  cacheHits?: number;
 }
 
 function labelForElement(elements: unknown[], index: number | undefined): string {
@@ -463,6 +489,137 @@ function describePageUpdate(value: unknown): string | null {
   return first ? `(page updated: "${truncateToChars(first, SIDE_EFFECT_FRAGMENT_MAX_CHARS)}")` : "(page updated)";
 }
 
+/** Outcome of a single cache-replay attempt (`replayCachedStep`). `ok:
+ * false` always means the replay was actually DISPATCHED to `browser.
+ * perform` (rejected, landed no effect, or threw/timed out) — the caller
+ * must treat the page as possibly changed and take a fresh snapshot before
+ * falling back to Jev, not just delete the entry and reuse the snapshot it
+ * already had (see the cache-lookup block below). `label` is either the
+ * landed step's display label (ok: true) or a short failure reason (ok:
+ * false), suitable for recording straight into the transcript/history
+ * either way. */
+interface CacheReplayResult {
+  ok: boolean;
+  label: string;
+}
+
+/**
+ * Replays a cached step (actionCache.ts) via `browser.perform` — the
+ * action-cache equivalent of the ordinary perform dispatch further down
+ * this file. Deliberately scoped to `PerformOperation` only: the cache
+ * never stores WAIT (see `isCacheableStepOperation`) or the `browser.act`
+ * operations (PRESS_ENTER/PRESS_ESCAPE/HOVER) — those are comparatively
+ * rare, cheap follow-ups (PRESS_ENTER in particular is only ever valid
+ * right after a landed TYPE_TEXT, a piece of state this replay path has no
+ * way to check), so the cache targets the common, high-value case
+ * (CLICK/TYPE_TEXT/SELECT/SCROLL_*) rather than reproducing every dispatch
+ * rule for a marginal extra hit rate. `goal` is used to read a TYPE_TEXT/
+ * SELECT entry's text back out of its stored `textRange` — the cache never
+ * persists raw typed text (see `CachedStep.textRange`'s doc comment).
+ * `targetLabel` is the FRESH element's own label (from this iteration's
+ * snapshot), not anything read back off `cached` — the cache never persists
+ * a target's raw label either (see `CachedStepTarget.labelHash`'s comment),
+ * only a hash of it, so the caller must hand this in for display purposes.
+ */
+async function replayCachedStep(
+  browser: PenDesktopBrowser,
+  cached: CachedStep,
+  index: number | undefined,
+  snapshotId: string,
+  goal: string,
+  targetLabel: string | undefined
+): Promise<CacheReplayResult> {
+  const text = readTextFromRange(goal, cached.textRange);
+  const performArgs: {
+    snapshotId: string;
+    index?: number;
+    operation: PerformOperation;
+    text?: string;
+  } = {
+    snapshotId,
+    operation: cached.operation as PerformOperation,
+    text,
+  };
+  if (index != null) performArgs.index = index;
+
+  try {
+    const performed = await browser.perform(performArgs);
+    const rejected = resultError(performed);
+    if (rejected) return { ok: false, label: rejected };
+    const noEffectRaw = isNoEffectResult(performed);
+    const pageUpdate = noEffectRaw ? describePageUpdate(performed) : null;
+    if (noEffectRaw && !pageUpdate) return { ok: false, label: "(no effect)" };
+    const baseLabel = targetLabel ?? "";
+    const displayLabel =
+      cached.operation === "TYPE_TEXT" && text
+        ? `TYPE_TEXT "${truncateToChars(text, 60)}" into "${baseLabel}"`
+        : baseLabel;
+    return {
+      ok: true,
+      label: `${displayLabel}${describeSideEffects(performed)}${pageUpdate ? ` ${pageUpdate}` : ""}`,
+    };
+  } catch (err) {
+    return { ok: false, label: err instanceof Error ? err.message : "cache replay failed" };
+  }
+}
+
+/**
+ * Writes a just-landed perform step to the action cache, when it's safe to.
+ * `cacheKey` is `undefined` when the cache is disabled (kill switch) —
+ * checked once, at the call site, so this stays a plain no-op rather than
+ * re-deriving that. Looks the acted-on element up by its own `.index`
+ * field (`findElementByIndex`), NOT array position — the snapshot's
+ * element list is not guaranteed dense/positional. Refuses to cache:
+ * irreversible/sensitive-sounding target labels, typing into a
+ * password/OTP/card/IBAN-shaped field (`isUnsafeCachedTarget` — checks the
+ * matched element's own `isPassword` plus its label/type), and TYPE_TEXT/
+ * SELECT text that `looksSensitive` (a card-number/password-shaped
+ * string) OR does not occur verbatim in `goal` (`findTextRangeInGoal` —
+ * the cache never persists raw typed text, only an offset into the goal;
+ * when the text isn't literally present in the goal there is no offset to
+ * store, so the step is simply not cached) — see actionCache.ts's header
+ * comment for why a false-positive refusal here is always the safe
+ * direction.
+ */
+function maybeWriteStepCache(
+  cacheKey: string | undefined,
+  operation: PerformOperation,
+  index: number | undefined,
+  text: string | undefined,
+  goal: string,
+  elements: unknown[]
+): void {
+  if (!cacheKey || !isCacheableStepOperation(operation)) return;
+
+  let target: CachedStepTarget | undefined;
+  if (index != null) {
+    const el = findElementByIndex(elements, index) as
+      | { label?: unknown; tag?: unknown; role?: unknown; type?: unknown; isPassword?: unknown }
+      | undefined;
+    if (!el || typeof el.tag !== "string") return;
+    const label = typeof el.label === "string" ? el.label : "";
+    if (isUnsafeCachedTarget(operation, label, el.type, el.isPassword)) return;
+    target = {
+      labelHash: hashCachedLabel(label),
+      tag: el.tag,
+      ...(typeof el.role === "string" ? { role: el.role } : {}),
+    };
+  }
+
+  let textRange: [number, number] | undefined;
+  if (operation === "TYPE_TEXT" || operation === "SELECT") {
+    if (looksSensitive(text)) return;
+    textRange = text ? findTextRangeInGoal(goal, text) : undefined;
+    if (!textRange) return;
+  }
+
+  writeStepCacheEntry(cacheKey, goal, elements, {
+    operation,
+    target,
+    ...(textRange ? { textRange } : {}),
+  });
+}
+
 /**
  * Records a step and appends it to the running history in one go —
  * hard-truncating `label` to HISTORY_LABEL_MAX_CHARS first. This is the
@@ -592,6 +749,10 @@ export async function runBrowseTaskLoop(
    * means no WAIT has happened yet in the current streak. */
   let sameUrlWaitStreak = 0;
   let waitStreakUrl: string | null = null;
+  /** How many steps this run resolved from the local action cache instead of
+   * calling /api/browse/step — see the cache-replay block at the top of the
+   * loop below, and Transcript.cacheHits' doc comment. */
+  let cacheHits = 0;
   /** recordStep plus the no-progress check. Returns the transcript to
    * return when the loop has stalled, or null to carry on. */
   const note = (entry: TranscriptStep): Transcript | null => {
@@ -609,6 +770,7 @@ export async function runBrowseTaskLoop(
       url: lastUrl,
       title: lastTitle,
       reason: `no progress — ${MAX_CONSECUTIVE_UNPRODUCTIVE_STEPS} consecutive steps landed nothing (last: ${entry.operation}: ${entry.label})`,
+      cacheHits,
     };
   };
 
@@ -619,7 +781,7 @@ export async function runBrowseTaskLoop(
     // left can still burn most of a desktop command timeout before the
     // loop gets back here to notice.
     if (deadline - now() < STEP_DEADLINE_RESERVE_MS) {
-      return { status: "budget", steps, url: lastUrl, title: lastTitle, reason: "deadline exceeded" };
+      return { status: "budget", steps, url: lastUrl, title: lastTitle, reason: "deadline exceeded", cacheHits };
     }
 
     // Finding: reuse the pre-loop probe as this first iteration's snapshot
@@ -640,6 +802,107 @@ export async function runBrowseTaskLoop(
 
     lastUrl = snapshot.url;
     lastTitle = snapshot.title;
+
+    // Action cache (Stagehand-style EXACT-INPUT MEMO, see actionCache.ts's
+    // header comment): computed once per iteration and reused both for the
+    // lookup below and, further down, for writing a freshly-landed Jev/
+    // cascade/rule decision — `history` hasn't been mutated by THIS
+    // iteration yet, so the key reflects "exact goal + exact url + exact
+    // title + exact element set + full history so far + bucketed scroll",
+    // exactly what a future identical run would see at the same point (and
+    // never anything less exact than that — see the module header for why).
+    const stepCacheKey = isActionCacheEnabled()
+      ? buildStepCacheKey(goal, snapshot.url, snapshot.title, snapshot.elements, history, snapshot.scroll)
+      : undefined;
+    if (stepCacheKey) {
+      const cached = lookupStepCache(stepCacheKey, goal, snapshot.elements);
+      if (cached) {
+        const cachedIndex = cached.target ? resolveCachedIndex(snapshot.elements, cached.target) : undefined;
+        const resolvedElement =
+          cachedIndex != null
+            ? (findElementByIndex(snapshot.elements, cachedIndex) as
+                | { label?: unknown; type?: unknown; isPassword?: unknown }
+                | undefined)
+            : undefined;
+        // Replay-time re-check (on top of the write-time check
+        // maybeWriteStepCache already applied): the FRESH element a cached
+        // fingerprint resolves to today might not be the same kind of
+        // control it was when the entry was written (a page could reuse a
+        // label for a different, now-sensitive field). Treat that exactly
+        // like "no unique match" below — no attempt is made at all.
+        const unsafeAtReplay =
+          resolvedElement !== undefined &&
+          isUnsafeCachedTarget(
+            cached.operation,
+            typeof resolvedElement.label === "string" ? resolvedElement.label : undefined,
+            resolvedElement.type,
+            resolvedElement.isPassword
+          );
+        // A target-bearing entry with no unique match (the element is gone,
+        // or the page now has more than one candidate), or one that is now
+        // unsafe to replay, can't be attempted at all — self-heal
+        // immediately, same as an executed-but-failed replay below. A
+        // targetless entry (none was ever cached) always proceeds to the
+        // attempt.
+        if (!unsafeAtReplay && (!cached.target || cachedIndex !== undefined)) {
+          const replay = await replayCachedStep(
+            browser,
+            cached,
+            cachedIndex,
+            snapshot.snapshotId,
+            goal,
+            typeof resolvedElement?.label === "string" ? resolvedElement.label : undefined
+          );
+          if (replay.ok) {
+            recordStep(steps, history, {
+              operation: cached.operation,
+              label: replay.label,
+              ok: true,
+              index: cachedIndex,
+              via: "cache",
+            });
+            unproductive = 0;
+            lastLandedOperation = cached.operation;
+            if (cached.operation === "TYPE_TEXT" && cachedIndex != null) {
+              lastTypeText = { index: cachedIndex, text: readTextFromRange(goal, cached.textRange) ?? "" };
+            }
+            // Same reset a landed non-WAIT Jev/cascade/rule decision gets
+            // below (item 5, code review): a cache replay is just as real a
+            // step as one Jev itself decided, so a WAIT streak building up
+            // before it must not carry over as if nothing happened.
+            sameUrlWaitStreak = 0;
+            waitStreakUrl = null;
+            cacheHits++;
+            touchCacheEntry(stepCacheKey);
+            continue;
+          }
+          // The replay was actually DISPATCHED to `browser.perform` and
+          // failed (rejected, landed no effect, or threw/timed out) — the
+          // page may have changed underneath us as a side effect, so this
+          // is recorded as a failed step (Jev's next `history` needs to see
+          // it, and it counts toward the stall detector the same way any
+          // other rejected/no-effect action does) and the loop moves on to
+          // its NEXT iteration, which takes a FRESH snapshot before falling
+          // back to Jev rather than reusing this now-possibly-stale one.
+          deleteCacheEntry(stepCacheKey);
+          const stalled = note({
+            operation: cached.operation,
+            label: `cache replay failed: ${replay.label}`,
+            ok: false,
+            index: cachedIndex,
+            via: "cache",
+          });
+          if (stalled) return stalled;
+          continue;
+        }
+        // No attempt was made — either no unique fresh match (element gone/
+        // ambiguous) or the re-checked element is now unsafe to touch.
+        // Nothing was dispatched, so nothing may have changed: it's safe to
+        // just drop the entry and fall through to a normal Jev decision
+        // using the SAME snapshot this iteration already has.
+        deleteCacheEntry(stepCacheKey);
+      }
+    }
 
     let decision: StepResponse;
     try {
@@ -666,10 +929,10 @@ export async function runBrowseTaskLoop(
       ? `${decision.reason ?? ""}${decision.reason ? " " : ""}(via cascade)`
       : decision.reason;
     if (decision.outcome === "done") {
-      return { status: "done", steps, url: lastUrl, title: lastTitle, reason: terminalReason };
+      return { status: "done", steps, url: lastUrl, title: lastTitle, reason: terminalReason, cacheHits };
     }
     if (decision.outcome === "blocked") {
-      return { status: "blocked", steps, url: lastUrl, title: lastTitle, reason: terminalReason };
+      return { status: "blocked", steps, url: lastUrl, title: lastTitle, reason: terminalReason, cacheHits };
     }
     if (decision.outcome === "retry") {
       const stalled = note({
@@ -930,6 +1193,16 @@ export async function runBrowseTaskLoop(
       if (operation === "TYPE_TEXT" && !rejected && !noEffect && decision.index != null) {
         lastTypeText = { index: decision.index, text: decision.text ?? "" };
       }
+      // Action cache write: a step Jev/cascade/rule (never the cache itself
+      // — `via` is only ever "cascade"/"rule" here) just decided LANDED
+      // productively. Store it under the key computed at the top of this
+      // iteration so a future identical run can skip straight to replaying
+      // it. maybeWriteStepCache owns every "must not cache this" rule
+      // (WAIT — moot here, WAIT never reaches `perform` — password fields,
+      // card-number/password-shaped text).
+      if (!rejected && !noEffect) {
+        maybeWriteStepCache(stepCacheKey, operation, decision.index, decision.text, goal, snapshot.elements);
+      }
     } catch (err) {
       // A failing step (design doc §3/§4: "a failing step is recorded and
       // does not abort the whole task") is recorded in the transcript and
@@ -945,7 +1218,7 @@ export async function runBrowseTaskLoop(
     }
   }
 
-  return { status: "budget", steps, url: lastUrl, title: lastTitle, reason: "maxSteps reached" };
+  return { status: "budget", steps, url: lastUrl, title: lastTitle, reason: "maxSteps reached", cacheHits };
 }
 
 export const browseTask: ToolHandler = async (args) => {

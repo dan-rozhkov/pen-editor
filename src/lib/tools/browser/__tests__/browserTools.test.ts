@@ -15,6 +15,9 @@ import { setPenDesktop, stubBrowser, stubLocateFetch, type PenDesktopBrowser } f
 afterEach(() => {
   delete window.penDesktop;
   vi.unstubAllGlobals();
+  // The action cache (actionCache.ts) persists to real localStorage — clear
+  // it so a write in one test can't be replayed as a cache hit in another.
+  localStorage.clear();
 });
 
 describe("browse_open", () => {
@@ -405,6 +408,25 @@ describe("browse_act element targeting", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(receivedActArgs).toEqual({ action: "click", target: "Search" });
+  });
+
+  // browse_act's `element` targeting used to have its own local cache
+  // (mirroring browseTask.ts's step cache) — a code review removed it
+  // entirely, so `element` now always resolves through /api/browse/locate,
+  // even for an identical repeated call.
+  it("never skips /api/browse/locate for a repeated identical `element` call — no local cache", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ outcome: "found", index: 2, label: "Search", confidence: 0.9, model: "jev" }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    setPenDesktop(stubSnapshotBrowser({ act: async () => ({ matched: "Search" }) }));
+
+    await browseAct({ action: "click", element: "the search button in the header" });
+    await browseAct({ action: "click", element: "the search button in the header" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
 

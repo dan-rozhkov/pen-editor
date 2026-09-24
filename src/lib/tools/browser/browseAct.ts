@@ -32,6 +32,12 @@ import {
  * target for browse_task). `index`/`target` always win when given — this
  * only kicks in when neither is present, so an `element` hint alongside an
  * explicit index/target is silently ignored rather than raced against it.
+ *
+ * `element` resolution ALWAYS calls `/api/browse/locate` — a prior local
+ * cache here (mirroring browseTask.ts's step cache) was removed by a code
+ * review: it duplicated most of actionCache.ts's machinery for a
+ * lower-value, harder-to-verify-safe path, and browseTask.ts's step cache
+ * remains the one local-replay cache in this module.
  */
 
 /**

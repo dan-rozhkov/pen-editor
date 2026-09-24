@@ -1,4 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  ACTION_CACHE_KILL_SWITCH_KEY,
+  ACTION_CACHE_STORAGE_KEY,
+  buildStepCacheKey,
+  hashCachedLabel,
+  lookupStepCache,
+  writeStepCacheEntry,
+} from "@/lib/tools/browser/actionCache";
 import { browseTask, extractUrlFromGoal, runBrowseTaskLoop } from "@/lib/tools/browser/browseTask";
 import { BROWSER_NOT_AVAILABLE_ERROR, type SnapshotResult } from "@/lib/tools/browser/shared";
 import {
@@ -40,6 +48,9 @@ const HOVER_STEP = { outcome: "act", operation: "HOVER", index: 0, confidence: 0
 afterEach(() => {
   delete window.penDesktop;
   vi.unstubAllGlobals();
+  // The action cache (actionCache.ts) persists to real localStorage — clear
+  // it so a write in one test can't be replayed as a cache hit in another.
+  localStorage.clear();
 });
 
 describe("browse_task", () => {
@@ -1388,6 +1399,544 @@ describe("browse_task", () => {
 
     it("returns undefined when no URL is present", () => {
       expect(extractUrlFromGoal("just search this page")).toBeUndefined();
+    });
+  });
+
+  describe("action cache", () => {
+    // Builds a {labelHash, tag, role?} target the way the real write path
+    // does (actionCache.ts's `hashCachedLabel`) — a cache entry never
+    // persists a target's raw label, only its hash.
+    const cachedTarget = (label: string, tag: string, role?: string) => ({
+      labelHash: hashCachedLabel(label),
+      tag,
+      ...(role ? { role } : {}),
+    });
+
+    const cacheKeyFor = (goal: string, history: Array<{ operation: string; label: string }> = []) =>
+      buildStepCacheKey(goal, EXAMPLE_SNAPSHOT.url, EXAMPLE_SNAPSHOT.title, EXAMPLE_SNAPSHOT.elements, history);
+
+    it("replays a cached CLICK without ever calling /api/browse/step, tagged via:\"cache\"", async () => {
+      const key = cacheKeyFor("accept cookies");
+      writeStepCacheEntry(key, "accept cookies", EXAMPLE_SNAPSHOT.elements, {
+        operation: "CLICK",
+        target: cachedTarget("Accept all", "button"),
+      });
+
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+      const perform = vi.fn(async () => ({}));
+      const browser = stubBrowser({ perform });
+
+      const transcript = await runBrowseTaskLoop("accept cookies", 1, browser);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(perform).toHaveBeenCalledTimes(1);
+      expect(perform).toHaveBeenCalledWith({ snapshotId: "snap-1", operation: "CLICK", text: undefined, index: 0 });
+      expect(transcript.cacheHits).toBe(1);
+      expect(transcript.steps).toEqual([
+        { operation: "CLICK", label: "Accept all", ok: true, index: 0, via: "cache" },
+      ]);
+    });
+
+    it("replays a cached TYPE_TEXT by reading the text back out of the goal via textRange, and persists neither the typed text nor the target label", async () => {
+      const goal = 'search for "wireless headphones" under $50';
+      const searchSnapshot: SnapshotResult = {
+        url: "https://example.com",
+        title: "Example",
+        elements: [{ index: 0, tag: "input", label: "Search", ops: ["TYPE_TEXT"] }],
+        snapshotId: "snap-1",
+      };
+      const key = buildStepCacheKey(goal, searchSnapshot.url, searchSnapshot.title, searchSnapshot.elements, []);
+      const textStart = goal.indexOf("wireless headphones");
+      writeStepCacheEntry(key, goal, searchSnapshot.elements, {
+        operation: "TYPE_TEXT",
+        target: cachedTarget("Search", "input"),
+        textRange: [textStart, textStart + "wireless headphones".length],
+      });
+
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+      let receivedText: unknown;
+      const perform = vi.fn(async (args: { text?: string }) => {
+        receivedText = args.text;
+        return {};
+      });
+      const browser = stubBrowser({ perform, snapshot: async () => searchSnapshot });
+
+      await runBrowseTaskLoop(goal, 1, browser);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(receivedText).toBe("wireless headphones");
+      // Nothing about the actual localStorage-persisted entry carries the
+      // raw text — only the offset used to derive it above — and nothing
+      // carries the raw target label either, only its hash.
+      const raw = localStorage.getItem(ACTION_CACHE_STORAGE_KEY) ?? "";
+      expect(raw).not.toContain("wireless headphones");
+      expect(raw).not.toContain("Search");
+    });
+
+    it("self-heals when the cached element no longer resolves uniquely: deletes the entry and falls back to Jev without an extra snapshot", async () => {
+      const key = cacheKeyFor("accept cookies");
+      writeStepCacheEntry(key, "accept cookies", EXAMPLE_SNAPSHOT.elements, {
+        operation: "CLICK",
+        target: cachedTarget("Gone now", "button"),
+      });
+
+      stubFetchSequence([DONE]);
+      const perform = vi.fn(async () => ({}));
+      const snapshot = vi.fn(async () => EXAMPLE_SNAPSHOT);
+      const browser = stubBrowser({ perform, snapshot });
+
+      const transcript = await runBrowseTaskLoop("accept cookies", 12, browser);
+
+      expect(perform).not.toHaveBeenCalled(); // no unique match — never even attempted
+      expect(transcript.status).toBe("done");
+      expect(transcript.cacheHits).toBe(0);
+      expect(transcript.steps).toEqual([]); // the miss itself is not recorded as a step
+      expect(lookupStepCache(key, "accept cookies", EXAMPLE_SNAPSHOT.elements)).toBeUndefined();
+      // No attempt was dispatched, so nothing may have changed — the SAME
+      // snapshot this iteration already took is reused, not re-fetched.
+      expect(snapshot).toHaveBeenCalledTimes(1);
+    });
+
+    it("self-heals when the cached action lands with no effect: deletes the entry, RECORDS a failed step, and takes a FRESH snapshot before falling back to Jev", async () => {
+      const key = cacheKeyFor("accept cookies");
+      writeStepCacheEntry(key, "accept cookies", EXAMPLE_SNAPSHOT.elements, {
+        operation: "CLICK",
+        target: cachedTarget("Accept all", "button"),
+      });
+
+      stubFetchSequence([DONE]);
+      const perform = vi.fn(async () => ({ changed: false }));
+      const snapshot = vi.fn(async () => EXAMPLE_SNAPSHOT);
+      const browser = stubBrowser({ perform, snapshot });
+
+      const transcript = await runBrowseTaskLoop("accept cookies", 12, browser);
+
+      expect(perform).toHaveBeenCalledTimes(1); // the replay attempt itself did run
+      expect(transcript.status).toBe("done");
+      expect(transcript.steps).toEqual([
+        { operation: "CLICK", label: "cache replay failed: (no effect)", ok: false, index: 0, via: "cache" },
+      ]);
+      expect(lookupStepCache(key, "accept cookies", EXAMPLE_SNAPSHOT.elements)).toBeUndefined();
+      // The dispatched-but-failed replay may have altered the page — a
+      // fresh snapshot is taken (this iteration's own + one more for the
+      // next loop iteration) rather than trusting the stale one.
+      expect(snapshot).toHaveBeenCalledTimes(2);
+    });
+
+    it("self-heals when the cached action is rejected by the bridge, and records why", async () => {
+      const key = cacheKeyFor("accept cookies");
+      writeStepCacheEntry(key, "accept cookies", EXAMPLE_SNAPSHOT.elements, {
+        operation: "CLICK",
+        target: cachedTarget("Accept all", "button"),
+      });
+
+      stubFetchSequence([DONE]);
+      const perform = vi.fn(async () => ({ error: "target is gone or occluded" }));
+      const browser = stubBrowser({ perform });
+
+      const transcript = await runBrowseTaskLoop("accept cookies", 12, browser);
+
+      expect(transcript.status).toBe("done");
+      expect(transcript.steps).toEqual([
+        {
+          operation: "CLICK",
+          label: "cache replay failed: target is gone or occluded",
+          ok: false,
+          index: 0,
+          via: "cache",
+        },
+      ]);
+      expect(lookupStepCache(key, "accept cookies", EXAMPLE_SNAPSHOT.elements)).toBeUndefined();
+    });
+
+    it("a failed cache replay is visible to the NEXT /api/browse/step call's history", async () => {
+      const key = cacheKeyFor("accept cookies");
+      writeStepCacheEntry(key, "accept cookies", EXAMPLE_SNAPSHOT.elements, {
+        operation: "CLICK",
+        target: cachedTarget("Accept all", "button"),
+      });
+
+      // The cache replay attempt itself never calls fetch — the first (and,
+      // since Jev then returns "done", only) /api/browse/step call is the
+      // one whose body must already carry the failed replay in `history`.
+      let requestBody: unknown;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: RequestInit) => {
+          requestBody = JSON.parse(init.body as string);
+          return { ok: true, json: async () => DONE };
+        })
+      );
+      const perform = vi.fn(async () => ({ error: "target is gone or occluded" }));
+      const browser = stubBrowser({ perform });
+
+      await runBrowseTaskLoop("accept cookies", 12, browser);
+
+      expect((requestBody as { history: unknown[] }).history).toEqual([
+        { operation: "CLICK", label: "cache replay failed: target is gone or occluded", ok: false },
+      ]);
+    });
+
+    it("writes a landed Jev-decided CLICK to the cache, replayable on a later identical run", async () => {
+      stubFetchSequence([CLICK_STEP, DONE]);
+      const perform = vi.fn(async () => ({}));
+      const browser = stubBrowser({ perform });
+
+      await runBrowseTaskLoop("accept cookies", 12, browser);
+
+      const key = cacheKeyFor("accept cookies");
+      expect(lookupStepCache(key, "accept cookies", EXAMPLE_SNAPSHOT.elements)).toEqual({
+        operation: "CLICK",
+        target: cachedTarget("Accept all", "button"),
+      });
+    });
+
+    it("never writes a CLICK on an irreversible/sensitive-sounding target label", async () => {
+      const checkoutSnapshot: SnapshotResult = {
+        url: "https://example.com",
+        title: "Cart",
+        elements: [{ index: 0, tag: "button", label: "Place order", ops: ["CLICK"] }],
+        snapshotId: "snap-1",
+      };
+      stubFetchSequence([
+        { outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" },
+        DONE,
+      ]);
+      const perform = vi.fn(async () => ({}));
+      const browser = stubBrowser({ perform, snapshot: async () => checkoutSnapshot });
+
+      await runBrowseTaskLoop("place the order", 12, browser);
+
+      const key = buildStepCacheKey(
+        "place the order",
+        checkoutSnapshot.url,
+        checkoutSnapshot.title,
+        checkoutSnapshot.elements,
+        []
+      );
+      expect(lookupStepCache(key, "place the order", checkoutSnapshot.elements)).toBeUndefined();
+    });
+
+    it("never writes TYPE_TEXT into a password field to the cache", async () => {
+      const passwordSnapshot: SnapshotResult = {
+        url: "https://example.com",
+        title: "Login",
+        elements: [{ index: 0, tag: "input", label: "Password", isPassword: true, ops: ["TYPE_TEXT"] }],
+        snapshotId: "snap-1",
+      };
+      stubFetchSequence([
+        { outcome: "act", operation: "TYPE_TEXT", index: 0, text: "hunter2", confidence: 0.9, model: "jev" },
+        DONE,
+      ]);
+      const perform = vi.fn(async () => ({}));
+      const browser = stubBrowser({ perform, snapshot: async () => passwordSnapshot });
+
+      await runBrowseTaskLoop("log in with password hunter2", 12, browser);
+
+      const key = buildStepCacheKey(
+        "log in with password hunter2",
+        passwordSnapshot.url,
+        passwordSnapshot.title,
+        passwordSnapshot.elements,
+        []
+      );
+      expect(lookupStepCache(key, "log in with password hunter2", passwordSnapshot.elements)).toBeUndefined();
+      const raw = localStorage.getItem(ACTION_CACHE_STORAGE_KEY) ?? "";
+      expect(raw).not.toContain("hunter2");
+    });
+
+    it("never writes TYPE_TEXT/SELECT into an OTP/verification-code field even when it isn't flagged isPassword", async () => {
+      const otpSnapshot: SnapshotResult = {
+        url: "https://example.com",
+        title: "Verify",
+        elements: [{ index: 0, tag: "input", label: "Verification code", ops: ["TYPE_TEXT"] }],
+        snapshotId: "snap-1",
+      };
+      stubFetchSequence([
+        { outcome: "act", operation: "TYPE_TEXT", index: 0, text: "123456", confidence: 0.9, model: "jev" },
+        DONE,
+      ]);
+      const perform = vi.fn(async () => ({}));
+      const browser = stubBrowser({ perform, snapshot: async () => otpSnapshot });
+
+      await runBrowseTaskLoop("enter code 123456", 12, browser);
+
+      const key = buildStepCacheKey(
+        "enter code 123456",
+        otpSnapshot.url,
+        otpSnapshot.title,
+        otpSnapshot.elements,
+        []
+      );
+      expect(lookupStepCache(key, "enter code 123456", otpSnapshot.elements)).toBeUndefined();
+    });
+
+    it("never writes card-number-shaped TYPE_TEXT text to the cache", async () => {
+      const fieldSnapshot: SnapshotResult = {
+        url: "https://example.com",
+        title: "Checkout",
+        elements: [{ index: 0, tag: "input", label: "Promo code", ops: ["TYPE_TEXT"] }],
+        snapshotId: "snap-1",
+      };
+      stubFetchSequence([
+        {
+          outcome: "act",
+          operation: "TYPE_TEXT",
+          index: 0,
+          text: "4111 1111 1111 1111",
+          confidence: 0.9,
+          model: "jev",
+        },
+        DONE,
+      ]);
+      const perform = vi.fn(async () => ({}));
+      const browser = stubBrowser({ perform, snapshot: async () => fieldSnapshot });
+
+      await runBrowseTaskLoop("check out with card 4111 1111 1111 1111", 12, browser);
+
+      const key = buildStepCacheKey(
+        "check out with card 4111 1111 1111 1111",
+        fieldSnapshot.url,
+        fieldSnapshot.title,
+        fieldSnapshot.elements,
+        []
+      );
+      expect(
+        lookupStepCache(key, "check out with card 4111 1111 1111 1111", fieldSnapshot.elements)
+      ).toBeUndefined();
+    });
+
+    it("never writes a TYPE_TEXT step whose text does not occur verbatim in the goal", async () => {
+      const searchSnapshot: SnapshotResult = {
+        url: "https://example.com",
+        title: "Shop",
+        elements: [{ index: 0, tag: "input", label: "Search", ops: ["TYPE_TEXT"] }],
+        snapshotId: "snap-1",
+      };
+      // Jev's chosen text ("wireless earbuds") is a paraphrase, not a
+      // substring of the goal itself — nothing to store an offset into.
+      stubFetchSequence([
+        {
+          outcome: "act",
+          operation: "TYPE_TEXT",
+          index: 0,
+          text: "wireless earbuds",
+          confidence: 0.9,
+          model: "jev",
+        },
+        DONE,
+      ]);
+      const perform = vi.fn(async () => ({}));
+      const browser = stubBrowser({ perform, snapshot: async () => searchSnapshot });
+
+      await runBrowseTaskLoop("find me some cheap earphones", 12, browser);
+
+      const key = buildStepCacheKey(
+        "find me some cheap earphones",
+        searchSnapshot.url,
+        searchSnapshot.title,
+        searchSnapshot.elements,
+        []
+      );
+      expect(lookupStepCache(key, "find me some cheap earphones", searchSnapshot.elements)).toBeUndefined();
+    });
+
+    it("REPLAY-time re-check: refuses a cached TYPE_TEXT whose fresh resolved element is now a password field, even though the fingerprint still matches", async () => {
+      // A field with the SAME label/tag the entry was written against, but
+      // now flagged isPassword — simulates the page having changed what
+      // that label/tag combination actually is.
+      const nowPasswordSnapshot: SnapshotResult = {
+        url: "https://example.com",
+        title: "Login",
+        elements: [{ index: 0, tag: "input", label: "Field", isPassword: true, ops: ["TYPE_TEXT"] }],
+        snapshotId: "snap-1",
+      };
+      const key = buildStepCacheKey(
+        "log in",
+        nowPasswordSnapshot.url,
+        nowPasswordSnapshot.title,
+        nowPasswordSnapshot.elements,
+        []
+      );
+      writeStepCacheEntry(key, "log in", nowPasswordSnapshot.elements, {
+        operation: "TYPE_TEXT",
+        target: cachedTarget("Field", "input"),
+        textRange: [0, 6],
+      });
+      stubFetchSequence([DONE]);
+      const perform = vi.fn(async () => ({}));
+      const browser = stubBrowser({ perform, snapshot: async () => nowPasswordSnapshot });
+
+      const transcript = await runBrowseTaskLoop("log in", 12, browser);
+
+      expect(perform).not.toHaveBeenCalled(); // treated as a miss, never attempted
+      expect(transcript.status).toBe("done");
+      expect(lookupStepCache(key, "log in", nowPasswordSnapshot.elements)).toBeUndefined();
+    });
+
+    it("REPLAY-time re-check: refuses a cached CLICK whose target label is irreversible-sounding, even though the fingerprint still matches", async () => {
+      // A hand-written entry (bypassing the write-time guard entirely) —
+      // stands in for an entry written before this guard existed, or one
+      // written under a since-relaxed rule. The fresh snapshot's element
+      // matches it uniquely by label+tag, so this exercises the REPLAY-time
+      // re-check specifically, not the write-time one.
+      const dangerousSnapshot: SnapshotResult = {
+        url: "https://example.com",
+        title: "Cart",
+        elements: [{ index: 0, tag: "button", label: "Delete", ops: ["CLICK"] }],
+        snapshotId: "snap-1",
+      };
+      const key = buildStepCacheKey(
+        "clear the cart",
+        dangerousSnapshot.url,
+        dangerousSnapshot.title,
+        dangerousSnapshot.elements,
+        []
+      );
+      writeStepCacheEntry(key, "clear the cart", dangerousSnapshot.elements, {
+        operation: "CLICK",
+        target: cachedTarget("Delete", "button"),
+      });
+      const perform = vi.fn(async () => ({}));
+      stubFetchSequence([DONE]);
+      const browser = stubBrowser({ perform, snapshot: async () => dangerousSnapshot });
+
+      const transcript = await runBrowseTaskLoop("clear the cart", 12, browser);
+
+      expect(perform).not.toHaveBeenCalled(); // treated as a miss, never attempted
+      expect(transcript.cacheHits).toBe(0);
+      expect(lookupStepCache(key, "clear the cart", dangerousSnapshot.elements)).toBeUndefined();
+    });
+
+    it("never replays or writes WAIT", async () => {
+      stubFetchSequence([{ outcome: "act", operation: "WAIT", confidence: 0.9, model: "jev" }, DONE]);
+      const sleep = vi.fn(async () => {});
+      const browser = stubBrowser({});
+
+      const transcript = await runBrowseTaskLoop("wait for the page to load", 12, browser, undefined, sleep);
+
+      const key = cacheKeyFor("wait for the page to load");
+      expect(lookupStepCache(key, "wait for the page to load", EXAMPLE_SNAPSHOT.elements)).toBeUndefined();
+      expect(transcript.cacheHits).toBe(0);
+    });
+
+    it("does not consult or write the cache when the kill switch is set", async () => {
+      const key = cacheKeyFor("accept cookies");
+      writeStepCacheEntry(key, "accept cookies", EXAMPLE_SNAPSHOT.elements, {
+        operation: "CLICK",
+        target: cachedTarget("Accept all", "button"),
+      });
+      localStorage.setItem(ACTION_CACHE_KILL_SWITCH_KEY, "off");
+
+      stubFetchSequence([CLICK_STEP, DONE]);
+      const perform = vi.fn(async () => ({}));
+      const browser = stubBrowser({ perform });
+
+      const transcript = await runBrowseTaskLoop("accept cookies", 12, browser);
+
+      // The pre-existing entry was never consulted (the loop went through
+      // the ordinary Jev decision instead), and no cacheHits were recorded.
+      expect(transcript.status).toBe("done");
+      expect(transcript.cacheHits).toBe(0);
+      expect(transcript.steps[0]).not.toHaveProperty("via");
+    });
+
+    it("no fixed point: the same page+goal never re-hits a stale entry, since history grows on every step", async () => {
+      // Regression for the code-review finding: the OLD key only hashed
+      // goal+host+path-pattern+last-3-history-entries, so a target that
+      // kept landing "no effect" against the SAME page could re-derive the
+      // exact same key forever. The new key folds in the FULL history, so
+      // even a run that keeps failing against the same page/goal mints a
+      // new key every single step.
+      const key = cacheKeyFor("accept cookies");
+      writeStepCacheEntry(key, "accept cookies", EXAMPLE_SNAPSHOT.elements, {
+        operation: "CLICK",
+        target: cachedTarget("Accept all", "button"),
+      });
+
+      stubFetchSequence([DONE]);
+      // Every replay attempt fails the same way — if the key ever repeated,
+      // this would loop forever re-hitting (and re-failing) the cache.
+      const perform = vi.fn(async () => ({ error: "still gone" }));
+      const browser = stubBrowser({ perform });
+
+      const transcript = await runBrowseTaskLoop("accept cookies", 12, browser);
+
+      // Exactly ONE cache attempt: after the first failed replay, the key
+      // for the next iteration's (now longer) history no longer matches
+      // anything in the store, so it falls straight through to Jev.
+      expect(perform).toHaveBeenCalledTimes(1);
+      expect(transcript.status).toBe("done");
+    });
+
+    // Code review item 5: a cache replay is just as real a "something
+    // landed" step as an ordinary Jev/cascade/rule decision — the same-url
+    // WAIT streak must reset after one, not just after a non-cached
+    // decision (browseTask.ts's existing `sameUrlWaitStreak = 0` reset for
+    // a landed non-WAIT decision).
+    it("resets the same-url WAIT streak after a successful cache replay, same as any other non-WAIT decision", async () => {
+      const FIXED_URL_SNAPSHOT: SnapshotResult = {
+        url: "https://example.com",
+        title: "Example",
+        elements: [{ index: 0, tag: "button", label: "Accept all", ops: ["CLICK"] }],
+        snapshotId: "snap-fixed",
+      };
+      const goal = "wait around a cached click";
+
+      // The cache entry is written for the EXACT state after two landed
+      // WAITs — the history a real run would have reached by step 3.
+      const historyAfterTwoWaits = [
+        { operation: "WAIT", label: "waiting for the page to settle" },
+        { operation: "WAIT", label: "waiting for the page to settle" },
+      ];
+      const key = buildStepCacheKey(
+        goal,
+        FIXED_URL_SNAPSHOT.url,
+        FIXED_URL_SNAPSHOT.title,
+        FIXED_URL_SNAPSHOT.elements,
+        historyAfterTwoWaits
+      );
+      writeStepCacheEntry(key, goal, FIXED_URL_SNAPSHOT.elements, {
+        operation: "CLICK",
+        target: cachedTarget("Accept all", "button"),
+      });
+
+      // Only 5 real /api/browse/step calls: step 3 (the CLICK) is served
+      // entirely from the cache and never calls fetch at all.
+      stubFetchSequence([
+        { outcome: "act", operation: "WAIT", confidence: 0.5, model: "jev" },
+        { outcome: "act", operation: "WAIT", confidence: 0.5, model: "jev" },
+        { outcome: "act", operation: "WAIT", confidence: 0.5, model: "jev" },
+        { outcome: "act", operation: "WAIT", confidence: 0.5, model: "jev" },
+        { outcome: "act", operation: "WAIT", confidence: 0.5, model: "jev" },
+      ]);
+
+      const snapshot = vi.fn(async () => FIXED_URL_SNAPSHOT);
+      const sleep = vi.fn(async () => {});
+      const perform = vi.fn(async () => ({}));
+      const browser = stubBrowser({ snapshot, perform });
+
+      const transcript = await runBrowseTaskLoop(goal, 6, browser, undefined, sleep);
+
+      // If the reset did NOT happen, the streak from the first two WAITs
+      // would carry straight through the cache replay and the very next
+      // WAIT (step 4) would already be the 3rd of an unbroken streak,
+      // stalling the loop long before 6 steps. Reaching all 6 steps with 4
+      // total sleeps (2 before the cache hit, 2 fresh ones after it) is
+      // only possible if the streak was reset.
+      expect(transcript.status).toBe("budget");
+      expect(sleep).toHaveBeenCalledTimes(4);
+      expect(transcript.cacheHits).toBe(1);
+      expect(transcript.steps.map((step) => `${step.operation}:${step.ok}`)).toEqual([
+        "WAIT:true",
+        "WAIT:true",
+        "CLICK:true",
+        "WAIT:true",
+        "WAIT:true",
+        "WAIT:false",
+      ]);
     });
   });
 });

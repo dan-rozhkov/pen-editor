@@ -99,6 +99,25 @@ export interface SnapshotResult {
  */
 export type PenDesktopBrowser = NonNullable<NonNullable<typeof window.penDesktop>["browser"]>;
 
+/**
+ * Finds a snapshot element by its own `index` field, NOT its position in
+ * the array — the element list is not guaranteed dense/positional (e.g.
+ * after `filterElementsForBackend`-style upstream filtering). Used by
+ * browseTask.ts's action-cache write AND replay paths, which need to
+ * resolve "the element a cached fingerprint points at" or "the element
+ * that was just acted on" back out of a snapshot by index, not by array
+ * offset (finding: an `elements[index]` array-position lookup would
+ * silently resolve the wrong element once anything upstream filtered the
+ * list). (browse_act's own `element` targeting used to have a matching
+ * local cache and write path here too — removed by a code review, see
+ * browseAct.ts's module comment — so this is now browseTask.ts-only.)
+ */
+export function findElementByIndex(elements: unknown[], index: number): Record<string, unknown> | undefined {
+  return elements.find(
+    (el) => el && typeof el === "object" && (el as { index?: unknown }).index === index
+  ) as Record<string, unknown> | undefined;
+}
+
 export function isSnapshotResult(value: unknown): value is SnapshotResult {
   return (
     !!value &&
