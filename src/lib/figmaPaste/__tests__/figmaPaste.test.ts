@@ -49,6 +49,62 @@ function onCanvas(change: FigNodeChange, position = '!'): FigNodeChange {
   return { ...change, parentIndex: { guid: guid(1, 0), position } }
 }
 
+/** A RECTANGLE with a single IMAGE fill — the shape shared by every image-fill/blob-offset test below. */
+function imageFillRectangle(overrides: {
+  name?: string
+  size?: { x: number; y: number }
+  dataBlob?: number
+  imageName?: string
+} = {}): FigNodeChange {
+  const { name, size = { x: 80, y: 60 }, dataBlob, imageName = 'photo.png' } = overrides
+  return onCanvas({
+    guid: guid(2),
+    type: 'RECTANGLE',
+    ...(name ? { name } : {}),
+    size,
+    transform: identityTransform(),
+    fillPaints: [
+      {
+        type: 'IMAGE',
+        visible: true,
+        opacity: 1,
+        image: {
+          hash: new Uint8Array([1, 2, 3, 4]),
+          name: imageName,
+          ...(dataBlob !== undefined ? { dataBlob } : {}),
+        },
+        imageScaleMode: 'FILL',
+      },
+    ],
+  })
+}
+
+/** A red→blue linear-gradient paint, the shape shared by the gradient fill/stroke tests below. */
+function linearGradientPaint(
+  stops: Array<{ color: { r: number; g: number; b: number; a: number }; position: number }> = [
+    { color: { r: 1, g: 0, b: 0, a: 1 }, position: 0 },
+    { color: { r: 0, g: 0, b: 1, a: 1 }, position: 1 },
+  ],
+) {
+  return {
+    type: 'GRADIENT_LINEAR' as const,
+    visible: true,
+    opacity: 1,
+    transform: identityTransform(),
+    stops,
+  }
+}
+
+/** The DROP_SHADOW effect shared by several effect-stack tests below. */
+const DROP_SHADOW = {
+  type: 'DROP_SHADOW' as const,
+  visible: true,
+  color: { r: 0, g: 0, b: 0, a: 0.25 },
+  offset: { x: 0, y: 4 },
+  radius: 8,
+  spread: 2,
+}
+
 describe('isFigmaClipboardHtml', () => {
   it('detects Figma clipboard markers', async () => {
     const html = clipboardWith([])
@@ -377,27 +433,7 @@ describe('convertFigmaClipboardHtml', () => {
   })
 
   it('embeds image fills from clipboard blobs as data URLs', async () => {
-    const html = clipboardWith(
-      [
-        onCanvas({
-          guid: guid(2),
-          type: 'RECTANGLE',
-          name: 'Photo',
-          size: { x: 80, y: 60 },
-          transform: identityTransform(),
-          fillPaints: [
-            {
-              type: 'IMAGE',
-              visible: true,
-              opacity: 1,
-              image: { hash: new Uint8Array([1, 2, 3, 4]), name: 'photo.png', dataBlob: 0 },
-              imageScaleMode: 'FILL',
-            },
-          ],
-        }),
-      ],
-      [PNG_BYTES],
-    )
+    const html = clipboardWith([imageFillRectangle({ name: 'Photo', dataBlob: 0 })], [PNG_BYTES])
 
     const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
     expect(rect.imageFill).toBeDefined()
@@ -410,29 +446,7 @@ describe('convertFigmaClipboardHtml', () => {
     // table, so dataBlob is an ABSOLUTE index that must be offset by
     // blobBaseIndex. Here the image's bytes are the only blob shipped
     // (blobs[0]) but its absolute index is 7 (blobBaseIndex 7 + local 0).
-    const html = clipboardWith(
-      [
-        onCanvas({
-          guid: guid(2),
-          type: 'RECTANGLE',
-          name: 'Photo',
-          size: { x: 80, y: 60 },
-          transform: identityTransform(),
-          fillPaints: [
-            {
-              type: 'IMAGE',
-              visible: true,
-              opacity: 1,
-              image: { hash: new Uint8Array([1, 2, 3, 4]), name: 'photo.png', dataBlob: 7 },
-              imageScaleMode: 'FILL',
-            },
-          ],
-        }),
-      ],
-      [PNG_BYTES],
-      [],
-      7,
-    )
+    const html = clipboardWith([imageFillRectangle({ name: 'Photo', dataBlob: 7 })], [PNG_BYTES], [], 7)
 
     const rect = (await convertFigmaClipboardHtml(html))!.nodes[0]
     expect(rect.imageFill).toBeDefined()
@@ -467,23 +481,7 @@ describe('convertFigmaClipboardHtml', () => {
   })
 
   it('warns when image bytes are not embedded', async () => {
-    const html = clipboardWith([
-      onCanvas({
-        guid: guid(2),
-        type: 'RECTANGLE',
-        size: { x: 80, y: 60 },
-        transform: identityTransform(),
-        fillPaints: [
-          {
-            type: 'IMAGE',
-            visible: true,
-            opacity: 1,
-            image: { hash: new Uint8Array([1, 2, 3, 4]), name: 'remote.png' },
-            imageScaleMode: 'FILL',
-          },
-        ],
-      }),
-    ])
+    const html = clipboardWith([imageFillRectangle({ imageName: 'remote.png' })])
 
     const result = (await convertFigmaClipboardHtml(html))!
     expect(result.nodes[0].imageFill).toBeUndefined()
@@ -493,26 +491,7 @@ describe('convertFigmaClipboardHtml', () => {
   })
 
   it('reports unresolvedImageCount 0 when every image fill embeds', async () => {
-    const html = clipboardWith(
-      [
-        onCanvas({
-          guid: guid(2),
-          type: 'RECTANGLE',
-          size: { x: 80, y: 60 },
-          transform: identityTransform(),
-          fillPaints: [
-            {
-              type: 'IMAGE',
-              visible: true,
-              opacity: 1,
-              image: { hash: new Uint8Array([1, 2, 3, 4]), name: 'photo.png', dataBlob: 0 },
-              imageScaleMode: 'FILL',
-            },
-          ],
-        }),
-      ],
-      [PNG_BYTES],
-    )
+    const html = clipboardWith([imageFillRectangle({ dataBlob: 0 })], [PNG_BYTES])
 
     const result = (await convertFigmaClipboardHtml(html))!
     expect(result.unresolvedImageCount).toBe(0)
@@ -815,16 +794,7 @@ describe('convertFigmaClipboardHtml', () => {
         type: 'RECTANGLE',
         size: { x: 10, y: 10 },
         transform: identityTransform(),
-        effects: [
-          {
-            type: 'DROP_SHADOW',
-            visible: true,
-            color: { r: 0, g: 0, b: 0, a: 0.25 },
-            offset: { x: 0, y: 4 },
-            radius: 8,
-            spread: 2,
-          },
-        ],
+        effects: [DROP_SHADOW],
       }),
     ])
 
@@ -846,16 +816,7 @@ describe('convertFigmaClipboardHtml', () => {
         type: 'FRAME',
         size: { x: 100, y: 100 },
         transform: identityTransform(),
-        effects: [
-          {
-            type: 'DROP_SHADOW',
-            visible: true,
-            color: { r: 0, g: 0, b: 0, a: 0.25 },
-            offset: { x: 0, y: 4 },
-            radius: 8,
-            spread: 2,
-          },
-        ],
+        effects: [DROP_SHADOW],
       }),
     ])
 
@@ -902,16 +863,7 @@ describe('convertFigmaClipboardHtml', () => {
         transform: identityTransform(),
         fillPaints: [
           solidPaint(1, 1, 1), // bottom solid
-          {
-            type: 'GRADIENT_LINEAR',
-            visible: true,
-            opacity: 1,
-            transform: identityTransform(),
-            stops: [
-              { color: { r: 1, g: 0, b: 0, a: 1 }, position: 0 },
-              { color: { r: 0, g: 0, b: 1, a: 1 }, position: 1 },
-            ],
-          },
+          linearGradientPaint(),
         ],
       }),
     ])
@@ -951,18 +903,7 @@ describe('convertFigmaClipboardHtml', () => {
         type: 'RECTANGLE',
         size: { x: 400, y: 200 },
         transform: identityTransform(),
-        strokePaints: [
-          {
-            type: 'GRADIENT_LINEAR',
-            visible: true,
-            opacity: 1,
-            transform: identityTransform(),
-            stops: [
-              { color: { r: 1, g: 0, b: 0, a: 1 }, position: 0 },
-              { color: { r: 0, g: 0, b: 1, a: 1 }, position: 1 },
-            ],
-          },
-        ],
+        strokePaints: [linearGradientPaint()],
         strokeWeight: 60,
         strokeAlign: 'OUTSIDE',
       }),
@@ -1034,18 +975,7 @@ describe('convertFigmaClipboardHtml', () => {
         type: 'RECTANGLE',
         size: { x: 400, y: 200 },
         transform: identityTransform(),
-        strokePaints: [
-          {
-            type: 'GRADIENT_LINEAR',
-            visible: true,
-            opacity: 1,
-            transform: identityTransform(),
-            stops: [
-              { color: { r: 1, g: 0, b: 0, a: 1 }, position: 0 },
-              { color: { r: 0, g: 0, b: 1, a: 1 }, position: 1 },
-            ],
-          },
-        ],
+        strokePaints: [linearGradientPaint()],
         strokeWeight: 60,
         borderBottomWeight: 1,
         borderStrokeWeightsIndependent: true,
@@ -1127,10 +1057,7 @@ describe('convertFigmaClipboardHtml', () => {
         type: 'RECTANGLE',
         size: { x: 10, y: 10 },
         transform: identityTransform(),
-        effects: [
-          { type: 'DROP_SHADOW', visible: true, color: { r: 0, g: 0, b: 0, a: 0.25 }, offset: { x: 0, y: 4 }, radius: 8, spread: 2 },
-          { type: 'FOREGROUND_BLUR', visible: true, radius: 6 },
-        ],
+        effects: [DROP_SHADOW, { type: 'FOREGROUND_BLUR', visible: true, radius: 6 }],
       }),
     ])
 
@@ -1183,7 +1110,7 @@ describe('convertFigmaClipboardHtml', () => {
         size: { x: 10, y: 10 },
         transform: identityTransform(),
         effects: [
-          { type: 'DROP_SHADOW', visible: true, color: { r: 0, g: 0, b: 0, a: 0.25 }, offset: { x: 0, y: 4 }, radius: 8, spread: 2 },
+          DROP_SHADOW,
           { type: 'INNER_SHADOW', visible: true, color: { r: 1, g: 1, b: 1, a: 0.5 }, offset: { x: 0, y: 1 }, radius: 2, spread: 0 },
         ],
       }),
@@ -1218,16 +1145,7 @@ describe('convertFigmaClipboardHtml', () => {
         // `Paint.styleId` would be observable here if we ever started
         // resolving one from the clipboard.
         fillPaints: [solidPaint(1, 0, 0), solidPaint(0, 0, 1, 1, 0.5)],
-        effects: [
-          {
-            type: 'DROP_SHADOW',
-            visible: true,
-            color: { r: 0, g: 0, b: 0, a: 0.25 },
-            offset: { x: 0, y: 4 },
-            radius: 8,
-            spread: 2,
-          },
-        ],
+        effects: [DROP_SHADOW],
       }),
     ])
 

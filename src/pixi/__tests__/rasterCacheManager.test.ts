@@ -49,6 +49,53 @@ function diffFor(ids: string[]): SceneDiff {
   return { changedIds: new Set(ids), addedIds: [], removedIds: [], updatedIds: [...ids] };
 }
 
+type RasterCacheManagerDeps = Parameters<typeof createRasterCacheManager>[0];
+
+// Builds a manager against a caller-supplied `state` (unlike `setup()` below,
+// which derives its own minimal state from a container map) — used by tests
+// that need extra nodesById/childrenById entries, a mutable scale, or a
+// hasCulledContent/getPixelRatio override alongside a fixed f1 container.
+function buildManager(
+  state: SceneState,
+  containers: Record<string, ReturnType<typeof makeContainer>>,
+  extra: Partial<Pick<RasterCacheManagerDeps, "getScale" | "getPixelRatio" | "hasCulledContent">> = {},
+) {
+  const getState = vi.fn<() => SceneState>(() => state);
+  const getScale = vi.fn<() => number>(extra.getScale ?? (() => 1));
+  const getContainer = vi.fn((id: string) => containers[id] ?? null);
+  const manager = createRasterCacheManager({
+    getContainer,
+    getState,
+    getScale,
+    ...(extra.getPixelRatio ? { getPixelRatio: extra.getPixelRatio } : {}),
+    ...(extra.hasCulledContent ? { hasCulledContent: extra.hasCulledContent } : {}),
+  });
+  return { manager, getState, getScale, getContainer };
+}
+
+// Runs a flush + the decision-round timers for f1 (defaulting to the full
+// QUIET_MS + two 600ms rounds so a fresh mutation ends up cached) — the
+// mechanical half of "cache f1, then assert against it" shared by several
+// tests below; the assertion itself stays in each test body.
+function primeCache(manager: ReturnType<typeof createRasterCacheManager>, state: SceneState, ms = 600 + QUIET_MS + 600): void {
+  manager.onFlushStart(diffFor(["f1"]), state);
+  vi.advanceTimersByTime(ms);
+}
+
+// Adds a shadow-carrying rect child ("n1") under "f1" — the shape shared by
+// the boundsArea-overhang tests below, which only vary the shadow's geometry.
+function addOverhangShadowChild(
+  state: SceneState,
+  offset: { x: number; y: number },
+  blur: number,
+  spread = 0,
+): void {
+  const shadow: ShadowEffect = { type: "shadow", shadowType: "outer", color: "#00000080", offset, blur, spread };
+  state.nodesById["n1"] = { type: "rect", width: 10, height: 10, effects: [shadow] } as unknown as SceneState["nodesById"][string];
+  state.parentById["n1"] = "f1";
+  state.childrenById["f1"] = ["n1"];
+}
+
 describe("createRasterCacheManager", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -110,13 +157,9 @@ describe("createRasterCacheManager", () => {
     const state = makeState(["f1"]);
     state.nodesById["n1"] = { type: "rect", width: 10, height: 10 } as unknown as SceneState["nodesById"][string];
     state.parentById["n1"] = "f1";
-    const getState = vi.fn<() => SceneState>(() => state);
-    const getScale = vi.fn<() => number>(() => 1);
-    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
-    const manager = createRasterCacheManager({ getContainer, getState, getScale });
+    const { manager } = buildManager(state, { f1: c1 });
 
-    manager.onFlushStart(diffFor(["f1"]), state);
-    vi.advanceTimersByTime(600); // caches f1
+    primeCache(manager, state, 600); // caches f1
     expect(c1.cacheAsTexture).toHaveBeenLastCalledWith({ resolution: 1, antialias: true });
     c1.cacheAsTexture.mockClear();
 
@@ -133,13 +176,9 @@ describe("createRasterCacheManager", () => {
     const state = makeState(["f1"]);
     state.nodesById["dragged-node"] = { type: "rect", width: 10, height: 10 } as unknown as SceneState["nodesById"][string];
     state.parentById["dragged-node"] = "f1";
-    const getState = vi.fn<() => SceneState>(() => state);
-    const getScale = vi.fn<() => number>(() => 1);
-    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
-    const manager = createRasterCacheManager({ getContainer, getState, getScale });
+    const { manager } = buildManager(state, { f1: c1 });
 
-    manager.onFlushStart(diffFor(["f1"]), state);
-    vi.advanceTimersByTime(600); // caches f1
+    primeCache(manager, state, 600); // caches f1
     expect(c1.cacheAsTexture).toHaveBeenLastCalledWith({ resolution: 1, antialias: true });
     c1.cacheAsTexture.mockClear();
 
@@ -265,11 +304,8 @@ describe("createRasterCacheManager", () => {
     // `resolution` applies to local units — zoom does NOT multiply into the
     // texture size). Zoom only picks the bucket, via scale * pixelRatio.
     const state = makeState(["f1"], { nodesById: { f1: frameNode(100, 80) } });
-    const getState = vi.fn<() => SceneState>(() => state);
     let scale = 1;
-    const getScale = vi.fn<() => number>(() => scale);
-    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
-    const manager = createRasterCacheManager({ getContainer, getState, getScale });
+    const { manager } = buildManager(state, { f1: c1 }, { getScale: () => scale });
 
     manager.onFlushStart(diffFor(["f1"]), state);
     vi.advanceTimersByTime(600); // round 1: caches at bucket 1
@@ -305,10 +341,7 @@ describe("createRasterCacheManager", () => {
       sizing: { widthMode: "fit_content" },
     } as unknown as SceneState["nodesById"][string];
     const state = makeState(["f1"], { nodesById: { f1: fitContentFrame } });
-    const getState = vi.fn<() => SceneState>(() => state);
-    const getScale = vi.fn<() => number>(() => 1);
-    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
-    const manager = createRasterCacheManager({ getContainer, getState, getScale });
+    const { manager } = buildManager(state, { f1: c1 });
 
     manager.onFlushStart(diffFor(["f1"]), state);
     vi.advanceTimersByTime(600 + QUIET_MS + 600);
@@ -322,10 +355,7 @@ describe("createRasterCacheManager", () => {
   it("a removed id in the mutation set does not throw and does not uncache an unrelated frame", () => {
     const c1 = makeContainer();
     const state = makeState(["f1"]);
-    const getState = vi.fn<() => SceneState>(() => state);
-    const getScale = vi.fn<() => number>(() => 1);
-    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
-    const manager = createRasterCacheManager({ getContainer, getState, getScale });
+    const { manager } = buildManager(state, { f1: c1 });
 
     manager.onFlushStart(diffFor(["f1"]), state);
     vi.advanceTimersByTime(600 + QUIET_MS); // caches f1
@@ -345,11 +375,8 @@ describe("createRasterCacheManager", () => {
   it("never caches a frame whose hasCulledContent dep reports true", () => {
     const c1 = makeContainer();
     const state = makeState(["f1"]);
-    const getState = vi.fn<() => SceneState>(() => state);
-    const getScale = vi.fn<() => number>(() => 1);
-    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
     const hasCulledContent = vi.fn(() => true);
-    const manager = createRasterCacheManager({ getContainer, getState, getScale, hasCulledContent });
+    const { manager } = buildManager(state, { f1: c1 }, { hasCulledContent });
 
     manager.onFlushStart(diffFor(["f1"]), state);
     vi.advanceTimersByTime(600 + QUIET_MS + 600);
@@ -360,16 +387,8 @@ describe("createRasterCacheManager", () => {
   it("evicts a frame that was cached before hasCulledContent started reporting true", () => {
     const c1 = makeContainer();
     const state = makeState(["f1"]);
-    const getState = vi.fn<() => SceneState>(() => state);
-    const getScale = vi.fn<() => number>(() => 1);
-    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
     let culled = false;
-    const manager = createRasterCacheManager({
-      getContainer,
-      getState,
-      getScale,
-      hasCulledContent: () => culled,
-    });
+    const { manager } = buildManager(state, { f1: c1 }, { hasCulledContent: () => culled });
 
     manager.onFlushStart(diffFor(["f1"]), state);
     vi.advanceTimersByTime(600 + QUIET_MS + 600);
@@ -388,11 +407,8 @@ describe("createRasterCacheManager", () => {
   it("caches at the dpr-adjusted resolution bucket when getPixelRatio is provided", () => {
     const c1 = makeContainer();
     const state = makeState(["f1"]);
-    const getState = vi.fn<() => SceneState>(() => state);
-    const getScale = vi.fn<() => number>(() => 1);
-    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
     const getPixelRatio = vi.fn(() => 2);
-    const manager = createRasterCacheManager({ getContainer, getState, getScale, getPixelRatio });
+    const { manager } = buildManager(state, { f1: c1 }, { getPixelRatio });
 
     manager.onFlushStart(diffFor(["f1"]), state);
     vi.advanceTimersByTime(600 + QUIET_MS + 600);
@@ -407,29 +423,10 @@ describe("createRasterCacheManager", () => {
   it("widens boundsArea to cover a descendant shadow's overhang before caching", () => {
     const c1 = makeContainer();
     const state = makeState(["f1"]);
-    const shadow: ShadowEffect = {
-      type: "shadow",
-      shadowType: "outer",
-      color: "#00000080",
-      offset: { x: 10, y: 0 },
-      blur: 20,
-      spread: 0,
-    };
-    state.nodesById["n1"] = {
-      type: "rect",
-      width: 10,
-      height: 10,
-      effects: [shadow],
-    } as unknown as SceneState["nodesById"][string];
-    state.parentById["n1"] = "f1";
-    state.childrenById["f1"] = ["n1"];
-    const getState = vi.fn<() => SceneState>(() => state);
-    const getScale = vi.fn<() => number>(() => 1);
-    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
-    const manager = createRasterCacheManager({ getContainer, getState, getScale });
+    addOverhangShadowChild(state, { x: 10, y: 0 }, 20);
+    const { manager } = buildManager(state, { f1: c1 });
 
-    manager.onFlushStart(diffFor(["f1"]), state);
-    vi.advanceTimersByTime(600 + QUIET_MS + 600);
+    primeCache(manager, state);
 
     expect(c1.cacheAsTexture).toHaveBeenCalledWith({ resolution: 1, antialias: true });
     // margin = |offset.x|(10) + blur(20) + spread(0) = 30
@@ -450,21 +447,8 @@ describe("createRasterCacheManager", () => {
   it("clears boundsArea when a previously-overhanging frame is uncached", () => {
     const c1 = makeContainer();
     const state = makeState(["f1"]);
-    const shadow: ShadowEffect = {
-      type: "shadow",
-      shadowType: "outer",
-      color: "#00000080",
-      offset: { x: 0, y: 0 },
-      blur: 15,
-      spread: 0,
-    };
-    state.nodesById["n1"] = { type: "rect", width: 10, height: 10, effects: [shadow] } as unknown as SceneState["nodesById"][string];
-    state.parentById["n1"] = "f1";
-    state.childrenById["f1"] = ["n1"];
-    const getState = vi.fn<() => SceneState>(() => state);
-    const getScale = vi.fn<() => number>(() => 1);
-    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
-    const manager = createRasterCacheManager({ getContainer, getState, getScale });
+    addOverhangShadowChild(state, { x: 0, y: 0 }, 15);
+    const { manager } = buildManager(state, { f1: c1 });
 
     manager.onFlushStart(diffFor(["f1"]), state);
     vi.advanceTimersByTime(600 + QUIET_MS + 600);
@@ -482,24 +466,10 @@ describe("createRasterCacheManager", () => {
       getLocalBounds: () => ({ minX: 0, minY: 0, maxX: 1600, maxY: 1000 }),
     };
     const state = makeState(["f1"]);
-    const shadow: ShadowEffect = {
-      type: "shadow",
-      shadowType: "outer",
-      color: "#00000080",
-      offset: { x: 10, y: 0 },
-      blur: 20,
-      spread: 0,
-    };
-    state.nodesById["n1"] = { type: "rect", width: 10, height: 10, effects: [shadow] } as unknown as SceneState["nodesById"][string];
-    state.parentById["n1"] = "f1";
-    state.childrenById["f1"] = ["n1"];
-    const getState = vi.fn<() => SceneState>(() => state);
-    const getScale = vi.fn<() => number>(() => 1);
-    const getContainer = vi.fn((id: string) => (id === "f1" ? c1 : null));
-    const manager = createRasterCacheManager({ getContainer, getState, getScale });
+    addOverhangShadowChild(state, { x: 10, y: 0 }, 20);
+    const { manager } = buildManager(state, { f1: c1 });
 
-    manager.onFlushStart(diffFor(["f1"]), state);
-    vi.advanceTimersByTime(600 + QUIET_MS + 600);
+    primeCache(manager, state);
 
     // margin = |offset.x|(10) + blur(20) = 30, applied to the REAL bounds
     // (1600x1000), not the 1440x900 frame rect — overflow preserved.

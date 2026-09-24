@@ -1,55 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createKeyDownHandler, type KeyDownHandlerDeps } from "../keyboardCommands";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
-
-function makeDeps(): KeyDownHandlerDeps {
-  return {
-    dimensions: { width: 800, height: 600 },
-    setIsSpacePressed: vi.fn(),
-    setIsPanning: vi.fn(),
-    deleteNode: vi.fn(),
-    updateNode: vi.fn(),
-    moveNode: vi.fn(),
-    groupNodes: vi.fn(() => null),
-    ungroupNodes: vi.fn(() => []),
-    wrapInAutoLayoutFrame: vi.fn(() => null),
-    booleanOperation: vi.fn(() => null),
-    restoreSnapshot: vi.fn(),
-    saveHistory: vi.fn(),
-    startBatch: vi.fn(),
-    endBatch: vi.fn(),
-    undo: vi.fn(() => null),
-    redo: vi.fn(() => null),
-    fitToContent: vi.fn(),
-    toggleTool: vi.fn(),
-    cancelDrawing: vi.fn(),
-    clearSelection: vi.fn(),
-    copySelection: vi.fn(),
-    cutSelection: vi.fn(),
-    copyStyleSelection: vi.fn(),
-    pasteStyleSelection: vi.fn(),
-    copyAsCss: vi.fn(),
-    copyAsSvg: vi.fn(),
-  };
-}
-
-function key(code: string, opts: Partial<KeyboardEventInit> = {}): KeyboardEvent {
-  return new KeyboardEvent("keydown", { code, key: code, bubbles: true, cancelable: true, ...opts });
-}
+import { appendInput, key, keyFrom, setupKeyDownHandler } from "./keyboardCommandFixtures";
 
 const FRAME = { id: "F", type: "frame", x: 0, y: 0, width: 100, height: 100, children: [] };
 const rect = (id: string) => ({ id, type: "rectangle", x: 0, y: 0, width: 10, height: 10 });
 
+/** The modifiers of the hotkey: Cmd+Shift+[ is Cmd+{, Cmd+Shift+] is Cmd+}. */
+const CMD_SHIFT = { metaKey: true, shiftKey: true };
+
 describe("keyboardCommands — reorder-in-tree hotkeys (Cmd+{ / Cmd+})", () => {
-  let deps: KeyDownHandlerDeps;
   let handler: (e: KeyboardEvent) => void;
 
   beforeEach(() => {
-    deps = makeDeps();
-    handler = createKeyDownHandler(deps);
-    useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
+    ({ handler } = setupKeyDownHandler());
   });
 
   function seedRoot() {
@@ -79,47 +44,80 @@ describe("keyboardCommands — reorder-in-tree hotkeys (Cmd+{ / Cmd+})", () => {
     });
   }
 
-  it("Cmd+{ (up) moves a root-level node one index higher (towards top of panel)", () => {
-    seedRoot();
-    useSelectionStore.setState({ selectedIds: ["B"], enteredContainerId: null } as never);
-    handler(key("BracketLeft", { metaKey: true, shiftKey: true }));
-    expect(useSceneStore.getState().rootIds).toEqual(["A", "C", "B"]);
-  });
+  function select(selectedIds: string[]) {
+    useSelectionStore.setState({ selectedIds, enteredContainerId: null } as never);
+  }
 
-  it("Cmd+} (down) moves a root-level node one index lower (towards bottom of panel)", () => {
+  it.each([
+    {
+      name: "Cmd+{ (up) moves a root-level node one index higher (towards top of panel)",
+      selected: ["B"],
+      code: "BracketLeft",
+      modifiers: CMD_SHIFT,
+      expected: ["A", "C", "B"],
+    },
+    {
+      name: "Cmd+} (down) moves a root-level node one index lower (towards bottom of panel)",
+      selected: ["B"],
+      code: "BracketRight",
+      modifiers: CMD_SHIFT,
+      expected: ["B", "A", "C"],
+    },
+    {
+      name: "no-op at the top edge (last index) on Cmd+{",
+      selected: ["C"],
+      code: "BracketLeft",
+      modifiers: CMD_SHIFT,
+      expected: ["A", "B", "C"],
+    },
+    {
+      name: "no-op at the bottom edge (index 0) on Cmd+}",
+      selected: ["A"],
+      code: "BracketRight",
+      modifiers: CMD_SHIFT,
+      expected: ["A", "B", "C"],
+    },
+    {
+      name: "is a no-op with multiple nodes selected (MVP: single selection only)",
+      selected: ["A", "B"],
+      code: "BracketLeft",
+      modifiers: CMD_SHIFT,
+      expected: ["A", "B", "C"],
+    },
+    {
+      name: "is a no-op with no selection",
+      selected: [],
+      code: "BracketLeft",
+      modifiers: CMD_SHIFT,
+      expected: ["A", "B", "C"],
+    },
+    {
+      name: "does not fire without Shift (BracketLeft/Right alone are not the hotkey)",
+      selected: ["B"],
+      code: "BracketLeft",
+      modifiers: { metaKey: true },
+      expected: ["A", "B", "C"],
+    },
+  ])("$name", ({ selected, code, modifiers, expected }) => {
     seedRoot();
-    useSelectionStore.setState({ selectedIds: ["B"], enteredContainerId: null } as never);
-    handler(key("BracketRight", { metaKey: true, shiftKey: true }));
-    expect(useSceneStore.getState().rootIds).toEqual(["B", "A", "C"]);
-  });
-
-  it("no-op at the top edge (last index) on Cmd+{", () => {
-    seedRoot();
-    useSelectionStore.setState({ selectedIds: ["C"], enteredContainerId: null } as never);
-    handler(key("BracketLeft", { metaKey: true, shiftKey: true }));
-    expect(useSceneStore.getState().rootIds).toEqual(["A", "B", "C"]);
-  });
-
-  it("no-op at the bottom edge (index 0) on Cmd+}", () => {
-    seedRoot();
-    useSelectionStore.setState({ selectedIds: ["A"], enteredContainerId: null } as never);
-    handler(key("BracketRight", { metaKey: true, shiftKey: true }));
-    expect(useSceneStore.getState().rootIds).toEqual(["A", "B", "C"]);
+    select(selected);
+    handler(key(code, modifiers));
+    expect(useSceneStore.getState().rootIds).toEqual(expected);
   });
 
   it("works for a nested node within a parent frame, keeping parentById intact", () => {
     seedNested();
-    useSelectionStore.setState({ selectedIds: ["B"], enteredContainerId: null } as never);
-    handler(key("BracketLeft", { metaKey: true, shiftKey: true }));
+    select(["B"]);
+    handler(key("BracketLeft", CMD_SHIFT));
     expect(useSceneStore.getState().childrenById.F).toEqual(["A", "C", "B"]);
     expect(useSceneStore.getState().parentById.B).toBe("F");
   });
 
   it("preserves undo history (calls saveHistory internally via moveNode)", () => {
     seedRoot();
-    useSelectionStore.setState({ selectedIds: ["B"], enteredContainerId: null } as never);
+    select(["B"]);
     const before = useSceneStore.getState().rootIds;
-    handler(key("BracketLeft", { metaKey: true, shiftKey: true }));
+    handler(key("BracketLeft", CMD_SHIFT));
     expect(useSceneStore.getState().rootIds).not.toBe(before);
     handler(key("KeyZ", { metaKey: true }));
     // undo isn't wired through the real historyStore here (deps.undo is a
@@ -127,42 +125,11 @@ describe("keyboardCommands — reorder-in-tree hotkeys (Cmd+{ / Cmd+})", () => {
     // state transition (new array reference) rather than an in-place mutation.
   });
 
-  it("is a no-op with multiple nodes selected (MVP: single selection only)", () => {
-    seedRoot();
-    useSelectionStore.setState({ selectedIds: ["A", "B"], enteredContainerId: null } as never);
-    handler(key("BracketLeft", { metaKey: true, shiftKey: true }));
-    expect(useSceneStore.getState().rootIds).toEqual(["A", "B", "C"]);
-  });
-
-  it("is a no-op with no selection", () => {
-    seedRoot();
-    useSelectionStore.setState({ selectedIds: [], enteredContainerId: null } as never);
-    handler(key("BracketLeft", { metaKey: true, shiftKey: true }));
-    expect(useSceneStore.getState().rootIds).toEqual(["A", "B", "C"]);
-  });
-
-  it("does not fire without Shift (BracketLeft/Right alone are not the hotkey)", () => {
-    seedRoot();
-    useSelectionStore.setState({ selectedIds: ["B"], enteredContainerId: null } as never);
-    handler(key("BracketLeft", { metaKey: true }));
-    expect(useSceneStore.getState().rootIds).toEqual(["A", "B", "C"]);
-  });
-
   it("is a no-op while typing in an input", () => {
     seedRoot();
-    useSelectionStore.setState({ selectedIds: ["B"], enteredContainerId: null } as never);
-    const input = document.createElement("input");
-    document.body.appendChild(input);
-    const evt = new KeyboardEvent("keydown", {
-      code: "BracketLeft",
-      key: "BracketLeft",
-      metaKey: true,
-      shiftKey: true,
-      bubbles: true,
-      cancelable: true,
-    });
-    Object.defineProperty(evt, "target", { value: input });
-    handler(evt);
+    select(["B"]);
+    const input = appendInput();
+    handler(keyFrom(input, "BracketLeft", CMD_SHIFT));
     expect(useSceneStore.getState().rootIds).toEqual(["A", "B", "C"]);
     document.body.removeChild(input);
   });
@@ -170,15 +137,15 @@ describe("keyboardCommands — reorder-in-tree hotkeys (Cmd+{ / Cmd+})", () => {
   it("is a no-op in view (read-only) mode", () => {
     seedRoot();
     useEditorModeStore.setState({ mode: "view" });
-    useSelectionStore.setState({ selectedIds: ["B"], enteredContainerId: null } as never);
-    handler(key("BracketLeft", { metaKey: true, shiftKey: true }));
+    select(["B"]);
+    handler(key("BracketLeft", CMD_SHIFT));
     expect(useSceneStore.getState().rootIds).toEqual(["A", "B", "C"]);
   });
 
   it("calls preventDefault on the browser-default-suppressing hotkeys", () => {
     seedRoot();
-    useSelectionStore.setState({ selectedIds: ["B"], enteredContainerId: null } as never);
-    const evt = key("BracketLeft", { metaKey: true, shiftKey: true });
+    select(["B"]);
+    const evt = key("BracketLeft", CMD_SHIFT);
     const spy = vi.spyOn(evt, "preventDefault");
     handler(evt);
     expect(spy).toHaveBeenCalled();

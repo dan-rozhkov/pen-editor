@@ -1,38 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createKeyDownHandler, type KeyDownHandlerDeps } from "../keyboardCommands";
-import { useEditorModeStore } from "@/store/editorModeStore";
+import type { KeyDownHandlerDeps } from "../keyboardCommands";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
-
-function makeDeps(): KeyDownHandlerDeps {
-  return {
-    dimensions: { width: 800, height: 600 },
-    setIsSpacePressed: vi.fn(),
-    setIsPanning: vi.fn(),
-    deleteNode: vi.fn(),
-    updateNode: vi.fn(),
-    moveNode: vi.fn(),
-    groupNodes: vi.fn(() => null),
-    ungroupNodes: vi.fn(() => []),
-    wrapInAutoLayoutFrame: vi.fn(() => null),
-    booleanOperation: vi.fn(() => null),
-    restoreSnapshot: vi.fn(),
-    saveHistory: vi.fn(),
-    startBatch: vi.fn(),
-    endBatch: vi.fn(),
-    undo: vi.fn(() => null),
-    redo: vi.fn(() => null),
-    fitToContent: vi.fn(),
-    toggleTool: vi.fn(),
-    cancelDrawing: vi.fn(),
-    clearSelection: vi.fn(),
-    copySelection: vi.fn(),
-    cutSelection: vi.fn(),
-    copyStyleSelection: vi.fn(),
-    pasteStyleSelection: vi.fn(),
-    copyAsCss: vi.fn(),
-    copyAsSvg: vi.fn(),
-  };
-}
+import { elementSelection, key, setupKeyDownHandler } from "./keyboardCommandFixtures";
 
 /**
  * Round-2 code-review finding: Escape while a single-element inline text
@@ -53,29 +22,17 @@ describe("keyboardCommands — Escape during an embed element inline text edit",
   let handler: (e: KeyboardEvent) => void;
 
   beforeEach(() => {
-    deps = makeDeps();
-    handler = createKeyDownHandler(deps);
-    useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
+    ({ deps, handler } = setupKeyDownHandler());
     useEmbedPickerStore.getState().reset();
   });
 
   it("cancels the edit via the registered callback and leaves the element selection intact", () => {
     const cancel = vi.fn();
     useEmbedPickerStore.getState().startPicking("e1");
-    useEmbedPickerStore.getState().selectElement(
-      {
-        embedId: "e1",
-        path: "div:nth-of-type(1)",
-        tagName: "div",
-        classes: [],
-        textPreview: "hi",
-        outerHtml: "<div>hi</div>",
-      },
-      "<div>hi</div>",
-    );
+    useEmbedPickerStore.getState().selectElement(elementSelection(), "<div>hi</div>");
     useEmbedPickerStore.getState().setCancelElementEdit(cancel);
 
-    handler(new KeyboardEvent("keydown", { code: "Escape", key: "Escape" }));
+    handler(key("Escape"));
 
     expect(cancel).toHaveBeenCalledTimes(1);
     // The whole point: exitContainer()'s own "clear a picked element" step
@@ -93,7 +50,7 @@ describe("keyboardCommands — Escape during an embed element inline text edit",
     useEmbedPickerStore.getState().setCancelElementDrag(cancelDrag);
     useEmbedPickerStore.getState().setCancelElementEdit(cancelEdit);
 
-    handler(new KeyboardEvent("keydown", { code: "Escape", key: "Escape" }));
+    handler(key("Escape"));
 
     expect(cancelDrag).toHaveBeenCalledTimes(1);
     expect(cancelEdit).not.toHaveBeenCalled();
@@ -102,7 +59,7 @@ describe("keyboardCommands — Escape during an embed element inline text edit",
   it("falls through to the ordinary Escape chain when no edit is in flight", () => {
     useEmbedPickerStore.getState().startPicking("e1");
 
-    handler(new KeyboardEvent("keydown", { code: "Escape", key: "Escape" }));
+    handler(key("Escape"));
 
     expect(useEmbedPickerStore.getState().pickingEmbedId).toBe("e1");
     expect(deps.clearSelection).toHaveBeenCalledTimes(1);

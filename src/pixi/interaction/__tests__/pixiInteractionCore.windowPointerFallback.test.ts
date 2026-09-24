@@ -65,6 +65,34 @@ function trustedPointerEvent(
   return ev;
 }
 
+/** A host div standing in for the embed's DOM host, which `pointer-events:
+ * auto` flips under the cursor mid-gesture (see the doc comment in
+ * pixiInteractionCore.ts) — most tests below dispatch at least one event to
+ * one of these instead of the canvas. */
+function appendHost(): HTMLDivElement {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  return host;
+}
+
+// The three dispatch helpers below share one default gesture (down at
+// (50,50), move to (70,80) with the button held, up at (70,80)) — every test
+// overrides only the fields its scenario actually varies (target, clientX/Y,
+// pointerId, buttons).
+function down(target: EventTarget, overrides: PointerEventInit = {}): void {
+  target.dispatchEvent(
+    trustedPointerEvent("pointerdown", { button: 0, clientX: 50, clientY: 50, bubbles: true, ...overrides }),
+  );
+}
+function move(target: EventTarget, overrides: PointerEventInit = {}): void {
+  target.dispatchEvent(trustedPointerEvent("pointermove", { clientX: 70, clientY: 80, bubbles: true, ...overrides }));
+}
+function up(target: EventTarget, overrides: PointerEventInit = {}): void {
+  target.dispatchEvent(
+    trustedPointerEvent("pointerup", { button: 0, clientX: 70, clientY: 80, bubbles: true, ...overrides }),
+  );
+}
+
 describe("window pointer fallback (embed-picker host stealing a gesture)", () => {
   let cleanup: (() => void) | null = null;
 
@@ -82,41 +110,16 @@ describe("window pointer fallback (embed-picker host stealing a gesture)", () =>
     const setup = setupInteractionOnFakeCanvas();
     cleanup = setup.cleanup;
 
-    // Stand-in for the embed's DOM host, which `pointer-events: auto`
-    // flips under the cursor mid-gesture (see the doc comment in
-    // pixiInteractionCore.ts).
-    const host = document.createElement("div");
-    document.body.appendChild(host);
+    const host = appendHost();
 
-    setup.canvas.dispatchEvent(
-      trustedPointerEvent("pointerdown", {
-        button: 0,
-        clientX: 50,
-        clientY: 50,
-        bubbles: true,
-      }),
-    );
+    down(setup.canvas);
 
     // Past CLICK_MOVE_THRESHOLD_PX (5px) so dragController commits to a drag.
     // `buttons: 1` mirrors a real drag (primary button still held) — without
     // it this move would look identical to the "button already released"
     // case the self-heal fix (finding 1) now treats specially.
-    host.dispatchEvent(
-      trustedPointerEvent("pointermove", {
-        clientX: 70,
-        clientY: 80,
-        buttons: 1,
-        bubbles: true,
-      }),
-    );
-    host.dispatchEvent(
-      trustedPointerEvent("pointerup", {
-        button: 0,
-        clientX: 70,
-        clientY: 80,
-        bubbles: true,
-      }),
-    );
+    move(host, { buttons: 1 });
+    up(host);
 
     const draggedNode = useSceneStore.getState().nodesById.embed1 as FlatSceneNode;
     expect(draggedNode.x).toBe(20);
@@ -125,13 +128,7 @@ describe("window pointer fallback (embed-picker host stealing a gesture)", () =>
     // Before the fix: the gesture never ended, so a later canvas
     // pointermove would keep moving the node. After the fix it must be a
     // no-op — the drag already ended at the host pointerup above.
-    setup.canvas.dispatchEvent(
-      trustedPointerEvent("pointermove", {
-        clientX: 90,
-        clientY: 90,
-        bubbles: true,
-      }),
-    );
+    setup.canvas.dispatchEvent(trustedPointerEvent("pointermove", { clientX: 90, clientY: 90, bubbles: true }));
 
     const afterExtraMove = useSceneStore.getState().nodesById.embed1 as FlatSceneNode;
     expect(afterExtraMove.x).toBe(20);
@@ -142,29 +139,9 @@ describe("window pointer fallback (embed-picker host stealing a gesture)", () =>
     const setup = setupInteractionOnFakeCanvas();
     cleanup = setup.cleanup;
 
-    setup.canvas.dispatchEvent(
-      trustedPointerEvent("pointerdown", {
-        button: 0,
-        clientX: 50,
-        clientY: 50,
-        bubbles: true,
-      }),
-    );
-    setup.canvas.dispatchEvent(
-      trustedPointerEvent("pointermove", {
-        clientX: 65,
-        clientY: 55,
-        bubbles: true,
-      }),
-    );
-    setup.canvas.dispatchEvent(
-      trustedPointerEvent("pointerup", {
-        button: 0,
-        clientX: 65,
-        clientY: 55,
-        bubbles: true,
-      }),
-    );
+    down(setup.canvas);
+    move(setup.canvas, { clientX: 65, clientY: 55 });
+    up(setup.canvas, { clientX: 65, clientY: 55 });
 
     const node = useSceneStore.getState().nodesById.embed1 as FlatSceneNode;
     // If the window listener double-processed the bubbled pointermove/up,
@@ -177,28 +154,14 @@ describe("window pointer fallback (embed-picker host stealing a gesture)", () =>
     const setup = setupInteractionOnFakeCanvas();
     cleanup = setup.cleanup;
 
-    const host = document.createElement("div");
-    document.body.appendChild(host);
+    const host = appendHost();
 
     // happy-dom's `new PointerEvent` is untrusted by default — exactly what
     // EmbedLayer's `forwardPointerEvent` produces for its own synthetic
     // gesture.
-    setup.canvas.dispatchEvent(
-      new PointerEvent("pointerdown", {
-        button: 0,
-        clientX: 50,
-        clientY: 50,
-        bubbles: true,
-      }),
-    );
+    setup.canvas.dispatchEvent(new PointerEvent("pointerdown", { button: 0, clientX: 50, clientY: 50, bubbles: true }));
 
-    host.dispatchEvent(
-      trustedPointerEvent("pointermove", {
-        clientX: 90,
-        clientY: 90,
-        bubbles: true,
-      }),
-    );
+    host.dispatchEvent(trustedPointerEvent("pointermove", { clientX: 90, clientY: 90, bubbles: true }));
 
     const node = useSceneStore.getState().nodesById.embed1 as FlatSceneNode;
     expect(node.x).toBe(0);
@@ -208,25 +171,10 @@ describe("window pointer fallback (embed-picker host stealing a gesture)", () =>
   it("cleanup: after teardown runs mid-gesture, later window-level pointer events are ignored", async () => {
     const setup = setupInteractionOnFakeCanvas();
 
-    const host = document.createElement("div");
-    document.body.appendChild(host);
+    const host = appendHost();
 
-    setup.canvas.dispatchEvent(
-      trustedPointerEvent("pointerdown", {
-        button: 0,
-        clientX: 50,
-        clientY: 50,
-        bubbles: true,
-      }),
-    );
-    host.dispatchEvent(
-      trustedPointerEvent("pointermove", {
-        clientX: 70,
-        clientY: 80,
-        buttons: 1,
-        bubbles: true,
-      }),
-    );
+    down(setup.canvas);
+    move(host, { buttons: 1 });
 
     // dragController coalesces position writes to one per animation frame
     // (see commitDragPositions in dragController.ts) — wait for it so the
@@ -240,13 +188,7 @@ describe("window pointer fallback (embed-picker host stealing a gesture)", () =>
     // Tear down mid-gesture (e.g. PixiCanvas unmounting).
     setup.cleanup();
 
-    host.dispatchEvent(
-      trustedPointerEvent("pointermove", {
-        clientX: 200,
-        clientY: 200,
-        bubbles: true,
-      }),
-    );
+    move(host, { clientX: 200, clientY: 200 });
     await new Promise((resolve) => requestAnimationFrame(resolve));
 
     // The post-cleanup pointermove on the host must not be picked up at all
@@ -261,28 +203,13 @@ describe("window pointer fallback (embed-picker host stealing a gesture)", () =>
     const setup = setupInteractionOnFakeCanvas();
     cleanup = setup.cleanup;
 
-    const host = document.createElement("div");
-    document.body.appendChild(host);
+    const host = appendHost();
 
-    setup.canvas.dispatchEvent(
-      trustedPointerEvent("pointerdown", {
-        button: 0,
-        clientX: 50,
-        clientY: 50,
-        bubbles: true,
-      }),
-    );
+    down(setup.canvas);
 
     // A real move first, so the drag is unambiguously in flight (dragController
     // coalesces the commit to the next animation frame — awaited below).
-    host.dispatchEvent(
-      trustedPointerEvent("pointermove", {
-        clientX: 70,
-        clientY: 80,
-        buttons: 1,
-        bubbles: true,
-      }),
-    );
+    move(host, { buttons: 1 });
 
     // The button was released somewhere this listener never saw (outside the
     // window, over browser chrome) — the only trace of that is `buttons`
@@ -290,14 +217,7 @@ describe("window pointer fallback (embed-picker host stealing a gesture)", () =>
     // as the end of the gesture, not a move: no further `handlePointerMove`
     // call means the node must NOT jump to this event's (far away) position
     // — it stays at the last real move's delta.
-    host.dispatchEvent(
-      trustedPointerEvent("pointermove", {
-        clientX: 500,
-        clientY: 500,
-        buttons: 0,
-        bubbles: true,
-      }),
-    );
+    move(host, { clientX: 500, clientY: 500, buttons: 0 });
     await new Promise((resolve) => requestAnimationFrame(resolve));
 
     const nodeAfterSelfHeal = useSceneStore.getState().nodesById.embed1 as FlatSceneNode;
@@ -307,14 +227,7 @@ describe("window pointer fallback (embed-picker host stealing a gesture)", () =>
     // The self-heal must also disarm the fallback — a later move (even with
     // the button legitimately held, as a brand new unrelated gesture would
     // report) must not be picked up by a listener that should already be gone.
-    host.dispatchEvent(
-      trustedPointerEvent("pointermove", {
-        clientX: 90,
-        clientY: 90,
-        buttons: 1,
-        bubbles: true,
-      }),
-    );
+    move(host, { clientX: 90, clientY: 90, buttons: 1 });
     await new Promise((resolve) => requestAnimationFrame(resolve));
 
     const nodeAfterExtraMove = useSceneStore.getState().nodesById.embed1 as FlatSceneNode;
@@ -326,54 +239,21 @@ describe("window pointer fallback (embed-picker host stealing a gesture)", () =>
     const setup = setupInteractionOnFakeCanvas();
     cleanup = setup.cleanup;
 
-    const host = document.createElement("div");
-    document.body.appendChild(host);
+    const host = appendHost();
 
-    setup.canvas.dispatchEvent(
-      trustedPointerEvent("pointerdown", {
-        pointerId: 1,
-        button: 0,
-        clientX: 50,
-        clientY: 50,
-        bubbles: true,
-      }),
-    );
+    down(setup.canvas, { pointerId: 1 });
 
     // A foreign pointer's pointerup (e.g. a finger touching the screen
     // elsewhere on a touch-capable machine) reaches `window` while the real
     // gesture is still in flight — it must be ignored entirely.
-    host.dispatchEvent(
-      trustedPointerEvent("pointerup", {
-        pointerId: 999,
-        button: 0,
-        clientX: 9999,
-        clientY: 9999,
-        bubbles: true,
-      }),
-    );
+    up(host, { pointerId: 999, clientX: 9999, clientY: 9999 });
 
     // The fallback must still be armed for pointerId 1 — a matching move
     // still reaches the drag.
-    host.dispatchEvent(
-      trustedPointerEvent("pointermove", {
-        pointerId: 1,
-        clientX: 70,
-        clientY: 80,
-        buttons: 1,
-        bubbles: true,
-      }),
-    );
+    move(host, { pointerId: 1, buttons: 1 });
 
     // The matching pointerId's pointerup ends the gesture normally.
-    host.dispatchEvent(
-      trustedPointerEvent("pointerup", {
-        pointerId: 1,
-        button: 0,
-        clientX: 70,
-        clientY: 80,
-        bubbles: true,
-      }),
-    );
+    up(host, { pointerId: 1 });
 
     const node = useSceneStore.getState().nodesById.embed1 as FlatSceneNode;
     expect(node.x).toBe(20);
@@ -384,50 +264,21 @@ describe("window pointer fallback (embed-picker host stealing a gesture)", () =>
     const setup = setupInteractionOnFakeCanvas();
     cleanup = setup.cleanup;
 
-    const host = document.createElement("div");
-    document.body.appendChild(host);
+    const host = appendHost();
 
     // First "click": down on the canvas, up on the host (within
     // CLICK_MOVE_THRESHOLD_PX) — the embed-picker-host-steals-the-gesture
     // scenario, but ending in a click rather than a drag.
-    setup.canvas.dispatchEvent(
-      trustedPointerEvent("pointerdown", {
-        button: 0,
-        clientX: 50,
-        clientY: 50,
-        bubbles: true,
-      }),
-    );
-    host.dispatchEvent(
-      trustedPointerEvent("pointerup", {
-        button: 0,
-        clientX: 51,
-        clientY: 51,
-        bubbles: true,
-      }),
-    );
+    down(setup.canvas);
+    up(host, { clientX: 51, clientY: 51 });
 
     // A single genuine click on the canvas at roughly the same point. If the
     // host-targeted pointerup above had wrongly registered as click #1, this
     // would be recognized as click #2 and promoted to a double-click,
     // starting the embed picker. With the fix it must be treated as an
     // unpaired first click.
-    setup.canvas.dispatchEvent(
-      trustedPointerEvent("pointerdown", {
-        button: 0,
-        clientX: 50,
-        clientY: 50,
-        bubbles: true,
-      }),
-    );
-    setup.canvas.dispatchEvent(
-      trustedPointerEvent("pointerup", {
-        button: 0,
-        clientX: 50,
-        clientY: 50,
-        bubbles: true,
-      }),
-    );
+    down(setup.canvas);
+    up(setup.canvas, { clientX: 50, clientY: 50 });
 
     expect(useEmbedPickerStore.getState().pickingEmbedId).toBeNull();
     // The lone genuine click above still selects the embed via ordinary

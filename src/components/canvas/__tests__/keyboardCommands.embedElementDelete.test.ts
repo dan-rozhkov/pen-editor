@@ -1,65 +1,40 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createKeyDownHandler, type KeyDownHandlerDeps } from "../keyboardCommands";
+import { beforeEach, describe, expect, it } from "vitest";
+import type { KeyDownHandlerDeps } from "../keyboardCommands";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { sourcePathToShadowPath } from "@/lib/embedLayerTree";
 import { resetStores } from "@/test/fixtures";
-import type { FlatSceneNode } from "@/types/scene";
+import {
+  elementSelection,
+  embedHtmlOf,
+  key,
+  seedEmbedNode,
+  setupKeyDownHandler,
+} from "./keyboardCommandFixtures";
 
-function makeDeps(): KeyDownHandlerDeps {
-  return {
-    dimensions: { width: 800, height: 600 },
-    setIsSpacePressed: vi.fn(),
-    setIsPanning: vi.fn(),
-    deleteNode: vi.fn(),
-    updateNode: vi.fn(),
-    moveNode: vi.fn(),
-    groupNodes: vi.fn(() => null),
-    ungroupNodes: vi.fn(() => []),
-    wrapInAutoLayoutFrame: vi.fn(() => null),
-    booleanOperation: vi.fn(() => null),
-    restoreSnapshot: vi.fn(),
-    saveHistory: vi.fn(),
-    startBatch: vi.fn(),
-    endBatch: vi.fn(),
-    undo: vi.fn(() => null),
-    redo: vi.fn(() => null),
-    fitToContent: vi.fn(),
-    toggleTool: vi.fn(),
-    cancelDrawing: vi.fn(),
-    clearSelection: vi.fn(),
-    copySelection: vi.fn(),
-    cutSelection: vi.fn(),
-    copyStyleSelection: vi.fn(),
-    pasteStyleSelection: vi.fn(),
-    copyAsCss: vi.fn(),
-    copyAsSvg: vi.fn(),
-  };
+const embedHtml = () => embedHtmlOf("embed1");
+
+/** Picks `<tag>text</tag>` at `sourcePath` in embed1's `html`, the way the layers panel does. */
+function pick(html: string, sourcePath: string, tagName: string, textPreview: string): void {
+  useEmbedPickerStore.getState().selectElement(
+    elementSelection({
+      embedId: "embed1",
+      path: sourcePathToShadowPath(sourcePath, html),
+      tagName,
+      textPreview,
+      outerHtml: `<${tagName}>${textPreview}</${tagName}>`,
+    }),
+    html,
+  );
 }
 
-function seedEmbed(html: string): void {
-  useSceneStore.setState({
-    nodesById: {
-      embed1: {
-        id: "embed1",
-        type: "embed",
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 100,
-        htmlContent: html,
-      } as unknown as FlatSceneNode,
-    },
-    parentById: { embed1: null },
-    childrenById: {},
-    rootIds: ["embed1"],
-  });
-}
-
-function embedHtml(): string {
-  return (useSceneStore.getState().nodesById.embed1 as unknown as { htmlContent: string }).htmlContent;
+/** embed1 holding `html`, as the sole selection, with its first `<button>Buy</button>` picked. */
+function seedPickedButton(html: string): void {
+  seedEmbedNode("embed1", html);
+  useSelectionStore.setState({ selectedIds: ["embed1"] });
+  pick(html, "button:nth-of-type(1)", "button", "Buy");
 }
 
 /**
@@ -74,28 +49,14 @@ describe("keyboardCommands — Delete/Backspace with a picked embed element", ()
 
   beforeEach(() => {
     resetStores();
-    deps = makeDeps();
-    handler = createKeyDownHandler(deps);
-    useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
+    ({ deps, handler } = setupKeyDownHandler());
   });
 
   it("deletes the picked element, not the embed node", () => {
     const html = "<button>Buy</button><span>Keep</span>";
-    seedEmbed(html);
-    useSelectionStore.setState({ selectedIds: ["embed1"] });
-    useEmbedPickerStore.getState().selectElement(
-      {
-        embedId: "embed1",
-        path: sourcePathToShadowPath("button:nth-of-type(1)", html),
-        tagName: "button",
-        classes: [],
-        textPreview: "Buy",
-        outerHtml: "<button>Buy</button>",
-      },
-      html,
-    );
+    seedPickedButton(html);
 
-    handler(new KeyboardEvent("keydown", { code: "Delete", key: "Delete" }));
+    handler(key("Delete"));
 
     expect(deps.deleteNode).not.toHaveBeenCalled();
     expect(useEmbedPickerStore.getState().selection).toBeNull();
@@ -105,31 +66,21 @@ describe("keyboardCommands — Delete/Backspace with a picked embed element", ()
   });
 
   it("falls through to deleting the native selection when no element is picked", () => {
-    seedEmbed("<button>Buy</button>");
+    seedEmbedNode("embed1", "<button>Buy</button>");
     useSelectionStore.setState({ selectedIds: ["embed1"] });
 
-    handler(new KeyboardEvent("keydown", { code: "Delete", key: "Delete" }));
+    handler(key("Delete"));
 
     expect(deps.deleteNode).toHaveBeenCalledWith("embed1");
   });
 
   it("falls through when a picker selection exists but the embed is no longer the sole selection", () => {
     const html = "<button>Buy</button>";
-    seedEmbed(html);
+    seedEmbedNode("embed1", html);
     useSelectionStore.setState({ selectedIds: ["embed1", "other"] });
-    useEmbedPickerStore.getState().selectElement(
-      {
-        embedId: "embed1",
-        path: sourcePathToShadowPath("button:nth-of-type(1)", html),
-        tagName: "button",
-        classes: [],
-        textPreview: "Buy",
-        outerHtml: "<button>Buy</button>",
-      },
-      html,
-    );
+    pick(html, "button:nth-of-type(1)", "button", "Buy");
 
-    handler(new KeyboardEvent("keydown", { code: "Delete", key: "Delete" }));
+    handler(key("Delete"));
 
     expect(deps.deleteNode).toHaveBeenCalledWith("embed1");
     expect(deps.deleteNode).toHaveBeenCalledWith("other");
@@ -147,22 +98,12 @@ describe("keyboardCommands — Delete/Backspace with a picked embed element", ()
   // node normally.
   it("clears the stale picker selection instead of deleting the embed node, on a rejected element delete", () => {
     const html = "<button>Buy</button>";
-    seedEmbed(html);
+    seedEmbedNode("embed1", html);
     useSelectionStore.setState({ selectedIds: ["embed1"] });
-    useEmbedPickerStore.getState().selectElement(
-      {
-        embedId: "embed1",
-        // Never resolves against `html` — a stale pick.
-        path: sourcePathToShadowPath("div:nth-of-type(1) > span:nth-of-type(1)", html),
-        tagName: "span",
-        classes: [],
-        textPreview: "Gone",
-        outerHtml: "<span>Gone</span>",
-      },
-      html,
-    );
+    // Never resolves against `html` — a stale pick.
+    pick(html, "div:nth-of-type(1) > span:nth-of-type(1)", "span", "Gone");
 
-    handler(new KeyboardEvent("keydown", { code: "Delete", key: "Delete" }));
+    handler(key("Delete"));
 
     expect(deps.deleteNode).not.toHaveBeenCalled();
     expect(useEmbedPickerStore.getState().selection).toBeNull();
@@ -171,28 +112,16 @@ describe("keyboardCommands — Delete/Backspace with a picked embed element", ()
 
     // A second Delete press, with no picker selection left, removes the
     // embed node through the normal fallthrough.
-    handler(new KeyboardEvent("keydown", { code: "Delete", key: "Delete" }));
+    handler(key("Delete"));
     expect(deps.deleteNode).toHaveBeenCalledWith("embed1");
   });
 
   it("does nothing in read-only (view) mode", () => {
     const html = "<button>Buy</button>";
-    seedEmbed(html);
-    useSelectionStore.setState({ selectedIds: ["embed1"] });
-    useEmbedPickerStore.getState().selectElement(
-      {
-        embedId: "embed1",
-        path: sourcePathToShadowPath("button:nth-of-type(1)", html),
-        tagName: "button",
-        classes: [],
-        textPreview: "Buy",
-        outerHtml: "<button>Buy</button>",
-      },
-      html,
-    );
+    seedPickedButton(html);
     useEditorModeStore.setState({ mode: "view", presentFrameIds: [], presentIndex: 0 });
 
-    handler(new KeyboardEvent("keydown", { code: "Delete", key: "Delete" }));
+    handler(key("Delete"));
 
     expect(deps.deleteNode).not.toHaveBeenCalled();
     expect(useEmbedPickerStore.getState().selection).not.toBeNull();

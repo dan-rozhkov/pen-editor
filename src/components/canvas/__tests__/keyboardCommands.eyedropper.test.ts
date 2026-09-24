@@ -1,60 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createKeyDownHandler, type KeyDownHandlerDeps } from "../keyboardCommands";
-import { useEditorModeStore } from "@/store/editorModeStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { resetStores, seedScene } from "@/test/fixtures";
-
-function makeDeps(): KeyDownHandlerDeps {
-  return {
-    dimensions: { width: 800, height: 600 },
-    setIsSpacePressed: vi.fn(),
-    setIsPanning: vi.fn(),
-    deleteNode: vi.fn(),
-    updateNode: vi.fn(),
-    moveNode: vi.fn(),
-    groupNodes: vi.fn(() => null),
-    ungroupNodes: vi.fn(() => []),
-    wrapInAutoLayoutFrame: vi.fn(() => null),
-    booleanOperation: vi.fn(() => null),
-    restoreSnapshot: vi.fn(),
-    saveHistory: vi.fn(),
-    startBatch: vi.fn(),
-    endBatch: vi.fn(),
-    undo: vi.fn(() => null),
-    redo: vi.fn(() => null),
-    fitToContent: vi.fn(),
-    toggleTool: vi.fn(),
-    cancelDrawing: vi.fn(),
-    clearSelection: vi.fn(),
-    copySelection: vi.fn(),
-    cutSelection: vi.fn(),
-    copyStyleSelection: vi.fn(),
-    pasteStyleSelection: vi.fn(),
-    copyAsCss: vi.fn(),
-    copyAsSvg: vi.fn(),
-  };
-}
-
-function key(code: string, opts: Partial<KeyboardEventInit> = {}): KeyboardEvent {
-  return new KeyboardEvent("keydown", { code, key: code, bubbles: true, cancelable: true, ...opts });
-}
+import { appendInput, key, keyFrom, setupKeyDownHandler } from "./keyboardCommandFixtures";
 
 function flushMicrotasks(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 describe("keyboardCommands — I hotkey (eyedropper)", () => {
-  let deps: KeyDownHandlerDeps;
   let handler: (e: KeyboardEvent) => void;
   const originalEyeDropper = window.EyeDropper;
 
   beforeEach(() => {
     resetStores();
     seedScene();
-    deps = makeDeps();
-    handler = createKeyDownHandler(deps);
-    useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
+    ({ handler } = setupKeyDownHandler());
   });
 
   afterEach(() => {
@@ -131,12 +92,9 @@ describe("keyboardCommands — I hotkey (eyedropper)", () => {
     window.EyeDropper = FakeEyeDropper as unknown as typeof window.EyeDropper;
     useSelectionStore.setState({ selectedIds: ["rect2"] } as never);
 
-    const input = document.createElement("input");
-    document.body.appendChild(input);
-    const event = new KeyboardEvent("keydown", { code: "KeyI", key: "KeyI", bubbles: true, cancelable: true });
-    Object.defineProperty(event, "target", { value: input });
+    const input = appendInput();
 
-    handler(event);
+    handler(keyFrom(input, "KeyI"));
     await flushMicrotasks();
 
     const node = useSceneStore.getState().nodesById["rect2"];

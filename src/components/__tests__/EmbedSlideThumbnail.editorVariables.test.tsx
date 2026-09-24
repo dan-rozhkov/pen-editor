@@ -1,10 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { render, cleanup } from "@testing-library/react";
 import { EmbedSlideThumbnail } from "../EmbedSlideThumbnail";
-import { useVariableStore } from "@/store/variableStore";
 import { resetStores } from "@/test/fixtures";
-import type { EmbedNode } from "@/types/scene";
-import type { Variable } from "@/types/variable";
+import { editorVariablesEmbedNode as node, seedVariable } from "./editorVariablesFixtures";
 
 // F5 regression: EmbedSlideThumbnail (the Slides panel preview) mounts an
 // embed's raw htmlContent via mountHtmlWithBodyStyles but historically never
@@ -13,31 +11,6 @@ import type { Variable } from "@/types/variable";
 // An element bound to an editor variable (`var(--brand)`) therefore had
 // nothing to resolve that custom property against in this thumbnail's own
 // shadow tree specifically, even though the live canvas resolved it fine.
-
-function seedVariable(): void {
-  useVariableStore.setState({
-    variables: [
-      {
-        id: "v1",
-        name: "--brand",
-        type: "color",
-        value: "#00ff00",
-        themeValues: { light: "#00ff00", dark: "#003300" },
-      } as unknown as Variable,
-    ],
-  });
-}
-
-const node = {
-  id: "e1",
-  type: "embed",
-  name: "Code",
-  x: 0,
-  y: 0,
-  width: 100,
-  height: 80,
-  htmlContent: "<div id='card' style='background-color: var(--brand)'>hi</div>",
-} as unknown as EmbedNode;
 
 describe("<EmbedSlideThumbnail /> editor variables", () => {
   beforeEach(() => { resetStores(); });

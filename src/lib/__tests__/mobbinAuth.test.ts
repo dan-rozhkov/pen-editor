@@ -363,26 +363,27 @@ describe("peekAccessToken", () => {
 });
 
 describe("withMobbinAuthHeader", () => {
-  it("attaches a currently-valid token as X-Mobbin-Token", async () => {
-    storeConnectedTokens({ accessToken: "access-fresh" });
+  // Drives a single wrapped-fetch call and returns the headers it actually
+  // sent — the mechanics shared by both cases below; only whether a token was
+  // stored beforehand differs.
+  async function callWrappedFetch(): Promise<Headers> {
     const inner = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response("ok"));
     const wrapped = withMobbinAuthHeader(inner as unknown as typeof fetch);
 
     await wrapped("https://example.test/api/chat", { method: "POST" });
 
     const init = inner.mock.calls[0][1];
-    const headers = new Headers(init?.headers);
+    return new Headers(init?.headers);
+  }
+
+  it("attaches a currently-valid token as X-Mobbin-Token", async () => {
+    storeConnectedTokens({ accessToken: "access-fresh" });
+    const headers = await callWrappedFetch();
     expect(headers.get("X-Mobbin-Token")).toBe("access-fresh");
   });
 
   it("sends no X-Mobbin-Token header when not connected", async () => {
-    const inner = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response("ok"));
-    const wrapped = withMobbinAuthHeader(inner as unknown as typeof fetch);
-
-    await wrapped("https://example.test/api/chat", { method: "POST" });
-
-    const init = inner.mock.calls[0][1];
-    const headers = new Headers(init?.headers);
+    const headers = await callWrappedFetch();
     expect(headers.has("X-Mobbin-Token")).toBe(false);
   });
 });
@@ -483,18 +484,29 @@ describe("connect (OAuth popup handshake)", () => {
     return promise;
   }
 
-  it("stores tokens after a valid, same-origin, state-matched callback", async () => {
-    const fetchMock = stubBackendRegisterAndToken();
-    vi.stubGlobal("fetch", fetchMock);
-    const { popup, dispatch } = stubPopup();
-
-    const connectPromise = startConnect();
-
-    // Let register() resolve and the state get generated before dispatching.
+  // Polls (via the real-timer `vi.waitFor`) until the popup's redirect has
+  // set a real `href`, i.e. register() resolved and the OAuth state was
+  // generated — the point at which a callback message can be dispatched.
+  async function expectPopupOpened(popup: Window): Promise<void> {
     await vi.waitFor(() => {
       expect((popup as unknown as { location: { href: string } }).location.href).not.toBe("");
     });
-    const state = stateFromPopupUrl(popup);
+  }
+
+  // The common opening moves of most "connect" tests below: stub the
+  // register+token backend calls and the popup, start connect(), and wait
+  // for the popup's redirect to carry the generated OAuth state.
+  async function beginConnect() {
+    const fetchMock = stubBackendRegisterAndToken();
+    vi.stubGlobal("fetch", fetchMock);
+    const { popup, dispatch } = stubPopup();
+    const connectPromise = startConnect();
+    await expectPopupOpened(popup);
+    return { fetchMock, popup, dispatch, connectPromise, state: stateFromPopupUrl(popup) };
+  }
+
+  it("stores tokens after a valid, same-origin, state-matched callback", async () => {
+    const { state, dispatch, connectPromise } = await beginConnect();
 
     dispatch(
       { type: MOBBIN_OAUTH_MESSAGE_TYPE, code: "auth-code", state },
@@ -507,15 +519,7 @@ describe("connect (OAuth popup handshake)", () => {
   });
 
   it("ignores a postMessage from a different origin", async () => {
-    const fetchMock = stubBackendRegisterAndToken();
-    vi.stubGlobal("fetch", fetchMock);
-    const { popup, dispatch } = stubPopup();
-
-    const connectPromise = startConnect();
-    await vi.waitFor(() => {
-      expect((popup as unknown as { location: { href: string } }).location.href).not.toBe("");
-    });
-    const state = stateFromPopupUrl(popup);
+    const { fetchMock, dispatch, connectPromise, state } = await beginConnect();
 
     // Forged/cross-origin message: must be ignored, not resolve the connect.
     dispatch(
@@ -540,14 +544,7 @@ describe("connect (OAuth popup handshake)", () => {
   });
 
   it("rejects when the callback state does not match", async () => {
-    const fetchMock = stubBackendRegisterAndToken();
-    vi.stubGlobal("fetch", fetchMock);
-    const { popup, dispatch } = stubPopup();
-
-    const connectPromise = startConnect();
-    await vi.waitFor(() => {
-      expect((popup as unknown as { location: { href: string } }).location.href).not.toBe("");
-    });
+    const { dispatch, connectPromise } = await beginConnect();
 
     dispatch(
       { type: MOBBIN_OAUTH_MESSAGE_TYPE, code: "auth-code", state: "wrong-state" },
@@ -587,10 +584,7 @@ describe("connect (OAuth popup handshake)", () => {
 
     // Let the flow finish so no dangling listeners/timers leak into later
     // tests in this file.
-    await vi.waitFor(() => {
-      const href = (popup as unknown as { location: { href: string } }).location.href;
-      expect(href).not.toBe("");
-    });
+    await expectPopupOpened(popup);
     const state = stateFromPopupUrl(popup);
     dispatch({ type: MOBBIN_OAUTH_MESSAGE_TYPE, code: "auth-code", state }, window.location.origin);
     await connectPromise;
@@ -659,9 +653,7 @@ describe("connect (OAuth popup handshake)", () => {
 
     try {
       const connectPromise = startConnect();
-      await vi.waitFor(() => {
-        expect((popup as unknown as { location: { href: string } }).location.href).not.toBe("");
-      });
+      await expectPopupOpened(popup);
       const state = stateFromPopupUrl(popup);
       dispatch({ type: MOBBIN_OAUTH_MESSAGE_TYPE, code: "auth-code", state }, window.location.origin);
 
@@ -672,6 +664,23 @@ describe("connect (OAuth popup handshake)", () => {
     expect(hasStoredCredentials()).toBe(false);
   });
 
+  // Stubs the backend + popup the way `beginConnect()` does above, but
+  // without starting connect() or waiting for the redirect: the three tests
+  // below all run under fake timers and need to control exactly when
+  // `startConnect()`/its rejection handler/`flushUntilFakeTimers` each run
+  // relative to one another (see the grace-period test's own comment).
+  function beginFakeTimerPopup() {
+    const fetchMock = stubBackendRegisterAndToken();
+    vi.stubGlobal("fetch", fetchMock);
+    return stubPopup();
+  }
+
+  async function waitForPopupOpenFakeTimers(popup: Window): Promise<void> {
+    await flushUntilFakeTimers(
+      () => (popup as unknown as { location: { href: string } }).location.href !== "",
+    );
+  }
+
   // Finding #7: the popup-closed poll can observe `popup.closed === true`
   // before a same-tick, already-queued postMessage is actually delivered —
   // both share the main thread. A successful sign-in must not lose its
@@ -679,14 +688,10 @@ describe("connect (OAuth popup handshake)", () => {
   it("lets an already-queued success message win a same-tick race with popup.closed", async () => {
     vi.useFakeTimers();
     try {
-      const fetchMock = stubBackendRegisterAndToken();
-      vi.stubGlobal("fetch", fetchMock);
-      const { popup, dispatch } = stubPopup();
+      const { popup, dispatch } = beginFakeTimerPopup();
 
       const connectPromise = startConnect();
-      await flushUntilFakeTimers(
-        () => (popup as unknown as { location: { href: string } }).location.href !== "",
-      );
+      await waitForPopupOpenFakeTimers(popup);
       const state = stateFromPopupUrl(popup);
 
       // The user closes the popup in the same tick the callback page's
@@ -708,9 +713,7 @@ describe("connect (OAuth popup handshake)", () => {
   it("rejects once the grace period elapses with no message after the popup closes", async () => {
     vi.useFakeTimers();
     try {
-      const fetchMock = stubBackendRegisterAndToken();
-      vi.stubGlobal("fetch", fetchMock);
-      const { popup } = stubPopup();
+      const { popup } = beginFakeTimerPopup();
 
       const connectPromise = startConnect();
       // Attach a handler immediately: the promise rejects DURING the
@@ -719,9 +722,7 @@ describe("connect (OAuth popup handshake)", () => {
       // attached, that's an unhandled-rejection tick even though the test
       // does eventually observe it.
       const rejection = connectPromise.catch((err: unknown) => err);
-      await flushUntilFakeTimers(
-        () => (popup as unknown as { location: { href: string } }).location.href !== "",
-      );
+      await waitForPopupOpenFakeTimers(popup);
 
       (popup as unknown as { closed: boolean }).closed = true;
       // Past the 500ms poll tick AND the grace period, with no message ever
@@ -741,17 +742,13 @@ describe("connect (OAuth popup handshake)", () => {
   it("times out if the popup never reports back", async () => {
     vi.useFakeTimers();
     try {
-      const fetchMock = stubBackendRegisterAndToken();
-      vi.stubGlobal("fetch", fetchMock);
-      const { popup } = stubPopup();
+      const { popup } = beginFakeTimerPopup();
 
       const connectPromise = startConnect();
       // See the grace-period test above: attach a handler before advancing
       // timers, since the rejection happens during that call.
       const rejection = connectPromise.catch((err: unknown) => err);
-      await flushUntilFakeTimers(
-        () => (popup as unknown as { location: { href: string } }).location.href !== "",
-      );
+      await waitForPopupOpenFakeTimers(popup);
 
       await vi.advanceTimersByTimeAsync(5 * 60_000 + 1000);
 

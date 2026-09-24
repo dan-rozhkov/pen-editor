@@ -2,31 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetStores } from "@/test/fixtures";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
-import { useHistoryStore } from "@/store/historyStore";
 import { useClipboardStore } from "@/store/clipboardStore";
 import { H2D_FIXTURE_HTML } from "@/lib/h2dPaste/__tests__/h2dFixtureHtml";
 import type { FrameNode, SceneNode } from "@/types/scene";
 import { generateId } from "@/types/scene";
-import { createClipboardActions } from "../clipboardActions";
+import { fakeClipboardEvent, makePasteActions } from "./pasteIntegrationFixtures";
 
 vi.mock("sonner", () => ({ toast: vi.fn() }));
-
-/**
- * A minimal fake ClipboardEvent: `handlePaste` only reads `target`,
- * `composedPath`, `clipboardData.getData`, `clipboardData.items` and calls
- * `preventDefault` — no need for a real browser ClipboardEvent/DataTransfer.
- */
-function fakeClipboardEvent(html: string): ClipboardEvent {
-  return {
-    target: null,
-    composedPath: () => [],
-    preventDefault: () => {},
-    clipboardData: {
-      getData: (type: string) => (type === "text/html" ? html : ""),
-      items: [] as unknown as DataTransferItemList,
-    },
-  } as unknown as ClipboardEvent;
-}
 
 /** h2d markers present (so `isH2dClipboardHtml` matches) but the base64 payload is garbage. */
 const CORRUPT_H2D_HTML = '<span data-h2d="<!--(figh2d)not-valid-base64!!!(/figh2d)-->"></span>';
@@ -37,22 +19,8 @@ describe("handlePaste — h2d clipboard payload", () => {
     useClipboardStore.setState({ copiedNodes: [], lastCopiedAt: 0 });
   });
 
-  function makeActions() {
-    return createClipboardActions({
-      dimensions: { width: 1200, height: 800 },
-      addNode: useSceneStore.getState().addNode,
-      addChildToFrame: useSceneStore.getState().addChildToFrame,
-      deleteNode: useSceneStore.getState().deleteNode,
-      saveHistory: (snapshot) => useHistoryStore.getState().saveHistory(snapshot),
-      startBatch: () => useHistoryStore.getState().startBatch(),
-      endBatch: () => useHistoryStore.getState().endBatch(),
-      clearSelection: () => useSelectionStore.getState().clearSelection(),
-      copyNodes: (nodes) => useClipboardStore.getState().copyNodes(nodes),
-    });
-  }
-
   it("converts an h2d clipboard payload into scene nodes and selects them", async () => {
-    const { handlePaste } = makeActions();
+    const { handlePaste } = makePasteActions();
 
     await handlePaste(fakeClipboardEvent(H2D_FIXTURE_HTML));
 
@@ -67,7 +35,7 @@ describe("handlePaste — h2d clipboard payload", () => {
   });
 
   it("converts capture.js HTML with entity-escaped markers", async () => {
-    const { handlePaste } = makeActions();
+    const { handlePaste } = makePasteActions();
     const escapedHtml = H2D_FIXTURE_HTML
       .replaceAll("<!--", "&lt;!--")
       .replaceAll("-->", "--&gt;");
@@ -80,7 +48,7 @@ describe("handlePaste — h2d clipboard payload", () => {
   });
 
   it("pastes the same h2d payload twice as two disjoint root frames", async () => {
-    const { handlePaste } = makeActions();
+    const { handlePaste } = makePasteActions();
 
     await handlePaste(fakeClipboardEvent(H2D_FIXTURE_HTML));
     await handlePaste(fakeClipboardEvent(H2D_FIXTURE_HTML));
@@ -103,7 +71,7 @@ describe("handlePaste — h2d clipboard payload", () => {
   });
 
   it("falls through to the internal clipboard fallback when the h2d payload is corrupt", async () => {
-    const { handlePaste } = makeActions();
+    const { handlePaste } = makePasteActions();
 
     // Seed an internal-clipboard node so the fallback branch has something to paste.
     const fallbackNode: SceneNode = {

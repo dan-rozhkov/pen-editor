@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createKeyDownHandler, type KeyDownHandlerDeps } from "../keyboardCommands";
+import type { KeyDownHandlerDeps } from "../keyboardCommands";
 import { handleEmbedElementEnter } from "../embedElementNavigation";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
@@ -10,37 +10,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { describeEmbedElement, resolveElementPath } from "@/lib/embedElementPicker";
 import { resetStores } from "@/test/fixtures";
 import type { FlatSceneNode } from "@/types/scene";
-
-function makeDeps(): KeyDownHandlerDeps {
-  return {
-    dimensions: { width: 800, height: 600 },
-    setIsSpacePressed: vi.fn(),
-    setIsPanning: vi.fn(),
-    deleteNode: vi.fn(),
-    updateNode: vi.fn(),
-    moveNode: vi.fn(),
-    groupNodes: vi.fn(() => null),
-    ungroupNodes: vi.fn(() => []),
-    wrapInAutoLayoutFrame: vi.fn(() => null),
-    booleanOperation: vi.fn(() => null),
-    restoreSnapshot: vi.fn(),
-    saveHistory: vi.fn(),
-    startBatch: vi.fn(),
-    endBatch: vi.fn(),
-    undo: vi.fn(() => null),
-    redo: vi.fn(() => null),
-    fitToContent: vi.fn(),
-    toggleTool: vi.fn(),
-    cancelDrawing: vi.fn(),
-    clearSelection: vi.fn(),
-    copySelection: vi.fn(),
-    cutSelection: vi.fn(),
-    copyStyleSelection: vi.fn(),
-    pasteStyleSelection: vi.fn(),
-    copyAsCss: vi.fn(),
-    copyAsSvg: vi.fn(),
-  };
-}
+import { key, seedEmbedNode, setupKeyDownHandler } from "./keyboardCommandFixtures";
 
 /**
  * Mirrors `mountHtmlWithBodyStyles`'s UNWRAPPED branch (no body-targeted
@@ -65,23 +35,7 @@ function mountEmbed(embedId: string, html: string): ShadowRoot {
  * precondition every handler under test requires (`resolveElementContext`'s
  * "owning embed is still the sole native selection" check). */
 function seedEmbedSelection(embedId: string, html: string): void {
-  useSceneStore.setState({
-    nodesById: {
-      [embedId]: {
-        id: embedId,
-        type: "embed",
-        name: "Embed",
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 100,
-        htmlContent: html,
-      } as unknown as FlatSceneNode,
-    },
-    parentById: { [embedId]: null },
-    childrenById: {},
-    rootIds: [embedId],
-  });
+  seedEmbedNode(embedId, html);
   useSelectionStore.setState({ selectedIds: [embedId] });
 }
 
@@ -93,11 +47,11 @@ function pick(embedId: string, root: ShadowRoot, el: Element, html: string): voi
 }
 
 function tabEvent(shiftKey = false): KeyboardEvent {
-  return new KeyboardEvent("keydown", { code: "Tab", key: "Tab", shiftKey });
+  return key("Tab", { shiftKey });
 }
 
 function enterEvent(shiftKey = false): KeyboardEvent {
-  return new KeyboardEvent("keydown", { code: "Enter", key: "Enter", shiftKey });
+  return key("Enter", { shiftKey });
 }
 
 /** Resolves `useEmbedPickerStore`'s current `selection.path` back to a live
@@ -119,9 +73,7 @@ describe("keyboardCommands — embed element keyboard navigation", () => {
   beforeEach(() => {
     resetStores();
     document.body.innerHTML = "";
-    deps = makeDeps();
-    handler = createKeyDownHandler(deps);
-    useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
+    ({ deps, handler } = setupKeyDownHandler());
   });
 
   it("Pen tool: Enter finishes an in-progress draft instead of auto-picking a sole-selected embed (Finding 1)", () => {

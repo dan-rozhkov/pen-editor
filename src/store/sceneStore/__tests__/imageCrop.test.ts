@@ -1,28 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useSceneStore, createSnapshot } from "@/store/sceneStore";
-import { useHistoryStore } from "@/store/historyStore";
 import { resetStores, seedScene } from "@/test/fixtures";
 import type { RectNode } from "@/types/scene";
-
-function scene() {
-  return useSceneStore.getState();
-}
-
-// Replicate the real undo/redo cycle from useCanvasKeyboardShortcuts:
-// snapshot current -> ask history for the target -> restore it if present.
-function undo() {
-  const snapshot = createSnapshot(useSceneStore.getState());
-  const prev = useHistoryStore.getState().undo(snapshot);
-  if (prev) useSceneStore.getState().restoreSnapshot(prev);
-  return prev;
-}
-
-function redo() {
-  const snapshot = createSnapshot(useSceneStore.getState());
-  const next = useHistoryStore.getState().redo(snapshot);
-  if (next) useSceneStore.getState().restoreSnapshot(next);
-  return next;
-}
+import { redo, scene, undo } from "./sceneTestHelpers";
 
 describe("image fill crop persists in the scene graph", () => {
   beforeEach(() => {

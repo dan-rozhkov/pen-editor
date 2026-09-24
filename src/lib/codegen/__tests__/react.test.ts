@@ -1,44 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetStores, seedVariables } from "@/test/fixtures";
 import { buildReactCode } from "../react";
-import type { FlatFrameNode, RectNode, TextNode } from "@/types/scene";
-
-function frameNode(overrides: Partial<FlatFrameNode> = {}): FlatFrameNode {
-  return {
-    id: "frame1",
-    type: "frame",
-    name: "Card",
-    x: 0,
-    y: 0,
-    width: 300,
-    height: 200,
-    layout: {
-      autoLayout: true,
-      flexDirection: "column",
-      gap: 8,
-      paddingTop: 16,
-      paddingRight: 16,
-      paddingBottom: 16,
-      paddingLeft: 16,
-    },
-    ...overrides,
-  } as unknown as FlatFrameNode;
-}
-
-function titleText(): TextNode {
-  return {
-    id: "text1",
-    type: "text",
-    name: "Title",
-    x: 0,
-    y: 0,
-    width: 120,
-    height: 24,
-    text: "Hello & <world>",
-    fontSize: 16,
-    fontWeight: "700",
-  } as unknown as TextNode;
-}
+import type { FlatFrameNode, RectNode } from "@/types/scene";
+import { frameNode, pathNode, titleText } from "./codegenNodeFixtures";
 
 function avatarImage(): RectNode {
   return {
@@ -215,15 +179,7 @@ describe("buildReactCode", () => {
 
   it("(i) warns once for an unsupported node type (path) rendered as an empty placeholder", () => {
     const frame = frameNode({ layout: undefined });
-    const path = {
-      id: "path1",
-      type: "path",
-      name: "Icon",
-      x: 0,
-      y: 0,
-      width: 50,
-      height: 20,
-    } as unknown as RectNode;
+    const path = pathNode();
     const nodesById = { frame1: frame, path1: path };
     const childrenById = { frame1: ["path1"] };
 

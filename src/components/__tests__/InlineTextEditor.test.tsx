@@ -22,8 +22,8 @@ function textNode(overrides: Partial<TextNode> = {}): TextNode {
   } as TextNode;
 }
 
-/** Place a collapsed caret `offset` characters into the given line div's own text (ignoring any marker span). */
-function placeCaret(lineDiv: HTMLElement, offset: number) {
+/** Find the `offset`-th character position within `lineDiv`'s own text (ignoring any marker span), shared by `placeCaret`/`placeSelection`. */
+function findTextPosition(lineDiv: HTMLElement, offset: number): { node: Node; offset: number } {
   const walk = (n: Node): { node: Node; offset: number } | null => {
     if (n.nodeType === Node.TEXT_NODE) return { node: n, offset }
     if (n instanceof HTMLElement && n.hasAttribute("data-text-list-marker")) return null
@@ -33,7 +33,12 @@ function placeCaret(lineDiv: HTMLElement, offset: number) {
     }
     return null
   }
-  const found = walk(lineDiv) ?? { node: lineDiv, offset: 0 }
+  return walk(lineDiv) ?? { node: lineDiv, offset: 0 }
+}
+
+/** Place a collapsed caret `offset` characters into the given line div's own text. */
+function placeCaret(lineDiv: HTMLElement, offset: number) {
+  const found = findTextPosition(lineDiv, offset)
   const range = document.createRange()
   range.setStart(found.node, found.offset)
   range.collapse(true)
@@ -44,26 +49,29 @@ function placeCaret(lineDiv: HTMLElement, offset: number) {
 
 /** Place a non-collapsed selection from `startOffset` chars into `startLine` to `endOffset` chars into `endLine` (marker spans excluded, same rules as `placeCaret`). */
 function placeSelection(startLine: HTMLElement, startOffset: number, endLine: HTMLElement, endOffset: number) {
-  const locate = (lineDiv: HTMLElement, offset: number): { node: Node; offset: number } => {
-    const walk = (n: Node): { node: Node; offset: number } | null => {
-      if (n.nodeType === Node.TEXT_NODE) return { node: n, offset }
-      if (n instanceof HTMLElement && n.hasAttribute("data-text-list-marker")) return null
-      for (const child of Array.from(n.childNodes)) {
-        const result = walk(child)
-        if (result) return result
-      }
-      return null
-    }
-    return walk(lineDiv) ?? { node: lineDiv, offset: 0 }
-  }
-  const start = locate(startLine, startOffset)
-  const end = locate(endLine, endOffset)
+  const start = findTextPosition(startLine, startOffset)
+  const end = findTextPosition(endLine, endOffset)
   const range = document.createRange()
   range.setStart(start.node, start.offset)
   range.setEnd(end.node, end.offset)
   const sel = window.getSelection()
   sel?.removeAllRanges()
   sel?.addRange(range)
+}
+
+/** Seed the scene store with `node` and render <InlineTextEditor/> against it
+ * — the setState+render+query-editor boilerplate shared by nearly every test
+ * below. Returns the render result plus the resolved contenteditable root. */
+function seedAndRender(node: TextNode) {
+  useSceneStore.setState({
+    nodesById: { t1: node },
+    parentById: { t1: null },
+    childrenById: {},
+    rootIds: ["t1"],
+  });
+  const rendered = render(<InlineTextEditor node={node} absoluteX={0} absoluteY={0} />);
+  const editor = rendered.container.querySelector('[contenteditable="true"]') as HTMLElement;
+  return { ...rendered, editor };
 }
 
 describe("<InlineTextEditor />", () => {
@@ -142,20 +150,7 @@ describe("<InlineTextEditor />", () => {
   });
 
   it("Enter inside a bulleted line continues the list onto the new paragraph", () => {
-    useSceneStore.setState({
-      nodesById: { t1: textNode({ text: "one", paragraphs: [{ listType: "bullet" }] }) },
-      parentById: { t1: null },
-      childrenById: {},
-      rootIds: ["t1"],
-    });
-    const { container } = render(
-      <InlineTextEditor
-        node={textNode({ text: "one", paragraphs: [{ listType: "bullet" }] })}
-        absoluteX={0}
-        absoluteY={0}
-      />,
-    );
-    const editor = container.querySelector('[contenteditable="true"]') as HTMLElement;
+    const { editor } = seedAndRender(textNode({ text: "one", paragraphs: [{ listType: "bullet" }] }));
     const firstLine = editor.children[0] as HTMLElement;
     placeCaret(firstLine, 3); // caret at end of "one"
 
@@ -168,20 +163,7 @@ describe("<InlineTextEditor />", () => {
   });
 
   it("Tab indents the current paragraph", () => {
-    useSceneStore.setState({
-      nodesById: { t1: textNode({ text: "one", paragraphs: [{ listType: "bullet" }] }) },
-      parentById: { t1: null },
-      childrenById: {},
-      rootIds: ["t1"],
-    });
-    const { container } = render(
-      <InlineTextEditor
-        node={textNode({ text: "one", paragraphs: [{ listType: "bullet" }] })}
-        absoluteX={0}
-        absoluteY={0}
-      />,
-    );
-    const editor = container.querySelector('[contenteditable="true"]') as HTMLElement;
+    const { editor } = seedAndRender(textNode({ text: "one", paragraphs: [{ listType: "bullet" }] }));
     const firstLine = editor.children[0] as HTMLElement;
     placeCaret(firstLine, 1);
 
@@ -192,20 +174,7 @@ describe("<InlineTextEditor />", () => {
   });
 
   it("Shift+Tab outdents the current paragraph", () => {
-    useSceneStore.setState({
-      nodesById: { t1: textNode({ text: "one", paragraphs: [{ listType: "bullet", indentLevel: 2 }] }) },
-      parentById: { t1: null },
-      childrenById: {},
-      rootIds: ["t1"],
-    });
-    const { container } = render(
-      <InlineTextEditor
-        node={textNode({ text: "one", paragraphs: [{ listType: "bullet", indentLevel: 2 }] })}
-        absoluteX={0}
-        absoluteY={0}
-      />,
-    );
-    const editor = container.querySelector('[contenteditable="true"]') as HTMLElement;
+    const { editor } = seedAndRender(textNode({ text: "one", paragraphs: [{ listType: "bullet", indentLevel: 2 }] }));
     const firstLine = editor.children[0] as HTMLElement;
     placeCaret(firstLine, 1);
 
@@ -216,16 +185,7 @@ describe("<InlineTextEditor />", () => {
   });
 
   it("Cmd+Shift+8 toggles a bullet list on the current paragraph", () => {
-    useSceneStore.setState({
-      nodesById: { t1: textNode({ text: "one" }) },
-      parentById: { t1: null },
-      childrenById: {},
-      rootIds: ["t1"],
-    });
-    const { container } = render(
-      <InlineTextEditor node={textNode({ text: "one" })} absoluteX={0} absoluteY={0} />,
-    );
-    const editor = container.querySelector('[contenteditable="true"]') as HTMLElement;
+    const { editor } = seedAndRender(textNode({ text: "one" }));
     placeCaret(editor.children[0] as HTMLElement, 1);
 
     fireEvent.keyDown(editor, { code: "Digit8", metaKey: true, shiftKey: true });
@@ -235,16 +195,7 @@ describe("<InlineTextEditor />", () => {
   });
 
   it("Cmd+Shift+7 toggles a numbered list on the current paragraph", () => {
-    useSceneStore.setState({
-      nodesById: { t1: textNode({ text: "one" }) },
-      parentById: { t1: null },
-      childrenById: {},
-      rootIds: ["t1"],
-    });
-    const { container } = render(
-      <InlineTextEditor node={textNode({ text: "one" })} absoluteX={0} absoluteY={0} />,
-    );
-    const editor = container.querySelector('[contenteditable="true"]') as HTMLElement;
+    const { editor } = seedAndRender(textNode({ text: "one" }));
     placeCaret(editor.children[0] as HTMLElement, 1);
 
     fireEvent.keyDown(editor, { code: "Digit7", ctrlKey: true, shiftKey: true });
@@ -255,20 +206,12 @@ describe("<InlineTextEditor />", () => {
 
   describe("commitText paragraph resync (finding 1a)", () => {
     it("a native backspace line-merge keeps paragraphs index-aligned with the new (shorter) line count", () => {
-      const seed = textNode({
-        text: "one\ntwo\nthree",
-        paragraphs: [{ listType: "bullet" }, { listType: "bullet" }, {}],
-      });
-      useSceneStore.setState({
-        nodesById: { t1: seed },
-        parentById: { t1: null },
-        childrenById: {},
-        rootIds: ["t1"],
-      });
-      const { container, unmount } = render(
-        <InlineTextEditor node={seed} absoluteX={0} absoluteY={0} />,
+      const { editor, unmount } = seedAndRender(
+        textNode({
+          text: "one\ntwo\nthree",
+          paragraphs: [{ listType: "bullet" }, { listType: "bullet" }, {}],
+        }),
       );
-      const editor = container.querySelector('[contenteditable="true"]') as HTMLElement;
 
       // No onPaste/backspace intercept exists in InlineTextEditor, so the
       // browser applies this natively — simulate the resulting DOM directly:
@@ -291,17 +234,7 @@ describe("<InlineTextEditor />", () => {
     });
 
     it("a simulated multi-line paste (line count increases) pads new paragraphs with plain defaults", () => {
-      const seed = textNode({ text: "one", paragraphs: [{ listType: "bullet" }] });
-      useSceneStore.setState({
-        nodesById: { t1: seed },
-        parentById: { t1: null },
-        childrenById: {},
-        rootIds: ["t1"],
-      });
-      const { container, unmount } = render(
-        <InlineTextEditor node={seed} absoluteX={0} absoluteY={0} />,
-      );
-      const editor = container.querySelector('[contenteditable="true"]') as HTMLElement;
+      const { editor, unmount } = seedAndRender(textNode({ text: "one", paragraphs: [{ listType: "bullet" }] }));
 
       editor.innerHTML = "";
       for (const t of ["one", "pasted-a", "pasted-b"]) {
@@ -321,16 +254,7 @@ describe("<InlineTextEditor />", () => {
 
   describe("Enter with a non-collapsed selection (finding 2)", () => {
     it("deletes a multi-character single-line selection before splitting", () => {
-      useSceneStore.setState({
-        nodesById: { t1: textNode({ text: "aabbcc" }) },
-        parentById: { t1: null },
-        childrenById: {},
-        rootIds: ["t1"],
-      });
-      const { container } = render(
-        <InlineTextEditor node={textNode({ text: "aabbcc" })} absoluteX={0} absoluteY={0} />,
-      );
-      const editor = container.querySelector('[contenteditable="true"]') as HTMLElement;
+      const { editor } = seedAndRender(textNode({ text: "aabbcc" }));
       const line = editor.children[0] as HTMLElement;
       placeSelection(line, 2, line, 4); // select "bb"
 
@@ -341,16 +265,7 @@ describe("<InlineTextEditor />", () => {
     });
 
     it("deletes a selection spanning two lines before splitting", () => {
-      useSceneStore.setState({
-        nodesById: { t1: textNode({ text: "hello\nworld" }) },
-        parentById: { t1: null },
-        childrenById: {},
-        rootIds: ["t1"],
-      });
-      const { container } = render(
-        <InlineTextEditor node={textNode({ text: "hello\nworld" })} absoluteX={0} absoluteY={0} />,
-      );
-      const editor = container.querySelector('[contenteditable="true"]') as HTMLElement;
+      const { editor } = seedAndRender(textNode({ text: "hello\nworld" }));
       const line0 = editor.children[0] as HTMLElement;
       const line1 = editor.children[1] as HTMLElement;
       placeSelection(line0, 3, line1, 2); // select "lo\nwo"
@@ -362,16 +277,7 @@ describe("<InlineTextEditor />", () => {
     });
 
     it("a collapsed selection (plain caret) still splits normally", () => {
-      useSceneStore.setState({
-        nodesById: { t1: textNode({ text: "aabbcc" }) },
-        parentById: { t1: null },
-        childrenById: {},
-        rootIds: ["t1"],
-      });
-      const { container } = render(
-        <InlineTextEditor node={textNode({ text: "aabbcc" })} absoluteX={0} absoluteY={0} />,
-      );
-      const editor = container.querySelector('[contenteditable="true"]') as HTMLElement;
+      const { editor } = seedAndRender(textNode({ text: "aabbcc" }));
       placeCaret(editor.children[0] as HTMLElement, 2);
 
       fireEvent.keyDown(editor, { key: "Enter" });
@@ -383,16 +289,7 @@ describe("<InlineTextEditor />", () => {
 
   describe("Tab on plain text (finding 3)", () => {
     it("does not intercept Tab, and does not persist an indentLevel, on a listType: 'none' paragraph", () => {
-      useSceneStore.setState({
-        nodesById: { t1: textNode({ text: "one" }) },
-        parentById: { t1: null },
-        childrenById: {},
-        rootIds: ["t1"],
-      });
-      const { container } = render(
-        <InlineTextEditor node={textNode({ text: "one" })} absoluteX={0} absoluteY={0} />,
-      );
-      const editor = container.querySelector('[contenteditable="true"]') as HTMLElement;
+      const { editor } = seedAndRender(textNode({ text: "one" }));
       placeCaret(editor.children[0] as HTMLElement, 1);
 
       const notCanceled = fireEvent.keyDown(editor, { key: "Tab" });
@@ -403,15 +300,7 @@ describe("<InlineTextEditor />", () => {
     });
 
     it("still intercepts Tab (and Shift+Tab) when the paragraph is part of a list", () => {
-      const seed = textNode({ text: "one", paragraphs: [{ listType: "bullet" }] });
-      useSceneStore.setState({
-        nodesById: { t1: seed },
-        parentById: { t1: null },
-        childrenById: {},
-        rootIds: ["t1"],
-      });
-      const { container } = render(<InlineTextEditor node={seed} absoluteX={0} absoluteY={0} />);
-      const editor = container.querySelector('[contenteditable="true"]') as HTMLElement;
+      const { editor } = seedAndRender(textNode({ text: "one", paragraphs: [{ listType: "bullet" }] }));
       placeCaret(editor.children[0] as HTMLElement, 1);
 
       const notCanceled = fireEvent.keyDown(editor, { key: "Tab" });

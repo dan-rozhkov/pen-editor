@@ -10,6 +10,70 @@ function sceneState() {
   return useSceneStore.getState();
 }
 
+/** Runs a single-node `I(...)` op and returns its parsed result plus the
+ * created node's effects stack — the shape shared by the effects tests below. */
+async function createNodeAndGetEffects(operations: string) {
+  const result = JSON.parse(await batchDesign({ operations }));
+  const node = sceneState().nodesById[result.createdNodes[0].id];
+  return { result, effects: node.effects as Effect[] };
+}
+
+/** Runs an `I(...)` op and returns its parsed result plus the created node's
+ * fills stack — the shape shared by several fills tests below. */
+async function insertAndGetFills(operations: string) {
+  const result = JSON.parse(await batchDesign({ operations }));
+  const fills = sceneState().nodesById[result.createdNodes[0].id].fills as Paint[];
+  return { result, fills };
+}
+
+/** Runs an op against the fixture's `rect1` and returns its parsed result
+ * plus the node and its fills stack — several legacy-fill-migration tests
+ * below all read `rect1` back the same way after their own op. */
+async function runOnRect1(operations: string) {
+  const result = JSON.parse(await batchDesign({ operations }));
+  const node = sceneState().nodesById["rect1"] as Record<string, unknown>;
+  return { result, node, fills: node.fills as Paint[] };
+}
+
+/** Fire-and-forget op, for setup steps whose own result isn't asserted on. */
+async function applyOp(operations: string): Promise<void> {
+  await batchDesign({ operations });
+}
+
+// Gives frame1 an auto-layout, the shared precondition for the two R()
+// layout-inheritance tests below (replacing with a non-frame type / with a
+// frame that has its own new children).
+function seedFrame1Layout(): void {
+  useSceneStore.setState((s) => ({
+    nodesById: {
+      ...s.nodesById,
+      frame1: {
+        ...s.nodesById["frame1"],
+        layout: { autoLayout: true, flexDirection: "column", gap: 8 },
+      },
+    },
+  }));
+}
+
+// The plain frame replacement several R()-side-effect tests below run —
+// only the pre-existing state (connectors/measurements) differs between them.
+async function replaceFrame1WithNewFrame() {
+  return JSON.parse(
+    await batchDesign({
+      operations: 'R(frame1, {type: "frame", name: "New", width: 100, height: 100})',
+    })
+  );
+}
+
+// Inserts a text node with a markdown link and returns its id — the shared
+// precondition for the "clear/remove an existing link" tests below.
+async function insertLinkedTextGetId(): Promise<string> {
+  await batchDesign({
+    operations: 'label=I(document, {type: "text", name: "CTA", content: "[Go](https://example.com)"})',
+  });
+  return sceneState().rootIds[sceneState().rootIds.length - 1];
+}
+
 describe("batch_design", () => {
   beforeEach(() => {
     resetStores();
@@ -300,15 +364,10 @@ describe("batch_design", () => {
 
   describe("effects (shadow/blur stack)", () => {
     it("creates a node with an inner shadow effect", async () => {
-      const result = JSON.parse(
-        await batchDesign({
-          operations:
-            'r=I(document, {type: "rectangle", name: "Inset", width: 10, height: 10, effects: [{type: "shadow", shadowType: "inner", color: "#00000080", offset: {x: 2, y: 2}, blur: 4, spread: 0}]})',
-        })
+      const { result, effects } = await createNodeAndGetEffects(
+        'r=I(document, {type: "rectangle", name: "Inset", width: 10, height: 10, effects: [{type: "shadow", shadowType: "inner", color: "#00000080", offset: {x: 2, y: 2}, blur: 4, spread: 0}]})',
       );
       expect(result.success).toBe(true);
-      const node = sceneState().nodesById[result.createdNodes[0].id];
-      const effects = node.effects as Effect[];
       expect(effects).toHaveLength(1);
       expect(effects[0]).toMatchObject({
         type: "shadow",
@@ -338,15 +397,10 @@ describe("batch_design", () => {
     // Pin: `effects` passes through the nodeMapper's default case verbatim,
     // so a noise effect round-trips with no special-casing required.
     it("creates a node with a noise effect", async () => {
-      const result = JSON.parse(
-        await batchDesign({
-          operations:
-            'r=I(document, {type: "rectangle", name: "Grain", width: 10, height: 10, effects: [{type: "noise", noiseType: "duo", color: "#00000080", secondaryColor: "#ffffffff", noiseSize: 2, noiseSizeY: 3, density: 0.3}]})',
-        })
+      const { result, effects } = await createNodeAndGetEffects(
+        'r=I(document, {type: "rectangle", name: "Grain", width: 10, height: 10, effects: [{type: "noise", noiseType: "duo", color: "#00000080", secondaryColor: "#ffffffff", noiseSize: 2, noiseSizeY: 3, density: 0.3}]})',
       );
       expect(result.success).toBe(true);
-      const node = sceneState().nodesById[result.createdNodes[0].id];
-      const effects = node.effects as Effect[];
       expect(effects).toHaveLength(1);
       expect(effects[0]).toMatchObject({
         type: "noise",
@@ -475,27 +529,19 @@ describe("batch_design", () => {
     });
 
     it("drops a pattern paint without a tile url, keeping the rest of the stack", async () => {
-      const result = JSON.parse(
-        await batchDesign({
-          operations:
-            'r=I(document, {type: "rectangle", name: "BadPat", width: 10, height: 10, fills: [{type: "solid", color: "#112233"}, {type: "pattern", scale: 2}]})',
-        })
+      const { result, fills } = await insertAndGetFills(
+        'r=I(document, {type: "rectangle", name: "BadPat", width: 10, height: 10, fills: [{type: "solid", color: "#112233"}, {type: "pattern", scale: 2}]})',
       );
       expect(result.success).toBe(true);
-      const fills = sceneState().nodesById[result.createdNodes[0].id].fills as Paint[];
       expect(fills).toHaveLength(1);
       expect(fills[0]).toMatchObject({ type: "solid", color: "#112233" });
     });
 
     it("drops a pattern paint on a node type that can't render sprite fills, with an issue message", async () => {
-      const result = JSON.parse(
-        await batchDesign({
-          operations:
-            'p=I(document, {type: "path", name: "PatPath", geometry: "M0,0 L10,0 L10,10 Z", width: 10, height: 10, fills: [{type: "solid", color: "#112233"}, {type: "pattern", url: "https://x/tile.png"}]})',
-        })
+      const { result, fills } = await insertAndGetFills(
+        'p=I(document, {type: "path", name: "PatPath", geometry: "M0,0 L10,0 L10,10 Z", width: 10, height: 10, fills: [{type: "solid", color: "#112233"}, {type: "pattern", url: "https://x/tile.png"}]})',
       );
       expect(result.success).toBe(true);
-      const fills = sceneState().nodesById[result.createdNodes[0].id].fills as Paint[];
       expect(fills).toHaveLength(1);
       expect(fills[0]).toMatchObject({ type: "solid", color: "#112233" });
       expect(result.issues).toBeDefined();
@@ -606,12 +652,8 @@ describe("batch_design", () => {
 
     it("G() migrates a legacy node to a fills stack, keeping its fill as the bottom layer", async () => {
       // rect1 starts with legacy fill #ff0000 and no fills stack
-      const result = JSON.parse(
-        await batchDesign({ operations: 'G(rect1, "ai", "a bird")' })
-      );
+      const { result, node, fills } = await runOnRect1('G(rect1, "ai", "a bird")');
       expect(result.success).toBe(true);
-      const node = sceneState().nodesById["rect1"] as Record<string, unknown>;
-      const fills = node.fills as Paint[];
       expect(fills).toHaveLength(2);
       expect(fills[0]).toMatchObject({ type: "solid", color: "#ff0000" });
       expect(fills[1].type).toBe("image");
@@ -621,16 +663,11 @@ describe("batch_design", () => {
     });
 
     it("U() with legacy fill on a fills node updates the topmost solid paint", async () => {
-      await batchDesign({
-        operations:
-          'U(rect1, {fills: [{type: "solid", color: "#0000ff"}, {type: "image", url: "https://x/a.png", mode: "fill"}]})',
-      });
-      const result = JSON.parse(
-        await batchDesign({ operations: 'U(rect1, {fill: "#00ff00"})' })
+      await applyOp(
+        'U(rect1, {fills: [{type: "solid", color: "#0000ff"}, {type: "image", url: "https://x/a.png", mode: "fill"}]})',
       );
+      const { result, node, fills } = await runOnRect1('U(rect1, {fill: "#00ff00"})');
       expect(result.success).toBe(true);
-      const node = sceneState().nodesById["rect1"] as Record<string, unknown>;
-      const fills = node.fills as Paint[];
       expect(fills).toHaveLength(2);
       expect(fills[0]).toMatchObject({ type: "solid", color: "#00ff00" });
       expect(fills[1].type).toBe("image");
@@ -639,16 +676,9 @@ describe("batch_design", () => {
     });
 
     it("U() with legacy fill adds a solid paint on top when the stack has none", async () => {
-      await batchDesign({
-        operations:
-          'U(rect1, {fills: [{type: "image", url: "https://x/a.png", mode: "fill"}]})',
-      });
-      const result = JSON.parse(
-        await batchDesign({ operations: 'U(rect1, {fill: "#00ff00"})' })
-      );
+      await applyOp('U(rect1, {fills: [{type: "image", url: "https://x/a.png", mode: "fill"}]})');
+      const { result, node, fills } = await runOnRect1('U(rect1, {fill: "#00ff00"})');
       expect(result.success).toBe(true);
-      const node = sceneState().nodesById["rect1"] as Record<string, unknown>;
-      const fills = node.fills as Paint[];
       expect(fills).toHaveLength(2);
       expect(fills[0].type).toBe("image");
       expect(fills[1]).toMatchObject({ type: "solid", color: "#00ff00" });
@@ -1433,15 +1463,7 @@ describe("batch_design", () => {
     });
 
     it("R() does not inherit layout when replacing a frame with a non-frame type", async () => {
-      useSceneStore.setState((s) => ({
-        nodesById: {
-          ...s.nodesById,
-          frame1: {
-            ...s.nodesById["frame1"],
-            layout: { autoLayout: true, flexDirection: "column", gap: 8 },
-          },
-        },
-      }));
+      seedFrame1Layout();
 
       const result = JSON.parse(
         await batchDesign({
@@ -1459,15 +1481,7 @@ describe("batch_design", () => {
     });
 
     it("R() does not apply the replaced node's inherited layout to its own new children", async () => {
-      useSceneStore.setState((s) => ({
-        nodesById: {
-          ...s.nodesById,
-          frame1: {
-            ...s.nodesById["frame1"],
-            layout: { autoLayout: true, flexDirection: "column", gap: 8 },
-          },
-        },
-      }));
+      seedFrame1Layout();
 
       const result = JSON.parse(
         await batchDesign({
@@ -1492,11 +1506,7 @@ describe("batch_design", () => {
       // conn1 anchors to rect1, a child of frame1; replacing frame1 removes rect1.
       addConnector("conn1", "rect1", "rect2");
 
-      const result = JSON.parse(
-        await batchDesign({
-          operations: 'R(frame1, {type: "frame", name: "New", width: 100, height: 100})',
-        })
-      );
+      const result = await replaceFrame1WithNewFrame();
 
       expect(result.success).toBe(true);
       expect(sceneState().nodesById["conn1"]).toBeUndefined();
@@ -1505,11 +1515,7 @@ describe("batch_design", () => {
     it("R() re-points connectors anchored to the replaced node itself", async () => {
       addConnector("conn1", "rect2", "frame1");
 
-      const result = JSON.parse(
-        await batchDesign({
-          operations: 'R(frame1, {type: "frame", name: "New", width: 100, height: 100})',
-        })
-      );
+      const result = await replaceFrame1WithNewFrame();
 
       expect(result.success).toBe(true);
       const newId = result.createdNodes[0].id;
@@ -1522,11 +1528,7 @@ describe("batch_design", () => {
       useMeasurementsStore.getState().addMeasurement("frame1", "rect2");
       expect(useMeasurementsStore.getState().measurements).toHaveLength(1);
 
-      const result = JSON.parse(
-        await batchDesign({
-          operations: 'R(frame1, {type: "frame", name: "New", width: 100, height: 100})',
-        })
-      );
+      const result = await replaceFrame1WithNewFrame();
 
       expect(result.success).toBe(true);
       expect(useMeasurementsStore.getState().measurements).toHaveLength(0);
@@ -1537,11 +1539,7 @@ describe("batch_design", () => {
       useMeasurementsStore.getState().addMeasurement("rect1", "rect2");
       expect(useMeasurementsStore.getState().measurements).toHaveLength(1);
 
-      const result = JSON.parse(
-        await batchDesign({
-          operations: 'R(frame1, {type: "frame", name: "New", width: 100, height: 100})',
-        })
-      );
+      const result = await replaceFrame1WithNewFrame();
 
       expect(result.success).toBe(true);
       expect(useMeasurementsStore.getState().measurements).toHaveLength(0);
@@ -1718,11 +1716,7 @@ describe("batch_design", () => {
     });
 
     it("U() can clear an existing link directly via {link: null}", async () => {
-      await batchDesign({
-        operations:
-          'label=I(document, {type: "text", name: "CTA", content: "[Go](https://example.com)"})',
-      });
-      const id = sceneState().rootIds[sceneState().rootIds.length - 1];
+      const id = await insertLinkedTextGetId();
       expect((sceneState().nodesById[id] as TextNode).link).toBeDefined();
 
       const result = JSON.parse(
@@ -1736,11 +1730,7 @@ describe("batch_design", () => {
     });
 
     it("U() removes an existing link by re-setting content to plain text", async () => {
-      await batchDesign({
-        operations:
-          'label=I(document, {type: "text", name: "CTA", content: "[Go](https://example.com)"})',
-      });
-      const id = sceneState().rootIds[sceneState().rootIds.length - 1];
+      const id = await insertLinkedTextGetId();
       expect((sceneState().nodesById[id] as TextNode).link).toBeDefined();
 
       const result = JSON.parse(

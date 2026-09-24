@@ -21,6 +21,40 @@ function stubBrowser(overrides: Partial<PenDesktopBrowser>): PenDesktopBrowser {
   };
 }
 
+// Every /api/browse/step call in these tests returns one JSON payload from a
+// fixed sequence — the Nth call gets payloads[N], and the last entry repeats
+// once exhausted (so a two-item sequence models "act once, then done
+// forever"). `onRequest` is only wired up by the couple of tests that also
+// need to inspect the request body the loop sent.
+type StepPayload = Record<string, unknown>;
+
+function stubFetchSequence(payloads: StepPayload[], onRequest?: (init: RequestInit) => void) {
+  let calls = 0;
+  const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+    onRequest?.(init as RequestInit);
+    const payload = payloads[Math.min(calls, payloads.length - 1)];
+    calls++;
+    return { ok: true, json: async () => payload };
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+// Decisions reused verbatim across several scenarios below.
+const CLICK_STEP = { outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" };
+const DONE = { outcome: "done", confidence: 1, model: "jev" };
+const TYPE_TEXT_STEP = {
+  outcome: "act",
+  operation: "TYPE_TEXT",
+  index: 0,
+  text: "headphones",
+  confidence: 0.9,
+  model: "jev",
+};
+const PRESS_ENTER_STEP = { outcome: "act", operation: "PRESS_ENTER", confidence: 0.9, model: "jev" };
+const PRESS_ESCAPE_STEP = { outcome: "act", operation: "PRESS_ESCAPE", confidence: 0.9, model: "jev" };
+const HOVER_STEP = { outcome: "act", operation: "HOVER", index: 0, confidence: 0.9, model: "jev" };
+
 afterEach(() => {
   delete window.penDesktop;
   vi.unstubAllGlobals();
@@ -36,25 +70,7 @@ describe("browse_task", () => {
   });
 
   it("terminates on outcome:done and returns the documented transcript shape", async () => {
-    let stepCalls = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        stepCalls++;
-        return {
-          ok: true,
-          json: async () =>
-            stepCalls === 1
-              ? { outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }
-              : {
-                  outcome: "done",
-                  confidence: 1,
-                  model: "jev",
-                  reason: "cookie banner dismissed",
-                },
-        };
-      })
-    );
+    stubFetchSequence([CLICK_STEP, { outcome: "done", confidence: 1, model: "jev", reason: "cookie banner dismissed" }]);
 
     const browser = stubBrowser({});
     const transcript = await runBrowseTaskLoop("accept cookies", 12, browser);
@@ -70,18 +86,7 @@ describe("browse_task", () => {
 
   it("terminates on outcome:blocked without performing the blocked step", async () => {
     const perform = vi.fn(async () => ({}));
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({
-          outcome: "blocked",
-          confidence: 0.2,
-          model: "jev",
-          reason: "confidence below threshold",
-        }),
-      }))
-    );
+    stubFetchSequence([{ outcome: "blocked", confidence: 0.2, model: "jev", reason: "confidence below threshold" }]);
 
     const browser = stubBrowser({ perform });
     const transcript = await runBrowseTaskLoop("log in", 12, browser);
@@ -95,20 +100,10 @@ describe("browse_task", () => {
   it("records outcome:retry as a step and continues the loop instead of ending the task", async () => {
     // A single transient Jev blip (timeout/malformed answer/no candidate
     // element) must not kill the whole task — addendum B's whole point.
-    let stepCalls = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        stepCalls++;
-        return {
-          ok: true,
-          json: async () =>
-            stepCalls === 1
-              ? { outcome: "retry", confidence: 0.4, model: "jev", reason: "no candidate element" }
-              : { outcome: "done", confidence: 1, model: "jev", reason: "goal met" },
-        };
-      })
-    );
+    stubFetchSequence([
+      { outcome: "retry", confidence: 0.4, model: "jev", reason: "no candidate element" },
+      { outcome: "done", confidence: 1, model: "jev", reason: "goal met" },
+    ]);
 
     const perform = vi.fn(async () => ({}));
     const browser = stubBrowser({ perform });
@@ -122,20 +117,10 @@ describe("browse_task", () => {
   });
 
   it("treats a missing/unrecognized outcome defensively — recorded and continued, not claimed as success", async () => {
-    let stepCalls = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        stepCalls++;
-        return {
-          ok: true,
-          json: async () =>
-            stepCalls === 1
-              ? { operation: "CLICK", index: 0, confidence: 0.9, model: "jev" } // no `outcome` at all
-              : { outcome: "some_future_value", confidence: 0.9, model: "jev" },
-        };
-      })
-    );
+    stubFetchSequence([
+      { operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }, // no `outcome` at all
+      { outcome: "some_future_value", confidence: 0.9, model: "jev" },
+    ]);
 
     const perform = vi.fn(async () => ({}));
     const browser = stubBrowser({ perform });
@@ -151,20 +136,7 @@ describe("browse_task", () => {
 
   it("sleeps and re-snapshots on WAIT without ever calling perform", async () => {
     // Addendum A: WAIT never reaches `perform`; the loop handles it itself.
-    let stepCalls = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        stepCalls++;
-        return {
-          ok: true,
-          json: async () =>
-            stepCalls === 1
-              ? { outcome: "act", operation: "WAIT", confidence: 0.9, model: "jev" }
-              : { outcome: "done", confidence: 1, model: "jev" },
-        };
-      })
-    );
+    stubFetchSequence([{ outcome: "act", operation: "WAIT", confidence: 0.9, model: "jev" }, DONE]);
 
     let snapshotCalls = 0;
     const snapshot = vi.fn(async () => {
@@ -199,13 +171,7 @@ describe("browse_task", () => {
   });
 
   it("forwards a scroll decision to perform without an `index` key when none is given", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({ outcome: "act", operation: "SCROLL_DOWN", confidence: 0.9, model: "jev" }),
-      }))
-    );
+    stubFetchSequence([{ outcome: "act", operation: "SCROLL_DOWN", confidence: 0.9, model: "jev" }]);
 
     const perform = vi.fn(async (_args: Parameters<PenDesktopBrowser["perform"]>[0]) => ({}));
     const browser = stubBrowser({ perform });
@@ -219,13 +185,7 @@ describe("browse_task", () => {
   });
 
   it("records a CLICK decision missing its index as a failed step and never calls perform", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({ outcome: "act", operation: "CLICK", confidence: 0.9, model: "jev" }),
-      }))
-    );
+    stubFetchSequence([{ outcome: "act", operation: "CLICK", confidence: 0.9, model: "jev" }]);
 
     const perform = vi.fn(async () => ({}));
     const browser = stubBrowser({ perform });
@@ -238,13 +198,7 @@ describe("browse_task", () => {
   });
 
   it("stops at maxSteps when the loop never resolves outcome:done/blocked", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({ outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }),
-      }))
-    );
+    stubFetchSequence([CLICK_STEP]);
 
     const browser = stubBrowser({});
     const transcript = await runBrowseTaskLoop("wander forever", 3, browser);
@@ -255,13 +209,7 @@ describe("browse_task", () => {
   });
 
   it("caps maxSteps at the hard cap of 25 even when a larger value is requested", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({ outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }),
-      }))
-    );
+    stubFetchSequence([CLICK_STEP]);
 
     const browser = stubBrowser({});
     const transcript = await runBrowseTaskLoop("wander forever", 1000, browser);
@@ -270,13 +218,7 @@ describe("browse_task", () => {
   });
 
   it("stops once the deadline is reached, before maxSteps", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({ operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }),
-      }))
-    );
+    stubFetchSequence([{ operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }]);
 
     const browser = stubBrowser({});
     let clock = 0;
@@ -297,20 +239,7 @@ describe("browse_task", () => {
   });
 
   it("records a failing perform step without ending the task", async () => {
-    let stepCalls = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        stepCalls++;
-        return {
-          ok: true,
-          json: async () =>
-            stepCalls === 1
-              ? { outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }
-              : { outcome: "done", confidence: 1, model: "jev" },
-        };
-      })
-    );
+    stubFetchSequence([CLICK_STEP, DONE]);
 
     const perform = vi
       .fn()
@@ -341,13 +270,7 @@ describe("browse_task", () => {
         snapshotId: "snap-2",
       };
     });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({ outcome: "done", confidence: 1, model: "jev" }),
-      }))
-    );
+    stubFetchSequence([DONE]);
 
     const browser = stubBrowser({ snapshot });
     const transcript = await runBrowseTaskLoop("accept cookies", 12, browser);
@@ -360,16 +283,9 @@ describe("browse_task", () => {
 
   it("forwards goal and maxSteps from args and returns a real JSON string", async () => {
     let receivedBody: unknown;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (_url: string, init: RequestInit) => {
-        receivedBody = JSON.parse(init.body as string);
-        return {
-          ok: true,
-          json: async () => ({ outcome: "done", confidence: 1, model: "jev" }),
-        };
-      })
-    );
+    stubFetchSequence([DONE], (init) => {
+      receivedBody = JSON.parse(init.body as string);
+    });
 
     window.penDesktop = {
       onMenuCommand: () => () => {},
@@ -392,20 +308,7 @@ describe("browse_task", () => {
   // three consecutive steps that land nothing end the task instead of
   // spending a paid Jev call per cycle until maxSteps runs out.
   it("records a perform that resolved with { error } as a failed step, not a landed action", async () => {
-    let stepCalls = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        stepCalls++;
-        return {
-          ok: true,
-          json: async () =>
-            stepCalls === 1
-              ? { outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }
-              : { outcome: "done", confidence: 1, model: "jev" },
-        };
-      })
-    );
+    stubFetchSequence([CLICK_STEP, DONE]);
 
     const perform = vi
       .fn()
@@ -426,11 +329,7 @@ describe("browse_task", () => {
   });
 
   it("stops with status:stalled after three consecutive steps that land nothing", async () => {
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({ outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }),
-    }));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubFetchSequence([CLICK_STEP]);
 
     // A persistently stale target: every act is rejected by the desktop
     // controller, so the loop would otherwise run all 12 steps.
@@ -448,20 +347,9 @@ describe("browse_task", () => {
   });
 
   it("resets the no-progress count on a step that did land", async () => {
-    let stepCalls = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        stepCalls++;
-        return {
-          ok: true,
-          json: async () =>
-            stepCalls >= 6
-              ? { outcome: "done", confidence: 1, model: "jev" }
-              : { outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" },
-        };
-      })
-    );
+    // Five CLICK decisions, then done — matched against the five perform
+    // outcomes below (fail, fail, land, fail, fail).
+    stubFetchSequence([CLICK_STEP, CLICK_STEP, CLICK_STEP, CLICK_STEP, CLICK_STEP, DONE]);
 
     // fail, fail, land, fail, fail — never three in a row, so the task runs
     // to its own conclusion.
@@ -484,32 +372,7 @@ describe("browse_task", () => {
   // 2026-09-23-full-browser-use-design.md): PRESS_ENTER/PRESS_ESCAPE and
   // HOVER dispatch through browser.act, not browser.perform.
   it("dispatches PRESS_ENTER as browser.act({action:'press', key:'Enter'}) right after a landed TYPE_TEXT", async () => {
-    let stepCalls = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        stepCalls++;
-        return {
-          ok: true,
-          json: async () => {
-            if (stepCalls === 1) {
-              return {
-                outcome: "act",
-                operation: "TYPE_TEXT",
-                index: 0,
-                text: "headphones",
-                confidence: 0.9,
-                model: "jev",
-              };
-            }
-            if (stepCalls === 2) {
-              return { outcome: "act", operation: "PRESS_ENTER", confidence: 0.9, model: "jev" };
-            }
-            return { outcome: "done", confidence: 1, model: "jev" };
-          },
-        };
-      })
-    );
+    stubFetchSequence([TYPE_TEXT_STEP, PRESS_ENTER_STEP, DONE]);
 
     const act = vi.fn(async () => ({}));
     const perform = vi.fn(async () => ({}));
@@ -526,20 +389,7 @@ describe("browse_task", () => {
   });
 
   it("refuses PRESS_ENTER without calling the bridge when the last landed step was not TYPE_TEXT", async () => {
-    let stepCalls = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        stepCalls++;
-        return {
-          ok: true,
-          json: async () =>
-            stepCalls === 1
-              ? { outcome: "act", operation: "PRESS_ENTER", confidence: 0.9, model: "jev" }
-              : { outcome: "done", confidence: 1, model: "jev" },
-        };
-      })
-    );
+    stubFetchSequence([PRESS_ENTER_STEP, DONE]);
 
     const act = vi.fn(async () => ({}));
     const browser = stubBrowser({ act });
@@ -556,30 +406,9 @@ describe("browse_task", () => {
   });
 
   it("refuses a second PRESS_ENTER right after the first (a landed PRESS_ENTER is not TYPE_TEXT)", async () => {
-    let stepCalls = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        stepCalls++;
-        return {
-          ok: true,
-          json: async () => {
-            if (stepCalls === 1) {
-              return {
-                outcome: "act",
-                operation: "TYPE_TEXT",
-                index: 0,
-                text: "headphones",
-                confidence: 0.9,
-                model: "jev",
-              };
-            }
-            // PRESS_ENTER decided twice in a row.
-            return { outcome: "act", operation: "PRESS_ENTER", confidence: 0.9, model: "jev" };
-          },
-        };
-      })
-    );
+    // TYPE_TEXT once, then PRESS_ENTER decided twice in a row (the loop
+    // never reaches outcome:done here — maxSteps below is what ends it).
+    stubFetchSequence([TYPE_TEXT_STEP, PRESS_ENTER_STEP]);
 
     const act = vi.fn(async () => ({}));
     const perform = vi.fn(async () => ({}));
@@ -597,20 +426,7 @@ describe("browse_task", () => {
   });
 
   it("dispatches PRESS_ESCAPE as browser.act({action:'press', key:'Escape'})", async () => {
-    let stepCalls = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        stepCalls++;
-        return {
-          ok: true,
-          json: async () =>
-            stepCalls === 1
-              ? { outcome: "act", operation: "PRESS_ESCAPE", confidence: 0.9, model: "jev" }
-              : { outcome: "done", confidence: 1, model: "jev" },
-        };
-      })
-    );
+    stubFetchSequence([PRESS_ESCAPE_STEP, DONE]);
 
     const act = vi.fn(async () => ({}));
     const browser = stubBrowser({ act });
@@ -622,20 +438,7 @@ describe("browse_task", () => {
   });
 
   it("dispatches HOVER as browser.act({action:'hover', index, snapshotId}) using the current step's snapshotId", async () => {
-    let stepCalls = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        stepCalls++;
-        return {
-          ok: true,
-          json: async () =>
-            stepCalls === 1
-              ? { outcome: "act", operation: "HOVER", index: 0, confidence: 0.9, model: "jev" }
-              : { outcome: "done", confidence: 1, model: "jev" },
-        };
-      })
-    );
+    stubFetchSequence([HOVER_STEP, DONE]);
 
     const act = vi.fn(async () => ({}));
     const browser = stubBrowser({ act });
@@ -647,13 +450,7 @@ describe("browse_task", () => {
   });
 
   it("records a HOVER decision missing its index as a failed step and never calls act", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({ outcome: "act", operation: "HOVER", confidence: 0.9, model: "jev" }),
-      }))
-    );
+    stubFetchSequence([{ outcome: "act", operation: "HOVER", confidence: 0.9, model: "jev" }]);
 
     const act = vi.fn(async () => ({}));
     const browser = stubBrowser({ act });
@@ -666,32 +463,7 @@ describe("browse_task", () => {
   });
 
   it("records a { error }-resolved act (PRESS_ENTER/HOVER) as a failed step, not a landed action", async () => {
-    let stepCalls = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        stepCalls++;
-        return {
-          ok: true,
-          json: async () => {
-            if (stepCalls === 1) {
-              return {
-                outcome: "act",
-                operation: "TYPE_TEXT",
-                index: 0,
-                text: "headphones",
-                confidence: 0.9,
-                model: "jev",
-              };
-            }
-            if (stepCalls === 2) {
-              return { outcome: "act", operation: "PRESS_ENTER", confidence: 0.9, model: "jev" };
-            }
-            return { outcome: "done", confidence: 1, model: "jev" };
-          },
-        };
-      })
-    );
+    stubFetchSequence([TYPE_TEXT_STEP, PRESS_ENTER_STEP, DONE]);
 
     const act = vi.fn(async () => ({ error: "nothing is focused" }));
     const perform = vi.fn(async () => ({}));
@@ -710,11 +482,7 @@ describe("browse_task", () => {
     // the no-progress counter, or a persistently no-op Escape would run out
     // the whole step budget the same way a persistently stale CLICK target
     // used to before PR #40.
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({ outcome: "act", operation: "PRESS_ESCAPE", confidence: 0.9, model: "jev" }),
-    }));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubFetchSequence([PRESS_ESCAPE_STEP]);
 
     const act = vi.fn(async () => ({ changed: false }));
     const browser = stubBrowser({ act });
@@ -728,20 +496,7 @@ describe("browse_task", () => {
   });
 
   it("folds openedTab into the step label/history when an act or perform result carries one", async () => {
-    let stepCalls = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        stepCalls++;
-        return {
-          ok: true,
-          json: async () =>
-            stepCalls === 1
-              ? { outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }
-              : { outcome: "done", confidence: 1, model: "jev" },
-        };
-      })
-    );
+    stubFetchSequence([CLICK_STEP, DONE]);
 
     const perform = vi.fn(async () => ({
       openedTab: { tabId: 7, url: "https://example.com/new", title: "New Tab" },
@@ -755,20 +510,7 @@ describe("browse_task", () => {
   });
 
   it("folds dialogs into the step label/history when a result carries them", async () => {
-    let stepCalls = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        stepCalls++;
-        return {
-          ok: true,
-          json: async () =>
-            stepCalls === 1
-              ? { outcome: "act", operation: "PRESS_ESCAPE", confidence: 0.9, model: "jev" }
-              : { outcome: "done", confidence: 1, model: "jev" },
-        };
-      })
-    );
+    stubFetchSequence([PRESS_ESCAPE_STEP, DONE]);
 
     const act = vi.fn(async () => ({
       dialogs: [{ tabId: 1, type: "alert", message: "Saved!" }],
@@ -783,23 +525,11 @@ describe("browse_task", () => {
 
   it("truncates an over-long opened-tab title/dialog message so the resulting history label stays within the backend's 200-char cap", async () => {
     const receivedBodies: Array<{ history?: Array<{ label: string }> }> = [];
-    let stepCalls = 0;
     const longTitle = "T".repeat(300);
     const longMessage = "M".repeat(300);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (_url: string, init: RequestInit) => {
-        stepCalls++;
-        receivedBodies.push(JSON.parse(init.body as string));
-        return {
-          ok: true,
-          json: async () =>
-            stepCalls === 1
-              ? { outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }
-              : { outcome: "done", confidence: 1, model: "jev" },
-        };
-      })
-    );
+    stubFetchSequence([CLICK_STEP, DONE], (init) => {
+      receivedBodies.push(JSON.parse(init.body as string));
+    });
 
     const perform = vi.fn(async () => ({
       openedTab: { tabId: 7, url: "https://example.com/new", title: longTitle },
@@ -821,13 +551,7 @@ describe("browse_task", () => {
   });
 
   it("surfaces a snapshot that resolved with { error } instead of reporting it as malformed", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({ outcome: "done", confidence: 1, model: "jev" }),
-      }))
-    );
+    stubFetchSequence([DONE]);
 
     const snapshot = vi.fn(async () => ({ error: "No browser tab is open — call browse_open first." }));
     const browser = stubBrowser({ snapshot });

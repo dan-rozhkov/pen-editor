@@ -1,10 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { render, cleanup } from "@testing-library/react";
 import { InlineEmbedEditor } from "../InlineEmbedEditor";
-import { useVariableStore } from "@/store/variableStore";
 import { resetStores } from "@/test/fixtures";
-import type { EmbedNode } from "@/types/scene";
-import type { Variable } from "@/types/variable";
+import { editorVariablesEmbedNode as node, seedVariable } from "./editorVariablesFixtures";
 
 // F5 regression: pressing "Edit inline" mounts the embed's raw htmlContent
 // into a SEPARATE shadow tree (InlineEmbedEditor, independent from
@@ -13,31 +11,6 @@ import type { Variable } from "@/types/variable";
 // therefore rendered with the custom property unresolved for the duration
 // of the edit — the fill went transparent even though the underlying canvas
 // shows it correctly.
-
-function seedVariable(): void {
-  useVariableStore.setState({
-    variables: [
-      {
-        id: "v1",
-        name: "--brand",
-        type: "color",
-        value: "#00ff00",
-        themeValues: { light: "#00ff00", dark: "#003300" },
-      } as unknown as Variable,
-    ],
-  });
-}
-
-const node = {
-  id: "e1",
-  type: "embed",
-  name: "Code",
-  x: 0,
-  y: 0,
-  width: 100,
-  height: 80,
-  htmlContent: "<div id='card' style='background-color: var(--brand)'>hi</div>",
-} as unknown as EmbedNode;
 
 describe("<InlineEmbedEditor /> editor variables", () => {
   beforeEach(() => { resetStores(); });

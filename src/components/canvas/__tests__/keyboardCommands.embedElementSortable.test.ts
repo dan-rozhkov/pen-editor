@@ -1,38 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createKeyDownHandler, type KeyDownHandlerDeps } from "../keyboardCommands";
-import { useEditorModeStore } from "@/store/editorModeStore";
+import type { KeyDownHandlerDeps } from "../keyboardCommands";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
-
-function makeDeps(): KeyDownHandlerDeps {
-  return {
-    dimensions: { width: 800, height: 600 },
-    setIsSpacePressed: vi.fn(),
-    setIsPanning: vi.fn(),
-    deleteNode: vi.fn(),
-    updateNode: vi.fn(),
-    moveNode: vi.fn(),
-    groupNodes: vi.fn(() => null),
-    ungroupNodes: vi.fn(() => []),
-    wrapInAutoLayoutFrame: vi.fn(() => null),
-    booleanOperation: vi.fn(() => null),
-    restoreSnapshot: vi.fn(),
-    saveHistory: vi.fn(),
-    startBatch: vi.fn(),
-    endBatch: vi.fn(),
-    undo: vi.fn(() => null),
-    redo: vi.fn(() => null),
-    fitToContent: vi.fn(),
-    toggleTool: vi.fn(),
-    cancelDrawing: vi.fn(),
-    clearSelection: vi.fn(),
-    copySelection: vi.fn(),
-    cutSelection: vi.fn(),
-    copyStyleSelection: vi.fn(),
-    pasteStyleSelection: vi.fn(),
-    copyAsCss: vi.fn(),
-    copyAsSvg: vi.fn(),
-  };
-}
+import { appendInput, elementSelection, key, keyFrom, setupKeyDownHandler } from "./keyboardCommandFixtures";
 
 /**
  * Escape has to mean "cancel the element drag" while one is in flight inside
@@ -51,9 +20,7 @@ describe("keyboardCommands — Escape during an embed element drag", () => {
   let handler: (e: KeyboardEvent) => void;
 
   beforeEach(() => {
-    deps = makeDeps();
-    handler = createKeyDownHandler(deps);
-    useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
+    ({ deps, handler } = setupKeyDownHandler());
     useEmbedPickerStore.getState().reset();
   });
 
@@ -62,7 +29,7 @@ describe("keyboardCommands — Escape during an embed element drag", () => {
     useEmbedPickerStore.getState().startPicking("e1");
     useEmbedPickerStore.getState().setCancelElementDrag(cancel);
 
-    handler(new KeyboardEvent("keydown", { code: "Escape", key: "Escape" }));
+    handler(key("Escape"));
 
     expect(cancel).toHaveBeenCalledTimes(1);
     expect(useEmbedPickerStore.getState().pickingEmbedId).toBe("e1");
@@ -78,7 +45,7 @@ describe("keyboardCommands — Escape during an embed element drag", () => {
     // selectionStore.embedPicker.test.ts for the full chain.
     useEmbedPickerStore.getState().startPicking("e1");
 
-    handler(new KeyboardEvent("keydown", { code: "Escape", key: "Escape" }));
+    handler(key("Escape"));
 
     expect(useEmbedPickerStore.getState().pickingEmbedId).toBe("e1");
     expect(deps.clearSelection).toHaveBeenCalledTimes(1);
@@ -98,17 +65,9 @@ describe("keyboardCommands — Escape while typing", () => {
   let handler: (e: KeyboardEvent) => void;
 
   beforeEach(() => {
-    deps = makeDeps();
-    handler = createKeyDownHandler(deps);
-    useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
+    ({ deps, handler } = setupKeyDownHandler());
     useEmbedPickerStore.getState().reset();
   });
-
-  function escapeFrom(target: EventTarget): KeyboardEvent {
-    const e = new KeyboardEvent("keydown", { code: "Escape", key: "Escape" });
-    Object.defineProperty(e, "target", { value: target });
-    return e;
-  }
 
   function composerTextarea(): HTMLTextAreaElement {
     const composer = document.createElement("div");
@@ -122,20 +81,13 @@ describe("keyboardCommands — Escape while typing", () => {
   /** The picked element Escape is expected to clear (or leave alone). */
   function pickElement(): void {
     useEmbedPickerStore.getState().startPicking("e1");
-    useEmbedPickerStore.getState().selectElement({
-      embedId: "e1",
-      path: "div:nth-of-type(1)",
-      tagName: "div",
-      classes: [],
-      textPreview: "hi",
-      outerHtml: "<div>hi</div>",
-    });
+    useEmbedPickerStore.getState().selectElement(elementSelection());
   }
 
   it("leaves the picked element and the selection alone when the agent composer has focus", () => {
     pickElement();
 
-    handler(escapeFrom(composerTextarea()));
+    handler(keyFrom(composerTextarea(), "Escape"));
 
     expect(useEmbedPickerStore.getState().selection).not.toBeNull();
     expect(deps.clearSelection).not.toHaveBeenCalled();
@@ -146,10 +98,9 @@ describe("keyboardCommands — Escape while typing", () => {
   // what surfaced that panel.
   it("still clears the picked element from a text field outside the composer", () => {
     pickElement();
-    const input = document.createElement("input");
-    document.body.appendChild(input);
+    const input = appendInput();
 
-    handler(escapeFrom(input));
+    handler(keyFrom(input, "Escape"));
 
     // Picking mode itself stays on — it is no longer a mode Escape can leave
     // (useEmbedPickerLifecycle re-arms it for as long as the embed is the
@@ -161,7 +112,7 @@ describe("keyboardCommands — Escape while typing", () => {
   it("still clears the picked element when the canvas itself has focus", () => {
     pickElement();
 
-    handler(escapeFrom(document.createElement("div")));
+    handler(keyFrom(document.createElement("div"), "Escape"));
 
     expect(useEmbedPickerStore.getState().selection).toBeNull();
     expect(useEmbedPickerStore.getState().pickingEmbedId).toBe("e1");

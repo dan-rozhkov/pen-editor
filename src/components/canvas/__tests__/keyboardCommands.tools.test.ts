@@ -1,52 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createKeyDownHandler, type KeyDownHandlerDeps } from "../keyboardCommands";
+import { beforeEach, describe, expect, it } from "vitest";
+import type { KeyDownHandlerDeps } from "../keyboardCommands";
 import { useDrawModeStore } from "@/store/drawModeStore";
-import { useEditorModeStore } from "@/store/editorModeStore";
 import { ALL_TOOLS } from "@/lib/toolDefinitions";
-
-function makeDeps(): KeyDownHandlerDeps {
-  return {
-    dimensions: { width: 800, height: 600 },
-    setIsSpacePressed: vi.fn(),
-    setIsPanning: vi.fn(),
-    deleteNode: vi.fn(),
-    updateNode: vi.fn(),
-    moveNode: vi.fn(),
-    groupNodes: vi.fn(() => null),
-    ungroupNodes: vi.fn(() => []),
-    wrapInAutoLayoutFrame: vi.fn(() => null),
-    booleanOperation: vi.fn(() => null),
-    restoreSnapshot: vi.fn(),
-    saveHistory: vi.fn(),
-    startBatch: vi.fn(),
-    endBatch: vi.fn(),
-    undo: vi.fn(() => null),
-    redo: vi.fn(() => null),
-    fitToContent: vi.fn(),
-    toggleTool: vi.fn(),
-    cancelDrawing: vi.fn(),
-    clearSelection: vi.fn(),
-    copySelection: vi.fn(),
-    cutSelection: vi.fn(),
-    copyStyleSelection: vi.fn(),
-    pasteStyleSelection: vi.fn(),
-    copyAsCss: vi.fn(),
-    copyAsSvg: vi.fn(),
-  };
-}
-
-function key(code: string, opts: Partial<KeyboardEventInit> = {}): KeyboardEvent {
-  return new KeyboardEvent("keydown", { code, key: code, bubbles: true, cancelable: true, ...opts });
-}
+import { key, setupKeyDownHandler } from "./keyboardCommandFixtures";
 
 describe("keyboardCommands — tool-letter dispatch matches toolDefinitions", () => {
   let deps: KeyDownHandlerDeps;
   let handler: (e: KeyboardEvent) => void;
 
   beforeEach(() => {
-    deps = makeDeps();
-    handler = createKeyDownHandler(deps);
-    useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
+    ({ deps, handler } = setupKeyDownHandler());
     useDrawModeStore.setState({
       activeTool: null,
       isDrawing: false,

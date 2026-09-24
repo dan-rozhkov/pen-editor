@@ -118,6 +118,21 @@ function getSection(title: string): HTMLElement {
   return screen.getByText(title, { exact: true }).closest(".relative.border-b") as HTMLElement;
 }
 
+/** The happy-path setup shared by nearly every test below: seed the scene
+ * node, mount `html` into a shadow-DOM host, select `selector` inside it as
+ * the current embed-picker selection, then render <EmbedElementProperties/>
+ * and flush its rAF re-read. Neither `shadow` nor `target` is needed past
+ * selection in any current test, so nothing is returned. */
+async function setupEmbedElement(html: string, selector: string): Promise<void> {
+  seedEmbedNode(html);
+  const { shadow } = mountEmbedHost(html);
+  const target = shadow.querySelector(selector)!;
+  selectElement(target, shadow, html);
+
+  render(<EmbedElementProperties />);
+  await flushRaf();
+}
+
 describe("<EmbedElementProperties />", () => {
   beforeEach(() => {
     resetStores();
@@ -130,13 +145,7 @@ describe("<EmbedElementProperties />", () => {
 
   it("renders values read from the live element via the native sections", async () => {
     const html = `<div class="card" style="display:flex;padding:4px 8px 4px 8px;background-color:rgb(255,0,0);font-size:14px;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "div.card");
 
     expect(screen.getByText("hi", { exact: true })).toBeTruthy();
     // Typography section (native `TypographySection`) — font-size.
@@ -153,13 +162,7 @@ describe("<EmbedElementProperties />", () => {
 
   it("hides sections with no CSS-writable equivalent, and shows only the native ones", async () => {
     const html = `<div class="card" style="background-color:#ff0000;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "div.card");
 
     for (const title of [
       "Position",
@@ -182,13 +185,7 @@ describe("<EmbedElementProperties />", () => {
 
   it("edits a typography field (native TypographySection), writes htmlContent, and keeps selection alive", async () => {
     const html = `<div class="card" style="font-size:14px;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "div.card");
 
     const fontSizeInput = screen.getByDisplayValue("14");
     fireEvent.change(fontSizeInput, { target: { value: "20" } });
@@ -206,13 +203,7 @@ describe("<EmbedElementProperties />", () => {
 
   it("edits the background color via the native Fill section and writes the expected CSS declaration", async () => {
     const html = `<div class="card" style="background-color:#ff0000;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "div.card");
 
     const fillSection = getSection("Fill");
     const colorInput = within(fillSection).getByPlaceholderText("#000000");
@@ -223,13 +214,7 @@ describe("<EmbedElementProperties />", () => {
 
   it("enables auto layout via the native Auto Layout section and writes display: flex", async () => {
     const html = `<div class="card">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "div.card");
 
     fireEvent.click(screen.getByRole("button", { name: "Enable auto layout" }));
 
@@ -238,13 +223,7 @@ describe("<EmbedElementProperties />", () => {
 
   it("edits the element's text content via the Text section", async () => {
     const html = `<p>old</p>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("p")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "p");
 
     const textInput = screen.getByDisplayValue("old");
     fireEvent.change(textInput, { target: { value: "new" } });
@@ -293,13 +272,7 @@ describe("<EmbedElementProperties />", () => {
 
   it("changing only the stroke color keeps the existing border-width (regression: used to null out untouched longhands)", async () => {
     const html = `<div class="card" style="border: 2px solid #333333;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "div.card");
 
     const strokeSection = getSection("Stroke");
     const strokeColorInput = within(strokeSection).getByPlaceholderText("#000000");
@@ -325,13 +298,7 @@ describe("<EmbedElementProperties />", () => {
     // touching the native stroke control on a border-less element produces
     // a real, visible border rather than a no-op.
     const html = `<div class="card" style="border-style: none;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "div.card");
 
     fireEvent.click(screen.getByRole("button", { name: "Add stroke" }));
 
@@ -348,13 +315,7 @@ describe("<EmbedElementProperties />", () => {
 
   it("does not render the Stroke Align control for an embed element (CSS has no border-alignment concept, and reading it back never survives an embed's own box-sizing reset)", async () => {
     const html = `<div class="card" style="border:1px solid #dddddd;box-sizing:border-box;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "div.card");
 
     const strokeSection = getSection("Stroke");
     expect(within(strokeSection).queryByText("Align", { exact: true })).toBeNull();
@@ -362,13 +323,7 @@ describe("<EmbedElementProperties />", () => {
 
   it("editing stroke width and color via the embed panel still reaches htmlContent, with no Align control involved", async () => {
     const html = `<div class="card" style="border: 2px solid #333333;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "div.card");
 
     const strokeSection = getSection("Stroke");
     const strokeColorInput = within(strokeSection).getByPlaceholderText("#000000");
@@ -396,13 +351,7 @@ describe("<EmbedElementProperties />", () => {
     // author-authored one, which this bridge now leaves alone either way,
     // since it no longer has any opinion about the property).
     const html = `<div class="card" style="border:1px solid #dddddd;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "div.card");
 
     const strokeSection = getSection("Stroke");
     const strokeColorInput = within(strokeSection).getByPlaceholderText("#000000");
@@ -419,13 +368,7 @@ describe("<EmbedElementProperties />", () => {
 
   it("leaves an author-authored inline box-sizing untouched by a stroke edit (the bridge no longer has any opinion about this property)", async () => {
     const html = `<div class="card" style="border:1px solid #dddddd;box-sizing:border-box;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "div.card");
 
     const strokeSection = getSection("Stroke");
     const strokeColorInput = within(strokeSection).getByPlaceholderText("#000000");
@@ -449,13 +392,7 @@ describe("<EmbedElementProperties />", () => {
 
     it("editing the stroke color resets the live outline instead of stacking a border next to it", async () => {
       const html = `<div class="card" style="outline: 2px solid #333333;">hi</div>`;
-      seedEmbedNode(html);
-      const { shadow } = mountEmbedHost(html);
-      const target = shadow.querySelector("div.card")!;
-      selectElement(target, shadow, html);
-
-      render(<EmbedElementProperties />);
-      await flushRaf();
+      await setupEmbedElement(html, "div.card");
 
       // Asserted on the actual `edit.styles` patch handed to
       // `applyEmbedElementEdit`, not a live-DOM re-read: happy-dom's own
@@ -484,13 +421,7 @@ describe("<EmbedElementProperties />", () => {
 
     it("editing the stroke weight resets the live outline too", async () => {
       const html = `<div class="card" style="outline: 2px solid #333333;">hi</div>`;
-      seedEmbedNode(html);
-      const { shadow } = mountEmbedHost(html);
-      const target = shadow.querySelector("div.card")!;
-      selectElement(target, shadow, html);
-
-      render(<EmbedElementProperties />);
-      await flushRaf();
+      await setupEmbedElement(html, "div.card");
 
       const applySpy = vi.spyOn(embedElementStyle, "applyEmbedElementEdit");
 
@@ -506,13 +437,7 @@ describe("<EmbedElementProperties />", () => {
 
     it("removing an outline-sourced stroke actually removes it, and does not resurrect it on the next read", async () => {
       const html = `<div class="card" style="outline: 2px solid #333333;">hi</div>`;
-      seedEmbedNode(html);
-      const { shadow } = mountEmbedHost(html);
-      const target = shadow.querySelector("div.card")!;
-      selectElement(target, shadow, html);
-
-      render(<EmbedElementProperties />);
-      await flushRaf();
+      await setupEmbedElement(html, "div.card");
 
       const applySpy = vi.spyOn(embedElementStyle, "applyEmbedElementEdit");
 
@@ -537,12 +462,7 @@ describe("<EmbedElementProperties />", () => {
       // write forgot to clear.
       cleanup();
       document.body.innerHTML = "";
-      seedEmbedNode(written);
-      const { shadow: shadow2 } = mountEmbedHost(written);
-      const target2 = shadow2.querySelector("div.card")!;
-      selectElement(target2, shadow2, written);
-      render(<EmbedElementProperties />);
-      await flushRaf();
+      await setupEmbedElement(written, "div.card");
 
       expect(screen.getByRole("button", { name: "Add stroke" })).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Remove stroke" })).toBeNull();
@@ -559,13 +479,7 @@ describe("<EmbedElementProperties />", () => {
     // did) — asserting an explicit "padding: 0px" (not the declaration
     // vanishing) is what distinguishes "set to zero" from "unset" here.
     const html = `<div class="card" style="display:flex;padding-top:10px;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "div.card");
 
     const autoLayoutSection = getSection("Auto Layout");
     const padTInput = within(autoLayoutSection).getByDisplayValue("10");
@@ -582,13 +496,7 @@ describe("<EmbedElementProperties />", () => {
     // permanently hiding whatever background the element's own CSS class
     // would otherwise show through, instead of letting it show through.
     const html = `<div class="card" style="background-color:#ff0000;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "div.card");
 
     fireEvent.click(screen.getByRole("button", { name: "Remove fill" }));
 
@@ -605,13 +513,7 @@ describe("<EmbedElementProperties />", () => {
     // explicit reset. On a class-styled element that makes "hide" show the
     // class's own background back through.
     const html = `<div class="card" style="background-color:#ff0000;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "div.card");
 
     fireEvent.click(screen.getByRole("button", { name: "Hide fill" }));
 
@@ -621,13 +523,7 @@ describe("<EmbedElementProperties />", () => {
 
   it("setting a fill's layer opacity to 0 writes an explicit reset, not removeProperty (bug repro)", async () => {
     const html = `<div class="card" style="background-color:#ff0000;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "div.card");
 
     const fillSection = getSection("Fill");
     // Scoped to `type="number"` — the color picker's own sliders in this
@@ -649,13 +545,7 @@ describe("<EmbedElementProperties />", () => {
     // `rowGap`/`columnGap` whenever either is defined, so the generated CSS
     // (and thus the diff) never changed and the edit was silently dropped.
     const html = `<div class="card" style="display:flex;gap:10px 20px;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "div.card");
 
     // Captures the exact `edit.styles` patch `commitPatch` computes and hands
     // to `applyEmbedElementEdit`, independent of any DOM re-serialization or
@@ -722,13 +612,7 @@ describe("<EmbedElementProperties />", () => {
     // write" bail-out before `setNode`, so this field never shows a state
     // that isn't backed by anything real.
     const html = `<div class="card" style="background-color:#ff0000;">hi</div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.card")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "div.card");
 
     fireEvent.click(screen.getByRole("button", { name: "Lock aspect ratio" }));
 
@@ -752,13 +636,7 @@ describe("<EmbedElementProperties />", () => {
 
   it("shows the Typography and Text sections only for an element with editable text", async () => {
     const html = `<div class="wrap"><span>only child, no text of its own</span></div>`;
-    seedEmbedNode(html);
-    const { shadow } = mountEmbedHost(html);
-    const target = shadow.querySelector("div.wrap")!;
-    selectElement(target, shadow, html);
-
-    render(<EmbedElementProperties />);
-    await flushRaf();
+    await setupEmbedElement(html, "div.wrap");
 
     expect(screen.queryByText("Typography", { exact: true })).toBeNull();
     expect(screen.queryByText("Text", { exact: true })).toBeNull();
@@ -767,13 +645,7 @@ describe("<EmbedElementProperties />", () => {
   describe("text color (TypographySection's textColor row)", () => {
     it("edits the text color and writes `color:` without touching `background-color:`", async () => {
       const html = `<div class="card" style="background-color:#ff0000;color:#0000ff;">hi</div>`;
-      seedEmbedNode(html);
-      const { shadow } = mountEmbedHost(html);
-      const target = shadow.querySelector("div.card")!;
-      selectElement(target, shadow, html);
-
-      render(<EmbedElementProperties />);
-      await flushRaf();
+      await setupEmbedElement(html, "div.card");
 
       const typographySection = getSection("Typography");
       const colorInput = within(typographySection).getByPlaceholderText("#000000");
@@ -793,13 +665,7 @@ describe("<EmbedElementProperties />", () => {
       };
       useVariableStore.getState().setVariables([variable]);
       const html = `<div class="card" style="color:#0000ff;">hi</div>`;
-      seedEmbedNode(html);
-      const { shadow } = mountEmbedHost(html);
-      const target = shadow.querySelector("div.card")!;
-      selectElement(target, shadow, html);
-
-      render(<EmbedElementProperties />);
-      await flushRaf();
+      await setupEmbedElement(html, "div.card");
 
       const typographySection = getSection("Typography");
       fireEvent.click(within(typographySection).getByTitle("Bind to variable"));
@@ -819,13 +685,7 @@ describe("<EmbedElementProperties />", () => {
       // Fallback is load-bearing here, same reason as the Fill unbind test
       // above: happy-dom cannot resolve `var()` on its own.
       const html = `<div class="card" style="color:var(--brand-500, #112233);">hi</div>`;
-      seedEmbedNode(html);
-      const { shadow } = mountEmbedHost(html);
-      const target = shadow.querySelector("div.card")!;
-      selectElement(target, shadow, html);
-
-      render(<EmbedElementProperties />);
-      await flushRaf();
+      await setupEmbedElement(html, "div.card");
 
       const typographySection = getSection("Typography");
       fireEvent.click(within(typographySection).getByTitle("Unbind variable"));
@@ -851,13 +711,7 @@ describe("<EmbedElementProperties />", () => {
     it("binding Fill to a color variable writes background-color: var(--name)", async () => {
       seedColorVariable();
       const html = `<div class="card" style="background-color:#ff0000;">hi</div>`;
-      seedEmbedNode(html);
-      const { shadow } = mountEmbedHost(html);
-      const target = shadow.querySelector("div.card")!;
-      selectElement(target, shadow, html);
-
-      render(<EmbedElementProperties />);
-      await flushRaf();
+      await setupEmbedElement(html, "div.card");
 
       const fillSection = getSection("Fill");
       fireEvent.click(within(fillSection).getByTitle("Bind to variable"));
@@ -869,13 +723,7 @@ describe("<EmbedElementProperties />", () => {
     it("binding Stroke to a color variable writes a solid border referencing the variable", async () => {
       seedColorVariable();
       const html = `<div class="card" style="border: 1px solid #333333;">hi</div>`;
-      seedEmbedNode(html);
-      const { shadow } = mountEmbedHost(html);
-      const target = shadow.querySelector("div.card")!;
-      selectElement(target, shadow, html);
-
-      render(<EmbedElementProperties />);
-      await flushRaf();
+      await setupEmbedElement(html, "div.card");
 
       const strokeSection = getSection("Stroke");
       fireEvent.click(within(strokeSection).getByTitle("Bind to variable"));
@@ -904,13 +752,7 @@ describe("<EmbedElementProperties />", () => {
       // (`resolveBindingToCssVar`) always includes a fallback for exactly
       // this reason, so a round-tripped document always has one too.
       const html = `<div class="card" style="background-color:var(--brand-500, #112233);">hi</div>`;
-      seedEmbedNode(html);
-      const { shadow } = mountEmbedHost(html);
-      const target = shadow.querySelector("div.card")!;
-      selectElement(target, shadow, html);
-
-      render(<EmbedElementProperties />);
-      await flushRaf();
+      await setupEmbedElement(html, "div.card");
 
       const fillSection = getSection("Fill");
       // Bound state renders an "Unbind variable" button in place of the swatch/input.

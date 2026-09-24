@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetStores, seedVariables } from "@/test/fixtures";
 import { buildTailwindCode, declarationsToTailwind } from "../tailwind";
-import type { FlatFrameNode, RectNode, TextNode } from "@/types/scene";
+import type { FlatFrameNode, RectNode } from "@/types/scene";
+import { frameNode as sharedFrameNode, pathNode, titleText } from "./codegenNodeFixtures";
 
 describe("declarationsToTailwind", () => {
   beforeEach(() => {
@@ -82,41 +83,13 @@ describe("declarationsToTailwind", () => {
   });
 });
 
-function frameNode(overrides: Partial<FlatFrameNode> = {}): FlatFrameNode {
-  return {
-    id: "frame1",
-    type: "frame",
-    name: "Card */ <script>alert(1)</script>",
-    x: 0,
-    y: 0,
-    width: 300,
-    height: 200,
-    layout: {
-      autoLayout: true,
-      flexDirection: "column",
-      gap: 8,
-      paddingTop: 16,
-      paddingRight: 16,
-      paddingBottom: 16,
-      paddingLeft: 16,
-    },
-    ...overrides,
-  } as unknown as FlatFrameNode;
-}
-
-function titleText(): TextNode {
-  return {
-    id: "text1",
-    type: "text",
-    name: "Title",
-    x: 0,
-    y: 0,
-    width: 120,
-    height: 24,
-    text: "Card */ <script>alert(1)</script>",
-    fontSize: 16,
-    fontWeight: "700",
-  } as unknown as TextNode;
+// This suite's frame/text fixtures carry an XSS-flavored name/text (unlike
+// react.test.ts's plain ones) to exercise escaping in the emitted HTML string
+// output — react.test.ts covers the same hostility via a JSX-sanitization
+// test instead, so the two suites' node shapes come from the shared
+// `codegenNodeFixtures` but with different literals here.
+function frameNode(overrides: Partial<Parameters<typeof sharedFrameNode>[0]> = {}) {
+  return sharedFrameNode({ name: "Card */ <script>alert(1)</script>", ...overrides });
 }
 
 function boxRect(): RectNode {
@@ -152,7 +125,7 @@ describe("buildTailwindCode", () => {
 
   it("(f) emits indented HTML markup for a frame with a text child, escaping untrusted text", () => {
     const frame = frameNode();
-    const text = titleText();
+    const text = titleText("Card */ <script>alert(1)</script>");
     const rect = boxRect();
     const nodesById = { frame1: frame, text1: text, rect1: rect };
     const childrenById = { frame1: ["text1", "rect1"] };
@@ -257,15 +230,7 @@ describe("buildTailwindCode", () => {
 
   it("warns once for an unsupported node type (path) rendered as an empty placeholder", () => {
     const frame = frameNode({ layout: undefined });
-    const path = {
-      id: "path1",
-      type: "path",
-      name: "Icon",
-      x: 0,
-      y: 0,
-      width: 50,
-      height: 20,
-    } as unknown as RectNode;
+    const path = pathNode();
     const nodesById = { frame1: frame, path1: path };
     const childrenById = { frame1: ["path1"] };
 
