@@ -79,7 +79,25 @@ export interface SnapshotResult {
   title: string;
   elements: unknown[];
   snapshotId: string;
+  /**
+   * Full browser use follow-up (browse-speed-contract.md 2026-09-24,
+   * "Frontend" item 4 / "Backend" item 5): the page's scroll position.
+   * Forwarded untouched by browseTask.ts's `requestStep` to
+   * `/api/browse/step` so Jev's digest can mention it — this side never
+   * inspects the shape, only passes it through.
+   */
+  scroll?: unknown;
+  /** Present when the element table was capped — passed through untouched,
+   * same as `scroll`. */
+  truncated?: boolean;
 }
+
+/**
+ * The desktop bridge's `browser` surface type, pulled out once so every
+ * browse_* module can name it instead of repeating the
+ * `NonNullable<NonNullable<typeof window.penDesktop>["browser"]>` spelling.
+ */
+export type PenDesktopBrowser = NonNullable<NonNullable<typeof window.penDesktop>["browser"]>;
 
 export function isSnapshotResult(value: unknown): value is SnapshotResult {
   return (
@@ -135,6 +153,63 @@ export async function takeSnapshot(
   } catch (err) {
     return { error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+/**
+ * Parses a browse_* handler's own JSON-string result back into an object so
+ * a caller (browseAct.ts's `actions` batch, the snapshot-attach helpers
+ * below) can inspect/merge fields into it. Every browse_* result is
+ * produced by `callBrowserBridge`/`resolveByElement`, which always emit a
+ * real JSON object string — this only guards the theoretical case where
+ * that contract is somehow violated, so it never throws.
+ */
+export function safeParseObject(value: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // fall through
+  }
+  return { error: "browse_act: malformed result from the browser bridge." };
+}
+
+/**
+ * Full browser use follow-up (browse-speed-contract.md, "Frontend" items
+ * 1/2): takes a fresh snapshot and merges it into `resultObj` as `snapshot`
+ * — the model usually doesn't need a separate browse_snapshot call after an
+ * open/act. Best-effort: a failed extra snapshot must not turn an otherwise
+ * successful open/act into an error, so this silently returns `resultObj`
+ * unchanged when the snapshot itself fails.
+ */
+export async function attachSnapshot(
+  browser: PenDesktopBrowser,
+  resultObj: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const snap = await takeSnapshot(browser);
+  if ("error" in snap) return resultObj;
+  return { ...resultObj, snapshot: snap };
+}
+
+/**
+ * The desktop snapshot now also emits scroll-container entries shaped
+ * `{index, tag, label, ops: [], scrollable: true}` (so the agent can scroll
+ * inside modals/lists by index). `/api/browse/step`'s and
+ * `/api/browse/locate`'s zod schemas require a non-empty `ops` array per
+ * element, so forwarding a scroll-container entry verbatim would 400 the
+ * request on any page that has one — this is defense in depth alongside the
+ * backend's own carve-out for `scrollable` elements (the deployed backend
+ * may lag the client that just started sending these). Every `/api/browse/*`
+ * forwarding site filters its `elements` payload through this before
+ * POSTing.
+ */
+export function filterElementsForBackend(elements: unknown[]): unknown[] {
+  return elements.filter((el) => {
+    if (!el || typeof el !== "object") return true;
+    const ops = (el as { ops?: unknown }).ops;
+    return Array.isArray(ops) && ops.length > 0;
+  });
 }
 
 /**

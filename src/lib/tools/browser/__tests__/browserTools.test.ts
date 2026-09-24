@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { browseOpen } from "@/lib/tools/browser/browseOpen";
-import { browseAct } from "@/lib/tools/browser/browseAct";
+import { browseAct, runActionsBatch } from "@/lib/tools/browser/browseAct";
 import { browseFindImages } from "@/lib/tools/browser/browseFindImages";
 import { browseRead } from "@/lib/tools/browser/browseRead";
 import { browseSnapshot } from "@/lib/tools/browser/browseSnapshot";
@@ -178,7 +178,7 @@ describe("browse_act element targeting", () => {
       snapshot: async () => ({
         url: "https://example.com",
         title: "Example",
-        elements: [{ index: 2, tag: "button", label: "Search" }],
+        elements: [{ index: 2, tag: "button", label: "Search", ops: ["CLICK"] }],
         snapshotId: "snap-1",
       }),
       ...overrides,
@@ -222,19 +222,34 @@ describe("browse_act element targeting", () => {
       operation: "CLICK",
       url: "https://example.com",
       title: "Example",
-      elements: [{ index: 2, tag: "button", label: "Search" }],
+      elements: [{ index: 2, tag: "button", label: "Search", ops: ["CLICK"] }],
     });
     expect(receivedActArgs).toEqual({ action: "click", index: 2, snapshotId: "snap-1" });
     expect(result).toEqual({
       url: "https://example.com",
       title: "Example",
       matched: "Search",
+      // `resolved.snapshotId` is REMOVED (browse-speed-contract.md, "Frontend"
+      // item 1): maybeAttachSnapshot below takes yet another fresh snapshot
+      // and attaches it as `snapshot`, making the id resolveByElement put on
+      // `resolved` a step stale — the note now points at `snapshot.snapshotId`
+      // instead of repeating a (possibly stale) id of its own.
       resolved: {
         index: 2,
         label: "Search",
         confidence: 0.87,
+        note: expect.stringContaining("snap-1"),
+      },
+      // No `changed` field on this bridge stub's act result, so
+      // maybeAttachSnapshot treats it as "may have changed" and attaches a
+      // fresh snapshot (browse-speed-contract.md, "Frontend" item 2) — the
+      // bridge's `snapshot()` stub here (stubSnapshotBrowser) returns a
+      // valid shape, unlike the other suites' default `{}` stub.
+      snapshot: {
+        url: "https://example.com",
+        title: "Example",
+        elements: [{ index: 2, tag: "button", label: "Search", ops: ["CLICK"] }],
         snapshotId: "snap-1",
-        note: expect.stringContaining("stale"),
       },
     });
   });
@@ -263,12 +278,20 @@ describe("browse_act element targeting", () => {
     );
 
     expect(result.error).toBe("target is gone or occluded");
+    // An error result has no `changed` field either, so maybeAttachSnapshot
+    // still takes another fresh snapshot and attaches it — `resolved`'s own
+    // snapshotId is stripped in favor of it, same as the success case above.
+    expect(result.snapshot).toEqual({
+      url: "https://example.com",
+      title: "Example",
+      elements: [{ index: 2, tag: "button", label: "Search", ops: ["CLICK"] }],
+      snapshotId: "snap-1",
+    });
     expect(result.resolved).toEqual({
       index: 2,
       label: "Search",
       confidence: 0.9,
-      snapshotId: "snap-1",
-      note: expect.stringContaining("stale"),
+      note: expect.stringContaining("snap-1"),
     });
   });
 
@@ -750,5 +773,519 @@ describe("browse_read", () => {
     const result = JSON.parse(await browseRead({ selector: "#missing" }));
 
     expect(result).toEqual({ error: "no browser tab open" });
+  });
+});
+
+// Full browser use follow-up (browse-speed-contract.md, "Frontend" items 1
+// and 2) — a `snapshot` field valid enough for `takeSnapshot`'s shape check
+// to accept, used by the tests below to exercise the attach path. The
+// suites above rely on the DEFAULT stub's `snapshot: async () => ({})`
+// being invalid on purpose (see shared.ts's `isSnapshotResult`) so none of
+// them accidentally pick up a `snapshot` field.
+const VALID_SNAPSHOT = {
+  url: "https://example.com",
+  title: "Example",
+  elements: [{ index: 0, tag: "button", label: "Search" }],
+  snapshotId: "snap-fresh",
+};
+
+describe("browse_open snapshot attach", () => {
+  it("attaches a fresh snapshot after a successful open", async () => {
+    let snapshotCalls = 0;
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        open: async () => ({ url: "https://example.com", title: "Example" }),
+        snapshot: async () => {
+          snapshotCalls++;
+          return VALID_SNAPSHOT;
+        },
+      }),
+    };
+
+    const result = JSON.parse(await browseOpen({ url: "https://example.com" }));
+
+    expect(snapshotCalls).toBe(1);
+    expect(result).toEqual({
+      url: "https://example.com",
+      title: "Example",
+      snapshot: VALID_SNAPSHOT,
+    });
+  });
+
+  it("does not attach a snapshot when the open itself failed", async () => {
+    const snapshot = vi.fn(async () => VALID_SNAPSHOT);
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        open: async () => ({ error: "navigation timed out" }),
+        snapshot,
+      }),
+    };
+
+    const result = JSON.parse(await browseOpen({ url: "https://example.com" }));
+
+    expect(snapshot).not.toHaveBeenCalled();
+    expect(result).toEqual({ error: "navigation timed out" });
+  });
+
+  it("does not fail the open when the follow-up snapshot itself fails", async () => {
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        open: async () => ({ url: "https://example.com", title: "Example" }),
+        snapshot: async () => ({ error: "no browser tab open" }),
+      }),
+    };
+
+    const result = JSON.parse(await browseOpen({ url: "https://example.com" }));
+
+    expect(result).toEqual({ url: "https://example.com", title: "Example" });
+    expect(result.snapshot).toBeUndefined();
+  });
+});
+
+describe("browse_act snapshot attach", () => {
+  it("attaches a fresh snapshot when the act result reports changed !== false", async () => {
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        act: async () => ({ matched: "Search", changed: true }),
+        snapshot: async () => VALID_SNAPSHOT,
+      }),
+    };
+
+    const result = JSON.parse(await browseAct({ action: "click", target: "Search" }));
+
+    expect(result.snapshot).toEqual(VALID_SNAPSHOT);
+  });
+
+  it("does not attach a snapshot when the act result reports changed: false", async () => {
+    const snapshot = vi.fn(async () => VALID_SNAPSHOT);
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        act: async () => ({ matched: "Search", changed: false }),
+        snapshot,
+      }),
+    };
+
+    const result = JSON.parse(await browseAct({ action: "click", target: "Search" }));
+
+    expect(snapshot).not.toHaveBeenCalled();
+    expect(result.snapshot).toBeUndefined();
+  });
+
+  it("always attaches a snapshot for wait, even when changed is false", async () => {
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        act: async () => ({ changed: false }),
+        snapshot: async () => VALID_SNAPSHOT,
+      }),
+    };
+
+    const result = JSON.parse(await browseAct({ action: "wait", ms: 500 }));
+
+    expect(result.snapshot).toEqual(VALID_SNAPSHOT);
+  });
+
+  it("always attaches a snapshot for scroll, even when changed is false", async () => {
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        act: async () => ({ changed: false }),
+        snapshot: async () => VALID_SNAPSHOT,
+      }),
+    };
+
+    const result = JSON.parse(await browseAct({ action: "scroll", amount: 1 }));
+
+    expect(result.snapshot).toEqual(VALID_SNAPSHOT);
+  });
+});
+
+describe("browse_act actions batch", () => {
+  it("runs actions sequentially, forwarding the top-level snapshotId to index-based entries", async () => {
+    const receivedActArgs: unknown[] = [];
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        act: async (args) => {
+          receivedActArgs.push(args);
+          return { matched: "ok", changed: true };
+        },
+        snapshot: async () => VALID_SNAPSHOT,
+      }),
+    };
+
+    const result = JSON.parse(
+      await browseAct({
+        snapshotId: "snap-top",
+        actions: [
+          { action: "click", index: 0 },
+          { action: "type", index: 1, text: "hello" },
+        ],
+      })
+    );
+
+    expect(receivedActArgs).toEqual([
+      { action: "click", index: 0, snapshotId: "snap-top" },
+      { action: "type", index: 1, text: "hello", snapshotId: "snap-top" },
+    ]);
+    expect(result.completed).toBe(2);
+    expect(result.stoppedAt).toBeUndefined();
+    expect(result.error).toBeUndefined();
+    expect(result.results).toHaveLength(2);
+    expect(result.snapshot).toEqual(VALID_SNAPSHOT);
+  });
+
+  it("stops at the first entry that returns { error } and reports stoppedAt/completed", async () => {
+    let callCount = 0;
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        act: async () => {
+          callCount++;
+          if (callCount === 2) {
+            return { error: "target is gone or occluded" };
+          }
+          return { matched: "ok", changed: true };
+        },
+        snapshot: async () => VALID_SNAPSHOT,
+      }),
+    };
+
+    const result = JSON.parse(
+      await browseAct({
+        snapshotId: "snap-top",
+        actions: [
+          { action: "click", index: 0 },
+          { action: "click", index: 1 },
+          { action: "click", index: 2 },
+        ],
+      })
+    );
+
+    expect(callCount).toBe(2);
+    expect(result.completed).toBe(1);
+    expect(result.stoppedAt).toBe(1);
+    expect(result.error).toBe("target is gone or occluded");
+    expect(result.results).toHaveLength(2);
+    // The final snapshot is still attempted even though the batch stopped
+    // early — the model needs a fresh read of wherever the batch left off.
+    expect(result.snapshot).toEqual(VALID_SNAPSHOT);
+  });
+
+  it("does not forward the top-level snapshotId to a targetless entry (e.g. press) — only entries carrying an index", async () => {
+    // Finding: the desktop bridge's act() treats ANY snapshotId on the args
+    // as "index mode" and rejects an entry with a snapshotId but no index.
+    // [{type,index:3},{press,key:'Enter'}] used to fail at entry 1 because
+    // the copied top-level snapshotId made the targetless press entry look
+    // like an (invalid) index-mode call.
+    const receivedActArgs: unknown[] = [];
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        act: async (args) => {
+          receivedActArgs.push(args);
+          return { matched: "ok", changed: true };
+        },
+        snapshot: async () => VALID_SNAPSHOT,
+      }),
+    };
+
+    const result = JSON.parse(
+      await browseAct({
+        snapshotId: "snap-top",
+        actions: [
+          { action: "type", index: 3, text: "hello" },
+          { action: "press", key: "Enter" },
+        ],
+      })
+    );
+
+    expect(receivedActArgs).toEqual([
+      { action: "type", index: 3, text: "hello", snapshotId: "snap-top" },
+      { action: "press", key: "Enter" },
+    ]);
+    expect(result.completed).toBe(2);
+    expect(result.stoppedAt).toBeUndefined();
+    expect(result.error).toBeUndefined();
+  });
+
+  it("stops on a stale snapshotId reported as { error } mid-batch", async () => {
+    const act = vi.fn(async (args: Record<string, unknown>) =>
+      args.index === 1 ? { error: "Stale or unknown snapshotId — the page may have changed." } : { changed: true }
+    );
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({ act, snapshot: async () => VALID_SNAPSHOT }),
+    };
+
+    const result = JSON.parse(
+      await browseAct({
+        actions: [
+          { action: "click", index: 0, snapshotId: "snap-1" },
+          { action: "click", index: 1, snapshotId: "snap-1" },
+        ],
+      })
+    );
+
+    expect(act).toHaveBeenCalledTimes(2);
+    expect(result.stoppedAt).toBe(1);
+    expect(result.completed).toBe(1);
+  });
+
+  it("returns the documented error when window.penDesktop.browser is absent (web build)", async () => {
+    const result = JSON.parse(
+      await browseAct({ actions: [{ action: "click", index: 0 }] })
+    );
+
+    expect(result).toEqual({ error: BROWSER_NOT_AVAILABLE_ERROR });
+  });
+
+  it("rejects an actions array with more than 10 entries without calling the bridge", async () => {
+    const act = vi.fn(async () => ({}));
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({ act }),
+    };
+
+    const actions = Array.from({ length: 11 }, (_, i) => ({ action: "click", index: i }));
+    const result = JSON.parse(await browseAct({ actions }));
+
+    expect(act).not.toHaveBeenCalled();
+    expect(result.error).toMatch(/at most 10/);
+  });
+
+  it("rejects an empty actions array without calling the bridge", async () => {
+    const act = vi.fn(async () => ({}));
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({ act }),
+    };
+
+    const result = JSON.parse(await browseAct({ actions: [] }));
+
+    expect(act).not.toHaveBeenCalled();
+    expect(result.error).toMatch(/at least 1/);
+  });
+
+  it("resolves `element` per-entry inside a batch, same as a single browse_act call", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ outcome: "found", index: 2, label: "Search", confidence: 0.9, model: "jev" }),
+      }))
+    );
+
+    const receivedActArgs: unknown[] = [];
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        snapshot: async () => VALID_SNAPSHOT,
+        act: async (args) => {
+          receivedActArgs.push(args);
+          return { matched: "ok", changed: true };
+        },
+      }),
+    };
+
+    const result = JSON.parse(
+      await browseAct({ actions: [{ action: "click", element: "the search button" }] })
+    );
+
+    expect(receivedActArgs).toEqual([{ action: "click", index: 2, snapshotId: "snap-fresh" }]);
+    expect(result.completed).toBe(1);
+  });
+
+  // browse-speed-contract.md, "Frontend" item 3: an `element` entry
+  // re-snapshots the page, which makes the batch's top-level snapshotId (and
+  // any index-based entry after it) stale.
+  it("rejects a batch where an index-based entry comes after an `element` entry, before calling the bridge", async () => {
+    const act = vi.fn(async () => ({}));
+    const snapshot = vi.fn(async () => VALID_SNAPSHOT);
+    vi.stubGlobal("fetch", vi.fn());
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({ act, snapshot }),
+    };
+
+    const result = JSON.parse(
+      await browseAct({
+        actions: [
+          { action: "click", element: "the search button" },
+          { action: "click", index: 1 },
+        ],
+      })
+    );
+
+    expect(act).not.toHaveBeenCalled();
+    expect(snapshot).not.toHaveBeenCalled();
+    expect(result.error).toMatch(/element entries re-snapshot the page; put them last or split the batch/);
+  });
+
+  it("allows an `element` entry as the LAST entry in a batch (order is fine)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ outcome: "found", index: 2, label: "Search", confidence: 0.9, model: "jev" }),
+      }))
+    );
+
+    const receivedActArgs: unknown[] = [];
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        snapshot: async () => VALID_SNAPSHOT,
+        act: async (args) => {
+          receivedActArgs.push(args);
+          return { matched: "ok", changed: true };
+        },
+      }),
+    };
+
+    const result = JSON.parse(
+      await browseAct({
+        snapshotId: "snap-top",
+        actions: [
+          { action: "click", index: 0 },
+          { action: "click", element: "the search button" },
+        ],
+      })
+    );
+
+    expect(receivedActArgs).toEqual([
+      { action: "click", index: 0, snapshotId: "snap-top" },
+      { action: "click", index: 2, snapshotId: "snap-fresh" },
+    ]);
+    expect(result.completed).toBe(2);
+  });
+
+  it("does not reject a batch where an `element` entry is followed only by target-based (non-index) entries", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ outcome: "found", index: 2, label: "Search", confidence: 0.9, model: "jev" }),
+      }))
+    );
+
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        snapshot: async () => VALID_SNAPSHOT,
+        act: async () => ({ matched: "ok", changed: true }),
+      }),
+    };
+
+    const result = JSON.parse(
+      await browseAct({
+        actions: [
+          { action: "click", element: "the search button" },
+          { action: "click", target: "Submit" },
+        ],
+      })
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.completed).toBe(2);
+  });
+
+  // browse-speed-contract.md, "Frontend" item 4: a batch must not keep
+  // running past the frontend's own 120s browse_act tool-call timeout.
+  it("stops the batch once the deadline is reached, returning partial results with stoppedAt and an error", async () => {
+    let now = 0;
+    let callCount = 0;
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        act: async () => {
+          callCount++;
+          // Each entry "takes" 30s of wall-clock time — the deadline check
+          // at the top of the loop must catch this before starting a 3rd
+          // entry (2 * 30s = 60s == the 60s batch budget).
+          now += 30_000;
+          return { matched: "ok", changed: true };
+        },
+        snapshot: async () => VALID_SNAPSHOT,
+      }),
+    };
+
+    const result = JSON.parse(
+      await runActionsBatch(
+        window.penDesktop.browser,
+        [
+          { action: "click", index: 0 },
+          { action: "click", index: 1 },
+          { action: "click", index: 2 },
+        ],
+        "snap-top",
+        () => now
+      )
+    );
+
+    expect(callCount).toBe(2);
+    expect(result.completed).toBe(2);
+    expect(result.stoppedAt).toBe(2);
+    expect(result.error).toMatch(/batch deadline reached/);
+    expect(result.results).toHaveLength(2);
+    // Finding: once the deadline has passed, the trailing attachSnapshot
+    // call is skipped entirely — no `snapshot` field on the result.
+    expect(result.snapshot).toBeUndefined();
+  });
+
+  it("still attaches the final snapshot when the batch finishes within the deadline", async () => {
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        act: async () => ({ matched: "ok", changed: true }),
+        snapshot: async () => VALID_SNAPSHOT,
+      }),
+    };
+
+    const result = JSON.parse(
+      await runActionsBatch(window.penDesktop.browser, [{ action: "click", index: 0 }], "snap-top")
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.snapshot).toEqual(VALID_SNAPSHOT);
+  });
+
+  it("skips the trailing snapshot when a single entry's own duration pushes past the deadline, even though it completed", async () => {
+    let now = 0;
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: stubBrowser({
+        act: async () => {
+          // This single entry itself takes longer than the whole batch
+          // deadline (60s) — it still completes (nothing aborts an
+          // in-flight bridge call), but by the time it resolves the
+          // deadline has already passed.
+          now += 70_000;
+          return { matched: "ok", changed: true };
+        },
+        snapshot: async () => VALID_SNAPSHOT,
+      }),
+    };
+
+    const result = JSON.parse(
+      await runActionsBatch(
+        window.penDesktop.browser,
+        [{ action: "click", index: 0 }],
+        "snap-top",
+        () => now
+      )
+    );
+
+    expect(result.completed).toBe(1);
+    expect(result.error).toBeUndefined();
+    expect(result.snapshot).toBeUndefined();
   });
 });

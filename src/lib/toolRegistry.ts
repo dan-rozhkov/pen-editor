@@ -48,6 +48,7 @@ import { browseSnapshot } from "./tools/browser/browseSnapshot";
 import { browseScreenshot } from "./tools/browser/browseScreenshot";
 import { browseTabs } from "./tools/browser/browseTabs";
 import { browseTask } from "./tools/browser/browseTask";
+import { applyLoopGuard } from "./tools/browser/loopGuard";
 
 /**
  * Per-call metadata threaded through to handlers that need to correlate
@@ -64,6 +65,24 @@ export type ToolHandler = (
   args: Record<string, unknown>,
   context?: ToolExecutionContext
 ) => Promise<string>;
+
+/**
+ * Wraps a browse_* handler with the loop guard (browse-speed-contract.md,
+ * "Frontend" item 5 — see loopGuard.ts's header comment). Applied here,
+ * once, at registration — rather than inside each browse_* module — so
+ * every entry point that runs a browse_* call (chat, both MCP bridges,
+ * WebMCP) gets it for free, the same way `runToolCall`'s mutual exclusion
+ * already does for `executeToolCall` callers. Keyed by
+ * `context?.sessionId` when the caller has one (a chat turn); falls back to
+ * loopGuard's own module-level ring for the rest (direct MCP bridge calls
+ * have no chat session).
+ */
+function withBrowseLoopGuard(toolName: string, handler: ToolHandler): ToolHandler {
+  return async (args, context) => {
+    const result = await handler(args, context);
+    return applyLoopGuard(toolName, args, result, context?.sessionId);
+  };
+}
 
 export const toolHandlers: Record<string, ToolHandler> = {
   get_editor_state: getEditorState,
@@ -117,20 +136,20 @@ export const toolHandlers: Record<string, ToolHandler> = {
   // mcpToolNames.ts, since these are chat-path tools, not part of the
   // desktop-MCP/WebMCP surface. See docs/superpowers/specs/
   // 2026-09-18-builtin-browser-design.md.
-  browse_open: browseOpen,
-  browse_act: browseAct,
-  browse_find_images: browseFindImages,
-  browse_read: browseRead,
+  browse_open: withBrowseLoopGuard("browse_open", browseOpen),
+  browse_act: withBrowseLoopGuard("browse_act", browseAct),
+  browse_find_images: withBrowseLoopGuard("browse_find_images", browseFindImages),
+  browse_read: withBrowseLoopGuard("browse_read", browseRead),
   // browse_snapshot/browse_screenshot/browse_tabs (docs/superpowers/specs/
   // 2026-09-23-full-browser-use-design.md) — full-browser-use additions:
   // an indexed element table exposed directly to the main model, a viewport
   // capture (optionally set-of-marks annotated), and tab list/switch/close/
   // open. Same conventions as the browse_* siblings above.
-  browse_snapshot: browseSnapshot,
-  browse_screenshot: browseScreenshot,
-  browse_tabs: browseTabs,
+  browse_snapshot: withBrowseLoopGuard("browse_snapshot", browseSnapshot),
+  browse_screenshot: withBrowseLoopGuard("browse_screenshot", browseScreenshot),
+  browse_tabs: withBrowseLoopGuard("browse_tabs", browseTabs),
   // Jev-driven browsing loop (docs/superpowers/specs/
   // 2026-09-18-browse-task-jev-loop-design.md) — a client-side loop, not a
   // single forwarded call. See browseTask.ts's header comment.
-  browse_task: browseTask,
+  browse_task: withBrowseLoopGuard("browse_task", browseTask),
 };

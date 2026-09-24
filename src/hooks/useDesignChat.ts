@@ -231,12 +231,31 @@ const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
   // by its own BROWSE_TASK_DEADLINE_MS = 90_000. That would not fit under
   // the 30s default — this client-side timeout would fire and report a
   // misleading "Tool call timed out" while the loop kept running underneath
-  // it. 100s gives the loop's own deadline room to win the race and return
-  // a normal transcript instead.
-  browse_task: 100_000,
+  // it.
+  //
+  // Finding: 100s wasn't enough margin over the loop's own worst case. The
+  // loop's STEP_DEADLINE_RESERVE_MS (browseTask.ts) only guarantees a step
+  // won't START once fewer than 35s remain of the 90s internal deadline —
+  // an already-started step can still take up to ~61.5s (snapshot + the
+  // /api/browse/step round trip + the act/perform call itself, see that
+  // constant's own comment), so the loop can finish as late as
+  // 90 - 35 + 61.5 = 116.5s after it starts. 150s covers that worst case
+  // with real margin, without needing to also raise the loop's own
+  // BROWSE_TASK_DEADLINE_MS (see STEP_DEADLINE_RESERVE_MS's comment for why
+  // that constant didn't need to move too).
+  browse_task: 150_000,
+  // browse_open (docs/superpowers/specs/2026-09-18-builtin-browser-design.md
+  // §5) reuses the desktop's own BROWSER_OPEN_TIMEOUT_MS = 45_000 navigation
+  // budget, and — since browse-speed-contract.md's "Frontend" item 2 — also
+  // takes an extra browser.snapshot() call afterward (up to the desktop's
+  // 20s BROWSER_COMMAND_TIMEOUT_MS) to attach a fresh `snapshot`. 45 + 20 =
+  // 65s worst case; 70s covers that with margin, comfortably above the
+  // contract's "≥ 50s" floor.
+  browse_open: 70_000,
   // browse_act (docs/superpowers/specs/2026-09-23-full-browser-use-design.md,
-  // "act gains actions and index targeting"). Two worst cases, and this
-  // must cover both:
+  // "act gains actions and index targeting"; browse-speed-contract.md's
+  // "Frontend" item 1 adds a 1..10-entry `actions` batch). Three worst
+  // cases, and this must cover all of them:
   //   - Plain act (index/target, no `element`): the desktop shell's own
   //     BROWSER_COMMAND_TIMEOUT_MS = 20s bounds every command, including
   //     `wait`'s hard cap of 15s (`wait` polls WITHIN that same 20s command
@@ -252,15 +271,28 @@ const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
   //     budget plus its ~1.5s cursor-move budget (CURSOR_TIMEOUT_MS in
   //     pen-editor-desktop/src/main/browser/controller.ts) for a
   //     click/type/select/hover/press that moves the visible cursor first.
-  //     20 + 20 + 21.5 = 61.5s worst case.
-  // 65s covers both (61.5s plus ~3.5s margin), while staying comfortably
-  // under browse_task's 100s.
-  browse_act: 65_000,
+  //     20 + 20 + 21.5 = 61.5s worst case. 65s used to cover this alone.
+  //   - An `actions` batch: up to 10 entries, each individually as expensive
+  //     as the plain-act worst case above (~21.5s for a cursor-moving act),
+  //     plus one more snapshot at the end for the batch-level `snapshot`
+  //     field. 65s stopped being enough the moment batching landed — the
+  //     contract calls for raising this override to 120s rather than trying
+  //     to size it for the full 10×21.5s+20s ≈ 235s worst case, since that
+  //     would make one runaway batch dominate the whole tool-call budget;
+  //     120s is a deliberate compromise, not a hard cap derived from the
+  //     batch math.
+  // Finding: at 120s, that compromise wasn't actually being enforced —
+  // runActionsBatch's own internal BATCH_DEADLINE_MS was 100s, which left
+  // only ~20s of margin against a single entry's own ~61.5s worst case (an
+  // entry starting at t=99s could finish around t=160s). BATCH_DEADLINE_MS
+  // is now tightened to 60s (browseAct.ts), and the trailing attachSnapshot
+  // call is skipped once that internal deadline has passed, so this 120s
+  // client-side budget stays a real ceiling rather than an aspirational one.
+  browse_act: 120_000,
   // browse_tabs (same design doc) with `action: "new"` and a `url` reuses
-  // browse_open's full ~45s command budget (a fresh navigation can be slow),
-  // so it needs the same headroom as browse_open would if browse_open had
-  // its own override — 60s leaves margin above that budget.
-  browse_tabs: 60_000,
+  // browse_open's ~65s worst case (see browse_open's override above), so it
+  // needs the same headroom as browse_open — 70s leaves margin above that.
+  browse_tabs: 70_000,
   // generate_vector hands the prompt to QuiverAI's arrow-2, which draws the
   // SVG token by token: measured 20s for a simple icon and ~90s for a
   // detailed illustration, against the backend's own QUIVER_TIMEOUT_MS =

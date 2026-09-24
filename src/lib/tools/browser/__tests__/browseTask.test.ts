@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { browseTask, runBrowseTaskLoop } from "@/lib/tools/browser/browseTask";
-import { BROWSER_NOT_AVAILABLE_ERROR } from "@/lib/tools/browser/shared";
+import { browseTask, extractUrlFromGoal, runBrowseTaskLoop } from "@/lib/tools/browser/browseTask";
+import { BROWSER_NOT_AVAILABLE_ERROR, type SnapshotResult } from "@/lib/tools/browser/shared";
 
 type PenDesktopBrowser = NonNullable<NonNullable<typeof window.penDesktop>["browser"]>;
 
@@ -164,6 +164,11 @@ describe("browse_task", () => {
     expect(perform).not.toHaveBeenCalled();
     expect(sleep).toHaveBeenCalledTimes(1);
     expect(sleep).toHaveBeenCalledWith(400);
+    // 2, not 3: the pre-loop "is a tab already open?" probe (requirement 1)
+    // succeeds here (a real snapshot, not the "no tab" error) and is REUSED
+    // as the first loop iteration's snapshot (finding: it used to be thrown
+    // away, doubling the snapshot cost) — so only the WAIT's follow-up
+    // snapshot is a second, genuinely new call.
     expect(snapshotCalls).toBe(2);
     expect(transcript.steps).toEqual([
       { operation: "WAIT", label: "waiting for the page to settle", ok: true },
@@ -260,7 +265,13 @@ describe("browse_task", () => {
     let snapshotCalls = 0;
     const snapshot = vi.fn(async () => {
       snapshotCalls++;
-      if (snapshotCalls === 1) {
+      // Call 1 is the pre-loop "is a tab already open?" probe (requirement
+      // 1) — it must succeed, and (finding: reused as the first loop
+      // iteration's own snapshot) is then consumed by iteration 0 without a
+      // second snapshot() call. Call 2 is iteration 1's own fresh snapshot,
+      // taken after iteration 0's CLICK landed — that's the one this test
+      // fails, to exercise a mid-LOOP snapshot failure.
+      if (snapshotCalls === 2) {
         throw new Error("page navigating");
       }
       return {
@@ -270,13 +281,15 @@ describe("browse_task", () => {
         snapshotId: "snap-2",
       };
     });
-    stubFetchSequence([DONE]);
+    stubFetchSequence([CLICK_STEP, DONE]);
 
-    const browser = stubBrowser({ snapshot });
+    const perform = vi.fn(async () => ({}));
+    const browser = stubBrowser({ snapshot, perform });
     const transcript = await runBrowseTaskLoop("accept cookies", 12, browser);
 
     expect(transcript.status).toBe("done");
     expect(transcript.steps).toEqual([
+      { operation: "CLICK", label: "Accept all", ok: true, index: 0 },
       { operation: "SNAPSHOT", label: "page navigating", ok: false },
     ]);
   });
@@ -383,7 +396,7 @@ describe("browse_task", () => {
     expect(act).toHaveBeenCalledWith({ action: "press", key: "Enter" });
     expect(perform).toHaveBeenCalledTimes(1);
     expect(transcript.steps).toEqual([
-      { operation: "TYPE_TEXT", label: "Accept all", ok: true, index: 0 },
+      { operation: "TYPE_TEXT", label: 'TYPE_TEXT "headphones" into "Accept all"', ok: true, index: 0 },
       { operation: "PRESS_ENTER", label: "press Enter", ok: true },
     ]);
   });
@@ -416,7 +429,7 @@ describe("browse_task", () => {
     const transcript = await runBrowseTaskLoop("submit the form", 3, browser);
 
     expect(act).toHaveBeenCalledTimes(1); // only the first PRESS_ENTER lands
-    expect(transcript.steps[0]).toEqual({ operation: "TYPE_TEXT", label: "Accept all", ok: true, index: 0 });
+    expect(transcript.steps[0]).toEqual({ operation: "TYPE_TEXT", label: 'TYPE_TEXT "headphones" into "Accept all"', ok: true, index: 0 });
     expect(transcript.steps[1]).toEqual({ operation: "PRESS_ENTER", label: "press Enter", ok: true });
     expect(transcript.steps[2]).toEqual({
       operation: "PRESS_ENTER",
@@ -471,7 +484,7 @@ describe("browse_task", () => {
     const transcript = await runBrowseTaskLoop("submit", 12, browser);
 
     expect(transcript.steps).toEqual([
-      { operation: "TYPE_TEXT", label: "Accept all", ok: true, index: 0 },
+      { operation: "TYPE_TEXT", label: 'TYPE_TEXT "headphones" into "Accept all"', ok: true, index: 0 },
       { operation: "PRESS_ENTER", label: "nothing is focused", ok: false },
     ]);
   });
@@ -550,19 +563,780 @@ describe("browse_task", () => {
     expect(secondRequestHistory[0]!.label.length).toBeLessThanOrEqual(200);
   });
 
-  it("surfaces a snapshot that resolved with { error } instead of reporting it as malformed", async () => {
+  it("surfaces a snapshot that resolved with { error } (unrelated to \"no tab\") instead of reporting it as malformed", async () => {
     stubFetchSequence([DONE]);
 
-    const snapshot = vi.fn(async () => ({ error: "No browser tab is open — call browse_open first." }));
+    // Deliberately NOT the "no browser tab is open" message — that one is
+    // now intercepted by the pre-loop probe (requirement 1, covered by its
+    // own describe block below) and ends the task immediately instead of
+    // reaching the loop's per-step SNAPSHOT handling this test exercises.
+    const snapshot = vi.fn(async () => ({
+      error: "Stale or unknown snapshotId — the page may have changed.",
+    }));
     const browser = stubBrowser({ snapshot });
 
     const transcript = await runBrowseTaskLoop("accept cookies", 12, browser);
 
     expect(transcript.status).toBe("stalled");
     expect(transcript.steps).toEqual([
-      { operation: "SNAPSHOT", label: "No browser tab is open — call browse_open first.", ok: false },
-      { operation: "SNAPSHOT", label: "No browser tab is open — call browse_open first.", ok: false },
-      { operation: "SNAPSHOT", label: "No browser tab is open — call browse_open first.", ok: false },
+      { operation: "SNAPSHOT", label: "Stale or unknown snapshotId — the page may have changed.", ok: false },
+      { operation: "SNAPSHOT", label: "Stale or unknown snapshotId — the page may have changed.", ok: false },
+      { operation: "SNAPSHOT", label: "Stale or unknown snapshotId — the page may have changed.", ok: false },
     ]);
+  });
+
+  // browse-speed-contract.md, "Frontend" item 4.
+  it("counts a perform CLICK/TYPE_TEXT/SELECT result with changed:false as unproductive, with an ok:false step and a 'no effect' reason", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const perform = vi.fn(async () => ({ changed: false }));
+    const browser = stubBrowser({ perform });
+
+    const transcript = await runBrowseTaskLoop("click the popover", 12, browser);
+
+    expect(transcript.status).toBe("stalled");
+    expect(transcript.steps).toHaveLength(3);
+    expect(perform).toHaveBeenCalledTimes(3);
+    expect(transcript.steps.every((step) => step.ok === false)).toBe(true);
+    expect(transcript.steps[0]!.label).toMatch(/no effect/);
+  });
+
+  it("does not treat a perform result with no `changed` field as no-effect (backward compatible)", async () => {
+    let stepCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        stepCalls++;
+        return {
+          ok: true,
+          json: async () =>
+            stepCalls === 1
+              ? { outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }
+              : { outcome: "done", confidence: 1, model: "jev" },
+        };
+      })
+    );
+
+    const perform = vi.fn(async () => ({}));
+    const browser = stubBrowser({ perform });
+
+    const transcript = await runBrowseTaskLoop("accept cookies", 12, browser);
+
+    expect(transcript.status).toBe("done");
+    expect(transcript.steps).toEqual([
+      { operation: "CLICK", label: "Accept all", ok: true, index: 0 },
+    ]);
+  });
+
+  // browse-speed-contract.md, "Frontend" item 4.
+  it("bails before starting a step once less than the per-step reserve remains, before the deadline is fully spent", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }),
+      }))
+    );
+
+    const browser = stubBrowser({});
+    let clock = 0;
+    // Deadline is now()+90_000 at start (clock 0 -> deadline 90_000). The
+    // first loop-entry check consumes one `now()` call — advance the clock
+    // by exactly enough that under 15s (STEP_DEADLINE_RESERVE_MS) remains,
+    // without having crossed the deadline itself.
+    const now = () => {
+      const value = clock;
+      clock += 80_000;
+      return value;
+    };
+
+    const transcript = await runBrowseTaskLoop("wander forever", 12, browser, now);
+
+    expect(transcript.status).toBe("budget");
+    expect(transcript.reason).toBe("deadline exceeded");
+    // Stopped before taking even one step: 90_000 - 80_000 = 10_000 remaining
+    // on the very first check, under the 35s reserve (STEP_DEADLINE_RESERVE_MS).
+    expect(transcript.steps).toHaveLength(0);
+  });
+
+  // Finding: STEP_DEADLINE_RESERVE_MS was raised from 15s to 35s — this
+  // exercises a case that used to PROCEED (15s < remaining < 35s) and must
+  // now bail instead, since a single step's own worst case (~61.5s) far
+  // exceeds a 15s reserve.
+  it("bails at the new 35s reserve even when the old 15s reserve would have let the step start", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }),
+      }))
+    );
+
+    const browser = stubBrowser({});
+    let clock = 0;
+    // Deadline is now()+90_000 at start. Advance by exactly enough that
+    // 20_000ms remain — under the new 35s reserve, but comfortably over the
+    // old 15s one.
+    const now = () => {
+      const value = clock;
+      clock += 70_000;
+      return value;
+    };
+
+    const transcript = await runBrowseTaskLoop("accept cookies", 12, browser, now);
+
+    expect(transcript.status).toBe("budget");
+    expect(transcript.reason).toBe("deadline exceeded");
+    expect(transcript.steps).toHaveLength(0);
+  });
+
+  // browse-speed-contract.md, "Frontend" item 4.
+  it("caps the WAIT sleep by whatever remains of the deadline", async () => {
+    let stepCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        stepCalls++;
+        return {
+          ok: true,
+          json: async () =>
+            stepCalls === 1
+              ? { outcome: "act", operation: "WAIT", confidence: 0.9, model: "jev" }
+              : { outcome: "done", confidence: 1, model: "jev" },
+        };
+      })
+    );
+
+    const browser = stubBrowser({});
+    const sleep = vi.fn(async (_ms: number) => {});
+    // now() is called 3 times before the sleep: (1) the initial deadline
+    // calc (deadline = 0 + 90_000 = 90_000), (2) the per-step reserve check
+    // (50_000 -> 40_000 remaining, comfortably over the 35s reserve, so the
+    // loop proceeds), (3) the sleep's own remaining-time calc (89_900 ->
+    // only 100ms left) — well under WAIT_SLEEP_MS (400ms).
+    const nowValues = [0, 50_000, 89_900];
+    let nowCalls = 0;
+    const now = () => nowValues[Math.min(nowCalls++, nowValues.length - 1)]!;
+
+    await runBrowseTaskLoop("wait for the page to load", 12, browser, now, sleep);
+
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep.mock.calls[0]![0]).toBe(100);
+  });
+
+  // browse-speed-contract.md, "Backend" item 5 / "Frontend" item 4.
+  it("forwards the snapshot's scroll position to /api/browse/step untouched", async () => {
+    const receivedBodies: Array<{ scroll?: unknown }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        receivedBodies.push(JSON.parse(init.body as string));
+        return {
+          ok: true,
+          json: async () => ({ outcome: "done", confidence: 1, model: "jev" }),
+        };
+      })
+    );
+
+    const snapshot = vi.fn(async () => ({
+      url: "https://example.com",
+      title: "Example",
+      elements: [],
+      snapshotId: "snap-1",
+      scroll: { y: 240, height: 1200, atBottom: false },
+    }));
+    const browser = stubBrowser({ snapshot });
+
+    await runBrowseTaskLoop("scroll and read", 12, browser);
+
+    expect(receivedBodies[0]!.scroll).toEqual({ y: 240, height: 1200, atBottom: false });
+  });
+
+  it("omits `scroll` from the /api/browse/step body when the snapshot doesn't carry one", async () => {
+    const receivedBodies: Array<Record<string, unknown>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        receivedBodies.push(JSON.parse(init.body as string));
+        return {
+          ok: true,
+          json: async () => ({ outcome: "done", confidence: 1, model: "jev" }),
+        };
+      })
+    );
+
+    const browser = stubBrowser({});
+    await runBrowseTaskLoop("accept cookies", 12, browser);
+
+    expect(receivedBodies[0]).not.toHaveProperty("scroll");
+  });
+
+  // Requirement 1: browse_task opens a tab itself (via `url`, or a URL
+  // sniffed out of the goal) instead of wasting Jev steps discovering there
+  // is no tab open — bench finding A (3 wasted "no browser tab" steps on
+  // every one of 3 live runs).
+  describe("opening a tab before the loop starts (requirement 1)", () => {
+    it("opens `url` before the loop starts, without any pre-loop snapshot probe", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({
+          ok: true,
+          json: async () => ({ outcome: "done", confidence: 1, model: "jev" }),
+        }))
+      );
+      const open = vi.fn(async () => ({}));
+      const snapshot = vi.fn(async () => ({
+        url: "https://shop.example.com",
+        title: "Shop",
+        elements: [],
+        snapshotId: "snap-1",
+      }));
+      const browser = stubBrowser({ open, snapshot });
+
+      const transcript = await runBrowseTaskLoop(
+        "search for headphones",
+        12,
+        browser,
+        undefined,
+        undefined,
+        "https://shop.example.com"
+      );
+
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(open).toHaveBeenCalledWith({ url: "https://shop.example.com" });
+      expect(transcript.status).toBe("done");
+    });
+
+    it("returns status:blocked immediately when open({url}) itself fails, without entering the loop", async () => {
+      const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({}) }));
+      vi.stubGlobal("fetch", fetchMock);
+      const open = vi.fn(async () => ({ error: "net::ERR_NAME_NOT_RESOLVED" }));
+      const browser = stubBrowser({ open });
+
+      const transcript = await runBrowseTaskLoop(
+        "search for headphones",
+        12,
+        browser,
+        undefined,
+        undefined,
+        "https://bad.example.invalid"
+      );
+
+      expect(transcript.status).toBe("blocked");
+      expect(transcript.reason).toContain("net::ERR_NAME_NOT_RESOLVED");
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("returns status:blocked with botCheck:true and never calls Jev when open({url}) lands on a bot-check wall", async () => {
+      const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({}) }));
+      vi.stubGlobal("fetch", fetchMock);
+      const open = vi.fn(async () => ({ botCheck: true }));
+      const browser = stubBrowser({ open });
+
+      const transcript = await runBrowseTaskLoop(
+        "search for headphones",
+        12,
+        browser,
+        undefined,
+        undefined,
+        "https://protected.example.com"
+      );
+
+      expect(transcript.status).toBe("blocked");
+      expect(transcript.botCheck).toBe(true);
+      expect(transcript.reason).toBe("bot check / CAPTCHA wall — hand over to the user");
+      expect(transcript.steps).toEqual([]);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("returns status:blocked with botCheck:true when the no-url probe path opens a goal URL that lands on a bot-check wall", async () => {
+      const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({}) }));
+      vi.stubGlobal("fetch", fetchMock);
+      const open = vi.fn(async () => ({ botCheck: true }));
+      let snapshotCalls = 0;
+      const snapshot = vi.fn(async () => {
+        snapshotCalls++;
+        return { error: "No browser tab is open — call browse_open first." };
+      });
+      const browser = stubBrowser({ open, snapshot });
+
+      const transcript = await runBrowseTaskLoop(
+        "open https://protected.example.com and search for headphones",
+        12,
+        browser
+      );
+
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(transcript.status).toBe("blocked");
+      expect(transcript.botCheck).toBe(true);
+      expect(fetchMock).not.toHaveBeenCalled();
+      // Only the one pre-loop probe snapshot — the loop itself never starts.
+      expect(snapshotCalls).toBe(1);
+    });
+
+    it("without `url`, probes for an already-open tab and proceeds normally when one is open (no extra open() call)", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({
+          ok: true,
+          json: async () => ({ outcome: "done", confidence: 1, model: "jev" }),
+        }))
+      );
+      const open = vi.fn(async () => ({}));
+      const browser = stubBrowser({ open });
+
+      const transcript = await runBrowseTaskLoop("accept cookies", 12, browser);
+
+      expect(open).not.toHaveBeenCalled();
+      expect(transcript.status).toBe("done");
+    });
+
+    it("without `url` and no tab open, opens a URL found inside the goal text instead of wasting steps", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({
+          ok: true,
+          json: async () => ({ outcome: "done", confidence: 1, model: "jev" }),
+        }))
+      );
+      const open = vi.fn(async () => ({}));
+      let snapshotCalls = 0;
+      const snapshot = vi.fn(async () => {
+        snapshotCalls++;
+        if (snapshotCalls === 1) {
+          return { error: "No browser tab is open — call browse_open first." };
+        }
+        return {
+          url: "https://shop.example.com",
+          title: "Shop",
+          elements: [],
+          snapshotId: "snap-1",
+        };
+      });
+      const browser = stubBrowser({ open, snapshot });
+
+      const transcript = await runBrowseTaskLoop(
+        "open https://shop.example.com and search for headphones",
+        12,
+        browser
+      );
+
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(open).toHaveBeenCalledWith({ url: "https://shop.example.com" });
+      expect(transcript.status).toBe("done");
+    });
+
+    it("without `url`, no open tab, and no URL in the goal, returns status:blocked immediately without ANY /api/browse/step call", async () => {
+      const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({}) }));
+      vi.stubGlobal("fetch", fetchMock);
+      const snapshot = vi.fn(async () => ({
+        error: "No browser tab is open — call browse_open first.",
+      }));
+      const browser = stubBrowser({ snapshot });
+
+      const transcript = await runBrowseTaskLoop("search this site for headphones", 12, browser);
+
+      expect(transcript).toEqual({
+        status: "blocked",
+        steps: [],
+        url: "",
+        title: "",
+        reason: "No browser tab is open — pass url or call browse_open first",
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+      // Exactly the one cheap probe call, not the three wasted Jev steps
+      // bench finding A measured on main.
+      expect(snapshot).toHaveBeenCalledTimes(1);
+    });
+
+    it("forwards `url` from the tool args through to the loop", async () => {
+      let receivedBody: unknown;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: RequestInit) => {
+          receivedBody = JSON.parse(init.body as string);
+          return { ok: true, json: async () => ({ outcome: "done", confidence: 1, model: "jev" }) };
+        })
+      );
+      const open = vi.fn(async () => ({}));
+
+      window.penDesktop = {
+        onMenuCommand: () => () => {},
+        browser: stubBrowser({ open }),
+      };
+
+      const result = await browseTask({
+        goal: "search for headphones",
+        url: "https://shop.example.com",
+      });
+      const parsed = JSON.parse(result);
+
+      expect(open).toHaveBeenCalledWith({ url: "https://shop.example.com" });
+      expect(parsed.status).toBe("done");
+      expect(receivedBody).toBeDefined();
+    });
+
+    // Finding #5: a URL named in the goal used to be silently ignored
+    // whenever ANY tab happened to be open, even on a totally unrelated
+    // site — only the "no tab open at all" case checked the goal for a URL.
+    it("navigates to a goal URL on a DIFFERENT origin even though a tab is already open elsewhere", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({
+          ok: true,
+          json: async () => ({ outcome: "done", confidence: 1, model: "jev" }),
+        }))
+      );
+      const open = vi.fn(async () => ({}));
+      const snapshot = vi.fn(async () => ({
+        url: "https://unrelated.example.com/dashboard",
+        title: "Unrelated",
+        elements: [],
+        snapshotId: "snap-1",
+      }));
+      const browser = stubBrowser({ open, snapshot });
+
+      const transcript = await runBrowseTaskLoop(
+        "open https://shop.example.com and search for headphones",
+        12,
+        browser
+      );
+
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(open).toHaveBeenCalledWith({ url: "https://shop.example.com" });
+      expect(transcript.status).toBe("done");
+    });
+
+    it("does NOT navigate when the goal URL is on the SAME origin as the already-open tab (just a different path)", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({
+          ok: true,
+          json: async () => ({ outcome: "done", confidence: 1, model: "jev" }),
+        }))
+      );
+      const open = vi.fn(async () => ({}));
+      const snapshot = vi.fn(async () => ({
+        url: "https://shop.example.com/cart",
+        title: "Cart",
+        elements: [],
+        snapshotId: "snap-1",
+      }));
+      const browser = stubBrowser({ open, snapshot });
+
+      const transcript = await runBrowseTaskLoop(
+        "go to https://shop.example.com/checkout and finish the order",
+        12,
+        browser
+      );
+
+      expect(open).not.toHaveBeenCalled();
+      expect(transcript.status).toBe("done");
+    });
+
+    it("does not navigate (and does not re-snapshot) when the goal names no URL and a tab is already open — reuses the probe as the loop's first snapshot (finding #7)", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({
+          ok: true,
+          json: async () => ({ outcome: "done", confidence: 1, model: "jev" }),
+        }))
+      );
+      const open = vi.fn(async () => ({}));
+      let snapshotCalls = 0;
+      const snapshot = vi.fn(async () => {
+        snapshotCalls++;
+        return {
+          url: "https://shop.example.com/cart",
+          title: "Cart",
+          elements: [],
+          snapshotId: "snap-1",
+        };
+      });
+      const browser = stubBrowser({ open, snapshot });
+
+      const transcript = await runBrowseTaskLoop("accept the cookie banner", 12, browser);
+
+      expect(open).not.toHaveBeenCalled();
+      expect(transcript.status).toBe("done");
+      // Exactly one snapshot call: the pre-loop probe, reused directly as
+      // the loop's first iteration snapshot rather than re-taken.
+      expect(snapshotCalls).toBe(1);
+    });
+  });
+
+  // Requirement 2: never re-type into the same search-like field twice in a
+  // row — press Enter instead. Bench finding B: Jev re-typed the identical
+  // query into the search box three times in a row and never submitted it.
+  describe("TYPE_TEXT-dedup rule for search-like fields (requirement 2)", () => {
+    function searchBoxSnapshot(): SnapshotResult {
+      return {
+        url: "https://shop.example.com",
+        title: "Shop",
+        elements: [{ index: 0, tag: "input", role: "searchbox", label: "Search products", ops: ["TYPE_TEXT"] }],
+        snapshotId: "snap-1",
+      };
+    }
+
+    it("overrides a repeat TYPE_TEXT into the same search-like element to PRESS_ENTER, tagged via:\"rule\"", async () => {
+      let stepCalls = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => {
+          stepCalls++;
+          return {
+            ok: true,
+            json: async () => {
+              if (stepCalls <= 2) {
+                // Jev keeps deciding to type the same text into the same
+                // field again — exactly the bench-B pattern.
+                return {
+                  outcome: "act",
+                  operation: "TYPE_TEXT",
+                  index: 0,
+                  text: "headphones",
+                  confidence: 0.9,
+                  model: "jev",
+                };
+              }
+              return { outcome: "done", confidence: 1, model: "jev" };
+            },
+          };
+        })
+      );
+
+      const act = vi.fn(async () => ({}));
+      const perform = vi.fn(async () => ({}));
+      const browser = stubBrowser({ act, perform, snapshot: async () => searchBoxSnapshot() });
+      const transcript = await runBrowseTaskLoop("search this site for headphones", 12, browser);
+
+      expect(perform).toHaveBeenCalledTimes(1); // only the FIRST TYPE_TEXT actually lands
+      expect(act).toHaveBeenCalledTimes(1); // the SECOND decision is overridden to PRESS_ENTER
+      expect(act).toHaveBeenCalledWith({ action: "press", key: "Enter" });
+      expect(transcript.steps[0]).toMatchObject({ operation: "TYPE_TEXT", ok: true });
+      expect(transcript.steps[0].label).toContain('TYPE_TEXT "headphones" into "Search products"');
+      expect(transcript.steps[1]).toMatchObject({ operation: "PRESS_ENTER", ok: true, via: "rule" });
+    });
+
+    it("does NOT override a repeat TYPE_TEXT into a non-search-like element", async () => {
+      let stepCalls = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => {
+          stepCalls++;
+          return {
+            ok: true,
+            json: async () =>
+              stepCalls <= 2
+                ? { outcome: "act", operation: "TYPE_TEXT", index: 0, text: "John", confidence: 0.9, model: "jev" }
+                : { outcome: "done", confidence: 1, model: "jev" },
+          };
+        })
+      );
+
+      const nameFieldSnapshot: SnapshotResult = {
+        url: "https://shop.example.com",
+        title: "Checkout",
+        elements: [{ index: 0, tag: "input", label: "Full name", ops: ["TYPE_TEXT"] }],
+        snapshotId: "snap-1",
+      };
+      const perform = vi.fn(async () => ({}));
+      const browser = stubBrowser({ perform, snapshot: async () => nameFieldSnapshot });
+      const transcript = await runBrowseTaskLoop("fill out the checkout form", 12, browser);
+
+      expect(perform).toHaveBeenCalledTimes(2);
+      expect(transcript.steps.every((s) => s.operation === "TYPE_TEXT")).toBe(true);
+    });
+
+    it("does NOT override to PRESS_ENTER when any element on the page isPassword, even into the same search-like field twice — mirrors the backend's hard credentials rule", async () => {
+      let stepCalls = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => {
+          stepCalls++;
+          return {
+            ok: true,
+            json: async () =>
+              stepCalls <= 2
+                ? {
+                    outcome: "act",
+                    operation: "TYPE_TEXT",
+                    index: 0,
+                    text: "headphones",
+                    confidence: 0.9,
+                    model: "jev",
+                  }
+                : { outcome: "done", confidence: 1, model: "jev" },
+          };
+        })
+      );
+
+      const searchBoxWithPasswordSnapshot: SnapshotResult = {
+        url: "https://shop.example.com/login",
+        title: "Login",
+        elements: [
+          { index: 0, tag: "input", role: "searchbox", label: "Search products", ops: ["TYPE_TEXT"] },
+          { index: 1, tag: "input", label: "Password", isPassword: true, ops: ["TYPE_TEXT"] },
+        ],
+        snapshotId: "snap-1",
+      };
+      const act = vi.fn(async () => ({}));
+      const perform = vi.fn(async () => ({}));
+      const browser = stubBrowser({
+        act,
+        perform,
+        snapshot: async () => searchBoxWithPasswordSnapshot,
+      });
+      const transcript = await runBrowseTaskLoop("search this site for headphones", 12, browser);
+
+      // No PRESS_ENTER override — both decisions land as plain TYPE_TEXT.
+      expect(act).not.toHaveBeenCalled();
+      expect(perform).toHaveBeenCalledTimes(2);
+      expect(transcript.steps.every((s) => s.operation === "TYPE_TEXT")).toBe(true);
+    });
+  });
+
+  // Requirement 3/4: the backend's STRUCTURED_MODEL cascade is surfaced to
+  // the transcript as `via: "cascade"`, and to a terminal reason as
+  // "(via cascade)".
+  describe("cascade surfaced in the transcript (requirement 3/4)", () => {
+    it("tags a cascade-decided act step with via:\"cascade\"", async () => {
+      let stepCalls = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => {
+          stepCalls++;
+          return {
+            ok: true,
+            json: async () =>
+              stepCalls === 1
+                ? {
+                    outcome: "act",
+                    operation: "CLICK",
+                    index: 0,
+                    confidence: 0.7,
+                    model: "openrouter:deepseek/deepseek-v4.1-flash",
+                    cascade: true,
+                  }
+                : { outcome: "done", confidence: 1, model: "jev" },
+          };
+        })
+      );
+
+      const perform = vi.fn(async () => ({}));
+      const browser = stubBrowser({ perform });
+      const transcript = await runBrowseTaskLoop("accept cookies", 12, browser);
+
+      expect(transcript.steps[0]).toMatchObject({ operation: "CLICK", ok: true, via: "cascade" });
+    });
+
+    it("does not tag an ordinary Jev-decided step with any `via`", async () => {
+      let stepCalls = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => {
+          stepCalls++;
+          return {
+            ok: true,
+            json: async () =>
+              stepCalls === 1
+                ? { outcome: "act", operation: "CLICK", index: 0, confidence: 0.9, model: "jev" }
+                : { outcome: "done", confidence: 1, model: "jev" },
+          };
+        })
+      );
+
+      const perform = vi.fn(async () => ({}));
+      const browser = stubBrowser({ perform });
+      const transcript = await runBrowseTaskLoop("accept cookies", 12, browser);
+
+      expect(transcript.steps[0]).not.toHaveProperty("via");
+    });
+
+    it("marks a cascade-decided terminal done/blocked reason with \"(via cascade)\"", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({
+          ok: true,
+          json: async () => ({
+            outcome: "done",
+            confidence: 0.7,
+            model: "openrouter:deepseek/deepseek-v4.1-flash",
+            reason: "cart already has the item",
+            cascade: true,
+          }),
+        }))
+      );
+
+      const browser = stubBrowser({});
+      const transcript = await runBrowseTaskLoop("add headphones to cart", 12, browser);
+
+      expect(transcript.status).toBe("done");
+      expect(transcript.reason).toBe("cart already has the item (via cascade)");
+    });
+  });
+
+  // Finding #6: a URL embedded in prose commonly picks up trailing
+  // punctuation that isn't part of the URL — must be stripped, but a
+  // legitimately balanced trailing paren (e.g. a Wikipedia-style link) must
+  // survive.
+  describe("extractUrlFromGoal (finding #6)", () => {
+    it("strips a trailing comma", () => {
+      expect(extractUrlFromGoal("go to https://example.com/a, then search")).toBe(
+        "https://example.com/a"
+      );
+    });
+
+    it("strips a trailing period", () => {
+      expect(extractUrlFromGoal("see https://example.com/a.")).toBe("https://example.com/a");
+    });
+
+    it("strips a trailing semicolon", () => {
+      expect(extractUrlFromGoal("open https://example.com/a; do the thing")).toBe(
+        "https://example.com/a"
+      );
+    });
+
+    it("strips a trailing exclamation mark", () => {
+      expect(extractUrlFromGoal("go to https://example.com/a!")).toBe("https://example.com/a");
+    });
+
+    it("strips an unbalanced trailing closing bracket", () => {
+      expect(extractUrlFromGoal("see [https://example.com/a]")).toBe("https://example.com/a");
+    });
+
+    it("strips an unbalanced trailing closing brace", () => {
+      expect(extractUrlFromGoal("see {https://example.com/a}")).toBe("https://example.com/a");
+    });
+
+    it("strips an unbalanced trailing closing paren", () => {
+      expect(extractUrlFromGoal("see (https://example.com/a)")).toBe("https://example.com/a");
+    });
+
+    it("strips a trailing closing quote", () => {
+      expect(extractUrlFromGoal("go to 'https://example.com/a' now")).toBe(
+        "https://example.com/a"
+      );
+    });
+
+    it("keeps a BALANCED trailing paren that is genuinely part of the URL", () => {
+      expect(extractUrlFromGoal("see https://en.wikipedia.org/wiki/Foo_(bar) for details")).toBe(
+        "https://en.wikipedia.org/wiki/Foo_(bar)"
+      );
+    });
+
+    it("strips multiple trailing punctuation characters in one pass", () => {
+      expect(extractUrlFromGoal("open https://example.com/a)., please")).toBe(
+        "https://example.com/a"
+      );
+    });
+
+    it("returns undefined when no URL is present", () => {
+      expect(extractUrlFromGoal("just search this page")).toBeUndefined();
+    });
   });
 });

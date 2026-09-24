@@ -2,8 +2,10 @@ import type { ToolHandler } from "../../toolRegistry";
 import {
   BROWSER_NOT_AVAILABLE_ERROR,
   fetchBrowseBackend,
+  filterElementsForBackend,
   resultError,
   takeSnapshot,
+  type PenDesktopBrowser,
   type SnapshotResult,
 } from "./shared";
 
@@ -32,6 +34,30 @@ const HARD_MAX_STEPS = 25;
 
 /** design doc §3: BROWSE_TASK_DEADLINE_MS = 90_000. */
 const BROWSE_TASK_DEADLINE_MS = 90_000;
+
+/**
+ * browse-speed-contract.md, "Frontend" item 4: how much of the deadline
+ * must remain before STARTING a new step (snapshot → step → perform). A
+ * step that begins with too little left can still burn most of a step's
+ * own worst case before this loop's own deadline check would have caught
+ * it on the NEXT iteration — reserving a margin means the loop bails before
+ * starting a step it likely can't finish, rather than after.
+ *
+ * Finding: 15s was far short of one step's real worst case. A single step
+ * is takeSnapshot (up to the desktop's 20s command budget) + requestStep
+ * (up to shared.ts's BROWSE_BACKEND_REQUEST_TIMEOUT_MS = 20s) + the
+ * act/perform call itself (up to 20s plus ~1.5s cursor-move budget) —
+ * ~61.5s worst case, not the 15s this reserve assumed. 35s is the
+ * documented middle-ground fix: it does not fully close the gap (a step
+ * starting at deadline-35s could still finish around deadline+26.5s), but
+ * it cuts the overrun from ~46.5s to ~26.5s, and — combined with raising
+ * browse_task's client-side tool-call timeout from 100s to 150s
+ * (useDesignChat.ts) — the worst-case total (BROWSE_TASK_DEADLINE_MS - this
+ * reserve + one step's worst case = 90 - 35 + 61.5 = 116.5s) now lands
+ * comfortably inside that 150s budget with margin to spare, so
+ * BROWSE_TASK_DEADLINE_MS itself does not need to move.
+ */
+const STEP_DEADLINE_RESERVE_MS = 35_000;
 
 /** design doc §3: "keeping a short history" / backend request shape: last 10 steps. */
 const HISTORY_LIMIT = 10;
@@ -103,10 +129,21 @@ type StepOperation = PerformOperation | ActOperation | "WAIT";
 /** Addendum B: the step response's explicit terminal/transient signal. */
 type StepOutcome = "act" | "done" | "blocked" | "retry";
 
+/** How a step's operation was decided — omitted for an ordinary confident
+ * Jev decision (the common case), so existing transcripts/history entries
+ * stay exactly as small as before. "cascade": the backend's
+ * STRUCTURED_MODEL second opinion decided it after Jev's own peak
+ * probability gate failed (see pen-editor-backend's cascadeStep). "rule": a
+ * deterministic client-side guard overrode the decision entirely — e.g.
+ * refusing to retype into the same search box twice in a row and pressing
+ * Enter instead (see the TYPE_TEXT-dedup rule below `note`). */
+type StepVia = "cascade" | "rule";
+
 interface StepHistoryEntry {
   operation: string;
   label: string;
   ok: boolean;
+  via?: StepVia;
 }
 
 interface StepResponse {
@@ -123,6 +160,11 @@ interface StepResponse {
   confidence: number;
   model: string;
   reason?: string;
+  /** Set by the backend cascade (see pen-editor-backend's browseStep.ts
+   * `cascadeStep`) when a low-confidence Jev head was overridden by a
+   * STRUCTURED_MODEL second opinion — surfaced to the transcript as
+   * `via: "cascade"`. */
+  cascade?: boolean;
 }
 
 interface TranscriptStep extends StepHistoryEntry {
@@ -135,12 +177,169 @@ interface Transcript {
   url: string;
   title: string;
   reason?: string;
+  /** Set when `openBeforeLoop`'s open() call reported `botCheck: true` —
+   * surfaced so the caller/model knows this `blocked` is a CAPTCHA/bot-check
+   * wall specifically, not an ordinary open failure or a Jev refusal. */
+  botCheck?: true;
 }
 
 function labelForElement(elements: unknown[], index: number | undefined): string {
   if (index == null) return "";
   const el = elements[index] as { label?: unknown } | undefined;
   return el && typeof el.label === "string" ? el.label : "";
+}
+
+/** Requirement 2's "search-like field" test — a native search input, a
+ * combobox/searchbox role, or a label/placeholder that reads like a search
+ * box (the desktop snapshot already folds placeholder text into `label`).
+ * Deliberately permissive: false positives just mean an ordinary text field
+ * gets Enter pressed after a repeat TYPE_TEXT, which is a harmless no-op at
+ * worst, not a destructive one. */
+const SEARCH_LABEL_PATTERN = /search|find|query|поиск/i;
+
+/** Mirrors the backend's hard credentials rule (browseStep.ts's
+ * `operation === "PRESS_ENTER" && elements.some((el) => el.isPassword)`
+ * gate): the client cannot know which element currently has focus, only
+ * that a password field exists SOMEWHERE on the page — same reasoning the
+ * PRESS_ENTER-after-TYPE_TEXT guard above already applies. Used to refuse
+ * the TYPE_TEXT-dedup rule below on any page carrying a password field, so
+ * this client-side override can never produce the PRESS_ENTER the backend
+ * itself would have refused. */
+function hasPasswordElement(elements: unknown[]): boolean {
+  return elements.some((el) => (el as { isPassword?: unknown } | undefined)?.isPassword === true);
+}
+
+function isSearchLikeElement(elements: unknown[], index: number): boolean {
+  const el = elements[index] as
+    | { role?: unknown; label?: unknown; type?: unknown }
+    | undefined;
+  if (!el) return false;
+  const role = typeof el.role === "string" ? el.role.toLowerCase() : "";
+  const type = typeof el.type === "string" ? el.type.toLowerCase() : "";
+  const label = typeof el.label === "string" ? el.label : "";
+  return (
+    type === "search" ||
+    role === "searchbox" ||
+    role === "combobox" ||
+    SEARCH_LABEL_PATTERN.test(label)
+  );
+}
+
+/**
+ * Bench finding A (fixture-shop live run, all 3 runs): the very first
+ * browse_task call was made before any tab was open, and burned three
+ * whole Jev steps re-discovering "No browser tab is open — call
+ * browse_open first" before finally giving up (MAX_CONSECUTIVE_UNPRODUCTIVE_STEPS).
+ * Matches the bridge's own `browser.snapshot()` refusal message
+ * (pen-editor-desktop's BrowserController) — kept as a substring match
+ * rather than an exact string so a wording tweak on the desktop side
+ * doesn't silently stop this from firing.
+ */
+const NO_TAB_OPEN_PATTERN = /no browser tab is open/i;
+
+/** First http(s) URL literally present in the goal text, if any — used
+ * when the model didn't pass `url` explicitly but phrased the goal as
+ * "open https://... and do X". Deliberately simple (no goal parsing beyond
+ * a URL regex): this is a convenience fallback, not the primary path — the
+ * tool description asks the model to pass `url` directly. */
+export function extractUrlFromGoal(goal: string): string | undefined {
+  // `)` is deliberately NOT excluded here (unlike `"`/`'`/`<`/`>`, which
+  // never legitimately appear in a bare URL) — a matched `)` can be part of
+  // the URL itself (a Wikipedia-style path segment) or trailing punctuation
+  // from the surrounding prose ("see https://x.com/a)."); the balance check
+  // below tells the two apart instead of the character class blanket-
+  // excluding it (finding: that used to cut off a genuinely balanced
+  // trailing paren along with an unbalanced one).
+  const match = goal.match(/https?:\/\/[^\s"'<>]+/i);
+  if (!match) return undefined;
+  // Finding: a URL embedded in prose commonly picks up trailing punctuation
+  // that isn't part of the URL itself ("...go to https://x.com/a, then
+  // search" or "see https://x.com/a]." from bracketed/quoted phrasing) — a
+  // literal trailing char is stripped repeatedly, and a closing `)`/`]`/`}`
+  // is only kept when it actually balances an opening one earlier in the
+  // match (a URL can legitimately end with a balanced paren, e.g. a
+  // Wikipedia-style link).
+  let url = match[0];
+  const CLOSERS: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
+  while (url.length > 0) {
+    const last = url[url.length - 1]!;
+    if (",.;!".includes(last)) {
+      url = url.slice(0, -1);
+      continue;
+    }
+    if (last === "'" || last === '"') {
+      url = url.slice(0, -1);
+      continue;
+    }
+    const opener = CLOSERS[last];
+    if (opener) {
+      const opens = url.split(opener).length - 1;
+      const closes = url.split(last).length - 1;
+      if (closes > opens) {
+        url = url.slice(0, -1);
+        continue;
+      }
+    }
+    break;
+  }
+  return url.length > 0 ? url : undefined;
+}
+
+/** True when `a` and `b` are both parseable URLs sharing the same origin
+ * (scheme + host + port). Used by finding #5's cross-origin navigation
+ * check — defensively returns `true` (i.e. "don't navigate") when either
+ * fails to parse, since staying on the current page is the safer default
+ * over an unplanned open() call driven by a malformed URL. */
+function sameOrigin(a: string, b: string): boolean {
+  try {
+    return new URL(a).origin === new URL(b).origin;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Opens `targetUrl` via the desktop bridge before the loop starts, folding
+ * any failure into the same `{ status: "blocked", reason }` shape a step
+ * failure would use. Returns `null` on success (caller proceeds into the
+ * loop as normal).
+ */
+async function openBeforeLoop(
+  browser: PenDesktopBrowser,
+  targetUrl: string
+): Promise<Transcript | null> {
+  try {
+    const opened = await browser.open({ url: targetUrl });
+    const err = resultError(opened);
+    if (err) {
+      return { status: "blocked", steps: [], url: "", title: "", reason: `failed to open ${targetUrl}: ${err}` };
+    }
+    // Finding: a successful open() can still land on a bot-check/CAPTCHA
+    // wall (pen-editor-desktop's BrowserController.checkBotWall merges
+    // `{ botCheck: true }` into an otherwise-successful open result). That
+    // is not something Jev can click through, so treat it as an immediate
+    // `blocked` and hand over to the user rather than burning steps against
+    // a wall the step loop has no way to pass.
+    if (opened && typeof opened === "object" && (opened as { botCheck?: unknown }).botCheck === true) {
+      return {
+        status: "blocked",
+        steps: [],
+        url: "",
+        title: "",
+        reason: "bot check / CAPTCHA wall — hand over to the user",
+        botCheck: true,
+      };
+    }
+    return null;
+  } catch (err) {
+    return {
+      status: "blocked",
+      steps: [],
+      url: "",
+      title: "",
+      reason: `failed to open ${targetUrl}: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 }
 
 async function requestStep(
@@ -152,8 +351,17 @@ async function requestStep(
     goal,
     url: snapshot.url,
     title: snapshot.title,
-    elements: snapshot.elements,
+    // Scroll-container entries (`ops: []`, `scrollable: true`) fail the
+    // backend's non-empty-`ops` schema on a lagging deployment — see
+    // filterElementsForBackend's comment.
+    elements: filterElementsForBackend(snapshot.elements),
     history: history.slice(-HISTORY_LIMIT),
+    // browse-speed-contract.md, "Frontend" item 4 / "Backend" item 5: the
+    // snapshot's scroll position, forwarded untouched so Jev's state digest
+    // can mention it. Omitted entirely (rather than sent as `undefined`,
+    // which JSON.stringify would drop from the body anyway) when the
+    // snapshot doesn't carry one — an older desktop bridge, say.
+    ...(snapshot.scroll !== undefined ? { scroll: snapshot.scroll } : {}),
   });
   if (!res.ok) {
     throw new Error(`/api/browse/step responded ${res.status}`);
@@ -250,7 +458,8 @@ export async function runBrowseTaskLoop(
   maxSteps: number,
   browser: NonNullable<NonNullable<typeof window.penDesktop>["browser"]>,
   now: () => number = () => Date.now(),
-  sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  url?: string
 ): Promise<Transcript> {
   const cappedMaxSteps = Math.min(Math.max(1, Math.floor(maxSteps)), HARD_MAX_STEPS);
   const deadline = now() + BROWSE_TASK_DEADLINE_MS;
@@ -259,6 +468,63 @@ export async function runBrowseTaskLoop(
 
   let lastUrl = "";
   let lastTitle = "";
+
+  // Bench finding A: don't spend paid Jev steps discovering there is no
+  // browser tab open. Either an explicit `url` (open it first, always) or,
+  // absent that, a cheap local snapshot probe: if the bridge reports no
+  // tab, look for an http(s) URL inside the goal and open THAT; only if
+  // neither is available do we give up immediately, before the loop
+  // (and before any /api/browse/step call) even starts.
+  //
+  // Finding: a snapshot taken here that turns out to still be current (the
+  // happy path below, where a tab is already open on the right origin) used
+  // to be thrown away, only for the loop's own first iteration to take an
+  // identical fresh one immediately after — doubling the snapshot cost of
+  // every browse_task call that starts with a tab already open. Captured
+  // here and handed to the loop as `initialSnapshot` instead.
+  let initialSnapshot: SnapshotResult | undefined;
+  if (url) {
+    const openFailure = await openBeforeLoop(browser, url);
+    if (openFailure) return openFailure;
+  } else {
+    const probe = await takeSnapshot(browser);
+    if ("error" in probe) {
+      if (NO_TAB_OPEN_PATTERN.test(probe.error)) {
+        const goalUrl = extractUrlFromGoal(goal);
+        if (!goalUrl) {
+          return {
+            status: "blocked",
+            steps: [],
+            url: "",
+            title: "",
+            reason: "No browser tab is open — pass url or call browse_open first",
+          };
+        }
+        const openFailure = await openBeforeLoop(browser, goalUrl);
+        if (openFailure) return openFailure;
+      }
+      // Any other probe error (unrelated to "no tab") is deliberately
+      // discarded here — the loop's own first iteration takes its own
+      // fresh snapshot below, keeping this probe a pure pre-check with no
+      // effect on the loop's normal state machine.
+    } else {
+      // Finding: a tab is already open, but the goal may name a URL on a
+      // DIFFERENT origin — that used to be silently ignored whenever any
+      // tab happened to be open, even on an unrelated site. Only navigate
+      // when the goal's URL and the current tab disagree on origin; same
+      // origin (or no URL in the goal at all) means stay put and reuse this
+      // snapshot as the loop's first iteration (see `initialSnapshot`
+      // above).
+      const goalUrl = extractUrlFromGoal(goal);
+      if (goalUrl && !sameOrigin(goalUrl, probe.url)) {
+        const openFailure = await openBeforeLoop(browser, goalUrl);
+        if (openFailure) return openFailure;
+        // The page just navigated — `probe` is now stale, do NOT reuse it.
+      } else {
+        initialSnapshot = probe;
+      }
+    }
+  }
 
   // PR #40: a step that landed nothing is still recorded (Jev needs to see
   // the no-op in `history`, or it re-picks the same dead target), but three
@@ -271,6 +537,16 @@ export async function runBrowseTaskLoop(
    * happens to have focus on, not the field Jev meant). `null` until the
    * first step lands. */
   let lastLandedOperation: string | null = null;
+  /** Bench finding B: Jev kept re-typing the same query into the search box
+   * instead of pressing Enter to submit it. Tracks the index (and text) of
+   * the element a landed TYPE_TEXT just filled, so the very next decision
+   * can be checked for the degenerate "type into the same field again"
+   * pattern — see the TYPE_TEXT-dedup rule below, right after `operation`
+   * is read out of the next decision. Cleared implicitly: the rule only
+   * fires when `lastLandedOperation === "TYPE_TEXT"` too, so a landed
+   * CLICK/SCROLL/etc. in between makes this stale value irrelevant even
+   * though it isn't reset. */
+  let lastTypeText: { index: number; text: string } | null = null;
   /** recordStep plus the no-progress check. Returns the transcript to
    * return when the loop has stalled, or null to carry on. */
   const note = (entry: TranscriptStep): Transcript | null => {
@@ -292,11 +568,20 @@ export async function runBrowseTaskLoop(
   };
 
   for (let stepCount = 0; stepCount < cappedMaxSteps; stepCount++) {
-    if (now() >= deadline) {
+    // browse-speed-contract.md, "Frontend" item 4: bail before STARTING a
+    // step once less than STEP_DEADLINE_RESERVE_MS remains, not only once
+    // the deadline itself has passed — a step begun with too little budget
+    // left can still burn most of a desktop command timeout before the
+    // loop gets back here to notice.
+    if (deadline - now() < STEP_DEADLINE_RESERVE_MS) {
       return { status: "budget", steps, url: lastUrl, title: lastTitle, reason: "deadline exceeded" };
     }
 
-    const snapshotResult = await takeSnapshot(browser);
+    // Finding: reuse the pre-loop probe as this first iteration's snapshot
+    // (when one was captured — see `initialSnapshot`'s comment above)
+    // instead of immediately re-taking an identical one.
+    const snapshotResult =
+      stepCount === 0 && initialSnapshot ? initialSnapshot : await takeSnapshot(browser);
     if ("error" in snapshotResult) {
       const stalled = note({
         operation: "SNAPSHOT",
@@ -329,11 +614,17 @@ export async function runBrowseTaskLoop(
     // candidate element) and anything unrecognized or missing are recorded
     // and the loop continues — treating an unknown outcome as a silent
     // success would be exactly the bug the addendum corrects.
+    // Requirement 4: keep `reason` on terminal statuses, and say when the
+    // STRUCTURED_MODEL cascade (not Jev itself) is what decided it — the
+    // bench reads these.
+    const terminalReason = decision.cascade
+      ? `${decision.reason ?? ""}${decision.reason ? " " : ""}(via cascade)`
+      : decision.reason;
     if (decision.outcome === "done") {
-      return { status: "done", steps, url: lastUrl, title: lastTitle, reason: decision.reason };
+      return { status: "done", steps, url: lastUrl, title: lastTitle, reason: terminalReason };
     }
     if (decision.outcome === "blocked") {
-      return { status: "blocked", steps, url: lastUrl, title: lastTitle, reason: decision.reason };
+      return { status: "blocked", steps, url: lastUrl, title: lastTitle, reason: terminalReason };
     }
     if (decision.outcome === "retry") {
       const stalled = note({
@@ -355,15 +646,25 @@ export async function runBrowseTaskLoop(
     }
 
     // outcome === "act" from here on.
+    const cascadeVia: StepVia | undefined = decision.cascade ? "cascade" : undefined;
+
     if (decision.operation === "WAIT") {
       // Addendum A: WAIT never reaches `perform` — the loop sleeps itself
       // and takes a fresh snapshot on the next iteration.
-      note({ operation: "WAIT", label: "waiting for the page to settle", ok: true });
-      await sleep(WAIT_SLEEP_MS);
+      note({
+        operation: "WAIT",
+        label: "waiting for the page to settle",
+        ok: true,
+        ...(cascadeVia ? { via: cascadeVia } : {}),
+      });
+      // browse-speed-contract.md, "Frontend" item 4: cap the sleep by
+      // whatever's actually left of the deadline, so a WAIT decided with
+      // little budget remaining can't itself blow past it.
+      await sleep(Math.max(0, Math.min(WAIT_SLEEP_MS, deadline - now())));
       continue;
     }
 
-    const operation = decision.operation;
+    let operation = decision.operation;
     if (!operation) {
       const stalled = note({
         operation: "MALFORMED",
@@ -372,6 +673,28 @@ export async function runBrowseTaskLoop(
       });
       if (stalled) return stalled;
       continue;
+    }
+
+    // Requirement 2 / bench finding B: Jev (or the cascade) kept re-typing
+    // the same query into the search box instead of submitting it. If the
+    // step JUST landed a TYPE_TEXT into a search-like field and the very
+    // next decision is TYPE_TEXT into that SAME element again, override to
+    // PRESS_ENTER instead of repeating the type — a deterministic rule, not
+    // a threshold, so it applies regardless of which head/model chose the
+    // repeat. Must run before the targetless/index checks below, since
+    // PRESS_ENTER (unlike TYPE_TEXT) needs no index.
+    let via: StepVia | undefined = cascadeVia;
+    if (
+      operation === "TYPE_TEXT" &&
+      lastLandedOperation === "TYPE_TEXT" &&
+      decision.index != null &&
+      lastTypeText !== null &&
+      lastTypeText.index === decision.index &&
+      isSearchLikeElement(snapshot.elements, decision.index) &&
+      !hasPasswordElement(snapshot.elements)
+    ) {
+      operation = "PRESS_ENTER";
+      via = "rule";
     }
 
     // Full browser use (docs/superpowers/specs/
@@ -428,7 +751,13 @@ export async function runBrowseTaskLoop(
           ? { action: "hover", index: decision.index, snapshotId: snapshot.snapshotId }
           : { action: "press", key: operation === "PRESS_ENTER" ? "Enter" : "Escape" };
       const actLabel =
-        operation === "HOVER" ? label : operation === "PRESS_ENTER" ? "press Enter" : "press Escape";
+        operation === "HOVER"
+          ? label
+          : operation === "PRESS_ENTER"
+            ? via === "rule"
+              ? "press Enter (avoided retyping into the same field)"
+              : "press Enter"
+            : "press Escape";
 
       try {
         const acted = await browser.act(actArgs);
@@ -451,6 +780,7 @@ export async function runBrowseTaskLoop(
                 label: `${actLabel}${describeSideEffects(acted)}`,
                 ok: !noEffect,
                 index: decision.index,
+                ...(via ? { via } : {}),
               }
         );
         if (stalled) return stalled;
@@ -490,12 +820,41 @@ export async function runBrowseTaskLoop(
       // persistently stale target loop forever while the transcript
       // claimed success on every cycle.
       const rejected = resultError(performed);
+      // browse-speed-contract.md, "Frontend" item 4: a CLICK/TYPE_TEXT/
+      // SELECT that resolved with no error but `changed: false` still
+      // landed nothing — same "no progress" case the act path already
+      // counts via isNoEffectResult (see that function's comment), now
+      // applied to perform too.
+      const noEffect = !rejected && isNoEffectResult(performed);
+      // Requirement 2 (typed-state awareness): a plain element label
+      // ("Search") tells the NEXT decision nothing about what was already
+      // typed there — the history sent back to /api/browse/step must say
+      // what was typed where, or Jev has no signal that the field is
+      // already filled with its own prior guess.
+      const displayLabel =
+        operation === "TYPE_TEXT" && decision.text
+          ? `TYPE_TEXT "${truncateToChars(decision.text, 60)}" into "${label}"`
+          : label;
       const stalled = note(
         rejected
           ? { operation, label: rejected, ok: false, index: decision.index }
-          : { operation, label: `${label}${describeSideEffects(performed)}`, ok: true, index: decision.index }
+          : {
+              operation,
+              label: noEffect
+                ? `${displayLabel}${describeSideEffects(performed)} (no effect)`
+                : `${displayLabel}${describeSideEffects(performed)}`,
+              ok: !noEffect,
+              index: decision.index,
+              ...(via ? { via } : {}),
+            }
       );
       if (stalled) return stalled;
+      // Track the just-landed TYPE_TEXT for the next iteration's dedup
+      // rule above — only on a genuinely landed (not rejected, not
+      // no-effect) TYPE_TEXT.
+      if (operation === "TYPE_TEXT" && !rejected && !noEffect && decision.index != null) {
+        lastTypeText = { index: decision.index, text: decision.text ?? "" };
+      }
     } catch (err) {
       // A failing step (design doc §3/§4: "a failing step is recorded and
       // does not abort the whole task") is recorded in the transcript and
@@ -525,9 +884,10 @@ export const browseTask: ToolHandler = async (args) => {
     typeof args.maxSteps === "number" && Number.isFinite(args.maxSteps)
       ? args.maxSteps
       : DEFAULT_MAX_STEPS;
+  const url = typeof args.url === "string" && args.url.length > 0 ? args.url : undefined;
 
   try {
-    const transcript = await runBrowseTaskLoop(goal, maxSteps, browser);
+    const transcript = await runBrowseTaskLoop(goal, maxSteps, browser, undefined, undefined, url);
     // Matches every other browser tool handler's "always resolves a real
     // JSON string" contract (see shared.ts's callBrowserBridge comment) —
     // this handler doesn't route through callBrowserBridge since it makes
