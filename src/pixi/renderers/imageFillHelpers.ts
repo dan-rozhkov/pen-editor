@@ -11,6 +11,7 @@ import { normalizeSvgMarkup, svgTextToDataUrl } from "@/lib/htmlToDesign/svgHand
 import { resolveApiUrl } from "@/lib/apiBase";
 import { LruTextureCache } from "./lruTextureCache";
 import { registerPendingImageLoad } from "./pendingImageLoads";
+import { notifyAsyncContainerMutation } from "./asyncContainerMutation";
 
 /** Cache for loaded textures by URL (LRU, bounded — SVG keys include size/resolution,
  *  so interactive resize/zoom would otherwise grow it without limit) */
@@ -286,10 +287,22 @@ function withCachedTexture(
     return;
   }
 
+  // Both paths below run `onReady` asynchronously, after the scene flush that
+  // requested the texture has long finished — so the sprite it attaches is an
+  // out-of-flush container mutation. Notify first (raster-cache eviction of
+  // the enclosing top-level frame + a render request), or a frame that was
+  // re-cached while the load was in flight keeps rendering its pre-load
+  // texture forever. See asyncContainerMutation.ts.
+  const onReadyAsync = (texture: Texture): void => {
+    if (container.destroyed) return;
+    notifyAsyncContainerMutation(container);
+    onReady(texture);
+  };
+
   if (loadingCallbacks.has(cacheKey)) {
     loadingCallbacks.get(cacheKey)!.push(() => {
       const tex = textureCache.peek(cacheKey);
-      if (tex && !container.destroyed) onReady(tex);
+      if (tex) onReadyAsync(tex);
     });
     return;
   }
@@ -297,7 +310,7 @@ function withCachedTexture(
   loadingCallbacks.set(cacheKey, []);
   const loadPromise = load().then((texture) => {
     textureCache.set(cacheKey, texture);
-    if (!container.destroyed) onReady(texture);
+    onReadyAsync(texture);
     const cbs = loadingCallbacks.get(cacheKey);
     loadingCallbacks.delete(cacheKey);
     cbs?.forEach((cb) => cb());
@@ -490,6 +503,8 @@ function trySvgResizeFastPath(
   const timer = setTimeout(() => {
     pendingSvgRerenderByContainer.delete(container);
     if (container.destroyed) return;
+    // Timer-driven, outside any scene flush — same invariant as onReadyAsync.
+    notifyAsyncContainerMutation(container);
     scheduleFullRerender();
   }, SVG_FILL_RESIZE_RERENDER_DEBOUNCE_MS);
   pendingSvgRerenderByContainer.set(container, timer);

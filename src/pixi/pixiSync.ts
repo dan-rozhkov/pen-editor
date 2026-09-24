@@ -28,6 +28,7 @@ import { createCullingIndex } from "./cullingIndex";
 import { perfStats } from "./perfStats";
 import { computeSceneDiffFull, computeSceneDiffDirty, type SceneDiff } from "./syncDiff";
 import { createRasterCacheManager, type RasterCacheManager } from "./rasterCacheManager";
+import { setAsyncContainerMutationHandler, resolveOwningNodeId } from "./renderers/asyncContainerMutation";
 
 // Module-level registry accessor for the drag animator
 let registryAccessor: ((id: string) => Container | null) | null = null;
@@ -170,6 +171,18 @@ export function createPixiSync(sceneRoot: Container): () => void {
         getPixelRatio: () => window.devicePixelRatio || 1,
       })
     : null;
+
+  // Async renderer mutations (an image-fill texture finishing its load and
+  // attaching its Sprite seconds after the flush that requested it) happen
+  // outside any flush, so they must evict the enclosing top frame's raster
+  // cache themselves — otherwise a board re-cached while the load was in
+  // flight renders its pre-load texture forever. See asyncContainerMutation.ts.
+  const asyncMutationHandler = (container: Parameters<typeof resolveOwningNodeId>[0]): void => {
+    const id = resolveOwningNodeId(container, (label, c) => registry.get(label)?.container === c);
+    if (id) rasterCacheManager?.onDirectContainerMutation([id], useSceneStore.getState());
+    requestCanvasRender();
+  };
+  setAsyncContainerMutationHandler(asyncMutationHandler);
 
   // ─── Full Rebuild ────────────────────────────────────────────────────
 
@@ -816,6 +829,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
     unsubViewport();
     unsubRenderMode();
     rasterCacheManager?.dispose();
+    setAsyncContainerMutationHandler(null);
     resolutionMgr.cleanup();
     clearPendingSceneUpdate();
     clearPendingThemeUpdate();
