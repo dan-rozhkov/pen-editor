@@ -580,11 +580,19 @@ describe("actionCache: cacheability guards", () => {
       "Купить",
       "Удалить",
       "Отправить",
+      "Подтвердить заказ",
+      "Оформить заказ",
+      "Выйти",
+      "Отменить",
+      "Перевести",
     ]) {
       expect(isIrreversibleLabel(label)).toBe(true);
     }
     expect(isIrreversibleLabel("Add to cart")).toBe(false);
     expect(isIrreversibleLabel(undefined)).toBe(false);
+    expect(isIrreversibleLabel("Поиск")).toBe(false);
+    expect(isIrreversibleLabel("Далее")).toBe(false);
+    expect(isIrreversibleLabel("Показать ещё")).toBe(false);
   });
 
   it("isSensitiveField flags password/OTP/card/IBAN-shaped labels and types", () => {
@@ -597,6 +605,10 @@ describe("actionCache: cacheability guards", () => {
     expect(isSensitiveField("Card number", undefined)).toBe(true);
     expect(isSensitiveField("IBAN", undefined)).toBe(true);
     expect(isSensitiveField(undefined, "password")).toBe(true);
+    expect(isSensitiveField("Пароль", undefined)).toBe(true);
+    expect(isSensitiveField("Код подтверждения", undefined)).toBe(true);
+    expect(isSensitiveField("Код из смс", undefined)).toBe(true);
+    expect(isSensitiveField("Номер карты", undefined)).toBe(true);
     expect(isSensitiveField("Email", undefined)).toBe(false);
     expect(isSensitiveField(undefined, undefined)).toBe(false);
   });

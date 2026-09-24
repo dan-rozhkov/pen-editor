@@ -554,7 +554,7 @@ export function looksSensitive(text: string | undefined): boolean {
  * may be in either). Deliberately broad — a false positive just means an
  * ordinary control doesn't get cached. */
 const IRREVERSIBLE_LABEL_PATTERN =
-  /place order|pay|buy now|purchase|checkout|confirm|submit order|delete|remove|cancel|refund|send|transfer|unsubscribe|log ?out|sign ?out|оплат|купить|удал|отправ/i;
+  /place order|pay|buy now|purchase|checkout|confirm|submit order|delete|remove|cancel|refund|send|transfer|unsubscribe|log ?out|sign ?out|оплат|плат|купить|купи|покуп|удал|отправ|подтверд|заказ|оформ|выйти|выход|отмен|перевод|перевест|подпис/i;
 
 export function isIrreversibleLabel(label: string | undefined): boolean {
   return !!label && IRREVERSIBLE_LABEL_PATTERN.test(label);
@@ -566,7 +566,8 @@ export function isIrreversibleLabel(label: string | undefined): boolean {
  * Covers password fields under any of their common labels/`type`
  * attributes, one-time/verification codes, and payment-credential fields
  * (card number, CVV/CVC, IBAN). */
-const SENSITIVE_FIELD_PATTERN = /password|passwd|pwd|cvv|cvc|otp|verification|2fa|card|iban/i;
+const SENSITIVE_FIELD_PATTERN =
+  /password|passwd|pwd|cvv|cvc|otp|verification|2fa|card|iban|парол|код подтвержд|код из смс|смс|карт/i;
 
 export function isSensitiveField(label: string | undefined, type: string | undefined): boolean {
   return (!!label && SENSITIVE_FIELD_PATTERN.test(label)) || (!!type && SENSITIVE_FIELD_PATTERN.test(type));
