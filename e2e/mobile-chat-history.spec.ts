@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { SSE_HEADERS, sseBody } from "./support/sse";
+import { stubModels, stubChatTurns, openAgentsRail, sendChatMessage } from "./support/api";
 
 // Regression test for a mobile-only bug: the left sidebar (which hosts the
 // Agents chat) used to fully unmount on mobile when the panel closed
@@ -16,42 +16,28 @@ test.use({ viewport: { width: 390, height: 844 } });
 test("mobile: closing and reopening the Agents panel keeps chat history", async ({
   page,
 }) => {
-  await page.route("**/api/models", (route) =>
-    route.fulfill({
-      json: {
-        models: [
-          { id: "test/smoke-model", label: "Smoke Model", supportsVision: true },
-        ],
-        default: "test/smoke-model",
-      },
-    })
-  );
+  await stubModels(page);
 
-  await page.route("**/api/chat", async (route) => {
-    await route.fulfill({
-      headers: SSE_HEADERS,
-      body: sseBody([
-        { type: "start" },
-        { type: "start-step" },
-        { type: "text-start", id: "t1" },
-        { type: "text-delta", id: "t1", delta: ASSISTANT_REPLY },
-        { type: "text-end", id: "t1" },
-        { type: "finish-step" },
-        { type: "finish" },
-      ]),
-    });
-  });
+  await stubChatTurns(page, [
+    [
+      { type: "start" },
+      { type: "start-step" },
+      { type: "text-start", id: "t1" },
+      { type: "text-delta", id: "t1", delta: ASSISTANT_REPLY },
+      { type: "text-end", id: "t1" },
+      { type: "finish-step" },
+      { type: "finish" },
+    ],
+  ]);
 
   await page.goto("/app");
 
   // Open the Agents section from the left rail.
-  await page.getByTestId("rail-agents").click();
+  await openAgentsRail(page);
   await expect(page.getByText("Design Agent", { exact: true })).toBeVisible();
 
   // Send a message.
-  const input = page.getByPlaceholder("Ask the design agent...");
-  await input.fill(USER_MESSAGE);
-  await input.press("Enter");
+  await sendChatMessage(page, USER_MESSAGE);
 
   // Scope message assertions to the active chat session's transcript — the
   // sent text is also mirrored into the chat's title in the header, so an
@@ -67,11 +53,11 @@ test("mobile: closing and reopening the Agents panel keeps chat history", async 
 
   // Close the panel: tap the already-active rail button again (mobile-only
   // toggle behavior in LeftRail's handleSectionClick).
-  await page.getByTestId("rail-agents").click();
+  await openAgentsRail(page);
   await expect(page.getByText("Design Agent", { exact: true })).toBeHidden();
 
   // Reopen it.
-  await page.getByTestId("rail-agents").click();
+  await openAgentsRail(page);
   await expect(page.getByText("Design Agent", { exact: true })).toBeVisible();
 
   // The previously sent message and reply must still be there.

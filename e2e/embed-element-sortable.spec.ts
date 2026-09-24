@@ -1,5 +1,7 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Locator } from "@playwright/test";
 import { expectEditorMounted } from "./support/editor";
+import { stubModels } from "./support/api";
+import { addEmbedNode, waitForEmbedHitTest, boxPoint, moveMouseThrough } from "./support/embed";
 
 // Live-browser coverage for dragging an element inside an embed while the
 // element picker is active — EmbedLayer.tsx's pointerdown/move/up gesture,
@@ -27,36 +29,18 @@ const EMBED_HTML =
   "</div>";
 
 async function gotoEditorWithEmbed(page: Page) {
-  await page.route("**/api/models", (route) =>
-    route.fulfill({
-      json: {
-        models: [{ id: "test/smoke-model", label: "Smoke Model", supportsVision: true }],
-        default: "test/smoke-model",
-      },
-    }),
-  );
+  await stubModels(page);
 
   await page.goto("/app");
   await expectEditorMounted(page);
 
-  await page.evaluate(
-    ({ id, html }) => {
-      const w = window as unknown as {
-        __sceneStore: { getState: () => { addNode: (n: unknown) => void } };
-      };
-      w.__sceneStore.getState().addNode({
-        id,
-        type: "embed",
-        name: "Sort target",
-        x: 500,
-        y: 300,
-        width: 300,
-        height: 200,
-        htmlContent: html,
-      });
-    },
-    { id: EMBED_ID, html: EMBED_HTML },
-  );
+  await addEmbedNode(page, {
+    id: EMBED_ID,
+    name: "Sort target",
+    width: 300,
+    height: 200,
+    htmlContent: EMBED_HTML,
+  });
 }
 
 /** Enter element-picker mode the same way embed-dom-layer.spec.ts does:
@@ -71,25 +55,12 @@ async function enterPicker(page: Page) {
   const host = page.locator(`[data-embed-id="${EMBED_ID}"]`);
   await expect(host).toBeVisible();
 
-  const box = await host.boundingBox();
-  if (!box) throw new Error("embed host has no box");
   // Double-click in the empty strip below the three blocks (180-200px down),
   // so this only ever exercises the canvas hit test, never a picker
   // interaction with a block itself.
-  const dblClickPoint = { x: box.x + box.width / 2, y: box.y + box.height - 10 };
-
-  await page.waitForFunction(
-    ({ point, embedId }) => {
-      const w = window as unknown as {
-        __hitTestScreenPoint?: (x: number, y: number) => string | null;
-      };
-      const canvas = document.querySelector("[data-canvas] canvas");
-      if (!w.__hitTestScreenPoint || !canvas) return false;
-      const rect = canvas.getBoundingClientRect();
-      return w.__hitTestScreenPoint(point.x - rect.left, point.y - rect.top) === embedId;
-    },
-    { point: dblClickPoint, embedId: EMBED_ID },
-  );
+  const { box, point: center } = await boxPoint(host);
+  const dblClickPoint = { x: center.x, y: box.y + box.height - 10 };
+  await waitForEmbedHitTest(page, dblClickPoint, EMBED_ID);
 
   await host.dblclick({ force: true, position: { x: box.width / 2, y: box.height - 10 } });
 
@@ -120,6 +91,16 @@ function readHtmlContent(page: Page): Promise<string> {
 const BLOCK2_CENTER = { x: 150, y: 90 }; // block2 spans 60-120px
 const BLOCK3_CENTER = { x: 150, y: 150 }; // block3 spans 120-180px
 const BLOCK1_CENTER = { x: 150, y: 30 }; // block1 spans 0-60px
+
+/** Screen-space start/end points for dragging block2 to just past block3
+ * (near the bottom of the host), shared by the reorder test and its
+ * Escape-cancels-mid-drag counterpart. */
+async function block2ToPastBlock3(host: Locator) {
+  const { box: hostBox } = await boxPoint(host);
+  const start = { x: hostBox.x + BLOCK2_CENTER.x, y: hostBox.y + BLOCK2_CENTER.y };
+  const end = { x: hostBox.x + BLOCK3_CENTER.x, y: hostBox.y + hostBox.height - 5 };
+  return { hostBox, start, end };
+}
 
 test.describe("embed element sortable drag", () => {
   test("Alt-hovering a different embed element shows the native-style gap measure", async ({ page }) => {
@@ -184,10 +165,7 @@ test.describe("embed element sortable drag", () => {
     // would before dragging it.
     await host.click({ position: BLOCK2_CENTER });
 
-    const hostBox = await host.boundingBox();
-    if (!hostBox) throw new Error("embed host has no box");
-    const start = { x: hostBox.x + BLOCK2_CENTER.x, y: hostBox.y + BLOCK2_CENTER.y };
-    const end = { x: hostBox.x + BLOCK3_CENTER.x, y: hostBox.y + hostBox.height - 5 };
+    const { hostBox, start, end } = await block2ToPastBlock3(host);
 
     await page.mouse.move(start.x, start.y);
     await page.mouse.down();
@@ -195,12 +173,7 @@ test.describe("embed element sortable drag", () => {
     // events between steps, so a single jump straight to the destination
     // would never cross DRAG_THRESHOLD_PX as a distinct move and the
     // gesture would be read as a click, not a drag.
-    for (let i = 1; i <= 5; i++) {
-      await page.mouse.move(
-        start.x + ((end.x - start.x) * i) / 5,
-        start.y + ((end.y - start.y) * i) / 5,
-      );
-    }
+    await moveMouseThrough(page, start, end);
 
     await expect(page.locator("[data-embed-drop-indicator]")).toBeVisible();
 
@@ -234,19 +207,11 @@ test.describe("embed element sortable drag", () => {
     // test for why a sortable drag now requires this.
     await host.click({ position: BLOCK2_CENTER });
 
-    const hostBox = await host.boundingBox();
-    if (!hostBox) throw new Error("embed host has no box");
-    const start = { x: hostBox.x + BLOCK2_CENTER.x, y: hostBox.y + BLOCK2_CENTER.y };
-    const end = { x: hostBox.x + BLOCK3_CENTER.x, y: hostBox.y + hostBox.height - 5 };
+    const { hostBox, start, end } = await block2ToPastBlock3(host);
 
     await page.mouse.move(start.x, start.y);
     await page.mouse.down();
-    for (let i = 1; i <= 5; i++) {
-      await page.mouse.move(
-        start.x + ((end.x - start.x) * i) / 5,
-        start.y + ((end.y - start.y) * i) / 5,
-      );
-    }
+    await moveMouseThrough(page, start, end);
 
     // Confirm the drag actually took hold (drop indicator visible) before
     // testing that Escape reverts it — otherwise a no-op Escape would pass

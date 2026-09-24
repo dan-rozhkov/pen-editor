@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { SSE_HEADERS, sseBody } from "./support/sse";
+import { stubModels, stubChatTurns, openAgentsRail, sendChatMessage } from "./support/api";
 
 // Smoke test for AI plugin generation (plg-03): the backend is stubbed via
 // page.route the same way chat-smoke.spec.ts stubs it, but this time the
@@ -18,79 +18,49 @@ const PLUGIN_CODE = `
 const FIRST_TURN_TEXT = "Installing your plugin now.";
 const FINAL_TURN_TEXT = "The plugin has been installed. Smoke test complete.";
 
-interface ChatRequestBody {
-  messages?: Array<{ role: string; parts: Array<Record<string, unknown>> }>;
-}
-
 test("AI chat streams a create_plugin tool call, installs it, and it runs from the command palette", async ({
   page,
 }) => {
-  const chatRequests: ChatRequestBody[] = [];
+  await stubModels(page);
 
-  await page.route("**/api/models", (route) =>
-    route.fulfill({
-      json: {
-        models: [
-          { id: "test/smoke-model", label: "Smoke Model", supportsVision: true },
-        ],
-        default: "test/smoke-model",
+  const chatRequests = await stubChatTurns(page, [
+    [
+      { type: "start" },
+      { type: "start-step" },
+      { type: "text-start", id: "t1" },
+      { type: "text-delta", id: "t1", delta: FIRST_TURN_TEXT },
+      { type: "text-end", id: "t1" },
+      {
+        type: "tool-input-available",
+        toolCallId: "call-plugin-1",
+        toolName: "create_plugin",
+        input: {
+          name: PLUGIN_NAME,
+          description: "Creates a frame and closes.",
+          code: PLUGIN_CODE,
+          ui: null,
+        },
       },
-    })
-  );
-
-  await page.route("**/api/chat", async (route) => {
-    const body = route.request().postDataJSON() as ChatRequestBody;
-    chatRequests.push(body);
-
-    if (chatRequests.length === 1) {
-      await route.fulfill({
-        headers: SSE_HEADERS,
-        body: sseBody([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", delta: FIRST_TURN_TEXT },
-          { type: "text-end", id: "t1" },
-          {
-            type: "tool-input-available",
-            toolCallId: "call-plugin-1",
-            toolName: "create_plugin",
-            input: {
-              name: PLUGIN_NAME,
-              description: "Creates a frame and closes.",
-              code: PLUGIN_CODE,
-              ui: null,
-            },
-          },
-          { type: "finish-step" },
-          { type: "finish" },
-        ]),
-      });
-      return;
-    }
-
-    await route.fulfill({
-      headers: SSE_HEADERS,
-      body: sseBody([
-        { type: "start" },
-        { type: "start-step" },
-        { type: "text-start", id: "t2" },
-        { type: "text-delta", id: "t2", delta: FINAL_TURN_TEXT },
-        { type: "text-end", id: "t2" },
-        { type: "finish-step" },
-        { type: "finish" },
-      ]),
-    });
-  });
+      { type: "finish-step" },
+      { type: "finish" },
+    ],
+    [
+      { type: "start" },
+      { type: "start-step" },
+      { type: "text-start", id: "t2" },
+      { type: "text-delta", id: "t2", delta: FINAL_TURN_TEXT },
+      { type: "text-end", id: "t2" },
+      { type: "finish-step" },
+      { type: "finish" },
+    ],
+  ]);
 
   await page.goto("/app");
 
-  await page.getByTestId("rail-agents").click();
+  await openAgentsRail(page);
   await expect(page.getByText("Design Agent", { exact: true })).toBeVisible();
 
-  const input = page.getByPlaceholder("Ask the design agent...");
-  await input.fill("Make me a plugin that inserts a frame");
-  await input.press("Enter");
+  await sendChatMessage(page, "Make me a plugin that inserts a frame");
 
   await expect(page.getByText(FIRST_TURN_TEXT)).toBeVisible();
   await expect(page.getByText(FINAL_TURN_TEXT)).toBeVisible({ timeout: 15_000 });

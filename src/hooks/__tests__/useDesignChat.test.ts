@@ -592,6 +592,136 @@ describe("useDesignChat (hook + UI message stream)", () => {
     });
   }
 
+  // Progressive batch_design sessions live in a module-level Map that
+  // outlives resetStores() — the kill switch is the one bit of state that
+  // could otherwise leak into a later test in this file.
+  function resetStreamingMutationsKillSwitch() {
+    try {
+      globalThis.localStorage?.removeItem("pen.streamingMutations");
+    } catch {
+      // ignore
+    }
+  }
+
+  // A plain single-text-part turn — by far the most common stream shape in
+  // this file. `finishExtra` merges into the `finish` chunk for the rare
+  // case (e.g. context-usage metadata) that needs something riding along
+  // with it, such as `messageMetadata`.
+  function textTurnChunks(
+    text: string,
+    finishExtra: Record<string, unknown> = {},
+  ): Array<Record<string, unknown>> {
+    return [
+      { type: "start" },
+      { type: "start-step" },
+      { type: "text-start", id: "t1" },
+      { type: "text-delta", id: "t1", delta: text },
+      { type: "text-end", id: "t1" },
+      { type: "finish-step" },
+      { type: "finish", ...finishExtra },
+    ];
+  }
+
+  // A turn that produces no text at all (used where only the request side —
+  // headers, body — is under test).
+  function emptyTurnChunks(): Array<Record<string, unknown>> {
+    return [
+      { type: "start" },
+      { type: "start-step" },
+      { type: "finish-step" },
+      { type: "finish" },
+    ];
+  }
+
+  // A response whose SSE body is pushed chunk-by-chunk under test control
+  // (real ReadableStream, real delays) rather than one static string body —
+  // this is what lets a test assert on state BEFORE a tool call's final
+  // chunk arrives (streaming previews/mutations below).
+  function controlledSseResponse() {
+    let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controllerRef = controller;
+      },
+    });
+    const push = (chunk: Record<string, unknown>) => {
+      controllerRef!.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+    };
+    const close = () => {
+      controllerRef!.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controllerRef!.close();
+    };
+    const response = new Response(stream, {
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream",
+        "x-vercel-ai-ui-message-stream": "v1",
+      },
+    });
+    return { response, push, close, controller: controllerRef! };
+  }
+
+  // A short real-time yield so the AI SDK's stream reader gets a turn to
+  // process enqueued chunks and flush the throttled React update.
+  async function flushStream(ms = 20) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+    });
+  }
+
+  // Streams the start of a batch_design call creating one frame named
+  // "Card" — the common opening move of every streaming-mutation test below,
+  // which then diverges on how the call resolves (completes, truncates,
+  // errors). Callers pass their own toolCallId since each test's assertions
+  // key off it.
+  async function pushBatchDesignCardStart(
+    push: (chunk: Record<string, unknown>) => void,
+    toolCallId: string,
+  ) {
+    push({ type: "start" });
+    push({ type: "start-step" });
+    push({
+      type: "tool-input-start",
+      toolCallId,
+      toolName: "batch_design",
+    });
+    push({
+      type: "tool-input-delta",
+      toolCallId,
+      inputTextDelta:
+        '{"operations":"card=I(document, {type: \\"frame\\", name: \\"Card\\", width: 100, height: 100})\\n',
+    });
+    await flushStream();
+  }
+
+  // Waits for a scene node with the given name to (not) exist — the
+  // recurring proof, throughout the streaming-mutation tests, that a
+  // progressive batch_design statement has (or hasn't) landed on/left the
+  // real scene.
+  async function expectNodeNamed(name: string, exists: boolean) {
+    await waitFor(() => {
+      expect(
+        Object.values(useSceneStore.getState().nodesById).some(
+          (n) => n.name === name
+        )
+      ).toBe(exists);
+    });
+  }
+
+  // Types the input then sends it — the two-`act` dance every test below
+  // uses to drive a turn (`setInput` is a sync state update, `sendMessage`
+  // kicks off the async fetch).
+  async function sendText(
+    result: { current: { setInput: (text: string) => void; sendMessage: () => unknown } },
+    text: string,
+  ) {
+    act(() => result.current.setInput(text));
+    await act(async () => {
+      result.current.sendMessage();
+    });
+  }
+
   // A background chat must send ITS OWN model, not the foreground chat's:
   // `model` at the store root is only the active chat's value and openChat
   // overwrites it on every switch, so a session that reads the root value
@@ -600,15 +730,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
     const requests: Array<Record<string, unknown>> = [];
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       requests.push(JSON.parse(String(init?.body)));
-      return sseResponse([
-        { type: "start" },
-        { type: "start-step" },
-        { type: "text-start", id: "t1" },
-        { type: "text-delta", id: "t1", delta: "ok" },
-        { type: "text-end", id: "t1" },
-        { type: "finish-step" },
-        { type: "finish" },
-      ]);
+      return sseResponse(textTurnChunks("ok"));
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -642,10 +764,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
     });
 
     const { result } = renderHook(() => useDesignChat({ sessionId: "tab-bg" }));
-    act(() => result.current.setInput("continue in background"));
-    await act(async () => {
-      result.current.sendMessage();
-    });
+    await sendText(result, "continue in background");
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
     expect(requests[0].model).toBe("qwen/qwen3.8-flash");
@@ -657,24 +776,13 @@ describe("useDesignChat (hook + UI message stream)", () => {
   describe("context-usage metadata (onFinish)", () => {
     it("records contextTokens from the finish chunk's messageMetadata, keyed by this session", async () => {
       const fetchMock = vi.fn(async () =>
-        sseResponse([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", delta: "ok" },
-          { type: "text-end", id: "t1" },
-          { type: "finish-step" },
-          { type: "finish", messageMetadata: { contextTokens: 42_000 } },
-        ])
+        sseResponse(textTurnChunks("ok", { messageMetadata: { contextTokens: 42_000 } }))
       );
       vi.stubGlobal("fetch", fetchMock);
 
       const sessionId = `ctx-session-${Date.now()}`;
       const { result } = renderHook(() => useDesignChat({ sessionId }));
-      act(() => result.current.setInput("hello"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "hello");
       await waitFor(() => expect(result.current.status).toBe("ready"));
 
       expect(useChatStore.getState().contextTokens[sessionId]).toBe(42_000);
@@ -682,24 +790,13 @@ describe("useDesignChat (hook + UI message stream)", () => {
 
     it("ignores a finish chunk with no contextTokens (older backend)", async () => {
       const fetchMock = vi.fn(async () =>
-        sseResponse([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", delta: "ok" },
-          { type: "text-end", id: "t1" },
-          { type: "finish-step" },
-          { type: "finish" },
-        ])
+        sseResponse(textTurnChunks("ok"))
       );
       vi.stubGlobal("fetch", fetchMock);
 
       const sessionId = `ctx-session-none-${Date.now()}`;
       const { result } = renderHook(() => useDesignChat({ sessionId }));
-      act(() => result.current.setInput("hello"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "hello");
       await waitFor(() => expect(result.current.status).toBe("ready"));
 
       expect(useChatStore.getState().contextTokens[sessionId]).toBeUndefined();
@@ -715,88 +812,47 @@ describe("useDesignChat (hook + UI message stream)", () => {
       clearOpenCodeKey();
     });
 
-    it("attaches X-OpenCode-Key when the session's model is an OpenCode route", async () => {
-      setOpenCodeKey("sk-test-opencode");
+    it.each([
+      {
+        name: "attaches X-OpenCode-Key when the session's model is an OpenCode route",
+        setup: () => setOpenCodeKey("sk-test-opencode"),
+        model: "opencode-go/glm-5.3-flash",
+        sessionId: "opencode-session",
+        assertHeaders: (headers: Headers) =>
+          expect(headers.get("X-OpenCode-Key")).toBe("sk-test-opencode"),
+      },
+      {
+        name: "does not attach X-OpenCode-Key on an ordinary OpenRouter turn",
+        setup: () => setOpenCodeKey("sk-test-opencode"),
+        model: "deepseek/deepseek-v4.1-flash",
+        sessionId: "openrouter-session",
+        assertHeaders: (headers: Headers) =>
+          expect(headers.has("X-OpenCode-Key")).toBe(false),
+      },
+      {
+        name: "does not attach a header for an OpenCode model when no key is stored",
+        setup: () => clearOpenCodeKey(),
+        model: "opencode-go/glm-5.3-flash",
+        sessionId: "opencode-nokey-session",
+        assertHeaders: (headers: Headers) =>
+          expect(headers.has("X-OpenCode-Key")).toBe(false),
+      },
+    ])("$name", async ({ setup, model, sessionId, assertHeaders }) => {
+      setup();
       const seenHeaders: Array<Headers> = [];
       const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
         seenHeaders.push(new Headers(init?.headers));
-        return sseResponse([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "finish-step" },
-          { type: "finish" },
-        ]);
+        return sseResponse(emptyTurnChunks());
       });
       vi.stubGlobal("fetch", fetchMock);
 
-      useChatStore.setState({ model: "opencode-go/glm-5.3-flash" });
+      useChatStore.setState({ model });
 
-      const { result } = renderHook(() =>
-        useDesignChat({ sessionId: "opencode-session" })
-      );
-      act(() => result.current.setInput("hello"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      const { result } = renderHook(() => useDesignChat({ sessionId }));
+      await sendText(result, "hello");
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
-      expect(seenHeaders[0].get("X-OpenCode-Key")).toBe("sk-test-opencode");
-    });
-
-    it("does not attach X-OpenCode-Key on an ordinary OpenRouter turn", async () => {
-      setOpenCodeKey("sk-test-opencode");
-      const seenHeaders: Array<Headers> = [];
-      const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-        seenHeaders.push(new Headers(init?.headers));
-        return sseResponse([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "finish-step" },
-          { type: "finish" },
-        ]);
-      });
-      vi.stubGlobal("fetch", fetchMock);
-
-      useChatStore.setState({ model: "deepseek/deepseek-v4.1-flash" });
-
-      const { result } = renderHook(() =>
-        useDesignChat({ sessionId: "openrouter-session" })
-      );
-      act(() => result.current.setInput("hello"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
-      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-
-      expect(seenHeaders[0].has("X-OpenCode-Key")).toBe(false);
-    });
-
-    it("does not attach a header for an OpenCode model when no key is stored", async () => {
-      clearOpenCodeKey();
-      const seenHeaders: Array<Headers> = [];
-      const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-        seenHeaders.push(new Headers(init?.headers));
-        return sseResponse([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "finish-step" },
-          { type: "finish" },
-        ]);
-      });
-      vi.stubGlobal("fetch", fetchMock);
-
-      useChatStore.setState({ model: "opencode-go/glm-5.3-flash" });
-
-      const { result } = renderHook(() =>
-        useDesignChat({ sessionId: "opencode-nokey-session" })
-      );
-      act(() => result.current.setInput("hello"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
-      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-
-      expect(seenHeaders[0].has("X-OpenCode-Key")).toBe(false);
+      assertHeaders(seenHeaders[0]);
     });
 
     // Defect 4 (code review): prepareSendMessagesRequest used to return
@@ -867,15 +923,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
           ]);
         }
         // Second turn: the model answers with text
-        return sseResponse([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", delta: "All done" },
-          { type: "text-end", id: "t1" },
-          { type: "finish-step" },
-          { type: "finish" },
-        ]);
+        return sseResponse(textTurnChunks("All done"));
       }
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -965,10 +1013,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
     const sessionId = `ask-session-${Date.now()}`;
     const { result } = renderHook(() => useDesignChat({ sessionId }));
 
-    act(() => result.current.setInput("design me a landing page"));
-    await act(async () => {
-      result.current.sendMessage();
-    });
+    await sendText(result, "design me a landing page");
 
     // First (and only) request so far; ask_user must NOT trigger a follow-up.
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -1002,15 +1047,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
     // forever, growing the request body until the worker heap is gone.
     const fetchMock = vi.fn(async () => {
       if (fetchMock.mock.calls.length > 1) {
-        return sseResponse([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "text-start", id: "t2" },
-          { type: "text-delta", id: "t2", delta: "Here is what I found" },
-          { type: "text-end", id: "t2" },
-          { type: "finish-step" },
-          { type: "finish" },
-        ]);
+        return sseResponse(textTurnChunks("Here is what I found"));
       }
       return sseResponse([
         { type: "start" },
@@ -1100,24 +1137,13 @@ describe("useDesignChat (hook + UI message stream)", () => {
           headers: new Headers(init?.headers),
           bodyText: String(init?.body),
         });
-        return sseResponse([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", delta: "ok" },
-          { type: "text-end", id: "t1" },
-          { type: "finish-step" },
-          { type: "finish" },
-        ]);
+        return sseResponse(textTurnChunks("ok"));
       });
       vi.stubGlobal("fetch", fetchMock);
 
       const sessionId = `test-session-mobbin-on-${Date.now()}`;
       const { result } = renderHook(() => useDesignChat({ sessionId }));
-      act(() => result.current.setInput("find onboarding screens"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "find onboarding screens");
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
       expect(requests[0].headers.get("X-Mobbin-Token")).toBe("mobbin-secret-token");
@@ -1128,24 +1154,13 @@ describe("useDesignChat (hook + UI message stream)", () => {
       const requests: Array<{ headers: Headers }> = [];
       const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
         requests.push({ headers: new Headers(init?.headers) });
-        return sseResponse([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", delta: "ok" },
-          { type: "text-end", id: "t1" },
-          { type: "finish-step" },
-          { type: "finish" },
-        ]);
+        return sseResponse(textTurnChunks("ok"));
       });
       vi.stubGlobal("fetch", fetchMock);
 
       const sessionId = `test-session-mobbin-off-${Date.now()}`;
       const { result } = renderHook(() => useDesignChat({ sessionId }));
-      act(() => result.current.setInput("find onboarding screens"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "find onboarding screens");
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
       expect(requests[0].headers.has("X-Mobbin-Token")).toBe(false);
@@ -1169,24 +1184,13 @@ describe("useDesignChat (hook + UI message stream)", () => {
           throw new Error("unexpected refresh call with no refresh token");
         }
         requests.push({ headers: new Headers(init?.headers) });
-        return sseResponse([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", delta: "ok" },
-          { type: "text-end", id: "t1" },
-          { type: "finish-step" },
-          { type: "finish" },
-        ]);
+        return sseResponse(textTurnChunks("ok"));
       });
       vi.stubGlobal("fetch", fetchMock);
 
       const sessionId = `test-session-mobbin-expired-${Date.now()}`;
       const { result } = renderHook(() => useDesignChat({ sessionId }));
-      act(() => result.current.setInput("find onboarding screens"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "find onboarding screens");
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
       expect(requests[0].headers.has("X-Mobbin-Token")).toBe(false);
@@ -1220,24 +1224,13 @@ describe("useDesignChat (hook + UI message stream)", () => {
           );
         }
         requests.push({ headers: new Headers(init?.headers) });
-        return sseResponse([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", delta: "ok" },
-          { type: "text-end", id: "t1" },
-          { type: "finish-step" },
-          { type: "finish" },
-        ]);
+        return sseResponse(textTurnChunks("ok"));
       });
       vi.stubGlobal("fetch", fetchMock);
 
       const sessionId = `test-session-mobbin-refresh-${Date.now()}`;
       const { result } = renderHook(() => useDesignChat({ sessionId }));
-      act(() => result.current.setInput("find onboarding screens"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "find onboarding screens");
       await waitFor(() => expect(requests.length).toBe(1));
 
       expect(requests[0].headers.get("X-Mobbin-Token")).toBe("refreshed-token");
@@ -1278,15 +1271,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
   // deleted it, destroying the queued message permanently.
   it("keeps a queued launch payload queued while offline, and sends it once back online", async () => {
     const fetchMock = vi.fn(async () =>
-      sseResponse([
-        { type: "start" },
-        { type: "start-step" },
-        { type: "text-start", id: "t1" },
-        { type: "text-delta", id: "t1", delta: "ok" },
-        { type: "text-end", id: "t1" },
-        { type: "finish-step" },
-        { type: "finish" },
-      ])
+      sseResponse(textTurnChunks("ok"))
     );
     vi.stubGlobal("fetch", fetchMock);
     const nav = { onLine: false };
@@ -1333,12 +1318,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
       // Never resolves — the send must not depend on it.
       if (String(input).includes("/api/models")) return new Promise<Response>(() => {});
       chatCalls.push(JSON.parse(String(init?.body)));
-      return sseResponse([
-        { type: "start" },
-        { type: "start-step" },
-        { type: "finish-step" },
-        { type: "finish" },
-      ]);
+      return sseResponse(emptyTurnChunks());
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -1389,25 +1369,14 @@ describe("useDesignChat (hook + UI message stream)", () => {
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockImplementationOnce(async () =>
-        sseResponse([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", delta: "recovered" },
-          { type: "text-end", id: "t1" },
-          { type: "finish-step" },
-          { type: "finish" },
-        ]),
+        sseResponse(textTurnChunks("recovered")),
       );
     vi.stubGlobal("fetch", fetchMock);
 
     const { result } = renderHook(() => useDesignChat({ sessionId: "s1" }));
     expect(result.current.retryState).toBeNull();
 
-    act(() => result.current.setInput("hello"));
-    await act(async () => {
-      result.current.sendMessage();
-    });
+    await sendText(result, "hello");
 
     await waitForFakeTimers(() =>
       expect(result.current.retryState).toMatchObject({
@@ -1446,8 +1415,12 @@ describe("useDesignChat (hook + UI message stream)", () => {
   // message — it goes into chatStore's messageQueue and is auto-sent, one at
   // a time, once the session returns to "ready".
   describe("message queue", () => {
-    it("queues sendPayload calls made while a request is in flight, and auto-sends the first once ready", async () => {
-      let resolveFirst: ((res: Response) => void) | undefined;
+    // A fetchMock whose first call hangs until `resolveFirst` is invoked
+    // (simulating an in-flight request), so the test can queue a second send
+    // while the session is still busy; every later call is an ordinary
+    // plain-text reply.
+    function makeDeferredFirstResponseFetchMock() {
+      let resolveFirst!: (res: Response) => void;
       const firstResponse = new Promise<Response>((resolve) => {
         resolveFirst = resolve;
       });
@@ -1459,26 +1432,20 @@ describe("useDesignChat (hook + UI message stream)", () => {
           if (requests.length === 1) {
             return firstResponse;
           }
-          return sseResponse([
-            { type: "start" },
-            { type: "start-step" },
-            { type: "text-start", id: "t2" },
-            { type: "text-delta", id: "t2", delta: "second reply" },
-            { type: "text-end", id: "t2" },
-            { type: "finish-step" },
-            { type: "finish" },
-          ]);
+          return sseResponse(textTurnChunks("second reply"));
         }
       );
+      return { fetchMock, resolveFirst, requests };
+    }
+
+    it("queues sendPayload calls made while a request is in flight, and auto-sends the first once ready", async () => {
+      const { fetchMock, resolveFirst } = makeDeferredFirstResponseFetchMock();
       vi.stubGlobal("fetch", fetchMock);
 
       const sessionId = `queue-session-${Date.now()}`;
       const { result } = renderHook(() => useDesignChat({ sessionId }));
 
-      act(() => result.current.setInput("first message"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "first message");
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
       // Still mid-flight — the first request hasn't resolved yet.
       expect(["submitted", "streaming"]).toContain(result.current.status);
@@ -1506,17 +1473,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
       // Resolve the first (in-flight) request; the session returns to
       // "ready", which should auto-send the queued message.
       await act(async () => {
-        resolveFirst!(
-          sseResponse([
-            { type: "start" },
-            { type: "start-step" },
-            { type: "text-start", id: "t1" },
-            { type: "text-delta", id: "t1", delta: "first reply" },
-            { type: "text-end", id: "t1" },
-            { type: "finish-step" },
-            { type: "finish" },
-          ])
-        );
+        resolveFirst(sseResponse(textTurnChunks("first reply")));
       });
 
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), {
@@ -1536,29 +1493,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
     // dequeued (removed) first and sent second, so a `false` return (e.g. an
     // offline race) silently lost the message forever.
     it("keeps a queued message in the queue when sendPayload fails, and sends it once the condition clears", async () => {
-      let resolveFirst: ((res: Response) => void) | undefined;
-      const firstResponse = new Promise<Response>((resolve) => {
-        resolveFirst = resolve;
-      });
-      const requests: Array<Record<string, unknown>> = [];
-      const fetchMock = vi.fn(
-        async (_input: RequestInfo | URL, init?: RequestInit) => {
-          const body = JSON.parse(String(init?.body));
-          requests.push(body);
-          if (requests.length === 1) {
-            return firstResponse;
-          }
-          return sseResponse([
-            { type: "start" },
-            { type: "start-step" },
-            { type: "text-start", id: "t2" },
-            { type: "text-delta", id: "t2", delta: "second reply" },
-            { type: "text-end", id: "t2" },
-            { type: "finish-step" },
-            { type: "finish" },
-          ]);
-        }
-      );
+      const { fetchMock, resolveFirst, requests } = makeDeferredFirstResponseFetchMock();
       vi.stubGlobal("fetch", fetchMock);
       // Control connectivity through a stubbed navigator (whose `onLine` the
       // live `isOffline()` check reads) plus the "offline"/"online" events
@@ -1570,10 +1505,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
       const sessionId = `queue-offline-race-${Date.now()}`;
       const { result } = renderHook(() => useDesignChat({ sessionId }));
 
-      act(() => result.current.setInput("first message"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "first message");
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
       expect(["submitted", "streaming"]).toContain(result.current.status);
 
@@ -1590,17 +1522,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
         window.dispatchEvent(new Event("offline"));
       });
       await act(async () => {
-        resolveFirst!(
-          sseResponse([
-            { type: "start" },
-            { type: "start-step" },
-            { type: "text-start", id: "t1" },
-            { type: "text-delta", id: "t1", delta: "first reply" },
-            { type: "text-end", id: "t1" },
-            { type: "finish-step" },
-            { type: "finish" },
-          ])
-        );
+        resolveFirst(sseResponse(textTurnChunks("first reply")));
       });
       await waitFor(() => expect(result.current.status).toBe("ready"));
 
@@ -1641,10 +1563,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
       const sessionId = `queue-remove-session-${Date.now()}`;
       const { result } = renderHook(() => useDesignChat({ sessionId }));
 
-      act(() => result.current.setInput("first message"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "first message");
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
       expect(["submitted", "streaming"]).toContain(result.current.status);
 
@@ -1669,10 +1588,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { result } = renderHook(() => useDesignChat({ sessionId: "s1" }));
-    act(() => result.current.setInput("hello"));
-    await act(async () => {
-      result.current.sendMessage();
-    });
+    await sendText(result, "hello");
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(15_000); // 3 pauses
@@ -1695,53 +1611,49 @@ describe("useDesignChat (hook + UI message stream)", () => {
       useAiVectorPreviewStore.getState().reset();
     });
 
-    // Builds a `Response` whose SSE body is pushed chunk-by-chunk under test
-    // control (real ReadableStream, real delays), rather than one static
-    // string body — this is what lets the test assert on preview state
-    // BEFORE the final tool-input-available chunk is sent.
-    function controlledSseResponse() {
-      let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
-      const encoder = new TextEncoder();
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controllerRef = controller;
-        },
-      });
-      const push = (chunk: Record<string, unknown>) => {
-        controllerRef!.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
-      };
-      const close = () => {
-        controllerRef!.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controllerRef!.close();
-      };
-      const response = new Response(stream, {
-        status: 200,
-        headers: {
-          "content-type": "text/event-stream",
-          "x-vercel-ai-ui-message-stream": "v1",
-        },
-      });
-      return { response, push, close, controller: controllerRef! };
+    // Stages a synthetic draft directly in the preview store (as opposed to
+    // driving one through a real stream) — the fixed shape below (commands,
+    // points, contours, geometry, bounds) is never itself under test in the
+    // tests that call this; only the session/toolCallId/name identity is.
+    // A fetchMock whose first call returns a controlled, still-open stream
+    // that errors out (mirroring what a real fetch() does) if its request is
+    // aborted, and whose every later call is an ordinary plain-text reply.
+    function makeAbortableFirstCallFetchMock() {
+      const { response: firstResponse, push, controller: firstController } =
+        controlledSseResponse();
+      const requests: Array<Record<string, unknown>> = [];
+      const fetchMock = vi.fn(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          requests.push(JSON.parse(String(init?.body)));
+          if (requests.length === 1) {
+            init?.signal?.addEventListener("abort", () => {
+              firstController.error(
+                new DOMException("The operation was aborted.", "AbortError")
+              );
+            });
+            return firstResponse;
+          }
+          return sseResponse(textTurnChunks("ok"));
+        }
+      );
+      return { fetchMock, push };
     }
 
-    function sseResponse(chunks: Array<Record<string, unknown>>): Response {
-      const body =
-        chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") +
-        "data: [DONE]\n\n";
-      return new Response(body, {
-        status: 200,
-        headers: {
-          "content-type": "text/event-stream",
-          "x-vercel-ai-ui-message-stream": "v1",
-        },
-      });
-    }
-
-    // A short real-time yield so the AI SDK's stream reader gets a turn to
-    // process enqueued chunks and flush the throttled React update.
-    async function flushStream(ms = 20) {
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, ms));
+    function stagePreviewDraft(sessionId: string, toolCallId: string, name: string) {
+      useAiVectorPreviewStore.getState().upsert({
+        sessionId,
+        toolCallId,
+        name,
+        commandText: "M(0,0)\nL(1,1)\n",
+        phase: "streaming",
+        receivedDuringStreaming: true,
+        points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+        contours: [{ points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], closed: false }],
+        geometry: "M 0 0 L 1 1",
+        bounds: { x: 0, y: 0, width: 1, height: 1 },
+        closed: false,
+        ended: false,
+        warnings: [],
       });
     }
 
@@ -1754,15 +1666,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
           if (requests.length === 1) {
             return firstResponse;
           }
-          return sseResponse([
-            { type: "start" },
-            { type: "start-step" },
-            { type: "text-start", id: "t1" },
-            { type: "text-delta", id: "t1", delta: "Drawn" },
-            { type: "text-end", id: "t1" },
-            { type: "finish-step" },
-            { type: "finish" },
-          ]);
+          return sseResponse(textTurnChunks("Drawn"));
         }
       );
       vi.stubGlobal("fetch", fetchMock);
@@ -1770,10 +1674,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
       const sessionId = `vector-session-${Date.now()}`;
       const { result } = renderHook(() => useDesignChat({ sessionId }));
 
-      act(() => result.current.setInput("draw a leaf"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "draw a leaf");
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
       push({ type: "start" });
@@ -1871,33 +1772,13 @@ describe("useDesignChat (hook + UI message stream)", () => {
         useDesignChat({ sessionId: sessionB })
       );
 
-      act(() => resultA.current.setInput("draw a"));
-      await act(async () => {
-        resultA.current.sendMessage();
-      });
-      act(() => resultB.current.setInput("draw b"));
-      await act(async () => {
-        resultB.current.sendMessage();
-      });
+      await sendText(resultA, "draw a");
+      await sendText(resultB, "draw b");
 
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
 
       act(() => {
-        useAiVectorPreviewStore.getState().upsert({
-          sessionId: sessionA,
-          toolCallId: "same-call",
-          name: "A",
-          commandText: "M(0,0)\nL(1,1)\n",
-          phase: "streaming",
-          receivedDuringStreaming: true,
-          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
-          contours: [{ points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], closed: false }],
-          geometry: "M 0 0 L 1 1",
-          bounds: { x: 0, y: 0, width: 1, height: 1 },
-          closed: false,
-          ended: false,
-          warnings: [],
-        });
+        stagePreviewDraft(sessionA, "same-call", "A");
       });
 
       expect(
@@ -1920,36 +1801,8 @@ describe("useDesignChat (hook + UI message stream)", () => {
       renderHook(() => useDesignChat({ sessionId: sessionB }));
 
       act(() => {
-        useAiVectorPreviewStore.getState().upsert({
-          sessionId: sessionA,
-          toolCallId: "call-a",
-          name: "A",
-          commandText: "M(0,0)\nL(1,1)\n",
-          phase: "streaming",
-          receivedDuringStreaming: true,
-          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
-          contours: [{ points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], closed: false }],
-          geometry: "M 0 0 L 1 1",
-          bounds: { x: 0, y: 0, width: 1, height: 1 },
-          closed: false,
-          ended: false,
-          warnings: [],
-        });
-        useAiVectorPreviewStore.getState().upsert({
-          sessionId: sessionB,
-          toolCallId: "call-b",
-          name: "B",
-          commandText: "M(0,0)\nL(1,1)\n",
-          phase: "streaming",
-          receivedDuringStreaming: true,
-          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
-          contours: [{ points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], closed: false }],
-          geometry: "M 0 0 L 1 1",
-          bounds: { x: 0, y: 0, width: 1, height: 1 },
-          closed: false,
-          ended: false,
-          warnings: [],
-        });
+        stagePreviewDraft(sessionA, "call-a", "A");
+        stagePreviewDraft(sessionB, "call-b", "B");
       });
 
       act(() => {
@@ -1972,21 +1825,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
       renderHook(() => useDesignChat({ sessionId }));
 
       act(() => {
-        useAiVectorPreviewStore.getState().upsert({
-          sessionId,
-          toolCallId: "call-abort",
-          name: "A",
-          commandText: "M(0,0)\nL(1,1)\n",
-          phase: "streaming",
-          receivedDuringStreaming: true,
-          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
-          contours: [{ points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], closed: false }],
-          geometry: "M 0 0 L 1 1",
-          bounds: { x: 0, y: 0, width: 1, height: 1 },
-          closed: false,
-          ended: false,
-          warnings: [],
-        });
+        stagePreviewDraft(sessionId, "call-abort", "A");
       });
 
       act(() => {
@@ -2009,27 +1848,10 @@ describe("useDesignChat (hook + UI message stream)", () => {
       const { result } = renderHook(() => useDesignChat({ sessionId }));
 
       act(() => {
-        useAiVectorPreviewStore.getState().upsert({
-          sessionId,
-          toolCallId: "call-err",
-          name: "A",
-          commandText: "M(0,0)\nL(1,1)\n",
-          phase: "streaming",
-          receivedDuringStreaming: true,
-          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
-          contours: [{ points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], closed: false }],
-          geometry: "M 0 0 L 1 1",
-          bounds: { x: 0, y: 0, width: 1, height: 1 },
-          closed: false,
-          ended: false,
-          warnings: [],
-        });
+        stagePreviewDraft(sessionId, "call-err", "A");
       });
 
-      act(() => result.current.setInput("hello"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "hello");
 
       // createRetryingFetch retries a few times (real delays under fake
       // timers) before the chat settles into "error" — mirror the pattern
@@ -2053,21 +1875,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
       const { unmount } = renderHook(() => useDesignChat({ sessionId }));
 
       act(() => {
-        useAiVectorPreviewStore.getState().upsert({
-          sessionId,
-          toolCallId: "call-unmount",
-          name: "A",
-          commandText: "M(0,0)\nL(1,1)\n",
-          phase: "streaming",
-          receivedDuringStreaming: true,
-          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
-          contours: [{ points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], closed: false }],
-          geometry: "M 0 0 L 1 1",
-          bounds: { x: 0, y: 0, width: 1, height: 1 },
-          closed: false,
-          ended: false,
-          warnings: [],
-        });
+        stagePreviewDraft(sessionId, "call-unmount", "A");
       });
 
       unmount();
@@ -2085,15 +1893,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
       // while an unrelated preview for a DIFFERENT (still in-flight) call
       // remains staged; it must survive the ready transition.
       const fetchMock = vi.fn(async () =>
-        sseResponse([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", delta: "ok" },
-          { type: "text-end", id: "t1" },
-          { type: "finish-step" },
-          { type: "finish" },
-        ])
+        sseResponse(textTurnChunks("ok"))
       );
       vi.stubGlobal("fetch", fetchMock);
 
@@ -2101,27 +1901,10 @@ describe("useDesignChat (hook + UI message stream)", () => {
       const { result } = renderHook(() => useDesignChat({ sessionId }));
 
       act(() => {
-        useAiVectorPreviewStore.getState().upsert({
-          sessionId,
-          toolCallId: "call-ready",
-          name: "A",
-          commandText: "M(0,0)\nL(1,1)\n",
-          phase: "streaming",
-          receivedDuringStreaming: true,
-          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
-          contours: [{ points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], closed: false }],
-          geometry: "M 0 0 L 1 1",
-          bounds: { x: 0, y: 0, width: 1, height: 1 },
-          closed: false,
-          ended: false,
-          warnings: [],
-        });
+        stagePreviewDraft(sessionId, "call-ready", "A");
       });
 
-      act(() => result.current.setInput("hi"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "hi");
 
       await waitFor(() => expect(result.current.status).toBe("ready"));
 
@@ -2140,46 +1923,19 @@ describe("useDesignChat (hook + UI message stream)", () => {
     // every messages update — it must NOT resurrect a preview for an
     // abandoned tool call.
     it("does not resurrect a preview for a stale input-streaming part after stop + follow-up send", async () => {
-      const { response: firstResponse, push, controller: firstController } =
-        controlledSseResponse();
-      const requests: Array<Record<string, unknown>> = [];
-      const fetchMock = vi.fn(
-        async (_input: RequestInfo | URL, init?: RequestInit) => {
-          requests.push(JSON.parse(String(init?.body)));
-          if (requests.length === 1) {
-            // Mirror what a real fetch() does: aborting the request signal
-            // errors the response body stream, which is what lets
-            // chat.stop() actually settle chat.status back to "ready" in
-            // this test (chat.stop() only aborts a signal — nothing reads
-            // it unless the transport's stream honors it).
-            init?.signal?.addEventListener("abort", () => {
-              firstController.error(
-                new DOMException("The operation was aborted.", "AbortError")
-              );
-            });
-            return firstResponse;
-          }
-          // Follow-up request: plain text reply, no more vector tool calls.
-          return sseResponse([
-            { type: "start" },
-            { type: "start-step" },
-            { type: "text-start", id: "t1" },
-            { type: "text-delta", id: "t1", delta: "ok" },
-            { type: "text-end", id: "t1" },
-            { type: "finish-step" },
-            { type: "finish" },
-          ]);
-        }
-      );
+      // Mirrors what a real fetch() does: aborting the request signal errors
+      // the response body stream, which is what lets chat.stop() actually
+      // settle chat.status back to "ready" in this test (chat.stop() only
+      // aborts a signal — nothing reads it unless the transport's stream
+      // honors it). The follow-up request is a plain text reply — no more
+      // vector tool calls.
+      const { fetchMock, push } = makeAbortableFirstCallFetchMock();
       vi.stubGlobal("fetch", fetchMock);
 
       const sessionId = `vector-stop-resurrect-${Date.now()}`;
       const { result } = renderHook(() => useDesignChat({ sessionId }));
 
-      act(() => result.current.setInput("draw a leaf"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "draw a leaf");
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
       // Genuinely stream a partial draw_vector tool call — this creates a
@@ -2222,10 +1978,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
       // Send a follow-up message — this pushes a new messages array through
       // the hook and re-runs the staging effect over the FULL history,
       // which still contains the stale input-streaming part.
-      act(() => result.current.setInput("something else"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "something else");
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
       await waitFor(() => expect(result.current.status).toBe("ready"));
 
@@ -2242,31 +1995,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
     // same guarantee `abandonedStreamingToolKeysRef` gave `draw_vector` alone
     // before this generalization.
     it("dispatches a streamed frame to its registered adapter, and the abort path permanently blocks a later frame for the same call", async () => {
-      const { response: firstResponse, push, controller: firstController } =
-        controlledSseResponse();
-      const requests: Array<Record<string, unknown>> = [];
-      const fetchMock = vi.fn(
-        async (_input: RequestInfo | URL, init?: RequestInit) => {
-          requests.push(JSON.parse(String(init?.body)));
-          if (requests.length === 1) {
-            init?.signal?.addEventListener("abort", () => {
-              firstController.error(
-                new DOMException("The operation was aborted.", "AbortError")
-              );
-            });
-            return firstResponse;
-          }
-          return sseResponse([
-            { type: "start" },
-            { type: "start-step" },
-            { type: "text-start", id: "t1" },
-            { type: "text-delta", id: "t1", delta: "ok" },
-            { type: "text-end", id: "t1" },
-            { type: "finish-step" },
-            { type: "finish" },
-          ]);
-        }
-      );
+      const { fetchMock, push } = makeAbortableFirstCallFetchMock();
       vi.stubGlobal("fetch", fetchMock);
 
       const sessionId = `registry-abort-${Date.now()}`;
@@ -2274,10 +2003,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
         useDesignChat({ sessionId })
       );
 
-      act(() => hookResult.current.setInput("draw something"));
-      await act(async () => {
-        hookResult.current.sendMessage();
-      });
+      await sendText(hookResult, "draw something");
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
       push({ type: "start" });
@@ -2325,10 +2051,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
       // A follow-up send re-runs the staging effect over the full message
       // history, which still contains the abandoned call's stale
       // input-streaming part. It must not be resurrected.
-      act(() => hookResult.current.setInput("something else"));
-      await act(async () => {
-        hookResult.current.sendMessage();
-      });
+      await sendText(hookResult, "something else");
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
       await waitFor(() => expect(hookResult.current.status).toBe("ready"));
       await flushStream();
@@ -2346,63 +2069,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
   // preview store, the way the draw_vector tests above do — through real AI
   // SDK v6 stream chunks.
   describe("streaming batch_design mutations", () => {
-    function sseResponse(chunks: Array<Record<string, unknown>>): Response {
-      const body =
-        chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") +
-        "data: [DONE]\n\n";
-      return new Response(body, {
-        status: 200,
-        headers: {
-          "content-type": "text/event-stream",
-          "x-vercel-ai-ui-message-stream": "v1",
-        },
-      });
-    }
-
-    // Same shape as the vector describe block's own helper above — kept
-    // local rather than shared, matching that block's existing convention
-    // (__tests__ files are exempt from the jscpd duplication gate).
-    function controlledSseResponse() {
-      let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
-      const encoder = new TextEncoder();
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controllerRef = controller;
-        },
-      });
-      const push = (chunk: Record<string, unknown>) => {
-        controllerRef!.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
-      };
-      const close = () => {
-        controllerRef!.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controllerRef!.close();
-      };
-      const response = new Response(stream, {
-        status: 200,
-        headers: {
-          "content-type": "text/event-stream",
-          "x-vercel-ai-ui-message-stream": "v1",
-        },
-      });
-      return { response, push, close, controller: controllerRef! };
-    }
-
-    async function flushStream(ms = 20) {
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, ms));
-      });
-    }
-
-    afterEach(() => {
-      // Progressive batch_design sessions live in a module-level Map that
-      // outlives resetStores() — the kill switch is the one bit of state
-      // that could otherwise leak into a later test in this file.
-      try {
-        globalThis.localStorage?.removeItem("pen.streamingMutations");
-      } catch {
-        // ignore
-      }
-    });
+    afterEach(resetStreamingMutationsKillSwitch);
 
     it("mutates the store before the tool call completes, and the completed call leaves exactly one undo entry", async () => {
       const { response: firstResponse, push, close } = controlledSseResponse();
@@ -2413,15 +2080,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
           if (requests.length === 1) {
             return firstResponse;
           }
-          return sseResponse([
-            { type: "start" },
-            { type: "start-step" },
-            { type: "text-start", id: "t1" },
-            { type: "text-delta", id: "t1", delta: "done" },
-            { type: "text-end", id: "t1" },
-            { type: "finish-step" },
-            { type: "finish" },
-          ]);
+          return sseResponse(textTurnChunks("done"));
         }
       );
       vi.stubGlobal("fetch", fetchMock);
@@ -2430,37 +2089,15 @@ describe("useDesignChat (hook + UI message stream)", () => {
       const sessionId = `batch-stream-${Date.now()}`;
       const { result } = renderHook(() => useDesignChat({ sessionId }));
 
-      act(() => result.current.setInput("build a card"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "build a card");
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
-      push({ type: "start" });
-      push({ type: "start-step" });
-      push({
-        type: "tool-input-start",
-        toolCallId: "batch-1",
-        toolName: "batch_design",
-      });
-      push({
-        type: "tool-input-delta",
-        toolCallId: "batch-1",
-        inputTextDelta:
-          '{"operations":"card=I(document, {type: \\"frame\\", name: \\"Card\\", width: 100, height: 100})\\n',
-      });
-      await flushStream();
+      await pushBatchDesignCardStart(push, "batch-1");
 
       // Mid-stream, well before tool-input-available: the first statement
       // has already landed on the REAL scene, and no undo entry exists yet
       // (streaming never calls saveHistory).
-      await waitFor(() => {
-        expect(
-          Object.values(useSceneStore.getState().nodesById).some(
-            (n) => n.name === "Card"
-          )
-        ).toBe(true);
-      });
+      await expectNodeNamed("Card", true);
       expect(useHistoryStore.getState().past.length).toBe(pastBefore);
 
       push({
@@ -2471,13 +2108,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
       });
       await flushStream();
 
-      await waitFor(() => {
-        expect(
-          Object.values(useSceneStore.getState().nodesById).some(
-            (n) => n.name === "Card2"
-          )
-        ).toBe(true);
-      });
+      await expectNodeNamed("Card2", true);
       expect(useHistoryStore.getState().past.length).toBe(pastBefore);
 
       const fullOperations =
@@ -2525,57 +2156,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
   // useDesignChat.ts for the full explanation of why chat.status === "ready"
   // is the right (and only) signal for both.
   describe("abandoning a streaming batch_design call that never reaches onToolCall", () => {
-    function sseResponse(chunks: Array<Record<string, unknown>>): Response {
-      const body =
-        chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") +
-        "data: [DONE]\n\n";
-      return new Response(body, {
-        status: 200,
-        headers: {
-          "content-type": "text/event-stream",
-          "x-vercel-ai-ui-message-stream": "v1",
-        },
-      });
-    }
-
-    function controlledSseResponse() {
-      let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
-      const encoder = new TextEncoder();
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controllerRef = controller;
-        },
-      });
-      const push = (chunk: Record<string, unknown>) => {
-        controllerRef!.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
-      };
-      const close = () => {
-        controllerRef!.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controllerRef!.close();
-      };
-      const response = new Response(stream, {
-        status: 200,
-        headers: {
-          "content-type": "text/event-stream",
-          "x-vercel-ai-ui-message-stream": "v1",
-        },
-      });
-      return { response, push, close, controller: controllerRef! };
-    }
-
-    async function flushStream(ms = 20) {
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, ms));
-      });
-    }
-
-    afterEach(() => {
-      try {
-        globalThis.localStorage?.removeItem("pen.streamingMutations");
-      } catch {
-        // ignore
-      }
-    });
+    afterEach(resetStreamingMutationsKillSwitch);
 
     // Path 1: a truncated turn. The provider (one of the models used here
     // fails this way roughly half the time) stops streaming mid-call: no
@@ -2593,34 +2174,12 @@ describe("useDesignChat (hook + UI message stream)", () => {
       const sessionId = `batch-truncated-${Date.now()}`;
       const { result } = renderHook(() => useDesignChat({ sessionId }));
 
-      act(() => result.current.setInput("build a card"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "build a card");
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
-      push({ type: "start" });
-      push({ type: "start-step" });
-      push({
-        type: "tool-input-start",
-        toolCallId: "batch-trunc-1",
-        toolName: "batch_design",
-      });
-      push({
-        type: "tool-input-delta",
-        toolCallId: "batch-trunc-1",
-        inputTextDelta:
-          '{"operations":"card=I(document, {type: \\"frame\\", name: \\"Card\\", width: 100, height: 100})\\n',
-      });
-      await flushStream();
+      await pushBatchDesignCardStart(push, "batch-trunc-1");
 
-      await waitFor(() => {
-        expect(
-          Object.values(useSceneStore.getState().nodesById).some(
-            (n) => n.name === "Card"
-          )
-        ).toBe(true);
-      });
+      await expectNodeNamed("Card", true);
 
       // The provider stops here — the turn ends without ever resolving the
       // tool call.
@@ -2638,13 +2197,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
       // false and the SDK has nothing to send a follow-up request for.
       expect(fetchMock).toHaveBeenCalledTimes(1);
 
-      await waitFor(() => {
-        expect(
-          Object.values(useSceneStore.getState().nodesById).some(
-            (n) => n.name === "Card"
-          )
-        ).toBe(false);
-      });
+      await expectNodeNamed("Card", false);
       expect(useHistoryStore.getState().past.length).toBe(pastBefore);
     });
 
@@ -2666,15 +2219,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
           if (requests.length === 1) {
             return firstResponse;
           }
-          return sseResponse([
-            { type: "start" },
-            { type: "start-step" },
-            { type: "text-start", id: "t1" },
-            { type: "text-delta", id: "t1", delta: "ok" },
-            { type: "text-end", id: "t1" },
-            { type: "finish-step" },
-            { type: "finish" },
-          ]);
+          return sseResponse(textTurnChunks("ok"));
         }
       );
       vi.stubGlobal("fetch", fetchMock);
@@ -2683,34 +2228,12 @@ describe("useDesignChat (hook + UI message stream)", () => {
       const sessionId = `batch-input-error-${Date.now()}`;
       const { result } = renderHook(() => useDesignChat({ sessionId }));
 
-      act(() => result.current.setInput("build a card"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "build a card");
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
-      push({ type: "start" });
-      push({ type: "start-step" });
-      push({
-        type: "tool-input-start",
-        toolCallId: "batch-err-1",
-        toolName: "batch_design",
-      });
-      push({
-        type: "tool-input-delta",
-        toolCallId: "batch-err-1",
-        inputTextDelta:
-          '{"operations":"card=I(document, {type: \\"frame\\", name: \\"Card\\", width: 100, height: 100})\\n',
-      });
-      await flushStream();
+      await pushBatchDesignCardStart(push, "batch-err-1");
 
-      await waitFor(() => {
-        expect(
-          Object.values(useSceneStore.getState().nodesById).some(
-            (n) => n.name === "Card"
-          )
-        ).toBe(true);
-      });
+      await expectNodeNamed("Card", true);
 
       await act(async () => {
         push({
@@ -2728,13 +2251,7 @@ describe("useDesignChat (hook + UI message stream)", () => {
 
       await waitFor(() => expect(result.current.status).toBe("ready"));
 
-      await waitFor(() => {
-        expect(
-          Object.values(useSceneStore.getState().nodesById).some(
-            (n) => n.name === "Card"
-          )
-        ).toBe(false);
-      });
+      await expectNodeNamed("Card", false);
       expect(useHistoryStore.getState().past.length).toBe(pastBefore);
     });
   });
@@ -2785,25 +2302,14 @@ describe("useDesignChat (hook + UI message stream)", () => {
             { type: "finish" },
           ]);
         }
-        return sseResponse([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", delta: "Done" },
-          { type: "text-end", id: "t1" },
-          { type: "finish-step" },
-          { type: "finish" },
-        ]);
+        return sseResponse(textTurnChunks("Done"));
       });
       vi.stubGlobal("fetch", fetchMock);
 
       const sessionId = `taste-check-${Date.now()}`;
       const { result } = renderHook(() => useDesignChat({ sessionId }));
 
-      act(() => result.current.setInput("build me a simple landing screen"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "build me a simple landing screen");
 
       // /api/chat (turn 1), /api/taste-check, /api/chat (turn 2, continuation).
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3), { timeout: 5000 });
@@ -2846,25 +2352,14 @@ describe("useDesignChat (hook + UI message stream)", () => {
             { type: "finish" },
           ]);
         }
-        return sseResponse([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", delta: "Done" },
-          { type: "text-end", id: "t1" },
-          { type: "finish-step" },
-          { type: "finish" },
-        ]);
+        return sseResponse(textTurnChunks("Done"));
       });
       vi.stubGlobal("fetch", fetchMock);
 
       const sessionId = `taste-check-noop-${Date.now()}`;
       const { result } = renderHook(() => useDesignChat({ sessionId }));
 
-      act(() => result.current.setInput("list my variables"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "list my variables");
 
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), { timeout: 5000 });
       await waitFor(() => expect(result.current.status).toBe("ready"), { timeout: 5000 });
@@ -2914,25 +2409,14 @@ describe("useDesignChat (hook + UI message stream)", () => {
             { type: "finish" },
           ]);
         }
-        return sseResponse([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", delta: "Done" },
-          { type: "text-end", id: "t1" },
-          { type: "finish-step" },
-          { type: "finish" },
-        ]);
+        return sseResponse(textTurnChunks("Done"));
       });
       vi.stubGlobal("fetch", fetchMock);
 
       const sessionId = `taste-check-pending-${Date.now()}`;
       const { result } = renderHook(() => useDesignChat({ sessionId }));
 
-      act(() => result.current.setInput("build me a simple landing screen"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "build me a simple landing screen");
 
       // The taste check has gone out, but its response is still pending —
       // the turn's own stream is still blocked on `onToolCall`'s await, so
@@ -3007,25 +2491,14 @@ describe("useDesignChat (hook + UI message stream)", () => {
         // A possible auto-continuation once the (unmerged) output resolves —
         // see the comment above. Same shape every other continuation in this
         // describe block uses.
-        return sseResponse([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", delta: "Done" },
-          { type: "text-end", id: "t1" },
-          { type: "finish-step" },
-          { type: "finish" },
-        ]);
+        return sseResponse(textTurnChunks("Done"));
       });
       vi.stubGlobal("fetch", fetchMock);
 
       const sessionId = `taste-check-abort-${Date.now()}`;
       const { result } = renderHook(() => useDesignChat({ sessionId }));
 
-      act(() => result.current.setInput("build me a simple landing screen"));
-      await act(async () => {
-        result.current.sendMessage();
-      });
+      await sendText(result, "build me a simple landing screen");
 
       await waitFor(() => expect(requests.some((r) => r.url === "/api/taste-check")).toBe(true));
       expect(tasteCheckSignal?.aborted).toBe(false);

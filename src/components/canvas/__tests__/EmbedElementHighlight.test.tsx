@@ -59,6 +59,88 @@ function rect(left: number, top: number, width: number, height: number): DOMRect
   } as DOMRect;
 }
 
+const CTA_PATH = "div:nth-of-type(1) > button:nth-of-type(1)";
+const CTA_SELECTION = {
+  embedId: "embed1",
+  path: CTA_PATH,
+  tagName: "button",
+  classes: [] as string[],
+  textPreview: "Buy",
+  outerHtml: "<button>Buy</button>",
+};
+
+/** Mounts the standard embed DOM, stubs the canvas/button rects to the
+ * combination most tests below use, and selects the CTA button — the setup
+ * every "an element is already picked" test needs before it renders
+ * `<EmbedElementHighlight />`. Returns `mountEmbedDom`'s own result so a test
+ * that also needs the live `button` (for `offsetWidth`, etc.) still has it. */
+function arrangeSelectedCta(): { canvas: HTMLElement; button: HTMLElement } {
+  const dom = mountEmbedDom();
+  stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
+  useEmbedPickerStore.getState().selectElement(CTA_SELECTION);
+  return dom;
+}
+
+const HOVER_RECT = rect(20, 10, 60, 24);
+
+/** Mounts the standard embed DOM and hovers (without selecting) the CTA
+ * button — the setup the "hover box" tests need before rendering. */
+function arrangeHoveredCta(): { canvas: HTMLElement; button: HTMLElement } {
+  const dom = mountEmbedDom();
+  stubRects(rect(0, 0, 400, 300), HOVER_RECT);
+  useEmbedPickerStore.getState().startPicking("embed1");
+  useEmbedPickerStore.getState().setHoveredPath(CTA_PATH);
+  return dom;
+}
+
+/** Stubs canvas/host/element rects for the agent-button anchoring tests,
+ * which each need their own three distinct rects but share the same
+ * three-branch `getBoundingClientRect` mock shape. */
+function stubHostElementRects(canvasRect: DOMRect, hostRect: DOMRect, elementRect: DOMRect): void {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this.hasAttribute("data-canvas")) return canvasRect;
+    if (this.hasAttribute("data-embed-id")) return hostRect;
+    return elementRect;
+  });
+}
+
+/** Mounts the embed DOM and stubs canvas/host/content/child rects to the
+ * combination the "selected element's parent" hover-measure tests share —
+ * only the `selectElement`/`setHoveredPath` calls after this differ between
+ * them. */
+function mountParentChildRects(): { canvas: HTMLElement; content: HTMLElement; child: HTMLElement } {
+  const { canvas } = mountEmbedDom();
+  const host = canvas.querySelector<HTMLElement>('[data-embed-id="embed1"]')!;
+  const content = host.shadowRoot!.firstElementChild as HTMLElement;
+  const child = content.querySelector<HTMLElement>("#cta")!;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this.hasAttribute("data-canvas")) return rect(0, 0, 400, 300);
+    if (this.hasAttribute("data-embed-id")) return rect(0, 0, 300, 200);
+    if (this === content) return rect(10, 10, 200, 100);
+    if (this === child) return rect(30, 30, 50, 20);
+    return rect(0, 0, 0, 0);
+  });
+  return { canvas, content, child };
+}
+
+/** Mounts the standard embed DOM, stubs canvas/button rects, starts picking
+ * and shows a drop indicator — the setup every drop-indicator test needs. */
+function arrangeDropIndicator(indicator: {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}): void {
+  mountEmbedDom();
+  stubRects(rect(0, 0, 400, 300), rect(0, 0, 0, 0));
+  useEmbedPickerStore.getState().startPicking("embed1");
+  useEmbedPickerStore.getState().setDropIndicator(indicator);
+}
+
 describe("<EmbedElementHighlight />", () => {
   beforeEach(() => {
     resetStores();
@@ -97,11 +179,7 @@ describe("<EmbedElementHighlight />", () => {
   });
 
   it("draws a 2px hover box with no tag label while picking", () => {
-    mountEmbedDom();
-    stubRects(rect(0, 0, 400, 300), rect(20, 10, 60, 24));
-
-    useEmbedPickerStore.getState().startPicking("embed1");
-    useEmbedPickerStore.getState().setHoveredPath("div:nth-of-type(1) > button:nth-of-type(1)");
+    arrangeHoveredCta();
 
     const { container } = render(<EmbedElementHighlight />);
 
@@ -126,17 +204,9 @@ describe("<EmbedElementHighlight />", () => {
     mountEmbedDom();
     stubRects(rect(0, 0, 400, 300), rect(20, 10, 60, 24));
 
-    const path = "div:nth-of-type(1) > button:nth-of-type(1)";
     useEmbedPickerStore.getState().startPicking("embed1");
-    useEmbedPickerStore.getState().selectElement({
-      embedId: "embed1",
-      path,
-      tagName: "button",
-      classes: [],
-      textPreview: "Buy",
-      outerHtml: "<button>Buy</button>",
-    });
-    useEmbedPickerStore.getState().setHoveredPath(path);
+    useEmbedPickerStore.getState().selectElement(CTA_SELECTION);
+    useEmbedPickerStore.getState().setHoveredPath(CTA_PATH);
 
     const { container } = render(<EmbedElementHighlight />);
 
@@ -211,30 +281,10 @@ describe("<EmbedElementHighlight />", () => {
   });
 
   it("uses native Dev Mode units when the hovered embed element is the selected element's parent", () => {
-    const { canvas } = mountEmbedDom();
-    const host = canvas.querySelector<HTMLElement>('[data-embed-id="embed1"]')!;
-    const content = host.shadowRoot!.firstElementChild as HTMLElement;
-    const child = content.querySelector<HTMLElement>("#cta")!;
-
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
-      this: HTMLElement,
-    ) {
-      if (this.hasAttribute("data-canvas")) return rect(0, 0, 400, 300);
-      if (this.hasAttribute("data-embed-id")) return rect(0, 0, 300, 200);
-      if (this === content) return rect(10, 10, 200, 100);
-      if (this === child) return rect(30, 30, 50, 20);
-      return rect(0, 0, 0, 0);
-    });
+    mountParentChildRects();
 
     useEmbedPickerStore.getState().startPicking("embed1");
-    useEmbedPickerStore.getState().selectElement({
-      embedId: "embed1",
-      path: "div:nth-of-type(1) > button:nth-of-type(1)",
-      tagName: "button",
-      classes: [],
-      textPreview: "Buy",
-      outerHtml: "<button>Buy</button>",
-    });
+    useEmbedPickerStore.getState().selectElement(CTA_SELECTION);
     useEmbedPickerStore.getState().setHoveredPath("div:nth-of-type(1)");
     useDevModeStore.setState({ active: true, units: "rem", remBase: 10 });
 
@@ -250,20 +300,7 @@ describe("<EmbedElementHighlight />", () => {
   });
 
   it("matches native hover by drawing no measure for selected parent to hovered child", () => {
-    const { canvas } = mountEmbedDom();
-    const host = canvas.querySelector<HTMLElement>('[data-embed-id="embed1"]')!;
-    const content = host.shadowRoot!.firstElementChild as HTMLElement;
-    const child = content.querySelector<HTMLElement>("#cta")!;
-
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
-      this: HTMLElement,
-    ) {
-      if (this.hasAttribute("data-canvas")) return rect(0, 0, 400, 300);
-      if (this.hasAttribute("data-embed-id")) return rect(0, 0, 300, 200);
-      if (this === content) return rect(10, 10, 200, 100);
-      if (this === child) return rect(30, 30, 50, 20);
-      return rect(0, 0, 0, 0);
-    });
+    mountParentChildRects();
 
     useEmbedPickerStore.getState().startPicking("embed1");
     useEmbedPickerStore.getState().selectElement({
@@ -285,17 +322,8 @@ describe("<EmbedElementHighlight />", () => {
     mountEmbedDom();
     stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
     useEmbedPickerStore.getState().startPicking("embed1");
-    useEmbedPickerStore.getState().selectElement({
-      embedId: "embed1",
-      path: "div:nth-of-type(1) > button:nth-of-type(1)",
-      tagName: "button",
-      classes: [],
-      textPreview: "Buy",
-      outerHtml: "<button>Buy</button>",
-    });
-    useEmbedPickerStore.getState().setHoveredPath(
-      "div:nth-of-type(1) > button:nth-of-type(1)",
-    );
+    useEmbedPickerStore.getState().selectElement(CTA_SELECTION);
+    useEmbedPickerStore.getState().setHoveredPath(CTA_PATH);
     useDevModeStore.setState({ active: true });
 
     const { container } = render(<EmbedElementHighlight />);
@@ -307,17 +335,7 @@ describe("<EmbedElementHighlight />", () => {
   });
 
   it("draws a 1px selection box with no label once an element is picked", () => {
-    mountEmbedDom();
-    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
-
-    useEmbedPickerStore.getState().selectElement({
-      embedId: "embed1",
-      path: "div:nth-of-type(1) > button:nth-of-type(1)",
-      tagName: "button",
-      classes: [],
-      textPreview: "Buy",
-      outerHtml: "<button>Buy</button>",
-    });
+    arrangeSelectedCta();
 
     const { container } = render(<EmbedElementHighlight />);
 
@@ -329,19 +347,8 @@ describe("<EmbedElementHighlight />", () => {
   });
 
   it("withholds the selection box while the selected element is the one being inline-edited (Finding 6)", () => {
-    mountEmbedDom();
-    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
-
-    const path = "div:nth-of-type(1) > button:nth-of-type(1)";
-    useEmbedPickerStore.getState().selectElement({
-      embedId: "embed1",
-      path,
-      tagName: "button",
-      classes: [],
-      textPreview: "Buy",
-      outerHtml: "<button>Buy</button>",
-    });
-    useEmbedPickerStore.getState().startElementEdit("embed1", path);
+    arrangeSelectedCta();
+    useEmbedPickerStore.getState().startElementEdit("embed1", CTA_PATH);
 
     const { container } = render(<EmbedElementHighlight />);
 
@@ -349,19 +356,8 @@ describe("<EmbedElementHighlight />", () => {
   });
 
   it("draws the selection box again once inline editing of that same element ends", () => {
-    mountEmbedDom();
-    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
-
-    const path = "div:nth-of-type(1) > button:nth-of-type(1)";
-    useEmbedPickerStore.getState().selectElement({
-      embedId: "embed1",
-      path,
-      tagName: "button",
-      classes: [],
-      textPreview: "Buy",
-      outerHtml: "<button>Buy</button>",
-    });
-    useEmbedPickerStore.getState().startElementEdit("embed1", path);
+    arrangeSelectedCta();
+    useEmbedPickerStore.getState().startElementEdit("embed1", CTA_PATH);
 
     const { container, rerender } = render(<EmbedElementHighlight />);
     expect(container.querySelector("[data-embed-element-box]")).toBeNull();
@@ -424,17 +420,7 @@ describe("<EmbedElementHighlight />", () => {
   });
 
   it("skips rendering the selection box once its embed node is removed from the scene", () => {
-    mountEmbedDom();
-    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
-
-    useEmbedPickerStore.getState().selectElement({
-      embedId: "embed1",
-      path: "div:nth-of-type(1) > button:nth-of-type(1)",
-      tagName: "button",
-      classes: [],
-      textPreview: "Buy",
-      outerHtml: "<button>Buy</button>",
-    });
+    arrangeSelectedCta();
 
     const { container } = render(<EmbedElementHighlight />);
     expect(container.querySelector("[data-embed-element-box]")).toBeTruthy();
@@ -447,16 +433,7 @@ describe("<EmbedElementHighlight />", () => {
   });
 
   it("renders nothing in view mode even with an active selection — never paints over a view-mode canvas", () => {
-    mountEmbedDom();
-    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
-    useEmbedPickerStore.getState().selectElement({
-      embedId: "embed1",
-      path: "div:nth-of-type(1) > button:nth-of-type(1)",
-      tagName: "button",
-      classes: [],
-      textPreview: "Buy",
-      outerHtml: "<button>Buy</button>",
-    });
+    arrangeSelectedCta();
     useEditorModeStore.setState({ mode: "view" });
 
     const { container } = render(<EmbedElementHighlight />);
@@ -464,16 +441,7 @@ describe("<EmbedElementHighlight />", () => {
   });
 
   it("renders nothing in present mode even with an active selection — never paints over a presented slide", () => {
-    mountEmbedDom();
-    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
-    useEmbedPickerStore.getState().selectElement({
-      embedId: "embed1",
-      path: "div:nth-of-type(1) > button:nth-of-type(1)",
-      tagName: "button",
-      classes: [],
-      textPreview: "Buy",
-      outerHtml: "<button>Buy</button>",
-    });
+    arrangeSelectedCta();
     useEditorModeStore.setState({ mode: "present" });
 
     const { container } = render(<EmbedElementHighlight />);
@@ -521,16 +489,7 @@ describe("<EmbedElementHighlight />", () => {
   });
 
   it("does not re-render when an unrelated scene node changes", () => {
-    mountEmbedDom();
-    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
-    useEmbedPickerStore.getState().selectElement({
-      embedId: "embed1",
-      path: "div:nth-of-type(1) > button:nth-of-type(1)",
-      tagName: "button",
-      classes: [],
-      textPreview: "Buy",
-      outerHtml: "<button>Buy</button>",
-    });
+    arrangeSelectedCta();
 
     const onRender = vi.fn();
     render(
@@ -560,16 +519,7 @@ describe("<EmbedElementHighlight />", () => {
   });
 
   it("re-renders when the active embed's own node changes", () => {
-    mountEmbedDom();
-    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
-    useEmbedPickerStore.getState().selectElement({
-      embedId: "embed1",
-      path: "div:nth-of-type(1) > button:nth-of-type(1)",
-      tagName: "button",
-      classes: [],
-      textPreview: "Buy",
-      outerHtml: "<button>Buy</button>",
-    });
+    arrangeSelectedCta();
 
     const onRender = vi.fn();
     render(
@@ -590,19 +540,9 @@ describe("<EmbedElementHighlight />", () => {
   });
 
   it("draws a size badge with offsetWidth/offsetHeight on the selection box", () => {
-    const { button } = mountEmbedDom();
-    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
+    const { button } = arrangeSelectedCta();
     Object.defineProperty(button, "offsetWidth", { value: 123, configurable: true });
     Object.defineProperty(button, "offsetHeight", { value: 45, configurable: true });
-
-    useEmbedPickerStore.getState().selectElement({
-      embedId: "embed1",
-      path: "div:nth-of-type(1) > button:nth-of-type(1)",
-      tagName: "button",
-      classes: [],
-      textPreview: "Buy",
-      outerHtml: "<button>Buy</button>",
-    });
 
     const { container } = render(<EmbedElementHighlight />);
 
@@ -622,11 +562,7 @@ describe("<EmbedElementHighlight />", () => {
   });
 
   it("does not draw a size badge on the hover box", () => {
-    mountEmbedDom();
-    stubRects(rect(0, 0, 400, 300), rect(20, 10, 60, 24));
-
-    useEmbedPickerStore.getState().startPicking("embed1");
-    useEmbedPickerStore.getState().setHoveredPath("div:nth-of-type(1) > button:nth-of-type(1)");
+    arrangeHoveredCta();
 
     const { container } = render(<EmbedElementHighlight />);
 
@@ -680,11 +616,7 @@ describe("<EmbedElementHighlight />", () => {
   });
 
   it("draws the drop indicator even with no hover and no selection", () => {
-    mountEmbedDom();
-    stubRects(rect(0, 0, 400, 300), rect(0, 0, 0, 0));
-
-    useEmbedPickerStore.getState().startPicking("embed1");
-    useEmbedPickerStore.getState().setDropIndicator({ left: 10, top: 10, width: 60, height: 2 });
+    arrangeDropIndicator({ left: 10, top: 10, width: 60, height: 2 });
 
     const { container } = render(<EmbedElementHighlight />);
 
@@ -694,11 +626,7 @@ describe("<EmbedElementHighlight />", () => {
   });
 
   it("renders nothing once picking stops and the indicator is cleared", () => {
-    mountEmbedDom();
-    stubRects(rect(0, 0, 400, 300), rect(0, 0, 0, 0));
-
-    useEmbedPickerStore.getState().startPicking("embed1");
-    useEmbedPickerStore.getState().setDropIndicator({ left: 10, top: 10, width: 60, height: 2 });
+    arrangeDropIndicator({ left: 10, top: 10, width: 60, height: 2 });
 
     const { container, rerender } = render(<EmbedElementHighlight />);
     expect(container.querySelector("[data-embed-drop-indicator]")).toBeTruthy();
@@ -744,17 +672,7 @@ describe("<EmbedElementHighlight />", () => {
   });
 
   it("shows an agent button next to a selected embed element", () => {
-    mountEmbedDom();
-    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
-
-    useEmbedPickerStore.getState().selectElement({
-      embedId: "embed1",
-      path: "div:nth-of-type(1) > button:nth-of-type(1)",
-      tagName: "button",
-      classes: [],
-      textPreview: "Buy",
-      outerHtml: "<button>Buy</button>",
-    });
+    arrangeSelectedCta();
 
     const { getByLabelText } = render(<EmbedElementHighlight />);
     expect(getByLabelText("Ask agent")).toBeTruthy();
@@ -767,25 +685,9 @@ describe("<EmbedElementHighlight />", () => {
   // behaviour.
   it("anchors the agent button at the picked element's top-right corner", () => {
     const { canvas } = mountEmbedDom();
-    const canvasRect = rect(10, 20, 400, 300);
-    const hostRect = rect(30, 40, 200, 150);
-    const elementRect = rect(50, 60, 40, 20);
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
-      this: HTMLElement,
-    ) {
-      if (this.hasAttribute("data-canvas")) return canvasRect;
-      if (this.hasAttribute("data-embed-id")) return hostRect;
-      return elementRect;
-    });
+    stubHostElementRects(rect(10, 20, 400, 300), rect(30, 40, 200, 150), rect(50, 60, 40, 20));
 
-    useEmbedPickerStore.getState().selectElement({
-      embedId: "embed1",
-      path: "div:nth-of-type(1) > button:nth-of-type(1)",
-      tagName: "button",
-      classes: [],
-      textPreview: "Buy",
-      outerHtml: "<button>Buy</button>",
-    });
+    useEmbedPickerStore.getState().selectElement(CTA_SELECTION);
 
     const { getByLabelText } = render(<EmbedElementHighlight />);
     const wrapper = getByLabelText("Ask agent").closest("div.absolute") as HTMLElement;
@@ -802,26 +704,10 @@ describe("<EmbedElementHighlight />", () => {
   // trigger on empty canvas with nothing under it.
   it("clamps the agent button to the embed host's box when the element overflows it", () => {
     mountEmbedDom();
-    const canvasRect = rect(10, 20, 400, 300);
-    const hostRect = rect(30, 40, 100, 80);
-    // Wider and taller than the host, and starting above it.
-    const elementRect = rect(30, 10, 400, 400);
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
-      this: HTMLElement,
-    ) {
-      if (this.hasAttribute("data-canvas")) return canvasRect;
-      if (this.hasAttribute("data-embed-id")) return hostRect;
-      return elementRect;
-    });
+    // Element rect wider and taller than the host, and starting above it.
+    stubHostElementRects(rect(10, 20, 400, 300), rect(30, 40, 100, 80), rect(30, 10, 400, 400));
 
-    useEmbedPickerStore.getState().selectElement({
-      embedId: "embed1",
-      path: "div:nth-of-type(1) > button:nth-of-type(1)",
-      tagName: "button",
-      classes: [],
-      textPreview: "Buy",
-      outerHtml: "<button>Buy</button>",
-    });
+    useEmbedPickerStore.getState().selectElement(CTA_SELECTION);
 
     const { getByLabelText } = render(<EmbedElementHighlight />);
     const wrapper = getByLabelText("Ask agent").closest("div.absolute") as HTMLElement;
@@ -836,17 +722,7 @@ describe("<EmbedElementHighlight />", () => {
   // left the live shadow DOM with htmlContent untouched, and suppressing on
   // the selection alone left such an embed with no agent affordance at all.
   it("reports the element affordance as visible only while it is actually mounted", () => {
-    mountEmbedDom();
-    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
-
-    useEmbedPickerStore.getState().selectElement({
-      embedId: "embed1",
-      path: "div:nth-of-type(1) > button:nth-of-type(1)",
-      tagName: "button",
-      classes: [],
-      textPreview: "Buy",
-      outerHtml: "<button>Buy</button>",
-    });
+    arrangeSelectedCta();
 
     const { unmount } = render(<EmbedElementHighlight />);
     expect(useEmbedPickerStore.getState().elementAffordanceVisible).toBe(true);
@@ -876,28 +752,14 @@ describe("<EmbedElementHighlight />", () => {
   });
 
   it("does not show an agent button while only hovering (no selection)", () => {
-    mountEmbedDom();
-    stubRects(rect(0, 0, 400, 300), rect(20, 10, 60, 24));
-
-    useEmbedPickerStore.getState().startPicking("embed1");
-    useEmbedPickerStore.getState().setHoveredPath("div:nth-of-type(1) > button:nth-of-type(1)");
+    arrangeHoveredCta();
 
     const { queryByLabelText } = render(<EmbedElementHighlight />);
     expect(queryByLabelText("Ask agent")).toBeNull();
   });
 
   it("opens the composer and sends through launchEmbedElementAgentChat with the embed id and text", () => {
-    mountEmbedDom();
-    stubRects(rect(0, 0, 400, 300), rect(5, 5, 40, 20));
-
-    useEmbedPickerStore.getState().selectElement({
-      embedId: "embed1",
-      path: "div:nth-of-type(1) > button:nth-of-type(1)",
-      tagName: "button",
-      classes: [],
-      textPreview: "Buy",
-      outerHtml: "<button>Buy</button>",
-    });
+    arrangeSelectedCta();
 
     const { getByLabelText, getByRole } = render(<EmbedElementHighlight />);
     fireEvent.click(getByLabelText("Ask agent"));
@@ -955,14 +817,10 @@ describe("<EmbedElementHighlight />", () => {
       });
     }
 
-    it("outlines a selected element's navigable children only while hovering that same element (case A)", () => {
-      const { frame, childA } = mountFrameWithChildren();
-      stubFrameRects(frame, childA);
-
-      // `setHoveredPath` alone (without `startPicking`) resolves against
-      // `hoveredEmbedId`, not `pickingEmbedId` — the canvas-picker path this
-      // case mirrors always has `pickingEmbedId` set (see
-      // `embedPickerStore.ts`'s doc comment on `setHoveredPath`).
+    /** Starts picking and selects `frame` at `FRAME_PATH` — the common first
+     * half of every case-A outline test below, which then differ only in
+     * whether/when they also hover it. */
+    function selectFrame(frame: HTMLElement): void {
       useEmbedPickerStore.getState().startPicking("embed1");
       useEmbedPickerStore.getState().selectElement({
         embedId: "embed1",
@@ -972,6 +830,24 @@ describe("<EmbedElementHighlight />", () => {
         textPreview: "",
         outerHtml: frame.outerHTML,
       });
+    }
+
+    /** `selectFrame` plus self-hovering it — the exact setup the "frame is
+     * both selected and hovered" tests share. */
+    function selectAndHoverFrame(frame: HTMLElement): void {
+      selectFrame(frame);
+      useEmbedPickerStore.getState().setHoveredPath(FRAME_PATH);
+    }
+
+    it("outlines a selected element's navigable children only while hovering that same element (case A)", () => {
+      const { frame, childA } = mountFrameWithChildren();
+      stubFrameRects(frame, childA);
+
+      // `setHoveredPath` alone (without `startPicking`) resolves against
+      // `hoveredEmbedId`, not `pickingEmbedId` — the canvas-picker path this
+      // case mirrors always has `pickingEmbedId` set (see
+      // `embedPickerStore.ts`'s doc comment on `setHoveredPath`).
+      selectFrame(frame);
 
       // No hover yet — self-hover gate must withhold the outlines.
       const { container, rerender } = render(<EmbedElementHighlight />);
@@ -1085,16 +961,7 @@ describe("<EmbedElementHighlight />", () => {
       const { frame, childA } = mountFrameWithChildren();
       stubFrameRects(frame, childA);
 
-      useEmbedPickerStore.getState().startPicking("embed1");
-      useEmbedPickerStore.getState().selectElement({
-        embedId: "embed1",
-        path: FRAME_PATH,
-        tagName: "div",
-        classes: [],
-        textPreview: "",
-        outerHtml: frame.outerHTML,
-      });
-      useEmbedPickerStore.getState().setHoveredPath(FRAME_PATH);
+      selectAndHoverFrame(frame);
       useEmbedPickerStore.getState().startElementEdit("embed1", FRAME_PATH);
 
       const { container } = render(<EmbedElementHighlight />);
@@ -1105,16 +972,7 @@ describe("<EmbedElementHighlight />", () => {
       const { frame, childA } = mountFrameWithChildren();
       stubFrameRects(frame, childA);
 
-      useEmbedPickerStore.getState().startPicking("embed1");
-      useEmbedPickerStore.getState().selectElement({
-        embedId: "embed1",
-        path: FRAME_PATH,
-        tagName: "div",
-        classes: [],
-        textPreview: "",
-        outerHtml: frame.outerHTML,
-      });
-      useEmbedPickerStore.getState().setHoveredPath(FRAME_PATH);
+      selectAndHoverFrame(frame);
 
       const { container } = render(<EmbedElementHighlight />);
       const highlight = container.querySelector("[data-embed-element-highlight]")!;
@@ -1130,16 +988,7 @@ describe("<EmbedElementHighlight />", () => {
       const { frame, childA } = mountFrameWithChildren();
       stubFrameRects(frame, childA);
 
-      useEmbedPickerStore.getState().startPicking("embed1");
-      useEmbedPickerStore.getState().selectElement({
-        embedId: "embed1",
-        path: FRAME_PATH,
-        tagName: "div",
-        classes: [],
-        textPreview: "",
-        outerHtml: frame.outerHTML,
-      });
-      useEmbedPickerStore.getState().setHoveredPath(FRAME_PATH);
+      selectAndHoverFrame(frame);
 
       const { container } = render(<EmbedElementHighlight />);
       const group = container.querySelector<HTMLElement>("[data-embed-child-outlines]");
@@ -1166,16 +1015,7 @@ describe("<EmbedElementHighlight />", () => {
         return rect(0, 0, 0, 0);
       });
 
-      useEmbedPickerStore.getState().startPicking("embed1");
-      useEmbedPickerStore.getState().selectElement({
-        embedId: "embed1",
-        path: FRAME_PATH,
-        tagName: "div",
-        classes: [],
-        textPreview: "",
-        outerHtml: frame.outerHTML,
-      });
-      useEmbedPickerStore.getState().setHoveredPath(FRAME_PATH);
+      selectAndHoverFrame(frame);
 
       const { container } = render(<EmbedElementHighlight />);
       expect(container.querySelectorAll("[data-embed-child-outline]").length).toBe(0);
@@ -1195,16 +1035,7 @@ describe("<EmbedElementHighlight />", () => {
         return rect(0, 0, 0, 0);
       });
 
-      useEmbedPickerStore.getState().startPicking("embed1");
-      useEmbedPickerStore.getState().selectElement({
-        embedId: "embed1",
-        path: FRAME_PATH,
-        tagName: "div",
-        classes: [],
-        textPreview: "",
-        outerHtml: frame.outerHTML,
-      });
-      useEmbedPickerStore.getState().setHoveredPath(FRAME_PATH);
+      selectAndHoverFrame(frame);
 
       const { container } = render(<EmbedElementHighlight />);
       const outlines = container.querySelectorAll<HTMLElement>("[data-embed-child-outline]");

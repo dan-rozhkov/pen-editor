@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { SSE_HEADERS, sseBody } from "./support/sse";
+import { stubModels, stubChatTurns, openAgentsRail, sendChatMessage } from "./support/api";
 
 // Smoke test for the AI design chat. The backend is stubbed via page.route:
 // the first /api/chat request streams assistant text plus a batch_design tool
@@ -14,84 +14,50 @@ const BATCH_DESIGN_OPERATIONS =
 const FIRST_TURN_TEXT = "Adding a frame to the canvas now.";
 const FINAL_TURN_TEXT = "The frame has been created. Smoke test complete.";
 
-interface ChatRequestBody {
-  canvasContext?: unknown;
-  messages?: Array<{
-    role: string;
-    parts: Array<Record<string, unknown>>;
-  }>;
-}
-
 test("AI chat streams a batch_design tool call, executes it locally and auto-continues", async ({
   page,
 }) => {
-  const chatRequests: ChatRequestBody[] = [];
-
   // Keep the model metadata deterministic (the app fetches it at startup and
   // silently falls back on failure; stubbing avoids a 404 in the dev server).
-  await page.route("**/api/models", (route) =>
-    route.fulfill({
-      json: {
-        models: [
-          { id: "test/smoke-model", label: "Smoke Model", supportsVision: true },
-        ],
-        default: "test/smoke-model",
+  await stubModels(page);
+
+  const chatRequests = await stubChatTurns(page, [
+    // Turn 1: assistant text + a client-executed batch_design tool call.
+    [
+      { type: "start" },
+      { type: "start-step" },
+      { type: "text-start", id: "t1" },
+      { type: "text-delta", id: "t1", delta: FIRST_TURN_TEXT },
+      { type: "text-end", id: "t1" },
+      {
+        type: "tool-input-available",
+        toolCallId: "call-smoke-1",
+        toolName: "batch_design",
+        input: { operations: BATCH_DESIGN_OPERATIONS },
       },
-    })
-  );
-
-  await page.route("**/api/chat", async (route) => {
-    const body = route.request().postDataJSON() as ChatRequestBody;
-    chatRequests.push(body);
-
-    if (chatRequests.length === 1) {
-      // Turn 1: assistant text + a client-executed batch_design tool call.
-      await route.fulfill({
-        headers: SSE_HEADERS,
-        body: sseBody([
-          { type: "start" },
-          { type: "start-step" },
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", delta: FIRST_TURN_TEXT },
-          { type: "text-end", id: "t1" },
-          {
-            type: "tool-input-available",
-            toolCallId: "call-smoke-1",
-            toolName: "batch_design",
-            input: { operations: BATCH_DESIGN_OPERATIONS },
-          },
-          { type: "finish-step" },
-          { type: "finish" },
-        ]),
-      });
-      return;
-    }
-
+      { type: "finish-step" },
+      { type: "finish" },
+    ],
     // Turn 2 (automatic continuation carrying the tool result): final text.
-    await route.fulfill({
-      headers: SSE_HEADERS,
-      body: sseBody([
-        { type: "start" },
-        { type: "start-step" },
-        { type: "text-start", id: "t2" },
-        { type: "text-delta", id: "t2", delta: FINAL_TURN_TEXT },
-        { type: "text-end", id: "t2" },
-        { type: "finish-step" },
-        { type: "finish" },
-      ]),
-    });
-  });
+    [
+      { type: "start" },
+      { type: "start-step" },
+      { type: "text-start", id: "t2" },
+      { type: "text-delta", id: "t2", delta: FINAL_TURN_TEXT },
+      { type: "text-end", id: "t2" },
+      { type: "finish-step" },
+      { type: "finish" },
+    ],
+  ]);
 
   await page.goto("/app");
 
   // Open the chat panel via the Agents item in the left rail.
-  await page.getByTestId("rail-agents").click();
+  await openAgentsRail(page);
   await expect(page.getByText("Design Agent", { exact: true })).toBeVisible();
 
   // Send a message (Enter submits).
-  const input = page.getByPlaceholder("Ask the design agent...");
-  await input.fill("Create a smoke test frame");
-  await input.press("Enter");
+  await sendChatMessage(page, "Create a smoke test frame");
 
   // (a) Streamed assistant text from both turns is rendered in the chat.
   await expect(page.getByText(FIRST_TURN_TEXT)).toBeVisible();

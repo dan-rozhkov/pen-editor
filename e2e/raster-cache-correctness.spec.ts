@@ -64,6 +64,27 @@ function isCloseTo(actual: RGBA, expected: RGBA, tolerance = 20): boolean {
   return actual.every((v, i) => Math.abs(v - expected[i]) <= tolerance);
 }
 
+/** Stubs /api/models, sets the raster-cache flag before the app boots
+ * (`addInitScript` so it's in place for the very first render), goes to the
+ * editor and waits for it to mount. Every test in this file starts this way,
+ * differing only in the flag value (always "on" except the flag-off half of
+ * the zoom-sharpness comparison). */
+async function gotoEditorWithRasterCache(page: Page, flag: "on" | "off" = "on"): Promise<void> {
+  await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
+  await page.addInitScript((f) => localStorage.setItem("pen.rasterCache", f), flag);
+  await page.goto("/app");
+  await expectEditorMounted(page);
+}
+
+/** `page.waitForTimeout` wrapped once so the shared eslint-disable rationale
+ * (this file is inherently timing-based: every wait outlasts the raster
+ * cache's own QUIET_MS/decision-round timers — see SETTLE_MS/FRESH_PAINT_MS
+ * above) lives in one place instead of on every call site. */
+async function settle(page: Page, ms: number): Promise<void> {
+  // eslint-disable-next-line playwright/no-wait-for-timeout -- inherently timing-based: waits out the raster cache's internal QUIET_MS/decision-round timers (see SETTLE_MS/FRESH_PAINT_MS doc comments above)
+  await page.waitForTimeout(ms);
+}
+
 async function seedMutateReparentScene(page: Page): Promise<void> {
   await page.evaluate(() => {
     const w = window as unknown as {
@@ -95,15 +116,11 @@ async function seedMutateReparentScene(page: Page): Promise<void> {
 
 test.describe("raster cache correctness (Task 13)", () => {
   test("mutate inside a cached frame shows fresh pixels, not a stale texture", async ({ page }) => {
-    await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
-    await page.addInitScript(() => localStorage.setItem("pen.rasterCache", "on"));
-    await page.goto("/app");
-    await expectEditorMounted(page);
+    await gotoEditorWithRasterCache(page);
     await seedMutateReparentScene(page);
 
     // Let frame-a's subtree go quiet so the manager caches it.
-    // eslint-disable-next-line playwright/no-wait-for-timeout -- inherently timing-based: waits out the raster cache's internal QUIET_MS/decision-round timers (see SETTLE_MS/FRESH_PAINT_MS doc comments above)
-    await page.waitForTimeout(SETTLE_MS);
+    await settle(page, SETTLE_MS);
     let center = await samplePixel(page, 100, 100);
     expect(isCloseTo(center, [0, 0, 255, 255])).toBe(true); // blue rect, pre-mutation
 
@@ -112,34 +129,27 @@ test.describe("raster cache correctness (Task 13)", () => {
       (window as unknown as { __sceneStore: { getState: () => { updateNode: (id: string, u: object) => void } } })
         .__sceneStore.getState().updateNode("rect-r", { fill: "#ff0000" });
     });
-    // eslint-disable-next-line playwright/no-wait-for-timeout -- inherently timing-based: waits out the raster cache's internal QUIET_MS/decision-round timers (see SETTLE_MS/FRESH_PAINT_MS doc comments above)
-    await page.waitForTimeout(FRESH_PAINT_MS);
+    await settle(page, FRESH_PAINT_MS);
     center = await samplePixel(page, 100, 100);
     expect(isCloseTo(center, [255, 0, 0, 255])).toBe(true); // red — no stale blue ghost
   });
 
   test("reparent A -> B: node disappears from A, appears (with its latest fill) in B", async ({ page }) => {
-    await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
-    await page.addInitScript(() => localStorage.setItem("pen.rasterCache", "on"));
-    await page.goto("/app");
-    await expectEditorMounted(page);
+    await gotoEditorWithRasterCache(page);
     await seedMutateReparentScene(page);
 
-    // eslint-disable-next-line playwright/no-wait-for-timeout -- inherently timing-based: waits out the raster cache's internal QUIET_MS/decision-round timers (see SETTLE_MS/FRESH_PAINT_MS doc comments above)
-    await page.waitForTimeout(SETTLE_MS); // both frame-a and frame-b cache
+    await settle(page, SETTLE_MS); // both frame-a and frame-b cache
     await page.evaluate(() => {
       (window as unknown as { __sceneStore: { getState: () => { updateNode: (id: string, u: object) => void } } })
         .__sceneStore.getState().updateNode("rect-r", { fill: "#ff0000" });
     });
-    // eslint-disable-next-line playwright/no-wait-for-timeout -- inherently timing-based: waits out the raster cache's internal QUIET_MS/decision-round timers (see SETTLE_MS/FRESH_PAINT_MS doc comments above)
-    await page.waitForTimeout(SETTLE_MS); // re-settle, both frames cached again with the red rect in A
+    await settle(page, SETTLE_MS); // re-settle, both frames cached again with the red rect in A
 
     await page.evaluate(() => {
       (window as unknown as { __sceneStore: { getState: () => { moveNode: (id: string, parentId: string | null, index: number) => void } } })
         .__sceneStore.getState().moveNode("rect-r", "frame-b", 0);
     });
-    // eslint-disable-next-line playwright/no-wait-for-timeout -- inherently timing-based: waits out the raster cache's internal QUIET_MS/decision-round timers (see SETTLE_MS/FRESH_PAINT_MS doc comments above)
-    await page.waitForTimeout(FRESH_PAINT_MS);
+    await settle(page, FRESH_PAINT_MS);
 
     const inA = await samplePixel(page, 100, 100); // frame-a's rect region — now empty
     const inB = await samplePixel(page, 500, 100); // frame-b's rect region — frame-b.x(400) + rect.x(50..150)
@@ -148,36 +158,27 @@ test.describe("raster cache correctness (Task 13)", () => {
   });
 
   test("revert (undo-equivalent) restores the original pixels", async ({ page }) => {
-    await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
-    await page.addInitScript(() => localStorage.setItem("pen.rasterCache", "on"));
-    await page.goto("/app");
-    await expectEditorMounted(page);
+    await gotoEditorWithRasterCache(page);
     await seedMutateReparentScene(page);
 
-    // eslint-disable-next-line playwright/no-wait-for-timeout -- inherently timing-based: waits out the raster cache's internal QUIET_MS/decision-round timers (see SETTLE_MS/FRESH_PAINT_MS doc comments above)
-    await page.waitForTimeout(SETTLE_MS);
+    await settle(page, SETTLE_MS);
     await page.evaluate(() => {
       (window as unknown as { __sceneStore: { getState: () => { updateNode: (id: string, u: object) => void } } })
         .__sceneStore.getState().updateNode("rect-r", { fill: "#ff0000" });
     });
-    // eslint-disable-next-line playwright/no-wait-for-timeout -- inherently timing-based: waits out the raster cache's internal QUIET_MS/decision-round timers (see SETTLE_MS/FRESH_PAINT_MS doc comments above)
-    await page.waitForTimeout(SETTLE_MS); // re-cache with the red fill
+    await settle(page, SETTLE_MS); // re-cache with the red fill
 
     await page.evaluate(() => {
       (window as unknown as { __sceneStore: { getState: () => { updateNode: (id: string, u: object) => void } } })
         .__sceneStore.getState().updateNode("rect-r", { fill: "#0000ff" }); // revert
     });
-    // eslint-disable-next-line playwright/no-wait-for-timeout -- inherently timing-based: waits out the raster cache's internal QUIET_MS/decision-round timers (see SETTLE_MS/FRESH_PAINT_MS doc comments above)
-    await page.waitForTimeout(FRESH_PAINT_MS);
+    await settle(page, FRESH_PAINT_MS);
     const center = await samplePixel(page, 100, 100);
     expect(isCloseTo(center, [0, 0, 255, 255])).toBe(true); // back to the original blue
   });
 
   async function zoomSharpnessPixel(page: Page, rasterCacheFlag: "on" | "off"): Promise<RGBA> {
-    await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
-    await page.addInitScript((flag) => localStorage.setItem("pen.rasterCache", flag), rasterCacheFlag);
-    await page.goto("/app");
-    await expectEditorMounted(page);
+    await gotoEditorWithRasterCache(page, rasterCacheFlag);
     await page.evaluate(() => {
       const w = window as unknown as {
         __sceneStore: { setState: (state: unknown) => void };
@@ -203,15 +204,13 @@ test.describe("raster cache correctness (Task 13)", () => {
       });
       w.__viewportStore.getState().setViewportState({ scale: 1, x: 0, y: 0 });
     });
-    // eslint-disable-next-line playwright/no-wait-for-timeout -- inherently timing-based: waits out the raster cache's internal QUIET_MS/decision-round timers (see SETTLE_MS/FRESH_PAINT_MS doc comments above)
-    await page.waitForTimeout(SETTLE_MS * SETTLE_SCALE); // settle + cache at bucket 1
+    await settle(page, SETTLE_MS * SETTLE_SCALE); // settle + cache at bucket 1
 
     await page.evaluate(() => {
       (window as unknown as { __viewportStore: { getState: () => { setViewportState: (s: { scale: number; x: number; y: number }) => void } } })
         .__viewportStore.getState().setViewportState({ scale: 3, x: 0, y: 0 });
     });
-    // eslint-disable-next-line playwright/no-wait-for-timeout -- inherently timing-based: waits out the raster cache's internal QUIET_MS/decision-round timers (see SETTLE_MS/FRESH_PAINT_MS doc comments above)
-    await page.waitForTimeout(SETTLE_MS * 2 * SETTLE_SCALE); // uncache-on-bucket-change round, then re-cache-at-new-bucket round
+    await settle(page, SETTLE_MS * 2 * SETTLE_SCALE); // uncache-on-bucket-change round, then re-cache-at-new-bucket round
 
     // Sample inside a text glyph stroke — a stale low-res (bucket 1) texture
     // stretched/resampled up to bucket 4 would blur the edge; sampling right
@@ -234,10 +233,7 @@ test.describe("raster cache correctness (Task 13)", () => {
   // mutation at all, so a cached top frame never saw a SceneDiff telling it
   // to drop its texture. Regression-tests rasterCacheManager.onDirectContainerMutation.
   test("variable edit inside a cached frame shows fresh pixels, not a stale texture", async ({ page }) => {
-    await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
-    await page.addInitScript(() => localStorage.setItem("pen.rasterCache", "on"));
-    await page.goto("/app");
-    await expectEditorMounted(page);
+    await gotoEditorWithRasterCache(page);
 
     await page.evaluate(() => {
       const w = window as unknown as {
@@ -267,8 +263,7 @@ test.describe("raster cache correctness (Task 13)", () => {
       w.__viewportStore.getState().setViewportState({ scale: 1, x: 0, y: 0 });
     });
 
-    // eslint-disable-next-line playwright/no-wait-for-timeout -- inherently timing-based: waits out the raster cache's internal QUIET_MS/decision-round timers (see SETTLE_MS/FRESH_PAINT_MS doc comments above)
-    await page.waitForTimeout(SETTLE_MS); // frame-v goes quiet and caches
+    await settle(page, SETTLE_MS); // frame-v goes quiet and caches
     let center = await samplePixel(page, 100, 100);
     expect(isCloseTo(center, [0, 0, 255, 255])).toBe(true); // blue, pre-edit
 
@@ -277,8 +272,7 @@ test.describe("raster cache correctness (Task 13)", () => {
       (window as unknown as { __variableStore: { getState: () => { updateVariable: (id: string, u: object) => void } } })
         .__variableStore.getState().updateVariable("var-fill-1", { value: "#ff0000" });
     });
-    // eslint-disable-next-line playwright/no-wait-for-timeout -- inherently timing-based: waits out the raster cache's internal QUIET_MS/decision-round timers (see SETTLE_MS/FRESH_PAINT_MS doc comments above)
-    await page.waitForTimeout(FRESH_PAINT_MS);
+    await settle(page, FRESH_PAINT_MS);
     center = await samplePixel(page, 100, 100);
     expect(isCloseTo(center, [255, 0, 0, 255])).toBe(true); // red — no stale blue ghost
   });
@@ -290,10 +284,7 @@ test.describe("raster cache correctness (Task 13)", () => {
   // `hasCulledDescendant` (gates caching) + the show-transition eviction
   // callback in `updateCulling` (syncAutoLayout.ts).
   test("panning into a cached wide frame reveals a child baked out of the cache, not a hole", async ({ page }) => {
-    await page.route("**/api/models", (route) => route.fulfill({ json: { models: [], default: null } }));
-    await page.addInitScript(() => localStorage.setItem("pen.rasterCache", "on"));
-    await page.goto("/app");
-    await expectEditorMounted(page);
+    await gotoEditorWithRasterCache(page);
 
     await page.evaluate(() => {
       const w = window as unknown as {
@@ -340,8 +331,7 @@ test.describe("raster cache correctness (Task 13)", () => {
     // child-right (world 2850-2950) sits well outside the initial viewport +
     // CULL_MARGIN, so it's culled (renderable=false) at cache time — the
     // frame's baked texture reflects that hole.
-    // eslint-disable-next-line playwright/no-wait-for-timeout -- inherently timing-based: waits out the raster cache's internal QUIET_MS/decision-round timers (see SETTLE_MS/FRESH_PAINT_MS doc comments above)
-    await page.waitForTimeout(SETTLE_MS);
+    await settle(page, SETTLE_MS);
 
     // Pan right so child-right comes into (culling-index) view. `samplePixel`
     // extracts from `sceneRoot` directly — its own child coordinates are
@@ -354,8 +344,7 @@ test.describe("raster cache correctness (Task 13)", () => {
       (window as unknown as { __viewportStore: { getState: () => { setViewportState: (s: { scale: number; x: number; y: number }) => void } } })
         .__viewportStore.getState().setViewportState({ scale: 1, x: -2600, y: 0 });
     });
-    // eslint-disable-next-line playwright/no-wait-for-timeout -- inherently timing-based: waits out the raster cache's internal QUIET_MS/decision-round timers (see SETTLE_MS/FRESH_PAINT_MS doc comments above)
-    await page.waitForTimeout(FRESH_PAINT_MS);
+    await settle(page, FRESH_PAINT_MS);
 
     const revealed = await samplePixel(page, 2900, 60); // child-right's own local center
     expect(isCloseTo(revealed, [255, 0, 0, 255])).toBe(true); // red — not a stale hole (white bg or transparent)

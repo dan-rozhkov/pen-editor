@@ -1,5 +1,7 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { expectEditorMounted } from "./support/editor";
+import { stubModels } from "./support/api";
+import { addEmbedNode, waitForEmbedHitTest, boxPoint } from "./support/embed";
 
 // Live-browser coverage for keyboard navigation across elements INSIDE an
 // embed's shadow DOM (Tab/Shift+Tab across siblings, Enter to descend/edit,
@@ -29,36 +31,18 @@ const EMBED_HTML =
   "<div id='block3' style='height:40px;background:#0ff'>Three text</div>";
 
 async function gotoEditorWithEmbed(page: Page) {
-  await page.route("**/api/models", (route) =>
-    route.fulfill({
-      json: {
-        models: [{ id: "test/smoke-model", label: "Smoke Model", supportsVision: true }],
-        default: "test/smoke-model",
-      },
-    }),
-  );
+  await stubModels(page);
 
   await page.goto("/app");
   await expectEditorMounted(page);
 
-  await page.evaluate(
-    ({ id, html }) => {
-      const w = window as unknown as {
-        __sceneStore: { getState: () => { addNode: (n: unknown) => void } };
-      };
-      w.__sceneStore.getState().addNode({
-        id,
-        type: "embed",
-        name: "Keyboard nav target",
-        x: 500,
-        y: 300,
-        width: 300,
-        height: 200,
-        htmlContent: html,
-      });
-    },
-    { id: EMBED_ID, html: EMBED_HTML },
-  );
+  await addEmbedNode(page, {
+    id: EMBED_ID,
+    name: "Keyboard nav target",
+    width: 300,
+    height: 200,
+    htmlContent: EMBED_HTML,
+  });
 }
 
 /** Select the embed on the canvas — selecting it as the sole node
@@ -71,22 +55,9 @@ async function selectEmbed(page: Page): Promise<Locator> {
   const host = page.locator(`[data-embed-id="${EMBED_ID}"]`);
   await expect(host).toBeVisible();
 
-  const box = await host.boundingBox();
-  if (!box) throw new Error("embed host has no box");
-  const point = { x: box.x + box.width / 2, y: box.y + 10 };
-
-  await page.waitForFunction(
-    ({ point, embedId }) => {
-      const w = window as unknown as {
-        __hitTestScreenPoint?: (x: number, y: number) => string | null;
-      };
-      const canvas = document.querySelector("[data-canvas] canvas");
-      if (!w.__hitTestScreenPoint || !canvas) return false;
-      const rect = canvas.getBoundingClientRect();
-      return w.__hitTestScreenPoint(point.x - rect.left, point.y - rect.top) === embedId;
-    },
-    { point, embedId: EMBED_ID },
-  );
+  const { box, point: center } = await boxPoint(host);
+  const clickPoint = { x: center.x, y: box.y + 10 };
+  await waitForEmbedHitTest(page, clickPoint, EMBED_ID);
 
   await host.click({ force: true, position: { x: box.width / 2, y: 10 } });
 

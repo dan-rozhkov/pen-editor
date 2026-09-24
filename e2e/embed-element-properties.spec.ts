@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { expectEditorMounted } from "./support/editor";
+import { addEmbedNode, waitForEmbedHitTest, boxPoint } from "./support/embed";
 
 const EMBED_ID = "element-properties-fixture";
 const EMBED_HTML = `
@@ -24,45 +25,23 @@ async function addEmbedFixture(
     Boolean((window as unknown as { __sceneStore?: unknown }).__sceneStore),
   );
 
-  await page.evaluate(
-    ({ id, html }) => {
-      const store = (window as unknown as {
-        __sceneStore: { getState: () => { addNode: (node: unknown) => void } };
-      }).__sceneStore;
-      store.getState().addNode({
-        id,
-        type: "embed",
-        name: "Element properties fixture",
-        x: 480,
-        y: 260,
-        width: 320,
-        height: 240,
-        htmlContent: html,
-      });
-    },
-    { id, html },
-  );
+  await addEmbedNode(page, {
+    id,
+    name: "Element properties fixture",
+    x: 480,
+    y: 260,
+    width: 320,
+    height: 240,
+    htmlContent: html,
+  });
 }
 
 async function enterElementPicker(page: Page, id: string = EMBED_ID) {
   const host = page.locator(`[data-embed-id="${id}"]`);
   await expect(host).toBeVisible();
-  const box = await host.boundingBox();
-  if (!box) throw new Error("embed host has no bounding box");
-
-  const point = { x: box.x + box.width / 2, y: box.y + box.height - 20 };
-  await page.waitForFunction(
-    ({ point, id }) => {
-      const w = window as unknown as {
-        __hitTestScreenPoint?: (x: number, y: number) => string | null;
-      };
-      const canvas = document.querySelector("[data-canvas] canvas");
-      if (!w.__hitTestScreenPoint || !canvas) return false;
-      const rect = canvas.getBoundingClientRect();
-      return w.__hitTestScreenPoint(point.x - rect.left, point.y - rect.top) === id;
-    },
-    { point, id },
-  );
+  const { box, point: center } = await boxPoint(host);
+  const point = { x: center.x, y: box.y + box.height - 20 };
+  await waitForEmbedHitTest(page, point, id);
 
   // A single click on the canvas selects the embed, which auto-starts the
   // picker (useEmbedPickerLifecycle) — there is no toggle button any more, so
@@ -88,6 +67,16 @@ function sidebarFor(page: Page) {
   );
 }
 
+/** A named properties-panel section (e.g. "Stroke", "Typography", "Auto
+ * Layout") — the fixed `relative`/`border-b` wrapper every `PropertySection`
+ * renders around its heading, scoped so field lookups don't collide with an
+ * identically-labelled field in a different section. */
+function panelSection(page: Page, heading: string): Locator {
+  return page
+    .getByText(heading, { exact: true })
+    .locator('xpath=ancestor::div[contains(@class, "relative") and contains(@class, "border-b")]');
+}
+
 /**
  * Find the `<input>` for a native `NumberInput`/`SelectInput` field by its
  * visible label text, scoped to `container` — robust to field reordering,
@@ -103,26 +92,38 @@ function numberFieldByLabel(container: Locator, label: string) {
     .locator("input");
 }
 
-/** Read a live property off the fixture's `<div id="fixture-card">`
- * from the current `htmlContent`, the same DOMParser round-trip the rest of
- * this spec uses instead of trusting the panel's own optimistic state. */
+/** Read a live inline style off an element inside the embed's `htmlContent`,
+ * via the same DOMParser round-trip the rest of this spec uses instead of
+ * trusting the panel's own optimistic state. `selector` is any
+ * `querySelector` string (an id, a tag name, ...). */
+function readEmbedElementStyle(
+  page: Page,
+  embedId: string,
+  selector: string,
+  prop: keyof CSSStyleDeclaration,
+): Promise<string | undefined> {
+  return page.evaluate(
+    ({ id, selector, prop }) => {
+      const w = window as unknown as {
+        __sceneStore: { getState: () => { nodesById: Record<string, { htmlContent?: string }> } };
+      };
+      const html = w.__sceneStore.getState().nodesById[id]?.htmlContent ?? "";
+      const el = new DOMParser().parseFromString(html, "text/html").querySelector<HTMLElement>(selector);
+      return el?.style[prop as keyof CSSStyleDeclaration] as string | undefined;
+    },
+    { id: embedId, selector, prop },
+  );
+}
+
+/** `readEmbedElementStyle` scoped to the fixture card by id (this spec's
+ * most common case). */
 function readFixtureCardStyle(
   page: Page,
   prop: "boxSizing" | "borderWidth" | "borderColor" | "borderStyle" | "outline",
   embedId: string = EMBED_ID,
   elementId: string = "fixture-card",
 ): Promise<string | undefined> {
-  return page.evaluate(
-    ({ id, prop, elementId }) => {
-      const w = window as unknown as {
-        __sceneStore: { getState: () => { nodesById: Record<string, { htmlContent?: string }> } };
-      };
-      const html = w.__sceneStore.getState().nodesById[id]?.htmlContent ?? "";
-      const card = new DOMParser().parseFromString(html, "text/html").getElementById(elementId);
-      return card?.style[prop];
-    },
-    { id: embedId, prop, elementId },
-  );
+  return readEmbedElementStyle(page, embedId, `#${elementId}`, prop);
 }
 
 test("picked embed elements use the native inspector field layout", async ({ page }) => {
@@ -147,22 +148,10 @@ test("picked embed elements use the native inspector field layout", async ({ pag
   // refresh after the HTML source of truth changes. Found by its "T" label
   // rather than a positional index — the native Auto Layout section reflows
   // fields (Direction/Wrap, the alignment grid, Gap) ahead of Padding.
-  const autoLayoutSection = page
-    .getByText("Auto Layout", { exact: true })
-    .locator('xpath=ancestor::div[contains(@class, "relative") and contains(@class, "border-b")]');
+  const autoLayoutSection = panelSection(page, "Auto Layout");
   await numberFieldByLabel(autoLayoutSection, "T").fill("24");
   await expect
-    .poll(() =>
-      page.evaluate((id) => {
-        const w = window as unknown as {
-          __sceneStore: { getState: () => { nodesById: Record<string, { htmlContent?: string }> } };
-        };
-        const html = w.__sceneStore.getState().nodesById[id]?.htmlContent ?? "";
-        return new DOMParser()
-          .parseFromString(html, "text/html")
-          .getElementById("fixture-card")?.style.paddingTop;
-      }, EMBED_ID),
-    )
+    .poll(() => readEmbedElementStyle(page, EMBED_ID, "#fixture-card", "paddingTop"))
     .toBe("24px");
   await expect(elementHeader(page, "#fixture-card")).toBeVisible();
 
@@ -174,9 +163,7 @@ test("picked embed elements use the native inspector field layout", async ({ pag
   // `embedElementNode.ts`'s `applyOutlineStroke` doc comment). The control is
   // gone; a stroke edit must still reach `htmlContent`, and must never write
   // an inline `box-sizing` declaration.
-  const strokeSection = page
-    .getByText("Stroke", { exact: true })
-    .locator('xpath=ancestor::div[contains(@class, "relative") and contains(@class, "border-b")]');
+  const strokeSection = panelSection(page, "Stroke");
   await expect(strokeSection.getByText("Align", { exact: true })).toHaveCount(0);
   expect(await readFixtureCardStyle(page, "boxSizing")).not.toBe("border-box");
 
@@ -207,9 +194,7 @@ test("picked embed elements use the native inspector field layout", async ({ pag
   // here (the flex container's Fill section above has no such label), and a
   // real edit must reach `htmlContent` as the `<h2>`'s own `color`, not the
   // container's `background-color` or `border`.
-  const typographySection = page
-    .getByText("Typography", { exact: true })
-    .locator('xpath=ancestor::div[contains(@class, "relative") and contains(@class, "border-b")]');
+  const typographySection = panelSection(page, "Typography");
   await expect(typographySection.getByText("Color", { exact: true })).toBeVisible();
   const textColorInput = typographySection.getByPlaceholder("#000000");
   await expect(textColorInput).toBeVisible();
@@ -217,31 +202,13 @@ test("picked embed elements use the native inspector field layout", async ({ pag
   await textColorInput.blur();
 
   await expect
-    .poll(() =>
-      page.evaluate((id) => {
-        const w = window as unknown as {
-          __sceneStore: { getState: () => { nodesById: Record<string, { htmlContent?: string }> } };
-        };
-        const html = w.__sceneStore.getState().nodesById[id]?.htmlContent ?? "";
-        const heading = new DOMParser().parseFromString(html, "text/html").querySelector("h2");
-        return heading?.style.color;
-      }, EMBED_ID),
-    )
+    .poll(() => readEmbedElementStyle(page, EMBED_ID, "h2", "color"))
     .toBe("rgb(255, 0, 170)");
   // The container's own background/border must be untouched by the h2's
   // text-color edit — same invariant `embedElementNode.test.ts`'s
   // "background fill vs. text color" describe block pins at the unit level.
   await expect
-    .poll(() =>
-      page.evaluate((id) => {
-        const w = window as unknown as {
-          __sceneStore: { getState: () => { nodesById: Record<string, { htmlContent?: string }> } };
-        };
-        const html = w.__sceneStore.getState().nodesById[id]?.htmlContent ?? "";
-        const card = new DOMParser().parseFromString(html, "text/html").getElementById("fixture-card");
-        return card?.style.backgroundColor;
-      }, EMBED_ID),
-    )
+    .poll(() => readEmbedElementStyle(page, EMBED_ID, "#fixture-card", "backgroundColor"))
     .toBe("rgb(244, 244, 245)");
 });
 
@@ -271,9 +238,7 @@ test("editing a bordered element under a class-authored box-sizing reset never w
   await host.click({ position: { x: 12, y: 12 } });
   await expect(elementHeader(page, "hi")).toBeVisible();
 
-  const strokeSection = page
-    .getByText("Stroke", { exact: true })
-    .locator('xpath=ancestor::div[contains(@class, "relative") and contains(@class, "border-b")]');
+  const strokeSection = panelSection(page, "Stroke");
   await expect(strokeSection.getByText("Align", { exact: true })).toHaveCount(0);
 
   const boxSizing = () =>
@@ -321,9 +286,7 @@ test("editing an outline-sourced stroke resets the live outline instead of paint
   await host.click({ position: { x: 12, y: 12 } });
   await expect(elementHeader(page, "hi")).toBeVisible();
 
-  const strokeSection = page
-    .getByText("Stroke", { exact: true })
-    .locator('xpath=ancestor::div[contains(@class, "relative") and contains(@class, "border-b")]');
+  const strokeSection = panelSection(page, "Stroke");
 
   const strokeWeightInput = numberFieldByLabel(strokeSection, "Weight");
   await strokeWeightInput.fill("6");
@@ -350,9 +313,7 @@ test("removing an outline-sourced stroke actually removes it, and a fresh picker
   await host.click({ position: { x: 12, y: 12 } });
   await expect(elementHeader(page, "hi")).toBeVisible();
 
-  const strokeSection = page
-    .getByText("Stroke", { exact: true })
-    .locator('xpath=ancestor::div[contains(@class, "relative") and contains(@class, "border-b")]');
+  const strokeSection = panelSection(page, "Stroke");
   await strokeSection.getByRole("button", { name: "Remove stroke" }).click();
 
   await expect

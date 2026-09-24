@@ -1,10 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, cleanup, act } from "@testing-library/react";
-import { EmbedLayer } from "../EmbedLayer";
+import { cleanup, act } from "@testing-library/react";
 import { useSceneStore } from "@/store/sceneStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { resetStores } from "@/test/fixtures";
-import type { FlatSceneNode } from "@/types/scene";
+import {
+  seedEmbedNode,
+  embedPointerEvent as pointerEvent,
+  renderEmbedLayerWithCanvas as renderWithCanvas,
+  THREE_SLOT_HTML,
+} from "./embedLayerFixtures";
 
 // Three in-flow, vertically-stacked siblings — same shape the sortable-drag
 // tests in EmbedLayer.elementPicker.test.tsx use, so a drag on one of them
@@ -14,73 +18,22 @@ import type { FlatSceneNode } from "@/types/scene";
 // forward instead — see EmbedLayer.tsx's `handlePointerDown`, the
 // `isCurrentSelection` gate right above the sortable-drag branch.
 function seedEmbed(): void {
-  useSceneStore.setState({
-    nodesById: {
-      e1: {
-        id: "e1",
-        type: "embed",
-        name: "Code",
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 80,
-        htmlContent:
-          "<span></span><div>" +
-          '<div data-slot="1">One</div>' +
-          '<div data-slot="2">Two</div>' +
-          '<div data-slot="3">Three</div>' +
-          "</div>",
-      } as unknown as FlatSceneNode,
-    },
-    parentById: { e1: null },
-    childrenById: {},
-    rootIds: ["e1"],
-    _cachedTree: null,
-  });
+  seedEmbedNode(THREE_SLOT_HTML);
 }
 
-function pointerEvent(
-  type: string,
-  init: {
-    clientX: number;
-    clientY: number;
-    pointerId?: number;
-    button?: number;
-    isPrimary?: boolean;
-  },
-): PointerEvent {
-  return new PointerEvent(type, {
-    bubbles: true,
-    composed: true,
-    cancelable: true,
-    pointerId: 1,
-    button: 0,
-    isPrimary: true,
-    ...init,
-  });
-}
-
-/** Sets up the same `[data-canvas] > canvas` DOM shape production code
- * expects (see `EmbedLayer.tsx`'s `findPixiCanvas`) and renders `EmbedLayer`
- * inside it, mirroring the "forwards a wheel event" test in
- * EmbedLayer.elementPicker.test.tsx. Returns everything a test needs plus a
- * `cleanupCanvas` to remove the extra DOM the default `cleanup()` from
- * testing-library doesn't own. */
-function renderWithCanvas() {
-  const dataCanvas = document.createElement("div");
-  dataCanvas.setAttribute("data-canvas", "");
-  document.body.appendChild(dataCanvas);
-  const canvas = document.createElement("canvas");
-  dataCanvas.appendChild(canvas);
-  const mountPoint = document.createElement("div");
-  dataCanvas.appendChild(mountPoint);
-
-  const { container } = render(<EmbedLayer />, { container: mountPoint });
-  return {
-    container,
-    canvas,
-    cleanupCanvas: () => dataCanvas.remove(),
-  };
+/** `renderWithCanvas()` plus starting picking on the seeded embed and
+ * resolving its live host — the setup nearly every test in this file needs
+ * before it can look up an item/span inside the shadow tree. */
+function renderPickingCanvas(): {
+  container: HTMLElement;
+  canvas: HTMLCanvasElement;
+  cleanupCanvas: () => void;
+  host: HTMLElement;
+} {
+  const rendered = renderWithCanvas();
+  act(() => useEmbedPickerStore.getState().startPicking("e1"));
+  const host = rendered.container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+  return { ...rendered, host };
 }
 
 /** Runs `cleanup()` and then flushes a real macrotask, so the module-level
@@ -104,11 +57,8 @@ describe("<EmbedLayer /> element picker — node-move forward", () => {
   afterEach(flushAndCleanup);
 
   it("a drag on an element that is NOT the picker's current selection forwards pointerdown/move/up to the Pixi canvas instead of reordering", () => {
-    const { container, canvas, cleanupCanvas } = renderWithCanvas();
+    const { canvas, cleanupCanvas, host } = renderPickingCanvas();
     try {
-      act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-      const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
       const item2 = host.shadowRoot!.querySelector('[data-slot="2"]')!;
 
       const forwarded: PointerEvent[] = [];
@@ -150,11 +100,8 @@ describe("<EmbedLayer /> element picker — node-move forward", () => {
   });
 
   it("a small move on a not-yet-selected element never forwards anything — it is still just a click", () => {
-    const { container, canvas, cleanupCanvas } = renderWithCanvas();
+    const { canvas, cleanupCanvas, host } = renderPickingCanvas();
     try {
-      act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-      const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
       const item2 = host.shadowRoot!.querySelector('[data-slot="2"]')!;
 
       const onCanvasPointerDown = vi.fn();
@@ -179,11 +126,8 @@ describe("<EmbedLayer /> element picker — node-move forward", () => {
   });
 
   it("clicking a not-yet-selected element still selects it (rule 1 is unaffected by the node-move gate)", () => {
-    const { container, cleanupCanvas } = renderWithCanvas();
+    const { cleanupCanvas, host } = renderPickingCanvas();
     try {
-      act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-      const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
       const item3 = host.shadowRoot!.querySelector('[data-slot="3"]')!;
 
       act(() => {
@@ -201,11 +145,8 @@ describe("<EmbedLayer /> element picker — node-move forward", () => {
   });
 
   it("a self-healed stray node-drag forward tells the canvas via a pointercancel, and does not leave the next gesture confused", () => {
-    const { container, canvas, cleanupCanvas } = renderWithCanvas();
+    const { canvas, cleanupCanvas, host } = renderPickingCanvas();
     try {
-      act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-      const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
       const item2 = host.shadowRoot!.querySelector('[data-slot="2"]')!;
       const item3 = host.shadowRoot!.querySelector('[data-slot="3"]')!;
 
@@ -233,11 +174,8 @@ describe("<EmbedLayer /> element picker — node-move forward", () => {
   });
 
   it("a started forward survives stopPicking() (e.g. the forwarded pointerdown itself moved selection elsewhere) and still delivers pointerup to the canvas (Finding 4)", () => {
-    const { container, canvas, cleanupCanvas } = renderWithCanvas();
+    const { canvas, cleanupCanvas, host } = renderPickingCanvas();
     try {
-      act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-      const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
       const item2 = host.shadowRoot!.querySelector('[data-slot="2"]')!;
 
       const forwarded: PointerEvent[] = [];
@@ -297,11 +235,8 @@ describe("<EmbedLayer /> element picker — trailing click after a node-drag for
   // is a real microtask checkpoint, standing in for the one the browser's own
   // event pipeline inserts between pointerup and the trailing click.
   it("still suppresses the trailing click after a microtask checkpoint has elapsed", async () => {
-    const { container, canvas, cleanupCanvas } = renderWithCanvas();
+    const { canvas, cleanupCanvas, host } = renderPickingCanvas();
     try {
-      act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-      const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
       const item2 = host.shadowRoot!.querySelector('[data-slot="2"]')!;
       const selectSpy = vi.spyOn(useEmbedPickerStore.getState(), "selectElement");
 
@@ -332,11 +267,8 @@ describe("<EmbedLayer /> element picker — trailing click after a node-drag for
   });
 
   it("still clears itself (does not suppress a later, unrelated click) when no trailing click ever arrives", async () => {
-    const { container, canvas, cleanupCanvas } = renderWithCanvas();
+    const { canvas, cleanupCanvas, host } = renderPickingCanvas();
     try {
-      act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-      const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
       const item2 = host.shadowRoot!.querySelector('[data-slot="2"]')!;
       const item3 = host.shadowRoot!.querySelector('[data-slot="3"]')!;
 
@@ -368,27 +300,11 @@ describe("<EmbedLayer /> element picker — trailing click after a node-drag for
 
 describe("<EmbedLayer /> element picker — handleClick always consumes the node-drag-forward suppress flag (Finding 6)", () => {
   function seedEmbedWithTextLeaf(): void {
-    useSceneStore.setState({
-      nodesById: {
-        e1: {
-          id: "e1",
-          type: "embed",
-          name: "Code",
-          x: 0,
-          y: 0,
-          width: 100,
-          height: 80,
-          htmlContent:
-            '<div><span id="txt">Hello</span>' +
-            '<div data-slot="2">Two</div>' +
-            '<div data-slot="3">Three</div></div>',
-        } as unknown as FlatSceneNode,
-      },
-      parentById: { e1: null },
-      childrenById: {},
-      rootIds: ["e1"],
-      _cachedTree: null,
-    });
+    seedEmbedNode(
+      '<div><span id="txt">Hello</span>' +
+        '<div data-slot="2">Two</div>' +
+        '<div data-slot="3">Three</div></div>',
+    );
   }
 
   beforeEach(() => {
@@ -405,11 +321,8 @@ describe("<EmbedLayer /> element picker — handleClick always consumes the node
   // the module-level flag stuck pending, ready to wrongly suppress whatever
   // click read it next — even one on a wholly unrelated embed.
   it("clicking the actively-edited element still consumes a pending suppress flag, so the NEXT unrelated click is not wrongly swallowed", () => {
-    const { container, cleanupCanvas } = renderWithCanvas();
+    const { cleanupCanvas, host } = renderPickingCanvas();
     try {
-      act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-      const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
       const span = host.shadowRoot!.querySelector("#txt")!;
       const item2 = host.shadowRoot!.querySelector('[data-slot="2"]')!;
       const item3 = host.shadowRoot!.querySelector('[data-slot="3"]')!;
@@ -469,33 +382,13 @@ describe("<EmbedLayer /> element picker — handleClick always consumes the node
 describe("<EmbedLayer /> element picker — node-move forward is gated during inline text edit", () => {
   beforeEach(() => {
     resetStores();
-    useSceneStore.setState({
-      nodesById: {
-        e1: {
-          id: "e1",
-          type: "embed",
-          name: "Code",
-          x: 0,
-          y: 0,
-          width: 100,
-          height: 80,
-          htmlContent: "<div><span>Editable text</span><button id='other'>Other</button></div>",
-        } as unknown as FlatSceneNode,
-      },
-      parentById: { e1: null },
-      childrenById: {},
-      rootIds: ["e1"],
-      _cachedTree: null,
-    });
+    seedEmbedNode("<div><span>Editable text</span><button id='other'>Other</button></div>");
   });
   afterEach(flushAndCleanup);
 
   it("a pointerdown-then-drag INSIDE the element currently being edited never reaches the node-move forward", () => {
-    const { container, canvas, cleanupCanvas } = renderWithCanvas();
+    const { canvas, cleanupCanvas, host } = renderPickingCanvas();
     try {
-      act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-      const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
       const span = host.shadowRoot!.querySelector("span")!;
 
       act(() => {

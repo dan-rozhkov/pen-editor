@@ -7,27 +7,15 @@ import { useEditorModeStore } from "@/store/editorModeStore";
 import { resolveElementPath } from "@/lib/embedElementPicker";
 import { resetStores } from "@/test/fixtures";
 import type { FlatSceneNode } from "@/types/scene";
+import {
+  seedEmbedNode,
+  embedPointerEvent,
+  renderEmbedLayerWithCanvas,
+  THREE_SLOT_HTML,
+} from "./embedLayerFixtures";
 
 function seedEmbed(htmlContent = "<div><button id='cta'>Buy</button></div>"): void {
-  useSceneStore.setState({
-    nodesById: {
-      e1: {
-        id: "e1",
-        type: "embed",
-        name: "Code",
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 80,
-        htmlContent,
-      } as unknown as FlatSceneNode,
-    },
-    parentById: { e1: null },
-    childrenById: {},
-    rootIds: ["e1"],
-
-    _cachedTree: null,
-  });
+  seedEmbedNode(htmlContent);
 }
 
 describe("<EmbedLayer /> element picker interaction", () => {
@@ -207,20 +195,8 @@ describe("<EmbedLayer /> element picker interaction", () => {
       });
     }
 
-    function renderWithCanvas() {
-      const dataCanvas = document.createElement("div");
-      dataCanvas.setAttribute("data-canvas", "");
-      document.body.appendChild(dataCanvas);
-      const canvas = document.createElement("canvas");
-      dataCanvas.appendChild(canvas);
-      const mountPoint = document.createElement("div");
-      dataCanvas.appendChild(mountPoint);
-      const { container } = render(<EmbedLayer />, { container: mountPoint });
-      return { container, canvas, cleanupCanvas: () => dataCanvas.remove() };
-    }
-
     it("forwards a two-finger touchstart to the Pixi canvas instead of letting the picker treat it as a tap", () => {
-      const { container, canvas, cleanupCanvas } = renderWithCanvas();
+      const { container, canvas, cleanupCanvas } = renderEmbedLayerWithCanvas();
       try {
         act(() => useEmbedPickerStore.getState().startPicking("e1"));
         const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
@@ -244,7 +220,7 @@ describe("<EmbedLayer /> element picker interaction", () => {
     });
 
     it("never forwards a single-finger touch — that stays the picker's own tap-to-select", () => {
-      const { container, canvas, cleanupCanvas } = renderWithCanvas();
+      const { container, canvas, cleanupCanvas } = renderEmbedLayerWithCanvas();
       try {
         act(() => useEmbedPickerStore.getState().startPicking("e1"));
         const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
@@ -264,7 +240,7 @@ describe("<EmbedLayer /> element picker interaction", () => {
     });
 
     it("keeps forwarding touchmove/touchend through to the end of a gesture that started multitouch, even after a finger lifts and the count drops below 2", () => {
-      const { container, canvas, cleanupCanvas } = renderWithCanvas();
+      const { container, canvas, cleanupCanvas } = renderEmbedLayerWithCanvas();
       try {
         act(() => useEmbedPickerStore.getState().startPicking("e1"));
         const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
@@ -311,23 +287,15 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
   // constant across a reorder — see buildElementPath's doc comment — which
   // would defeat the assertions below that the selection's path is updated
   // after a reorder). `data-slot` is only an anchor for `stubItemRects`.
+  // THREE_SLOT_HTML's leading sacrificial `<span></span>` absorbs
+  // `sanitizeEmbedHtml`'s DOMPurify pass mangling the fragment's FIRST
+  // top-level node under happy-dom (see that module's own doc comment), so
+  // the real (div-only) wrapper below it survives sanitization intact and
+  // every div still lines up 1:1 with the RAW `htmlContent` string the
+  // reorder is applied against — a real browser's DOMPurify never does this,
+  // so production HTML needs no such padding.
   function seedSortableEmbed(): void {
-    seedEmbed(
-      // Leading sacrificial `<span></span>`: `sanitizeEmbedHtml`'s
-      // DOMPurify pass is documented (see that module's file doc comment)
-      // to mangle the DOM under happy-dom, and it specifically eats the
-      // FIRST top-level node of the fragment. A throwaway, differently-
-      // tagged first node absorbs that, so the real (div-only) wrapper
-      // below it survives sanitization intact and every div still lines up
-      // 1:1 with the RAW `htmlContent` string the reorder is applied
-      // against — a real browser's DOMPurify never does this, so
-      // production HTML needs no such padding.
-      "<span></span><div>" +
-        '<div data-slot="1">One</div>' +
-        '<div data-slot="2">Two</div>' +
-        '<div data-slot="3">Three</div>' +
-        "</div>",
-    );
+    seedEmbed(THREE_SLOT_HTML);
   }
 
   /** happy-dom never runs layout, so `getBoundingClientRect` reads back all
@@ -383,27 +351,6 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     return spy;
   }
 
-  function pointerEvent(
-    type: string,
-    init: {
-      clientX: number;
-      clientY: number;
-      pointerId?: number;
-      button?: number;
-      isPrimary?: boolean;
-    },
-  ): PointerEvent {
-    return new PointerEvent(type, {
-      bubbles: true,
-      composed: true,
-      cancelable: true,
-      pointerId: 1,
-      button: 0,
-      isPrimary: true,
-      ...init,
-    });
-  }
-
   function itemsOf(host: HTMLElement): { item1: Element; item2: Element; item3: Element } {
     const root = host.shadowRoot!;
     return {
@@ -411,6 +358,25 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
       item2: root.querySelector('[data-slot="2"]')!,
       item3: root.querySelector('[data-slot="3"]')!,
     };
+  }
+
+  /** Renders `<EmbedLayer />`, starts picking, resolves the three sortable
+   * items, and spies on `updateNode` — the setup nearly every reorder test
+   * below needs before it can drag one of the three items. */
+  function renderPickingItems(): {
+    container: HTMLElement;
+    host: HTMLElement;
+    item1: Element;
+    item2: Element;
+    item3: Element;
+    updateNodeSpy: ReturnType<typeof spyOnUpdateNode>;
+  } {
+    const { container } = render(<EmbedLayer />);
+    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const { item1, item2, item3 } = itemsOf(host);
+    const updateNodeSpy = spyOnUpdateNode();
+    return { container, host, item1, item2, item3, updateNodeSpy };
   }
 
   /** Makes `el` the picker's current selection via a real click, exactly the
@@ -434,9 +400,9 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     const { item2 } = itemsOf(host);
 
     act(() => {
-      item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
-      window.dispatchEvent(pointerEvent("pointermove", { clientX: 11, clientY: 31 }));
-      window.dispatchEvent(pointerEvent("pointerup", { clientX: 11, clientY: 31 }));
+      item2.dispatchEvent(embedPointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
+      window.dispatchEvent(embedPointerEvent("pointermove", { clientX: 11, clientY: 31 }));
+      window.dispatchEvent(embedPointerEvent("pointerup", { clientX: 11, clientY: 31 }));
       // The browser still fires a click after a same-element mousedown/up.
       item2.dispatchEvent(
         new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
@@ -451,26 +417,21 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
   });
 
   it("a drag past the threshold to the last slot commits one reorder, keeps the element selected with an updated path, and shows/clears the drop indicator", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const { item2 } = itemsOf(host);
-    const updateNodeSpy = spyOnUpdateNode();
+    const { container, item2, updateNodeSpy } = renderPickingItems();
 
     act(() => selectItem(item2));
     act(() => {
-      item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
+      item2.dispatchEvent(embedPointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
       // Past DRAG_THRESHOLD_PX, and nearest (by the stubbed rects above) to
       // the trailing slot (y=60: after item3, i.e. the list's new end).
-      window.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 80 }));
+      window.dispatchEvent(embedPointerEvent("pointermove", { clientX: 10, clientY: 80 }));
     });
 
     // The indicator is showing the trailing slot while the drag is live.
     expect(useEmbedPickerStore.getState().dropIndicator).not.toBeNull();
 
     act(() => {
-      window.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 80 }));
+      window.dispatchEvent(embedPointerEvent("pointerup", { clientX: 10, clientY: 80 }));
       // Browser fires a trailing click after pointerup on the same element —
       // it must be suppressed, not re-run selection/commit logic.
       item2.dispatchEvent(
@@ -498,20 +459,15 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
   });
 
   it("dropping on the element's own current slot is a no-op — nothing is committed", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const { item2 } = itemsOf(host);
-    const updateNodeSpy = spyOnUpdateNode();
+    const { item2, updateNodeSpy } = renderPickingItems();
 
     act(() => selectItem(item2));
     act(() => {
-      item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 20 }));
+      item2.dispatchEvent(embedPointerEvent("pointerdown", { clientX: 10, clientY: 20 }));
       // y=30 is nearest the slot between item1 and item3 — item2's own
       // current position.
-      window.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 30 }));
-      window.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 30 }));
+      window.dispatchEvent(embedPointerEvent("pointermove", { clientX: 10, clientY: 30 }));
+      window.dispatchEvent(embedPointerEvent("pointerup", { clientX: 10, clientY: 30 }));
     });
 
     expect(updateNodeSpy).not.toHaveBeenCalled();
@@ -542,9 +498,9 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     act(() => selectItem(item4));
 
     act(() => {
-      item4.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
-      window.dispatchEvent(pointerEvent("pointermove", { clientX: 20, clientY: 20 }));
-      window.dispatchEvent(pointerEvent("pointerup", { clientX: 20, clientY: 20 }));
+      item4.dispatchEvent(embedPointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+      window.dispatchEvent(embedPointerEvent("pointermove", { clientX: 20, clientY: 20 }));
+      window.dispatchEvent(embedPointerEvent("pointerup", { clientX: 20, clientY: 20 }));
     });
 
     expect(useEmbedPickerStore.getState().cancelElementDrag).toBeNull();
@@ -553,17 +509,12 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
   });
 
   it("Escape during a drag reverts the live element, clears the indicator, and never commits", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const { item2 } = itemsOf(host);
-    const updateNodeSpy = spyOnUpdateNode();
+    const { item2, updateNodeSpy } = renderPickingItems();
 
     act(() => selectItem(item2));
     act(() => {
-      item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
-      window.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 80 }));
+      item2.dispatchEvent(embedPointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
+      window.dispatchEvent(embedPointerEvent("pointermove", { clientX: 10, clientY: 80 }));
       // Escape reaches the drag through the canceller the gesture
       // registered in the picker store — see keyboardCommands.ts's Escape
       // branch, and `keyboardCommands.embedElementSortable.test.ts` for the
@@ -584,18 +535,13 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
   // `click` never reaches it, so the flag stayed stuck `true` and ate the
   // next real click. `handlePointerDown` must clear it unconditionally too.
   it("self-heals a stuck suppressNextClick on the next pointerdown, even if the drag-ending click never reached the host", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const { item2 } = itemsOf(host);
-    const updateNodeSpy = spyOnUpdateNode();
+    const { container, item2, updateNodeSpy } = renderPickingItems();
 
     act(() => selectItem(item2));
     act(() => {
-      item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
-      window.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 80 }));
-      window.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 80 }));
+      item2.dispatchEvent(embedPointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
+      window.dispatchEvent(embedPointerEvent("pointermove", { clientX: 10, clientY: 80 }));
+      window.dispatchEvent(embedPointerEvent("pointerup", { clientX: 10, clientY: 80 }));
       // No trailing click dispatched — as if mouseup landed outside the host.
     });
     expect(updateNodeSpy).toHaveBeenCalledTimes(1);
@@ -614,8 +560,8 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     // normally — if suppressNextClick were still stuck true, this click
     // would be silently swallowed instead of running selection.
     act(() => {
-      item1Again.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
-      window.dispatchEvent(pointerEvent("pointerup", { clientX: 0, clientY: 0 }));
+      item1Again.dispatchEvent(embedPointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+      window.dispatchEvent(embedPointerEvent("pointerup", { clientX: 0, clientY: 0 }));
       item1Again.dispatchEvent(
         new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
       );
@@ -634,31 +580,26 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
   // gesture's half of that contract: the canceller exists exactly while a
   // real drag is in flight.
   it("publishes a drag canceller only once the drag crosses the threshold, and clears it on drag end", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const { item2 } = itemsOf(host);
-    spyOnUpdateNode();
+    const { item2 } = renderPickingItems();
 
     act(() => selectItem(item2));
     expect(useEmbedPickerStore.getState().cancelElementDrag).toBeNull();
 
     act(() => {
-      item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
+      item2.dispatchEvent(embedPointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
       // Below the 3px threshold: still just a click, so Escape must keep
       // its normal meaning (exit the picker), not cancel a "drag".
-      window.dispatchEvent(pointerEvent("pointermove", { clientX: 11, clientY: 31 }));
+      window.dispatchEvent(embedPointerEvent("pointermove", { clientX: 11, clientY: 31 }));
     });
     expect(useEmbedPickerStore.getState().cancelElementDrag).toBeNull();
 
     act(() => {
-      window.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 80 }));
+      window.dispatchEvent(embedPointerEvent("pointermove", { clientX: 10, clientY: 80 }));
     });
     expect(useEmbedPickerStore.getState().cancelElementDrag).toBeTypeOf("function");
 
     act(() => {
-      window.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 80 }));
+      window.dispatchEvent(embedPointerEvent("pointerup", { clientX: 10, clientY: 80 }));
     });
     expect(useEmbedPickerStore.getState().cancelElementDrag).toBeNull();
   });
@@ -687,42 +628,16 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
   // contact) may start a drag — a right/middle-click drag has no visible
   // warning (contextmenu is swallowed too) besides the element silently
   // ending up moved.
-  it("ignores a right-click drag (non-primary button)", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const { item2 } = itemsOf(host);
-    const updateNodeSpy = spyOnUpdateNode();
+  it.each([
+    { name: "a right-click drag (non-primary button)", override: { button: 2 } },
+    { name: "a non-primary-pointer drag (isPrimary false)", override: { isPrimary: false } },
+  ])("ignores $name", ({ override }) => {
+    const { item2, updateNodeSpy } = renderPickingItems();
 
     act(() => {
-      item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 30, button: 2 }));
-      window.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 80, button: 2 }));
-      window.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 80, button: 2 }));
-    });
-
-    expect(updateNodeSpy).not.toHaveBeenCalled();
-    expect((item2 as HTMLElement).getAttribute("style")).toBeNull();
-  });
-
-  it("ignores a non-primary-pointer drag (isPrimary false)", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const { item2 } = itemsOf(host);
-    const updateNodeSpy = spyOnUpdateNode();
-
-    act(() => {
-      item2.dispatchEvent(
-        pointerEvent("pointerdown", { clientX: 10, clientY: 30, isPrimary: false }),
-      );
-      window.dispatchEvent(
-        pointerEvent("pointermove", { clientX: 10, clientY: 80, isPrimary: false }),
-      );
-      window.dispatchEvent(
-        pointerEvent("pointerup", { clientX: 10, clientY: 80, isPrimary: false }),
-      );
+      item2.dispatchEvent(embedPointerEvent("pointerdown", { clientX: 10, clientY: 30, ...override }));
+      window.dispatchEvent(embedPointerEvent("pointermove", { clientX: 10, clientY: 80, ...override }));
+      window.dispatchEvent(embedPointerEvent("pointerup", { clientX: 10, clientY: 80, ...override }));
     });
 
     expect(updateNodeSpy).not.toHaveBeenCalled();
@@ -733,25 +648,20 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
   // flight must never steer or end THAT drag — only its own `pointerId`
   // may.
   it("ignores pointermove/pointerup from a different pointerId than the one that started the drag", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const { item2 } = itemsOf(host);
-    const updateNodeSpy = spyOnUpdateNode();
+    const { item2, updateNodeSpy } = renderPickingItems();
 
     act(() => selectItem(item2));
     act(() => {
       item2.dispatchEvent(
-        pointerEvent("pointerdown", { clientX: 10, clientY: 30, pointerId: 1 }),
+        embedPointerEvent("pointerdown", { clientX: 10, clientY: 30, pointerId: 1 }),
       );
       // A second pointer moving far away must not steer or end pointer 1's
       // drag.
       window.dispatchEvent(
-        pointerEvent("pointermove", { clientX: 90, clientY: 90, pointerId: 2 }),
+        embedPointerEvent("pointermove", { clientX: 90, clientY: 90, pointerId: 2 }),
       );
       window.dispatchEvent(
-        pointerEvent("pointerup", { clientX: 90, clientY: 90, pointerId: 2 }),
+        embedPointerEvent("pointerup", { clientX: 90, clientY: 90, pointerId: 2 }),
       );
     });
     expect((item2 as HTMLElement).getAttribute("style")).toBeNull(); // never moved by the wrong pointer
@@ -759,9 +669,9 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
 
     act(() => {
       window.dispatchEvent(
-        pointerEvent("pointermove", { clientX: 10, clientY: 80, pointerId: 1 }),
+        embedPointerEvent("pointermove", { clientX: 10, clientY: 80, pointerId: 1 }),
       );
-      window.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 80, pointerId: 1 }));
+      window.dispatchEvent(embedPointerEvent("pointerup", { clientX: 10, clientY: 80, pointerId: 1 }));
     });
 
     expect(updateNodeSpy).toHaveBeenCalledTimes(1);
@@ -774,12 +684,7 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
   // — a picker drag must never be able to write to the scene outside edit
   // mode.
   it("does not commit a drag outside edit mode, and reverts the live element", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const { item2 } = itemsOf(host);
-    const updateNodeSpy = spyOnUpdateNode();
+    const { item2, updateNodeSpy } = renderPickingItems();
 
     // Select it (via a plain click, unaffected by `canEditScene`) BEFORE
     // switching to view mode, so the pointerdown below still takes the
@@ -789,9 +694,9 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     act(() => useEditorModeStore.setState({ mode: "view" }));
     try {
       act(() => {
-        item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
-        window.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 80 }));
-        window.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 80 }));
+        item2.dispatchEvent(embedPointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
+        window.dispatchEvent(embedPointerEvent("pointermove", { clientX: 10, clientY: 80 }));
+        window.dispatchEvent(embedPointerEvent("pointerup", { clientX: 10, clientY: 80 }));
       });
 
       expect(updateNodeSpy).not.toHaveBeenCalled();
@@ -818,8 +723,8 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
 
     act(() => selectItem(item2));
     act(() => {
-      item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
-      window.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 80 }));
+      item2.dispatchEvent(embedPointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
+      window.dispatchEvent(embedPointerEvent("pointermove", { clientX: 10, clientY: 80 }));
       // pointerup/pointercancel never arrives.
     });
     expect((item2 as HTMLElement).style.transform).not.toBe(""); // visually dragged
@@ -831,7 +736,7 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     // IT, for the same reason as item2 above.
     act(() => selectItem(item3));
     act(() => {
-      item3.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 50 }));
+      item3.dispatchEvent(embedPointerEvent("pointerdown", { clientX: 10, clientY: 50 }));
     });
 
     // The abandoned item2 drag was cleaned up and reverted before the new
@@ -839,8 +744,8 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     expect((item2 as HTMLElement).getAttribute("style")).toBeNull();
 
     act(() => {
-      window.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 0 }));
-      window.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 0 }));
+      window.dispatchEvent(embedPointerEvent("pointermove", { clientX: 10, clientY: 0 }));
+      window.dispatchEvent(embedPointerEvent("pointerup", { clientX: 10, clientY: 0 }));
     });
 
     expect(updateNodeSpy).toHaveBeenCalledTimes(1);
@@ -868,11 +773,11 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     act(() => {
       // pointerdown well above the cursor's landing spot, so the first move
       // below clears DRAG_THRESHOLD_PX (3px).
-      item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
+      item2.dispatchEvent(embedPointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
       // Past the threshold. With the ORIGINAL rects (item1: 0-20, item3:
       // 40-60), y=32 is nearest the slot between item1 and item3 (indicator
       // centered at y=30) — item2's own current slot.
-      window.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 32 }));
+      window.dispatchEvent(embedPointerEvent("pointermove", { clientX: 10, clientY: 32 }));
     });
 
     const indicatorAtStart = useEmbedPickerStore.getState().dropIndicator;
@@ -913,7 +818,7 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
       // nearest slot (by the FRESH rects) is the one before item1
       // (indicator centered at item1's top edge, y=0) — a stale, cached
       // slot list would still report the old y≈29 indicator instead.
-      window.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 32 }));
+      window.dispatchEvent(embedPointerEvent("pointermove", { clientX: 10, clientY: 32 }));
     });
 
     const indicatorAfterReflow = useEmbedPickerStore.getState().dropIndicator;
@@ -921,7 +826,7 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     expect(indicatorAfterReflow?.top).not.toBeCloseTo(indicatorAtStart!.top, 0);
 
     act(() => {
-      window.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 32 }));
+      window.dispatchEvent(embedPointerEvent("pointerup", { clientX: 10, clientY: 32 }));
     });
   });
 
@@ -946,9 +851,9 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
 
     act(() => selectItem(item2));
     act(() => {
-      item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
+      item2.dispatchEvent(embedPointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
       // Cross the threshold — this is the moment the stale hover must clear.
-      window.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 80 }));
+      window.dispatchEvent(embedPointerEvent("pointermove", { clientX: 10, clientY: 80 }));
     });
     expect(useEmbedPickerStore.getState().hoveredPath).toBeNull();
 
@@ -956,12 +861,12 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     // `composedPath()[0]` (dispatched at item3's DOM location) resolves to
     // item3 — but must not be treated as a hover while the drag is live.
     act(() => {
-      item3.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 50 }));
+      item3.dispatchEvent(embedPointerEvent("pointermove", { clientX: 10, clientY: 50 }));
     });
     expect(useEmbedPickerStore.getState().hoveredPath).toBeNull();
 
     act(() => {
-      window.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 50 }));
+      window.dispatchEvent(embedPointerEvent("pointerup", { clientX: 10, clientY: 50 }));
     });
   });
 
@@ -1003,8 +908,8 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
 
     act(() => selectItem(item2));
     act(() => {
-      item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
-      window.dispatchEvent(pointerEvent("pointermove", { clientX: 15, clientY: 34 }));
+      item2.dispatchEvent(embedPointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
+      window.dispatchEvent(embedPointerEvent("pointermove", { clientX: 15, clientY: 34 }));
     });
 
     const transform = (item2 as HTMLElement).style.transform;
@@ -1015,7 +920,7 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     expect(transform.indexOf("translate(5px")).toBeLessThan(transform.indexOf("translateX(-50%)"));
 
     act(() => {
-      window.dispatchEvent(pointerEvent("pointerup", { clientX: 15, clientY: 34 }));
+      window.dispatchEvent(embedPointerEvent("pointerup", { clientX: 15, clientY: 34 }));
     });
   });
 
@@ -1033,8 +938,8 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
 
     act(() => selectItem(item2));
     act(() => {
-      item2.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
-      window.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 80 }));
+      item2.dispatchEvent(embedPointerEvent("pointerdown", { clientX: 10, clientY: 30 }));
+      window.dispatchEvent(embedPointerEvent("pointermove", { clientX: 10, clientY: 80 }));
     });
 
     const updateNodeSpy = spyOnUpdateNode();
@@ -1055,8 +960,8 @@ describe("<EmbedLayer /> element picker — drag to reorder", () => {
     expect((item2 as HTMLElement).isConnected).toBe(false); // detached by the shadow remount
 
     act(() => {
-      window.dispatchEvent(pointerEvent("pointermove", { clientX: 40, clientY: 40 }));
-      window.dispatchEvent(pointerEvent("pointerup", { clientX: 40, clientY: 40 }));
+      window.dispatchEvent(embedPointerEvent("pointermove", { clientX: 40, clientY: 40 }));
+      window.dispatchEvent(embedPointerEvent("pointerup", { clientX: 40, clientY: 40 }));
     });
 
     // No second commit from the drag itself.

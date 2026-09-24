@@ -5,36 +5,72 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { resetStores } from "@/test/fixtures";
-import type { FlatSceneNode } from "@/types/scene";
 import { buildElementPath } from "@/lib/embedElementPicker";
+import { seedEmbedNode } from "./embedLayerFixtures";
 
 function seedEmbed(
   htmlContent = "<div><button id='cta'>Buy now</button><p><span>Nested</span><span>Text</span></p></div>",
 ): void {
-  useSceneStore.setState({
-    nodesById: {
-      e1: {
-        id: "e1",
-        type: "embed",
-        name: "Code",
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 80,
-        htmlContent,
-      } as unknown as FlatSceneNode,
-    },
-    parentById: { e1: null },
-    childrenById: {},
-    rootIds: ["e1"],
-    _cachedTree: null,
-  });
+  seedEmbedNode(htmlContent);
 }
 
 function dblclick(el: Element): void {
   el.dispatchEvent(
     new MouseEvent("dblclick", { bubbles: true, composed: true, cancelable: true }),
   );
+}
+
+/** Renders `<EmbedLayer />`, starts picking on the seeded embed, and resolves
+ * the live host/button — the setup nearly every test in this file needs
+ * before it can dblclick into (or otherwise interact with) the button. */
+function renderPicking(): {
+  container: HTMLElement;
+  unmount: () => void;
+  host: HTMLElement;
+  button: HTMLElement;
+} {
+  const { container, unmount } = render(<EmbedLayer />);
+  act(() => useEmbedPickerStore.getState().startPicking("e1"));
+  const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+  const button = host.shadowRoot!.querySelector("button")!;
+  return { container, unmount, host, button };
+}
+
+/** `updateNode` spy, pre-cleared — every commit/no-commit assertion in this
+ * file spies on it fresh right before the interaction under test. */
+function spyOnUpdateNode() {
+  const spy = vi.spyOn(useSceneStore.getState(), "updateNode");
+  spy.mockClear();
+  return spy;
+}
+
+/** `renderPicking()` plus dblclick-to-enter-edit — the common case for tests
+ * that don't need to assert anything about entry itself. */
+function beginButtonEdit(): {
+  container: HTMLElement;
+  unmount: () => void;
+  host: HTMLElement;
+  button: HTMLElement;
+} {
+  const ctx = renderPicking();
+  act(() => dblclick(ctx.button));
+  return ctx;
+}
+
+/** `beginButtonEdit()` plus a pre-cleared `updateNode` spy, ordered so the
+ * spy is attached (and cleared) BEFORE the dblclick that enters edit mode —
+ * matching every commit test's own ordering. */
+function beginButtonEditWithUpdateSpy(): {
+  container: HTMLElement;
+  unmount: () => void;
+  host: HTMLElement;
+  button: HTMLElement;
+  updateSpy: ReturnType<typeof spyOnUpdateNode>;
+} {
+  const ctx = renderPicking();
+  const updateSpy = spyOnUpdateNode();
+  act(() => dblclick(ctx.button));
+  return { ...ctx, updateSpy };
 }
 
 describe("<EmbedLayer /> element picker — dblclick to edit text", () => {
@@ -45,19 +81,12 @@ describe("<EmbedLayer /> element picker — dblclick to edit text", () => {
   afterEach(() => cleanup());
 
   it("hovering an embed while picking (but not yet inside an element) shows an ordinary arrow, not crosshair", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const { host } = renderPicking();
     expect(host.style.cursor).toBe("default");
   });
 
   it("dblclick on a text-leaf element enters edit mode: contenteditable, focus, store state, and selection", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const button = host.shadowRoot!.querySelector("button")!;
+    const { host, button } = renderPicking();
 
     act(() => dblclick(button));
 
@@ -72,10 +101,7 @@ describe("<EmbedLayer /> element picker — dblclick to edit text", () => {
   });
 
   it("dblclick on a non-text-leaf container does nothing — no contenteditable, no editing state", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const { host } = renderPicking();
     const p = host.shadowRoot!.querySelector("p")!; // holds two <span> children with the real text
 
     act(() => dblclick(p));
@@ -87,11 +113,7 @@ describe("<EmbedLayer /> element picker — dblclick to edit text", () => {
   it("does not enter edit mode when the canvas is not editable", () => {
     act(() => useEditorModeStore.setState({ mode: "view" }));
     try {
-      const { container } = render(<EmbedLayer />);
-      act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-      const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-      const button = host.shadowRoot!.querySelector("button")!;
+      const { button } = renderPicking();
 
       act(() => dblclick(button));
 
@@ -105,11 +127,7 @@ describe("<EmbedLayer /> element picker — dblclick to edit text", () => {
   });
 
   it("Enter commits the edited text: noteSelectionEdit lands before updateNode, and contenteditable never reaches htmlContent", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const button = host.shadowRoot!.querySelector("button")!;
+    const { button } = renderPicking();
 
     const calls: string[] = [];
     const realNoteSelectionEdit = useEmbedPickerStore.getState().noteSelectionEdit;
@@ -150,15 +168,8 @@ describe("<EmbedLayer /> element picker — dblclick to edit text", () => {
   });
 
   it("Escape reverts the text and writes nothing to the scene", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+    const { button, updateSpy } = beginButtonEditWithUpdateSpy();
 
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const button = host.shadowRoot!.querySelector("button")!;
-    const updateSpy = vi.spyOn(useSceneStore.getState(), "updateNode");
-    updateSpy.mockClear();
-
-    act(() => dblclick(button));
     act(() => {
       button.textContent = "Something else entirely";
       button.dispatchEvent(
@@ -175,15 +186,8 @@ describe("<EmbedLayer /> element picker — dblclick to edit text", () => {
   });
 
   it("blur commits the edit, same as Enter", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+    const { button, updateSpy } = beginButtonEditWithUpdateSpy();
 
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const button = host.shadowRoot!.querySelector("button")!;
-    const updateSpy = vi.spyOn(useSceneStore.getState(), "updateNode");
-    updateSpy.mockClear();
-
-    act(() => dblclick(button));
     act(() => {
       button.textContent = "Buy soon";
       button.dispatchEvent(new FocusEvent("blur"));
@@ -196,15 +200,8 @@ describe("<EmbedLayer /> element picker — dblclick to edit text", () => {
   });
 
   it("commit is a no-op write-wise when the text didn't actually change", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+    const { button, updateSpy } = beginButtonEditWithUpdateSpy();
 
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const button = host.shadowRoot!.querySelector("button")!;
-    const updateSpy = vi.spyOn(useSceneStore.getState(), "updateNode");
-    updateSpy.mockClear();
-
-    act(() => dblclick(button));
     act(() => {
       button.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
@@ -218,15 +215,7 @@ describe("<EmbedLayer /> element picker — dblclick to edit text", () => {
   });
 
   it("abandons the commit (writes nothing) when htmlContent changed elsewhere mid-edit", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const button = host.shadowRoot!.querySelector("button")!;
-    const updateSpy = vi.spyOn(useSceneStore.getState(), "updateNode");
-    updateSpy.mockClear();
-
-    act(() => dblclick(button));
+    const { button, updateSpy } = beginButtonEditWithUpdateSpy();
 
     // Simulate a concurrent edit_embed_html/batch_design mutation landing
     // while the user is still typing.
@@ -250,16 +239,9 @@ describe("<EmbedLayer /> element picker — dblclick to edit text", () => {
   });
 
   it("pointerdown on a different element inside the embed commits the in-flight edit first", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const button = host.shadowRoot!.querySelector("button")!;
+    const { host, button, updateSpy } = beginButtonEditWithUpdateSpy();
     const otherSpan = host.shadowRoot!.querySelectorAll("span")[0];
-    const updateSpy = vi.spyOn(useSceneStore.getState(), "updateNode");
-    updateSpy.mockClear();
 
-    act(() => dblclick(button));
     act(() => {
       button.textContent = "Buy today";
       otherSpan.dispatchEvent(
@@ -287,15 +269,7 @@ describe("<EmbedLayer /> element picker — dblclick to edit text", () => {
     // before any cleanup runs, so `e.el.isConnected` is false and the
     // staleness guard correctly abandons the write instead — the same
     // guard this test exercises the opposite (successful) side of.
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const button = host.shadowRoot!.querySelector("button")!;
-    const updateSpy = vi.spyOn(useSceneStore.getState(), "updateNode");
-    updateSpy.mockClear();
-
-    act(() => dblclick(button));
+    const { button, updateSpy } = beginButtonEditWithUpdateSpy();
     act(() => {
       button.textContent = "Buy while stock lasts";
     });
@@ -310,15 +284,7 @@ describe("<EmbedLayer /> element picker — dblclick to edit text", () => {
   });
 
   it("a full component unmount mid-edit does not throw and does not write — the element is already disconnected by the time cleanup runs", () => {
-    const { container, unmount } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const button = host.shadowRoot!.querySelector("button")!;
-    const updateSpy = vi.spyOn(useSceneStore.getState(), "updateNode");
-    updateSpy.mockClear();
-
-    act(() => dblclick(button));
+    const { unmount, button, updateSpy } = beginButtonEditWithUpdateSpy();
     act(() => {
       button.textContent = "Buy while stock lasts";
     });
@@ -330,13 +296,7 @@ describe("<EmbedLayer /> element picker — dblclick to edit text", () => {
   });
 
   it("does not advertise contenteditable in the selection snapshot taken on entry (Finding 7)", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const button = host.shadowRoot!.querySelector("button")!;
-
-    act(() => dblclick(button));
+    beginButtonEdit();
 
     // The element IS contenteditable live (see the first test above) — but
     // the snapshot handed to the properties panel / agent must describe it
@@ -357,15 +317,8 @@ describe("<EmbedLayer /> element picker — dblclick to edit text preserves stru
   afterEach(() => cleanup());
 
   it("committing a text edit on an icon-plus-text button leaves the icon child intact", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+    const { button, updateSpy } = beginButtonEditWithUpdateSpy();
 
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const button = host.shadowRoot!.querySelector("button")!;
-    const updateSpy = vi.spyOn(useSceneStore.getState(), "updateNode");
-    updateSpy.mockClear();
-
-    act(() => dblclick(button));
     act(() => {
       // Simulate `plaintext-only` typing: only the trailing text node
       // changes — a real contenteditable never lets the user delete the
@@ -389,14 +342,9 @@ describe("<EmbedLayer /> element picker — dblclick to edit text preserves stru
   });
 
   it("Escape reverts an icon-plus-text button to its exact original markup, icon included", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const button = host.shadowRoot!.querySelector("button")!;
+    const { button } = beginButtonEdit();
     const originalInnerHtml = button.innerHTML;
 
-    act(() => dblclick(button));
     act(() => {
       const textNode = Array.from(button.childNodes).find(
         (n) => n.nodeType === Node.TEXT_NODE,
@@ -471,13 +419,7 @@ describe("<EmbedLayer /> element picker — text selection is cleared on exit, n
   }
 
   it("Escape clears a selection left inside the edited element", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const button = host.shadowRoot!.querySelector("button")!;
-
-    act(() => dblclick(button));
+    const { button } = beginButtonEdit();
     const removeAllRanges = stubSelectionInside(button);
 
     act(() => {
@@ -510,13 +452,7 @@ describe("<EmbedLayer /> element picker — text selection is cleared on exit, n
   });
 
   it("does not touch a selection that lives outside the edited element", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const button = host.shadowRoot!.querySelector("button")!;
-
-    act(() => dblclick(button));
+    const { button } = beginButtonEdit();
     const removeAllRanges = stubSelectionOutside();
 
     act(() => {
@@ -529,13 +465,7 @@ describe("<EmbedLayer /> element picker — text selection is cleared on exit, n
   });
 
   it("Escape clears a retargeted (WebKit-style) selection that intersects the embed host", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const button = host.shadowRoot!.querySelector("button")!;
-
-    act(() => dblclick(button));
+    const { host, button } = beginButtonEdit();
     // happy-dom's shadow root has no own `getSelection`, matching WebKit/
     // Firefox — `document.getSelection()` retargets to `host` itself rather
     // than `button`, so only the `intersectsNode(host)` fallback path can
@@ -553,13 +483,7 @@ describe("<EmbedLayer /> element picker — text selection is cleared on exit, n
   });
 
   it("does not clear a retargeted selection that does not intersect the embed host", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const button = host.shadowRoot!.querySelector("button")!;
-
-    act(() => dblclick(button));
+    const { host, button } = beginButtonEdit();
     const { removeAllRanges } = stubRetargetedSelection(host, false);
 
     act(() => {
@@ -580,11 +504,7 @@ describe("<EmbedLayer /> element picker — native caret cursor during inline te
   afterEach(() => cleanup());
 
   it("does not force the arrow cursor on the host while an element is being edited", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const button = host.shadowRoot!.querySelector("button")!;
+    const { host, button } = renderPicking();
 
     // Before entering edit mode, picking mode forces the ordinary arrow so
     // hovering doesn't look draggable.
@@ -608,10 +528,7 @@ describe("<EmbedLayer /> element picker — dblclick on a second element right a
   afterEach(() => cleanup());
 
   it("enters edit mode on the second element and its commit lands, even though the first commit remounted the shadow DOM", async () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const { container, host } = renderPicking();
     const buttonA = host.shadowRoot!.querySelector("#a")!;
 
     act(() => dblclick(buttonA));
@@ -643,8 +560,7 @@ describe("<EmbedLayer /> element picker — dblclick on a second element right a
     expect(freshButtonB.getAttribute("contenteditable")).toBe("plaintext-only");
     expect(buttonBBeforeRemount.isConnected).toBe(false);
 
-    const updateSpy = vi.spyOn(useSceneStore.getState(), "updateNode");
-    updateSpy.mockClear();
+    const updateSpy = spyOnUpdateNode();
 
     act(() => {
       freshButtonB.textContent = "Continue now";
@@ -674,18 +590,14 @@ describe("<EmbedLayer /> element picker — committing a text edit never leaks m
   afterEach(() => cleanup());
 
   it("does not write forced eager-loading attributes into htmlContent on an unrelated text commit", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const { container, host } = renderPicking();
     const span = host.shadowRoot!.querySelector("#txt")!;
     // Mounting already forced these onto the LIVE img — that's the whole
     // point of `forceEagerImageLoading`, and it must stay true for display.
     const liveImg = span.querySelector("img")!;
     expect(liveImg.getAttribute("loading")).toBe("eager");
 
-    const updateSpy = vi.spyOn(useSceneStore.getState(), "updateNode");
-    updateSpy.mockClear();
+    const updateSpy = spyOnUpdateNode();
 
     act(() => {
       span.dispatchEvent(
@@ -736,15 +648,7 @@ describe("<EmbedLayer /> element picker — paste during inline text edit never 
   }
 
   it("inserts clipboard text/plain only — a formatted HTML fragment on the clipboard never reaches htmlContent", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
-    const button = host.shadowRoot!.querySelector("button")!;
-    const updateSpy = vi.spyOn(useSceneStore.getState(), "updateNode");
-    updateSpy.mockClear();
-
-    act(() => dblclick(button));
+    const { button, updateSpy } = beginButtonEditWithUpdateSpy();
 
     const event = pasteEvent("PASTED", "<b>PASTED</b><script>evil()</script>");
     act(() => {
@@ -776,10 +680,7 @@ describe("<EmbedLayer /> element picker — keyboard navigation entry point (req
   afterEach(() => cleanup());
 
   it("starts the same inline edit as dblclick when the path resolves to a text leaf", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const { host } = renderPicking();
     const root = host.shadowRoot!;
     const button = root.querySelector("button")!;
     const path = buildElementPath(button, root);
@@ -797,10 +698,7 @@ describe("<EmbedLayer /> element picker — keyboard navigation entry point (req
   });
 
   it("returns false and does not enter edit mode for a non-text-leaf path", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const { host } = renderPicking();
     const root = host.shadowRoot!;
     const p = root.querySelector("p")!; // holds two <span> children — not a text leaf
     const path = buildElementPath(p, root);
@@ -816,8 +714,7 @@ describe("<EmbedLayer /> element picker — keyboard navigation entry point (req
   });
 
   it("returns false for a path that no longer resolves to any live element", () => {
-    render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
+    renderPicking();
 
     let started = true;
     act(() => {
@@ -829,10 +726,7 @@ describe("<EmbedLayer /> element picker — keyboard navigation entry point (req
   });
 
   it("commits an in-flight edit before starting a new one on a different element", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const { host } = renderPicking();
     const root = host.shadowRoot!;
     const button = root.querySelector("button")!;
     const spans = root.querySelectorAll("span");
@@ -845,8 +739,7 @@ describe("<EmbedLayer /> element picker — keyboard navigation entry point (req
     act(() => {
       button.textContent = "Buy soon";
     });
-    const updateSpy = vi.spyOn(useSceneStore.getState(), "updateNode");
-    updateSpy.mockClear();
+    const updateSpy = spyOnUpdateNode();
 
     // A second `requestElementEdit` call while the first edit is still open
     // (never committed by Enter/blur/Escape) must commit it first — same
@@ -869,10 +762,7 @@ describe("<EmbedLayer /> element picker — keyboard navigation entry point (req
   });
 
   it("does not start an edit in a read-only mode, even with a resolvable text-leaf path", () => {
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const { host } = renderPicking();
     const root = host.shadowRoot!;
     const button = root.querySelector("button")!;
     const path = buildElementPath(button, root);
@@ -898,10 +788,7 @@ describe("<EmbedLayer /> element picker — keyboard navigation entry point (req
     // the scene) BEFORE its own `canEditScene` check — so the one write
     // this guard exists to prevent happened anyway, on the very call the
     // guard was meant to reject. The fix checks `canEditScene` first.
-    const { container } = render(<EmbedLayer />);
-    act(() => useEmbedPickerStore.getState().startPicking("e1"));
-
-    const host = container.querySelector<HTMLElement>('[data-embed-id="e1"]')!;
+    const { host } = renderPicking();
     const root = host.shadowRoot!;
     const button = root.querySelector("button")!;
     const spans = root.querySelectorAll("span");
@@ -916,8 +803,7 @@ describe("<EmbedLayer /> element picker — keyboard navigation entry point (req
     });
 
     act(() => useEditorModeStore.setState({ mode: "view" }));
-    const updateSpy = vi.spyOn(useSceneStore.getState(), "updateNode");
-    updateSpy.mockClear();
+    const updateSpy = spyOnUpdateNode();
 
     let started = true;
     try {
