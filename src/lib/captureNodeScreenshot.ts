@@ -12,11 +12,15 @@ import type { EmbedNode } from "@/types/scene";
 /**
  * Wait for one rendered frame, or `timeoutMs` — whichever comes first.
  *
- * `requestAnimationFrame` never fires in a hidden (backgrounded) tab — same
- * gotcha as `getScreenshot.ts` (see its longer comment) and
- * `src/lib/h2dCapture/captureEmbed.ts`'s capture iframe. Skip the rAF
- * entirely when `document.hidden`, and otherwise race it against a short
- * timeout so a hidden/backgrounded tab still settles instead of hanging.
+ * `requestAnimationFrame` never fires in a hidden (backgrounded) tab, and
+ * `get_screenshot` is exactly the tool a background MCP/desktop bridge
+ * session drives from a hidden tab (same gotcha as
+ * `src/lib/h2dCapture/captureEmbed.ts`'s capture iframe) — an unbounded
+ * `await new Promise(requestAnimationFrame)` would hang the capture
+ * forever whenever the editor tab isn't focused. Skip the rAF entirely when
+ * `document.hidden` (nothing will ever paint anyway), and otherwise race it
+ * against a short timeout so a tab that becomes hidden mid-wait still
+ * settles.
  */
 function boundedFrameWait(timeoutMs = 250): Promise<void> {
   if (typeof document !== "undefined" && document.hidden) {
@@ -36,6 +40,73 @@ function boundedFrameWait(timeoutMs = 250): Promise<void> {
       settle();
     }, timeoutMs);
   });
+}
+
+/**
+ * The embed as it actually renders. FIR-59-style gap: an embed sized
+ * fill_container/fit_content stores 0 as a creation-time placeholder in the
+ * flat node (batchDesign/nodeMapper.ts) — the raw node would look 0×0 even
+ * though it renders at its real resolved size on screen. Resolve the
+ * effective size the same way tool reads already do (serializeUtils.ts), or
+ * `captureEmbedScreenshot`'s `!node.width || !node.height` guard rejects a
+ * node that actually renders fine.
+ */
+export function resolveEmbedForCapture(node: EmbedNode, nodeId: string): EmbedNode {
+  const effectiveSize = getNodeEffectiveSize(
+    useSceneStore.getState().getNodes(),
+    nodeId,
+    useLayoutStore.getState().calculateLayoutForFrame,
+  );
+  return effectiveSize
+    ? { ...node, width: effectiveSize.width, height: effectiveSize.height }
+    : node;
+}
+
+export type PixiExtractResult =
+  | { ok: true; dataUrl: string }
+  | { ok: false; reason: "no-renderer" | "not-found" };
+
+/**
+ * Extract a scene node from the live PixiJS scene graph as a PNG data URL.
+ * Throws if `extract.base64` itself fails; callers decide how to report it.
+ *
+ * A just-generated image applied as a fill (e.g. by `set_fill`/`set_image`)
+ * loads its Sprite asynchronously — see imageFillHelpers.ts's
+ * `withTexture`/`onReady` — so extracting immediately can capture the
+ * container before that Sprite is attached (FIR-71). But `applyImageFill`
+ * itself only runs inside pixiSync's own rAF-deferred scene flush
+ * (`pixiSync.ts`'s `scheduleSceneUpdate`) — if `set_image` and
+ * `get_screenshot` land in the same tick, that flush hasn't run yet, the fill
+ * hasn't been registered, and `waitForPendingImageFills()` would see an empty
+ * registry and return immediately. So: settle the pending flush FIRST, THEN
+ * wait for whatever image loads that flush just registered, THEN one more
+ * bounded frame wait so the newly-attached sprites are actually in the frame
+ * `extract.base64` reads from.
+ */
+export async function extractPixiNodeDataUrl(
+  nodeId: string,
+  imageWaitTimeoutMs?: number,
+): Promise<PixiExtractResult> {
+  requestCanvasRender();
+  await boundedFrameWait();
+  await waitForPendingImageFills(imageWaitTimeoutMs);
+  requestCanvasRender();
+  await boundedFrameWait();
+
+  // Re-resolve AFTER all the awaits above — a wait that can last seconds
+  // gives pixiSync room to fullRebuild (outline-mode toggle, font load,
+  // undo/redo), destroying and recreating every container, or the node may
+  // have been deleted in the meantime.
+  const pixiRefs = useCanvasRefStore.getState().pixiRefs;
+  if (!pixiRefs) return { ok: false, reason: "no-renderer" };
+  const target = findPixiChild(pixiRefs.sceneRoot, nodeId);
+  if (!target) return { ok: false, reason: "not-found" };
+
+  const raw = await pixiRefs.app.renderer.extract.base64(target);
+  // extract.base64 may or may not include the data URI prefix depending on
+  // the PixiJS version — normalize either way (mirrors useNodeThumbnails).
+  const dataUrl = raw.startsWith("data:") ? raw : `data:image/png;base64,${raw}`;
+  return { ok: true, dataUrl };
 }
 
 /**
@@ -63,57 +134,24 @@ export async function captureNodeScreenshot(
   // getScreenshot.ts) — extract their preview from the HTML content directly
   // instead of returning a blank image. See FIR-56.
   if (node.type === "embed") {
-    // See getScreenshot.ts: an embed sized fill_container/fit_content stores
-    // a 0-placeholder width/height on the raw flat node (FIR-59-style gap) —
-    // resolve the real, rendered size before handing it to
-    // captureEmbedScreenshot, or its `!node.width || !node.height` guard
-    // rejects a node that actually renders fine.
-    const effectiveSize = getNodeEffectiveSize(
-      useSceneStore.getState().getNodes(),
+    const imageData = await captureEmbedScreenshot(
+      resolveEmbedForCapture(node as EmbedNode, nodeId),
+      undefined,
       nodeId,
-      useLayoutStore.getState().calculateLayoutForFrame,
     );
-    const embedNode: EmbedNode = effectiveSize
-      ? { ...(node as EmbedNode), width: effectiveSize.width, height: effectiveSize.height }
-      : (node as EmbedNode);
-    const imageData = await captureEmbedScreenshot(embedNode, undefined, nodeId);
     return imageData ? await downscaleImageDataUrl(imageData) : null;
   }
 
   if (!useCanvasRefStore.getState().pixiRefs) return null;
 
   try {
-    // Same in-flight-image-fill race as `get_screenshot` (see FIR-71 note and
-    // longer comment in getScreenshot.ts): settle pixiSync's own pending scene
-    // flush FIRST (that's where a just-applied fill's load actually gets
-    // registered), THEN wait for pending image loads, THEN one more bounded
-    // frame wait so the newly-attached sprites are in the frame extracted
-    // below.
-    //
     // This capture backs selection previews (a UI nicety, not an agent tool),
-    // and the registry is document-global (shared with pattern tiles/video
-    // thumbnails elsewhere in the doc) — so use a much shorter timeout than
-    // `get_screenshot`'s default to bound how long a preview can stall the UI
-    // waiting on unrelated images.
-    requestCanvasRender();
-    await boundedFrameWait();
-    await waitForPendingImageFills(1500);
-    requestCanvasRender();
-    await boundedFrameWait();
-
-    // Re-resolve AFTER all the awaits above — pixiSync may have fullRebuilt
-    // (outline-mode toggle, font load, undo/redo) in that window, destroying
-    // and recreating every container, or the node may have been deleted.
-    const pixiRefs = useCanvasRefStore.getState().pixiRefs;
-    if (!pixiRefs) return null;
-    const target = findPixiChild(pixiRefs.sceneRoot, nodeId);
-    if (!target) return null;
-
-    const raw = await pixiRefs.app.renderer.extract.base64(target);
-    // extract.base64 may or may not include the data URI prefix depending on
-    // the PixiJS version — normalize either way (mirrors useNodeThumbnails).
-    const dataUrl = raw.startsWith("data:") ? raw : `data:image/png;base64,${raw}`;
-    return await downscaleImageDataUrl(dataUrl);
+    // and the pending-image registry is document-global (shared with pattern
+    // tiles/video thumbnails elsewhere in the doc) — so use a much shorter
+    // timeout than `get_screenshot`'s default to bound how long a preview can
+    // stall the UI waiting on unrelated images.
+    const result = await extractPixiNodeDataUrl(nodeId, 1500);
+    return result.ok ? await downscaleImageDataUrl(result.dataUrl) : null;
   } catch {
     return null;
   }
