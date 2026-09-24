@@ -12,7 +12,8 @@
     "test:e2e": "playwright test",
     "test:coverage": "vitest run --coverage",
     "test:flaky-summary": "node scripts/flaky-summary.mjs",
-    "check:dup": "jscpd src"
+    "check:dup": "jscpd src",
+    "check:dup:tests": "node scripts/check-test-dup.mjs"
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.230",

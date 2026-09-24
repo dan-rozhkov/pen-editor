@@ -1,0 +1,7 @@
+{
+  "minTokens": 70,
+  "suites": [
+    { "name": "unit", "path": "src", "pattern": "**/__tests__/**/*.{ts,tsx}", "ignore": ["**/vendor/**"] },
+    { "name": "e2e", "path": "e2e" }
+  ]
+}

@@ -19,6 +19,9 @@ jobs:
       # jscpd duplication gate: fails if duplicated lines in production code
       # (src/ minus __tests__ and vendor) exceed the threshold in .jscpd.json.
       - run: npm run check:dup
+      # Ratchet on duplicated lines in unit + e2e tests: may never exceed
+      # test-dup-baseline.json (see CLAUDE.md → Testing).
+      - run: npm run check:dup:tests
       # test:coverage runs the full suite AND enforces the non-regression
       # coverage thresholds in vitest.config.ts (fails if coverage drops).
       - run: npm run test:coverage
