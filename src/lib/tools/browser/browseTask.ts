@@ -1200,10 +1200,17 @@ export async function runBrowseTaskLoop(
       // typed there — the history sent back to /api/browse/step must say
       // what was typed where, or Jev has no signal that the field is
       // already filled with its own prior guess.
+      // Same for SELECT: "Country" alone never said WHICH option was chosen,
+      // and a desktop build that doesn't report a <select>'s value left the
+      // history as the only record of it — Jev re-selected Country until
+      // the loop stalled. The backend reads the choice back out of this
+      // exact `SELECT "<option>" in "<label>"` shape (browseStepUltrafast.ts).
       const displayLabel =
         operation === "TYPE_TEXT" && decision.text
           ? `TYPE_TEXT "${truncateToChars(decision.text, 60)}" into "${label}"`
-          : label;
+          : operation === "SELECT" && decision.text
+            ? `SELECT "${truncateToChars(decision.text, 60)}" in "${label}"`
+            : label;
       const stalled = note(
         rejected
           ? { operation, label: rejected, ok: false, index: decision.index }

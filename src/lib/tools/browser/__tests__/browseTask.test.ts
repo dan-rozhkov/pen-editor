@@ -534,6 +534,15 @@ describe("browse_task", () => {
     ]);
   });
 
+  // The backend reads a <select>'s choice back out of this label when an
+  // older desktop build doesn't report the select's value itself.
+  it("records which option a SELECT chose in the step label", async () => {
+    stubFetchSequence([{ outcome: "act", operation: "SELECT", index: 0, text: "Germany", confidence: 0.9, model: "jev" }, DONE]);
+    const transcript = await runBrowseTaskLoop("pick Germany", 12, stubBrowser({}));
+
+    expect(transcript.steps[0]).toEqual({ operation: "SELECT", label: 'SELECT "Germany" in "Accept all"', ok: true, index: 0 });
+  });
+
   it("refuses a second PRESS_ENTER right after the first (a landed PRESS_ENTER is not TYPE_TEXT)", async () => {
     // TYPE_TEXT once, then PRESS_ENTER decided twice in a row (the loop
     // never reaches outcome:done here — maxSteps below is what ends it).
