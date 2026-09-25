@@ -387,10 +387,33 @@ async function openBeforeLoop(
   }
 }
 
+/** How much page text a step request carries — the backend's own cap
+ * (browseStepUltrafast.ts MAX_PAGE_TEXT_CHARS). */
+const PAGE_TEXT_MAX_CHARS = 6_000;
+
+/**
+ * The visible page text sent with each step, so Jev sees what a user sees —
+ * a validation error, "Account created" — not only the controls
+ * (jev-ultrafast's snapshot carries it the same way). The snapshot carries it
+ * on a current desktop build; an older build gets one `read` instead. Never
+ * fails the step: no text is just a poorer decision, not an error.
+ */
+async function pageTextFor(browser: PenDesktopBrowser, snapshot: SnapshotResult): Promise<string | undefined> {
+  if (typeof snapshot.text === "string") return snapshot.text.slice(0, PAGE_TEXT_MAX_CHARS);
+  try {
+    const read = await browser.read({ maxChars: PAGE_TEXT_MAX_CHARS });
+    const text = read && typeof read === "object" ? (read as { text?: unknown }).text : undefined;
+    return typeof text === "string" ? text.slice(0, PAGE_TEXT_MAX_CHARS) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function requestStep(
   goal: string,
   snapshot: SnapshotResult,
-  history: StepHistoryEntry[]
+  history: StepHistoryEntry[],
+  pageText: string | undefined
 ): Promise<StepResponse> {
   const res = await fetchBrowseBackend("/api/browse/step", {
     goal,
@@ -407,6 +430,7 @@ async function requestStep(
     // which JSON.stringify would drop from the body anyway) when the
     // snapshot doesn't carry one — an older desktop bridge, say.
     ...(snapshot.scroll !== undefined ? { scroll: snapshot.scroll } : {}),
+    ...(pageText !== undefined ? { pageText } : {}),
   });
   if (!res.ok) {
     throw new Error(`/api/browse/step responded ${res.status}`);
@@ -913,7 +937,7 @@ export async function runBrowseTaskLoop(
 
     let decision: StepResponse;
     try {
-      decision = await requestStep(goal, snapshot, history);
+      decision = await requestStep(goal, snapshot, history, await pageTextFor(browser, snapshot));
     } catch (err) {
       const stalled = note({
         operation: "STEP",

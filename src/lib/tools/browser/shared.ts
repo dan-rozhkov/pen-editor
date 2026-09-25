@@ -90,6 +90,9 @@ export interface SnapshotResult {
   /** Present when the element table was capped — passed through untouched,
    * same as `scroll`. */
   truncated?: boolean;
+  /** Visible text inside the viewport (≤6000 chars) — a desktop build that
+   * predates it omits the field. */
+  text?: string;
 }
 
 /**

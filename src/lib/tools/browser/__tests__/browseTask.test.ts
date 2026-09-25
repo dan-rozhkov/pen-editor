@@ -903,6 +903,32 @@ describe("browse_task", () => {
     expect(receivedBodies[0]).not.toHaveProperty("scroll");
   });
 
+  // The ultrafast step policy reads visible page text: from the snapshot on a
+  // current desktop build, from one `read` on an older one, and a failing
+  // read must never fail the step — it just goes without text.
+  it.each([
+    ["the snapshot's own text", { text: "Create your account" }, async () => ({ text: "unused" }), "Create your account", 0],
+    ["a read fallback", {}, async () => ({ text: "Welcome back" }), "Welcome back", 1],
+    ["nothing when the fallback read throws", {}, async () => { throw new Error("boom"); }, undefined, 1],
+  ])("sends %s as pageText", async (_name, snapshotExtra, readImpl, expected, readCalls) => {
+    const receivedBodies: Array<Record<string, unknown>> = [];
+    stubFetchSequence([DONE], (init) => {
+      receivedBodies.push(JSON.parse(init.body as string));
+    });
+    const read = vi.fn(readImpl);
+    const snapshot = vi.fn(async () => ({
+      url: "https://example.com",
+      title: "Example",
+      elements: [],
+      snapshotId: "snap-1",
+      ...snapshotExtra,
+    }));
+    await runBrowseTaskLoop("register", 12, stubBrowser({ snapshot, read }));
+
+    expect(receivedBodies[0]!.pageText).toBe(expected);
+    expect(read).toHaveBeenCalledTimes(readCalls);
+  });
+
   // Requirement 1: browse_task opens a tab itself (via `url`, or a URL
   // sniffed out of the goal) instead of wasting Jev steps discovering there
   // is no tab open — bench finding A (3 wasted "no browser tab" steps on
