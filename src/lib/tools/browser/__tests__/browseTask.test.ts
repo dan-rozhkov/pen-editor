@@ -1285,7 +1285,7 @@ describe("browse_task", () => {
     });
   });
 
-  // Requirement 3/4: the backend's STRUCTURED_MODEL cascade is surfaced to
+  // Requirement 3/4: the backend's BROWSE_CASCADE_MODEL cascade is surfaced to
   // the transcript as `via: "cascade"`, and to a terminal reason as
   // "(via cascade)".
   describe("cascade surfaced in the transcript (requirement 3/4)", () => {
@@ -1575,7 +1575,7 @@ describe("browse_task", () => {
       await runBrowseTaskLoop("accept cookies", 12, browser);
 
       expect((requestBody as { history: unknown[] }).history).toEqual([
-        { operation: "CLICK", label: "cache replay failed: target is gone or occluded", ok: false },
+        { operation: "CLICK", label: "cache replay failed: target is gone or occluded", ok: false, index: 0 },
       ]);
     });
 

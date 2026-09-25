@@ -167,7 +167,7 @@ type StepOutcome = "act" | "done" | "blocked" | "retry";
 /** How a step's operation was decided — omitted for an ordinary confident
  * Jev decision (the common case), so existing transcripts/history entries
  * stay exactly as small as before. "cascade": the backend's
- * STRUCTURED_MODEL second opinion decided it after Jev's own peak
+ * BROWSE_CASCADE_MODEL second opinion decided it after Jev's own peak
  * probability gate failed (see pen-editor-backend's cascadeStep). "rule": a
  * deterministic client-side guard overrode the decision entirely — e.g.
  * refusing to retype into the same search box twice in a row and pressing
@@ -181,6 +181,10 @@ interface StepHistoryEntry {
   label: string;
   ok: boolean;
   via?: StepVia;
+  /** The element the step acted on, when it had one — the backend's repeat
+   * guard keys on it to tell "same element, still no effect" apart from two
+   * different elements that happen to share a label. */
+  index?: number;
 }
 
 interface StepResponse {
@@ -199,14 +203,12 @@ interface StepResponse {
   reason?: string;
   /** Set by the backend cascade (see pen-editor-backend's browseStep.ts
    * `cascadeStep`) when a low-confidence Jev head was overridden by a
-   * STRUCTURED_MODEL second opinion — surfaced to the transcript as
+   * BROWSE_CASCADE_MODEL second opinion — surfaced to the transcript as
    * `via: "cascade"`. */
   cascade?: boolean;
 }
 
-interface TranscriptStep extends StepHistoryEntry {
-  index?: number;
-}
+type TranscriptStep = StepHistoryEntry;
 
 interface Transcript {
   status: "done" | "blocked" | "budget" | "stalled";
@@ -638,7 +640,12 @@ function recordStep(
     label: truncateToChars(entry.label, HISTORY_LABEL_MAX_CHARS),
   };
   steps.push(truncated);
-  history.push({ operation: truncated.operation, label: truncated.label, ok: truncated.ok });
+  history.push({
+    operation: truncated.operation,
+    label: truncated.label,
+    ok: truncated.ok,
+    ...(truncated.index !== undefined ? { index: truncated.index } : {}),
+  });
 }
 
 /**
@@ -923,7 +930,7 @@ export async function runBrowseTaskLoop(
     // and the loop continues — treating an unknown outcome as a silent
     // success would be exactly the bug the addendum corrects.
     // Requirement 4: keep `reason` on terminal statuses, and say when the
-    // STRUCTURED_MODEL cascade (not Jev itself) is what decided it — the
+    // BROWSE_CASCADE_MODEL cascade (not Jev itself) is what decided it — the
     // bench reads these.
     const terminalReason = decision.cascade
       ? `${decision.reason ?? ""}${decision.reason ? " " : ""}(via cascade)`
