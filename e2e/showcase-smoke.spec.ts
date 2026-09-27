@@ -93,7 +93,7 @@ test("the showcase follows the editor's dark theme across navigation", async ({
     "rgb(42, 42, 42)",
   );
   await expect(
-    page.getByRole("heading", { name: "Design, on autopilot." }),
+    page.getByRole("heading", { name: "Explore ideas. Find your direction." }),
   ).toHaveCSS("color", "rgba(255, 255, 255, 0.87)");
 
   await page.getByRole("link", { name: /open the editor/i }).click();
@@ -104,7 +104,7 @@ test("the showcase follows the editor's dark theme across navigation", async ({
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
   await expect(
-    page.getByRole("heading", { name: "Design, on autopilot." }),
+    page.getByRole("heading", { name: "Explore ideas. Find your direction." }),
   ).toBeVisible();
   await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(page.locator("body")).toHaveCSS(

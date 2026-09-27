@@ -99,7 +99,7 @@ describe("<ShowcasePage />", () => {
     renderPage();
 
     const heading = screen.getByRole("heading", {
-      name: "Design, on autopilot.",
+      name: "Explore ideas. Find your direction.",
     });
     const editorLink = screen.getByRole("link", {
       name: "Open the editor →",
@@ -107,7 +107,7 @@ describe("<ShowcasePage />", () => {
 
     expect(heading).toBeTruthy();
     expect(
-      heading.classList.contains("sm:text-[clamp(3.375rem,6vw,4.875rem)]"),
+      heading.classList.contains("sf-hero-title"),
     ).toBe(true);
     expect(heading.classList.contains("tracking-tight")).toBe(true);
     expect(
@@ -180,7 +180,7 @@ describe("<ShowcasePage />", () => {
     renderPage();
 
     await screen.findByAltText("Onboarding flow");
-    const carousels = screen.getAllByRole("region");
+    const carousels = screen.getAllByRole("region", { name: / screens$/ });
     const selector = screen.getByLabelText("Screen selector");
     expect(carousels).toHaveLength(2);
     expect(carousels[0].getAttribute("data-slot")).toBe("showcase-app-carousel");
