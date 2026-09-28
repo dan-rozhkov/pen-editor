@@ -127,6 +127,66 @@ describe("browse_task", () => {
     ]);
   });
 
+  // Live bench finding (booking.com): browser.open returns at DOM-ready, so
+  // the first snapshot is blank and used to reach Jev, which answered BLOCKED.
+  describe("blank first snapshot (page not rendered yet)", () => {
+    const BLANK_SNAPSHOT = { url: "https://www.booking.com", title: "", elements: [], text: "  ", snapshotId: "blank" };
+
+    it("re-snapshots instead of asking Jev, then sends the first non-empty snapshot exactly once", async () => {
+      const bodies: Array<{ elements: unknown[] }> = [];
+      const fetchMock = stubFetchSequence([DONE], (init) => bodies.push(JSON.parse(String(init.body))));
+      let calls = 0;
+      const snapshot = vi.fn(async () => (++calls < 3 ? BLANK_SNAPSHOT : EXAMPLE_SNAPSHOT));
+      const sleep = vi.fn(async () => {});
+
+      const transcript = await runBrowseTaskLoop("look", 12, stubBrowser({ snapshot }), undefined, sleep);
+
+      expect(transcript.status).toBe("done");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(bodies[0].elements.length).toBeGreaterThan(0);
+      expect(sleep).toHaveBeenCalledWith(400);
+      expect(transcript.steps).toEqual([]);
+    });
+
+    it("gives up after the bound and asks Jev once, as before", async () => {
+      const fetchMock = stubFetchSequence([{ outcome: "blocked", confidence: 0.2, model: "jev", reason: "empty" }]);
+      const snapshot = vi.fn(async () => BLANK_SNAPSHOT);
+      const sleep = vi.fn(async () => {});
+
+      const transcript = await runBrowseTaskLoop("look", 12, stubBrowser({ snapshot }), undefined, sleep);
+
+      expect(transcript.status).toBe("blocked");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(sleep).toHaveBeenCalledTimes(12);
+      expect(sleep.mock.calls.length * 400).toBeLessThanOrEqual(5_000);
+    });
+
+    it("does not poll a snapshot without `text` (an older desktop build), only an empty one", async () => {
+      const fetchMock = stubFetchSequence([DONE]);
+      const { text: _omitted, ...noText } = BLANK_SNAPSHOT;
+      const snapshot = vi.fn(async () => noText);
+      const sleep = vi.fn(async () => {});
+
+      await runBrowseTaskLoop("look", 12, stubBrowser({ snapshot }), undefined, sleep);
+
+      expect(sleep).not.toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("polls only the first snapshot, never a page that goes blank mid-task", async () => {
+      const fetchMock = stubFetchSequence([{ outcome: "act", operation: "WAIT", confidence: 0.9, model: "jev" }, DONE]);
+      let calls = 0;
+      const snapshot = vi.fn(async () => (++calls === 1 ? EXAMPLE_SNAPSHOT : BLANK_SNAPSHOT));
+      const sleep = vi.fn(async () => {});
+
+      await runBrowseTaskLoop("look", 12, stubBrowser({ snapshot }), undefined, sleep);
+
+      // One sleep: the WAIT itself — the blank second snapshot is not polled.
+      expect(sleep).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it("sleeps and re-snapshots on WAIT without ever calling perform", async () => {
     // Addendum A: WAIT never reaches `perform`; the loop handles it itself.
     stubFetchSequence([{ outcome: "act", operation: "WAIT", confidence: 0.9, model: "jev" }, DONE]);
@@ -1173,7 +1233,8 @@ describe("browse_task", () => {
         return {
           url: "https://shop.example.com/cart",
           title: "Cart",
-          elements: [],
+          // Non-empty: a blank snapshot would (correctly) be re-polled.
+          elements: [{ index: 0, tag: "button", label: "Accept all", ops: ["CLICK"] }],
           snapshotId: "snap-1",
         };
       });

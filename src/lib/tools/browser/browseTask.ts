@@ -99,6 +99,23 @@ const MAX_CONSECUTIVE_UNPRODUCTIVE_STEPS = 3;
 const WAIT_SLEEP_MS = 400;
 
 /**
+ * Live bench finding (booking.com): `browser.open` can return at DOM-ready
+ * with `loaded: false`, so the first snapshot of a heavy page is empty — the
+ * step request went out with `elements: []` and no page text, Jev answered
+ * BLOCKED, and browse_task ended `blocked` after 0 steps. A snapshot with no
+ * elements AND no page text is therefore treated as "not rendered yet": the
+ * loop polls for a real one (every EMPTY_SNAPSHOT_POLL_MS, at most
+ * EMPTY_SNAPSHOT_MAX_POLLS times, ~5 s) before spending a paid step request.
+ * Polls consume neither the step budget nor the unproductive-step count. If
+ * the page is still empty afterwards, the last snapshot is used as before.
+ * Only the FIRST snapshot is polled (review): a page that genuinely has no
+ * controls or text mid-task (a canvas app, an image) would otherwise pay ~5 s
+ * on every step and break STEP_DEADLINE_RESERVE_MS's per-step worst case.
+ */
+const EMPTY_SNAPSHOT_POLL_MS = 400;
+const EMPTY_SNAPSHOT_MAX_POLLS = 12;
+
+/**
  * Live bench finding (2026-09-24, fixture-shop run): Jev chose WAIT six
  * times in a row at low confidence (0.37-0.57) before anything else
  * happened. WAIT never reaches `perform`/`act` (addendum A), so it carries
@@ -672,6 +689,29 @@ function recordStep(
   });
 }
 
+/** Blank = no elements AND page text that is present but empty. A missing
+ * `text` means an older desktop build that never sends it (pageTextFor falls
+ * back to `read`), not a blank page — never polled. */
+function isEmptySnapshot(snapshot: SnapshotResult): boolean {
+  return snapshot.elements.length === 0 && typeof snapshot.text === "string" && snapshot.text.trim() === "";
+}
+
+/** Re-snapshots (bounded) while the page is still blank — see EMPTY_SNAPSHOT_POLL_MS.
+ * A snapshot error during polling is returned as-is (existing error handling). */
+async function settleEmptySnapshot(
+  browser: PenDesktopBrowser,
+  first: Awaited<ReturnType<typeof takeSnapshot>>,
+  sleep: (ms: number) => Promise<void>
+): Promise<Awaited<ReturnType<typeof takeSnapshot>>> {
+  let current = first;
+  for (let i = 0; i < EMPTY_SNAPSHOT_MAX_POLLS; i++) {
+    if ("error" in current || !isEmptySnapshot(current)) return current;
+    await sleep(EMPTY_SNAPSHOT_POLL_MS);
+    current = await takeSnapshot(browser);
+  }
+  return current;
+}
+
 /**
  * Runs the snapshot → step → perform loop. Exported separately from the
  * `ToolHandler` wrapper so tests can drive it directly and so the deadline
@@ -818,8 +858,8 @@ export async function runBrowseTaskLoop(
     // Finding: reuse the pre-loop probe as this first iteration's snapshot
     // (when one was captured — see `initialSnapshot`'s comment above)
     // instead of immediately re-taking an identical one.
-    const snapshotResult =
-      stepCount === 0 && initialSnapshot ? initialSnapshot : await takeSnapshot(browser);
+    const freshSnapshot = stepCount === 0 && initialSnapshot ? initialSnapshot : await takeSnapshot(browser);
+    const snapshotResult = stepCount === 0 ? await settleEmptySnapshot(browser, freshSnapshot, sleep) : freshSnapshot;
     if ("error" in snapshotResult) {
       const stalled = note({
         operation: "SNAPSHOT",
