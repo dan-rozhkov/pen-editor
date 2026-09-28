@@ -101,6 +101,13 @@ export function setupRenderScheduler(app: Application): () => void {
     markActivity();
   });
 
+  // Streamed html lives in its own store slot, so `drafts` keeps its identity
+  // on html-only frames: repaint only when a box moved/resized/appeared/gone.
+  const unsubPendingScreens = useAiPendingScreenStore.subscribe((state, prev) => {
+    if (state.drafts === prev.drafts) return;
+    markActivity();
+  });
+
   const onTick = () => {
     const now = performance.now();
     if (
@@ -170,7 +177,7 @@ export function setupRenderScheduler(app: Application): () => void {
     // the cached scene frames — without this the repaint would only land on
     // the next safety tick, same class of bug as the two subscriptions
     // above.
-    useAiPendingScreenStore.subscribe(markActivity),
+    unsubPendingScreens, // geometry-filtered above
     // Picking an element inside the selected embed hides that embed's Pixi
     // size badge (drawSelection.ts's `pickedElementOwnsSingleEmbed`) in favor
     // of EmbedElementHighlight's own box — a Pixi Graphics change that writes

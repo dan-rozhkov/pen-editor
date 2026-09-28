@@ -20,6 +20,7 @@ import { topLevelAncestorId } from "@/utils/topLevelAncestor";
 import { useOverlayHostRect } from "./useOverlayHostRect";
 import { isEmbedContentEmpty } from "@/lib/embedDefaults";
 import { EmbedPromptHost } from "./EmbedPromptHost";
+import { StreamingEmbedPreviewLayer } from "./StreamingEmbedPreviewLayer";
 import { redispatchWheelAt } from "./forwardWheelToPixiCanvas";
 import {
   buildElementPath,
@@ -1740,6 +1741,10 @@ export function EmbedLayer() {
           <EmbedHost key={id} nodeId={id} />
         ),
       )}
+      {/* Hidden in outline render mode and in present mode. Unlike real embeds
+          there is no per-node gating (hidden ancestors, slide filtering):
+          streaming roots are brand-new top-level screens with no ancestors. */}
+      {!isOutline && mode !== "present" && <StreamingEmbedPreviewLayer />}
     </div>
   );
 }

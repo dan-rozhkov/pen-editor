@@ -297,12 +297,26 @@ describe("setupRenderScheduler invalidation sources", () => {
     useAiPendingScreenStore.getState().upsert({
       sessionId: "s1",
       toolCallId: "call-1",
-      screens: [{ name: "Login", x: 0, y: 0, width: 390, height: 844 }],
+      screens: [{ index: 0, start: 0, htmlComplete: false, name: "Login", x: 0, y: 0, width: 390, height: 844, html: "" }],
     });
 
     now.mockReturnValue(5116);
     tick();
     expect(render).toHaveBeenCalledTimes(1);
+
+    // An html-only delta (same geometry) must NOT trigger a Pixi render.
+    now.mockReturnValue(9000); // past the trailing window; safety render settles
+    tick();
+    render.mockClear();
+    now.mockReturnValue(9100);
+    useAiPendingScreenStore.getState().upsert({
+      sessionId: "s1",
+      toolCallId: "call-1",
+      screens: [{ index: 0, start: 0, htmlComplete: false, name: "Login", x: 0, y: 0, width: 390, height: 844, html: "<div>hi" }],
+    });
+    now.mockReturnValue(9116);
+    tick();
+    expect(render).not.toHaveBeenCalled();
 
     useAiPendingScreenStore.getState().reset();
     cleanup();

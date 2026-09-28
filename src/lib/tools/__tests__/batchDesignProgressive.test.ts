@@ -655,3 +655,39 @@ describe("applyStreamingBatchDesign + batch_design final commit", () => {
     expect(Object.values(sceneState().nodesById).filter((n) => n.name === "Card")).toHaveLength(1);
   });
 });
+
+describe("createCachedOperationsParser().parseWithBoundary", () => {
+  const A = 'a=I(document, {type: "frame", name: "A"})\n';
+  const B = 'b=I(a, {type: "frame", name: "B"})\n';
+
+  it("puts the boundary right after the last complete statement, dropping the streaming tail", () => {
+    const p = createCachedOperationsParser();
+    const tail = 'c=I(document, {type: "frame", na';
+    const { operations, boundary } = p.parseWithBoundary(A + B + tail);
+    expect(operations).toHaveLength(2);
+    expect(boundary).toBe((A + B).length);
+  });
+
+  it("shifts by leading wrapper-noise lines so offsets index the ORIGINAL string", () => {
+    const src = "```\n" + A + B + 'c=I(document, {';
+    const { boundary } = createCachedOperationsParser().parseWithBoundary(src);
+    expect(boundary).toBe(("```\n" + A + B).length);
+  });
+
+  it("stops the boundary before an unparseable statement", () => {
+    const src = A + "garbage here\n" + B;
+    const { operations, boundary } = createCachedOperationsParser().parseWithBoundary(src);
+    expect(operations).toHaveLength(1);
+    expect(boundary).toBe(A.length);
+  });
+
+  it("agrees with parse() across frames of the growing string (cache reuse)", () => {
+    const p = createCachedOperationsParser();
+    const src = A + B;
+    for (let i = 0; i <= src.length; i++) {
+      const r = p.parseWithBoundary(src.slice(0, i));
+      expect(r.boundary).toBeLessThanOrEqual(i);
+    }
+    expect(p.parseWithBoundary(src).boundary).toBe(src.length);
+  });
+});

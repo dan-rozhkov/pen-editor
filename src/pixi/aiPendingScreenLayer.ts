@@ -2,6 +2,7 @@ import { Container, Graphics } from "pixi.js";
 import { useAiPendingScreenStore, type AiPendingScreenDraft } from "@/store/aiPendingScreenStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { drawDashedRect } from "./selectionOverlay/helpers";
+import { PLACEHOLDER_COLOR } from "@/lib/streamingTools/pendingScreenColor";
 import { createAiOverlayTeardown } from "./aiOverlayLayerLifecycle";
 
 /**
@@ -15,14 +16,11 @@ import { createAiOverlayTeardown } from "./aiOverlayLayerLifecycle";
  * the moment the real embed node lands.
  */
 
-/** Same accent `aiSvgPreviewLayer.ts` uses, so in-flight agent work reads as
- * one family rather than two unrelated affordances. */
-const PLACEHOLDER_COLOR = 0x0d99ff;
-
 interface PendingEntry {
   container: Container;
   /** One Graphics per screen index, drawn fresh whenever screens or scale change. */
   boxes: Graphics[];
+  /** The `screens` array last drawn; the store keeps it identity-stable across html-only frames. */
   renderedScreens: AiPendingScreenDraft["screens"] | null;
   renderedScale: number | null;
 }
@@ -80,10 +78,13 @@ export function createAiPendingScreenLayer(overlayContainer: Container): () => v
     }
 
     // Dashes are baked at the current viewport scale (see drawDashedRect),
-    // so a redraw is needed whenever either the screens or the scale
+    // so a redraw is needed whenever either the geometry or the scale
     // changed — without the scale check, dashes would stretch on zoom, the
-    // same trap aiSvgPreviewLayer's own comment calls out.
-    if (entry.renderedScreens === draft.screens && entry.renderedScale === scale) return;
+    // same trap aiSvgPreviewLayer's own comment calls out. The store
+    // replaces `screens` only when geometry changed (html is a separate slot).
+    if (entry.renderedScreens === draft.screens && entry.renderedScale === scale) {
+      return;
+    }
     draw(entry, draft.screens, scale);
   }
 
@@ -105,7 +106,9 @@ export function createAiPendingScreenLayer(overlayContainer: Container): () => v
     rafId = requestAnimationFrame(flush);
   }
 
-  const unsubscribe = useAiPendingScreenStore.subscribe(scheduleFlush);
+  const unsubscribe = useAiPendingScreenStore.subscribe((state, prev) => {
+    if (state.drafts !== prev.drafts) scheduleFlush();
+  });
   // Boxes are drawn in scene coordinates but dash length is baked at the
   // current on-screen scale — a zoom while placeholders are staged must
   // redraw them, same rationale as aiSvgPreviewLayer's own subscription.

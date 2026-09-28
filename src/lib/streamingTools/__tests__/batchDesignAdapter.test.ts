@@ -4,6 +4,7 @@ import { streamingToolAdapters, getStreamingToolAdapter } from "../index";
 import {
   useAiPendingScreenStore,
   pendingScreenKey,
+  pendingHtmlKey,
 } from "@/store/aiPendingScreenStore";
 import { resetStores, seedScene } from "@/test/fixtures";
 
@@ -51,7 +52,8 @@ describe("batch_design streaming adapter", () => {
 
     const key = pendingScreenKey(sessionId, toolCallId);
     const draft = useAiPendingScreenStore.getState().drafts[key];
-    expect(draft?.screens).toEqual([{ name: "Feed", x: 440, y: 0, width: 390, height: 844 }]);
+    expect(draft?.screens).toEqual([{ index: 1, name: "Feed", x: 440, y: 0, width: 390, height: 844 }]);
+    expect(useAiPendingScreenStore.getState().html[pendingHtmlKey(key, 1)]).toBe('<div class="card">still typing');
   });
 
   it("shows both placeholders when progressive application is disabled by the kill switch", () => {
@@ -66,9 +68,12 @@ describe("batch_design streaming adapter", () => {
     const key = pendingScreenKey(sessionId, toolCallId);
     const draft = useAiPendingScreenStore.getState().drafts[key];
     expect(draft?.screens).toEqual([
-      { name: "Login", x: 0, y: 0, width: 390, height: 844 },
-      { name: "Feed", x: 440, y: 0, width: 390, height: 844 },
+      { index: 0, name: "Login", x: 0, y: 0, width: 390, height: 844 },
+      { index: 1, name: "Feed", x: 440, y: 0, width: 390, height: 844 },
     ]);
+    const { html } = useAiPendingScreenStore.getState();
+    expect(html[pendingHtmlKey(key, 0)]).toBe('<div style="width: 100%">ok</div>');
+    expect(html[pendingHtmlKey(key, 1)]).toBe('<div class="card">still typing');
   });
 
   it("clears the placeholder once the screen's own htmlContent finishes and it becomes a real node", () => {
@@ -137,5 +142,28 @@ describe("batch_design streaming adapter", () => {
 
     expect(useAiPendingScreenStore.getState().drafts[pendingScreenKey("s1", "call-1")]).toBeUndefined();
     expect(useAiPendingScreenStore.getState().drafts[pendingScreenKey("s2", "call-2")]).toBeDefined();
+  });
+
+  it("keeps the second screen's placeholder when an earlier completed embed targets another parent", () => {
+    // `e=I(frame1, {type:"embed"...})` is a complete embed statement but NOT a
+    // header (parent isn't `document`); counting it as "applied" used to drop s1.
+    const ops =
+      'e=I(frame1, {type: "embed", name: "Inner", x: 0, y: 0, width: 10, height: 10, htmlContent: "<p>i</p>"})\n' +
+      's1=I(document, {type: "embed", name: "Home", x: 0, y: 0, width: 390, height: 844, htmlContent: "<div>typ';
+    batchDesignStreamingAdapter.onFrame({ sessionId, toolCallId, input: { operations: ops } });
+    const key = pendingScreenKey(sessionId, toolCallId);
+    const draft = useAiPendingScreenStore.getState().drafts[key];
+    expect(draft?.screens.map((s) => s.name)).toEqual(["Home"]);
+    expect(useAiPendingScreenStore.getState().html[pendingHtmlKey(key, 0)]).toBe("<div>typ");
+  });
+
+  it("html-only frames keep the drafts reference stable", () => {
+    const ops = 's1=I(document, {type: "embed", name: "Home", x: 0, y: 0, width: 390, height: 844, htmlContent: "<div>a';
+    batchDesignStreamingAdapter.onFrame({ sessionId, toolCallId, input: { operations: ops } });
+    const before = useAiPendingScreenStore.getState().drafts;
+    batchDesignStreamingAdapter.onFrame({ sessionId, toolCallId, input: { operations: ops + "bc" } });
+    expect(useAiPendingScreenStore.getState().drafts).toBe(before);
+    const key = pendingScreenKey(sessionId, toolCallId);
+    expect(useAiPendingScreenStore.getState().html[pendingHtmlKey(key, 0)]).toBe("<div>abc");
   });
 });

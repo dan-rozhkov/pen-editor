@@ -77,11 +77,21 @@ function isWrapperNoiseLine(raw: string): boolean {
  * string value) is never blanked, which would corrupt the generated HTML.
  */
 function stripWrapperNoiseLines(input: string): string {
+  return stripWrapperNoise(input).text;
+}
+
+/** `stripWrapperNoiseLines` plus how many characters were removed from the
+ * TOP (blanked leading noise lines) — the shift between offsets in the
+ * stripped text and offsets in `input`. Bottom noise only follows all real
+ * content, so it never shifts an offset of a statement. */
+function stripWrapperNoise(input: string): { text: string; leadingShift: number } {
   const lines = input.split("\n");
   let start = 0;
   let end = lines.length - 1;
+  let leadingShift = 0;
   // Peel contiguous wrapper/fence noise from the top…
   while (start <= end && isWrapperNoiseLine(lines[start].trim())) {
+    leadingShift += lines[start].length;
     lines[start] = "";
     start++;
   }
@@ -91,7 +101,7 @@ function stripWrapperNoiseLines(input: string): string {
     lines[end] = "";
     end--;
   }
-  return lines.join("\n");
+  return { text: lines.join("\n"), leadingShift };
 }
 
 /**
@@ -121,7 +131,7 @@ function stripWrapperNoiseLines(input: string): string {
  * scanner to know whether it's at an object-key position, which none of
  * its three callers currently track.
  */
-function isLikelyStringEnd(text: string, quoteIndex: number): boolean {
+export function isLikelyStringEnd(text: string, quoteIndex: number): boolean {
   let i = quoteIndex + 1;
   while (i < text.length && /\s/.test(text[i])) i++;
   if (i >= text.length) return true;
@@ -287,9 +297,19 @@ export function parseCompleteOperationsPrefix(partial: string): ParsedOperation[
  * describes, factored out so both it and `createCachedOperationsParser`
  * share one implementation of "what counts as complete" instead of two.
  */
-function collectCompleteOperationLines(partial: string): Array<{ text: string; line: number }> {
-  const { lines, lastFlushedAtNewline } = splitOperationLines(stripWrapperNoiseLines(partial));
-  return lastFlushedAtNewline ? lines : lines.slice(0, -1);
+function collectCompleteOperationLines(
+  partial: string,
+): Array<{ text: string; line: number; end: number }> {
+  const { text, leadingShift } = stripWrapperNoise(partial);
+  const { lines, lastFlushedAtNewline } = splitOperationLines(text);
+  const complete = lastFlushedAtNewline ? lines : lines.slice(0, -1);
+  // `end`: offset in `partial` just past this statement (its own newline
+  // included). The parts of `splitOperationLines` tile the text exactly.
+  let offset = leadingShift;
+  return complete.map((entry) => {
+    offset += entry.text.length;
+    return { text: entry.text, line: entry.line, end: offset };
+  });
 }
 
 export interface CachedOperationsParser {
@@ -302,6 +322,13 @@ export interface CachedOperationsParser {
    * for the same statement.
    */
   parse(partial: string): ParsedOperation[];
+  /**
+   * Like `parse`, plus `boundary`: the character offset in `partial` where
+   * the syntactically-complete, parseable prefix ends — i.e. a statement
+   * starting before this offset is one `parse` returned (or a skippable
+   * line); one starting at/after it is still streaming or unparseable.
+   */
+  parseWithBoundary(partial: string): { operations: ParsedOperation[]; boundary: number };
 }
 
 /**
@@ -322,51 +349,58 @@ export interface CachedOperationsParser {
 export function createCachedOperationsParser(): CachedOperationsParser {
   let cached: ParsedOperation[] = [];
 
-  return {
-    parse(partial: string): ParsedOperation[] {
-      const completeLines = collectCompleteOperationLines(partial);
+  function run(partial: string): { operations: ParsedOperation[]; boundary: number } {
+    const completeLines = collectCompleteOperationLines(partial);
 
-      const operations: ParsedOperation[] = [];
-      let cacheIndex = 0;
-      // Once one statement fails to match the cache at its position, every
-      // later one is guaranteed new too (the prefix only ever grows in the
-      // normal streaming case) — stop even TRYING the cache at that point,
-      // rather than keep probing `cached[cacheIndex]` at a now-frozen index,
-      // which could otherwise coincidentally match an unrelated cached
-      // statement that happens to share raw text.
-      let reuseExhausted = false;
-      for (const entry of completeLines) {
-        const raw = entry.text.trim();
-        if (isSkippableLine(raw)) {
-          continue;
-        }
-
-        if (!reuseExhausted) {
-          const reusable = cached[cacheIndex];
-          if (reusable && reusable.raw === raw) {
-            operations.push(reusable);
-            cacheIndex++;
-            continue;
-          }
-          reuseExhausted = true;
-        }
-
-        try {
-          operations.push(parseLine(raw, entry.line));
-        } catch {
-          // Stop at (excluding) the first unparseable statement rather than
-          // failing the whole frame — see `parseCompleteOperationsPrefix`'s
-          // doc comment.
-          break;
-        }
+    const operations: ParsedOperation[] = [];
+    let boundary = 0;
+    let cacheIndex = 0;
+    // Once one statement fails to match the cache at its position, every
+    // later one is guaranteed new too (the prefix only ever grows in the
+    // normal streaming case) — stop even TRYING the cache at that point,
+    // rather than keep probing `cached[cacheIndex]` at a now-frozen index,
+    // which could otherwise coincidentally match an unrelated cached
+    // statement that happens to share raw text.
+    let reuseExhausted = false;
+    for (const entry of completeLines) {
+      const raw = entry.text.trim();
+      if (isSkippableLine(raw)) {
+        boundary = entry.end;
+        continue;
       }
 
-      // Cache what THIS call produced, not what was reused from before: a
-      // statement that stopped matching (or a newly-unparseable one) must
-      // not linger in the cache and get silently reused again.
-      cached = operations;
-      return operations;
-    },
+      if (!reuseExhausted) {
+        const reusable = cached[cacheIndex];
+        if (reusable && reusable.raw === raw) {
+          operations.push(reusable);
+          cacheIndex++;
+          boundary = entry.end;
+          continue;
+        }
+        reuseExhausted = true;
+      }
+
+      try {
+        operations.push(parseLine(raw, entry.line));
+        boundary = entry.end;
+      } catch {
+        // Stop at (excluding) the first unparseable statement rather than
+        // failing the whole frame — see `parseCompleteOperationsPrefix`'s
+        // doc comment.
+        break;
+      }
+    }
+
+    // Cache what THIS call produced, not what was reused from before: a
+    // statement that stopped matching (or a newly-unparseable one) must
+    // not linger in the cache and get silently reused again.
+    cached = operations;
+    return { operations, boundary };
+  }
+
+  return {
+    parse: (partial) => run(partial).operations,
+    parseWithBoundary: run,
   };
 }
 

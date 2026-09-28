@@ -1,0 +1,47 @@
+<!doctype html><html><head><style>
+*{box-sizing:border-box;margin:0}
+body{font-family:-apple-system,"SF Pro Display",system-ui,sans-serif;background:#0f1115;color:#f3f1ec;width:390px;height:844px;overflow:hidden}
+.top{display:flex;justify-content:space-between;align-items:center;padding:58px 22px 10px}
+.hi{font-size:14px;color:#9a9ca3}
+.name{font-size:26px;font-weight:700;letter-spacing:-.02em;margin-top:2px}
+.avatar{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#ffb86b,#ff5e7e)}
+.hero{margin:18px 22px 0;height:210px;border-radius:28px;padding:22px;position:relative;overflow:hidden;background:radial-gradient(120% 90% at 100% 0%,#7c5cff 0%,#3a2aa8 45%,#171433 100%)}
+.hero:after{content:"";position:absolute;right:-40px;bottom:-60px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,#ff9f6b 0%,rgba(255,94,126,.2) 60%,transparent 70%)}
+.tag{display:inline-block;font-size:12px;font-weight:600;padding:6px 10px;border-radius:99px;background:rgba(255,255,255,.14)}
+.hero h2{font-size:30px;line-height:1.05;letter-spacing:-.03em;margin-top:16px;max-width:220px}
+.hero p{font-size:14px;color:#cfc8ff;margin-top:10px}
+.btn{position:absolute;left:22px;bottom:22px;z-index:1;background:#f3f1ec;color:#171433;font-weight:700;font-size:14px;padding:12px 18px;border-radius:99px}
+.sec{display:flex;justify-content:space-between;align-items:baseline;padding:28px 22px 12px}
+.sec h3{font-size:19px;letter-spacing:-.01em}
+.sec a{font-size:13px;color:#9a9ca3}
+.chips{display:flex;gap:10px;padding:0 22px}
+.chip{flex:1;border-radius:20px;padding:14px;background:#1a1d24}
+.chip b{display:block;font-size:22px;margin-top:10px}
+.chip span{font-size:12px;color:#9a9ca3}
+.dot{width:30px;height:30px;border-radius:10px}
+.list{padding:0 22px;display:flex;flex-direction:column;gap:10px}
+.row{display:flex;align-items:center;gap:14px;background:#1a1d24;border-radius:20px;padding:12px}
+.thumb{width:56px;height:56px;border-radius:16px}
+.row div{flex:1}
+.row b{font-size:15px}
+.row small{display:block;font-size:12px;color:#9a9ca3;margin-top:3px}
+.row i{font-style:normal;font-size:13px;font-weight:700;color:#b9ff66}
+.tab{position:absolute;left:22px;right:22px;bottom:28px;height:66px;border-radius:26px;background:rgba(30,33,41,.92);display:flex;justify-content:space-around;align-items:center}
+.tab span{width:22px;height:22px;border-radius:7px;background:#3a3e48}
+.tab span.on{background:#b9ff66}
+</style></head><body>
+<div class="top"><div><div class="hi">Good morning</div><div class="name">Maya Chen</div></div><div class="avatar"></div></div>
+<div class="hero"><span class="tag">Today · 32 min</span><h2>Morning flow for deep focus</h2><p>Breathwork + mobility, guided</p><div class="btn">Start session</div></div>
+<div class="sec"><h3>Your week</h3><a>Details</a></div>
+<div class="chips">
+<div class="chip"><div class="dot" style="background:#ff5e7e"></div><b>4.2h</b><span>Mindful</span></div>
+<div class="chip"><div class="dot" style="background:#7c5cff"></div><b>12</b><span>Sessions</span></div>
+<div class="chip"><div class="dot" style="background:#b9ff66"></div><b>86%</b><span>Streak</span></div>
+</div>
+<div class="sec"><h3>Continue</h3><a>See all</a></div>
+<div class="list">
+<div class="row"><div class="thumb" style="background:linear-gradient(135deg,#ffb86b,#ff5e7e)"></div><div><b>Evening wind-down</b><small>Sleep · 18 min</small></div><i>68%</i></div>
+<div class="row"><div class="thumb" style="background:linear-gradient(135deg,#6be3ff,#3a2aa8)"></div><div><b>Box breathing</b><small>Calm · 6 min</small></div><i>New</i></div>
+</div>
+<div class="tab"><span class="on"></span><span></span><span></span><span></span></div>
+</body></html>

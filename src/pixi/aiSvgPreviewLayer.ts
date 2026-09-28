@@ -1,3 +1,4 @@
+import { PLACEHOLDER_COLOR } from "@/lib/streamingTools/pendingScreenColor";
 import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import { svgTextToDataUrl } from "@/lib/htmlToDesign/svgHandling";
 import { getSvgIntrinsicSize } from "@/utils/svgUtils";
@@ -22,10 +23,6 @@ import { requestCanvasRender } from "./renderScheduler";
  * committed vector art moments later, so there is no reason to spend a 4K
  * decode on it — and the draft re-rasterizes ~140 times over one generation. */
 const MAX_RASTER_PX = 2048;
-
-/** Same accent the `draw_vector` preview overlay uses, so in-flight agent work
- * reads as one family rather than two unrelated affordances. */
-const PLACEHOLDER_COLOR = 0x0d99ff;
 
 interface PreviewEntry {
   container: Container;

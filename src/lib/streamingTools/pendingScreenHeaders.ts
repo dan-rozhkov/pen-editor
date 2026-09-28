@@ -11,8 +11,11 @@
  * has also finished. A pending screen's header sits INSIDE an incomplete
  * statement, so this module does its own narrow, single-purpose scan of the
  * prescribed key order (`type`, `name`, `x`, `y`, `width`, `height`, then
- * `htmlContent`; see CLAUDE.md's "batch_design" section) and never looks
- * past `htmlContent:`'s key for a given header.
+ * `htmlContent`; see CLAUDE.md's "batch_design" section). The geometry scan
+ * never looks past `htmlContent:`'s key; the html VALUE itself is decoded
+ * separately (see `decodePartialString`) for the live preview, and is
+ * skipped for headers the caller says are already applied or already
+ * decoded to completion.
  *
  * The DSL's object literals use bare (unquoted) JS-style keys, e.g.
  * `{type: "embed", name: "Login", x: 0, ...}` — not JSON. Field matching
@@ -24,12 +27,26 @@
  * shown" — never a thrown error, and never a wrong box.
  */
 
+import { isLikelyStringEnd } from "@/lib/tools/batchDesign/parser";
+
 export interface PendingScreenHeader {
+  /** Source-order index among the embed headers; stable as earlier screens get applied. */
+  index: number;
+  /** Offset in `operations` where the header's statement (`[bind=]I(`) begins. */
+  start: number;
   name: string;
   x: number;
   y: number;
   width: number;
   height: number;
+  /**
+   * The `htmlContent` decoded so far (`""` until its opening quote streams
+   * in). Best-effort and possibly cut mid-tag — feed it through
+   * `repairPartialHtml` before mounting. Only the live preview reads it.
+   */
+  html: string;
+  /** True once the html string literal's closing quote has streamed in. */
+  htmlComplete: boolean;
 }
 
 function keyPattern(key: string): string {
@@ -60,6 +77,67 @@ function matchStringField(source: string, key: string): string | null {
   return m ? m[1] : null;
 }
 
+const SIMPLE_ESCAPES: Record<string, string> = {
+  n: "\n",
+  t: "\t",
+  r: "\r",
+  b: "\b",
+  f: "\f",
+};
+
+/**
+ * Decode the string literal starting right after `htmlContent:` in `source`
+ * (whitespace, then a `"`/`'`/backtick delimiter) up to its closing quote or
+ * the end of the text. Escapes are decoded best-effort; an incomplete escape
+ * at the tail is dropped (it completes next frame). The closing quote uses
+ * the same lookahead as the real parser, so unescaped inner quotes
+ * (`class="card"` in a `"`-delimited string) stay content.
+ */
+function decodePartialString(source: string, from: number): { value: string; complete: boolean } {
+  let i = from;
+  while (i < source.length && /\s/.test(source[i])) i++;
+  const delimiter = source[i];
+  if (delimiter !== '"' && delimiter !== "'" && delimiter !== "`") return { value: "", complete: false };
+  i++;
+
+  // Collect verbatim slices between escapes instead of appending per char.
+  const parts: string[] = [];
+  let complete = false;
+  let sliceStart = i;
+  while (i < source.length) {
+    const ch = source[i];
+    if (ch === "\\") {
+      if (i + 1 >= source.length) break;
+      parts.push(source.slice(sliceStart, i));
+      const next = source[i + 1];
+      if (next === "u") {
+        const hex = source.slice(i + 2, i + 6);
+        if (hex.length < 4) {
+          // Incomplete escape at the tail: dropped, completes next frame.
+          return { value: parts.join(""), complete: false };
+        }
+        parts.push(/^[0-9a-fA-F]{4}$/.test(hex) ? String.fromCharCode(parseInt(hex, 16)) : "u" + hex);
+        i += 6;
+      } else {
+        parts.push(SIMPLE_ESCAPES[next] ?? next);
+        i += 2;
+      }
+      sliceStart = i;
+      continue;
+    }
+    if (ch === delimiter && isLikelyStringEnd(source, i)) {
+      // A quote at the very end of the text is "likely the end" only for
+      // want of a next character; more input can still show it was inner
+      // content. Report closed only once a real follower confirmed it.
+      complete = /\S/.test(source.slice(i + 1, i + 64));
+      break;
+    }
+    i++;
+  }
+  parts.push(source.slice(sliceStart, i));
+  return { value: parts.join(""), complete };
+}
+
 const HEADER_START_RE = /(?:\w+\s*=\s*)?I\s*\(\s*document\s*,\s*\{/g;
 const HTML_CONTENT_KEY_RE = /(?:"htmlContent"|'htmlContent'|htmlContent)\s*:/;
 
@@ -71,14 +149,28 @@ const HTML_CONTENT_KEY_RE = /(?:"htmlContent"|'htmlContent'|htmlContent)\s*:/;
  * (which routinely contains CSS `width:`/`height:` declarations) is ever
  * mistaken for another screen's fields, or its own.
  *
+ * `options.decodeFromOffset`: html is only decoded for headers whose statement
+ * starts at/after this offset (the syntactically-complete boundary — earlier
+ * ones are already real nodes and get `html: ""`).
+ * `options.completedHtml`: html already decoded to completion on a previous
+ * frame, by header index; those headers reuse it instead of re-decoding.
+ *
  * A header is only included once all four numeric fields and the name have
  * fully arrived (see `matchNumberField`/`matchStringField`); the screen
  * currently being typed is simply absent from the result, never returned
  * in a partial form.
  */
-export function parsePendingScreenHeaders(operations: string): PendingScreenHeader[] {
+export interface ParseOptions {
+  decodeFromOffset?: number;
+  completedHtml?: ReadonlyMap<number, string>;
+}
+
+export function parsePendingScreenHeaders(
+  operations: string,
+  options: ParseOptions = {},
+): PendingScreenHeader[] {
   try {
-    return parsePendingScreenHeadersUnsafe(operations);
+    return parsePendingScreenHeadersUnsafe(operations, options);
   } catch {
     // Never throw: a malformed or still-shifting partial string is the
     // normal case mid-stream, not a bug to surface.
@@ -86,14 +178,20 @@ export function parsePendingScreenHeaders(operations: string): PendingScreenHead
   }
 }
 
-function parsePendingScreenHeadersUnsafe(operations: string): PendingScreenHeader[] {
+function parsePendingScreenHeadersUnsafe(
+  operations: string,
+  options: ParseOptions,
+): PendingScreenHeader[] {
+  const decodeFromOffset = options.decodeFromOffset ?? 0;
   const headers: PendingScreenHeader[] = [];
   const starts: number[] = [];
+  const stmtStarts: number[] = [];
 
   HEADER_START_RE.lastIndex = 0;
   let startMatch: RegExpExecArray | null;
   while ((startMatch = HEADER_START_RE.exec(operations)) !== null) {
     starts.push(startMatch.index + startMatch[0].length);
+    stmtStarts.push(startMatch.index);
     // Guard against a zero-width match looping forever; the pattern always
     // consumes at least "I(document,{" so this never actually triggers, but
     // costs nothing to keep.
@@ -123,7 +221,25 @@ function parsePendingScreenHeadersUnsafe(operations: string): PendingScreenHeade
       continue;
     }
 
-    headers.push({ name, x, y, width, height });
+    const start = stmtStarts[i];
+    const index = headers.length;
+    let html = "";
+    let htmlComplete = false;
+    if (htmlContentMatch !== null && start >= decodeFromOffset) {
+      const cachedHtml = options.completedHtml?.get(index);
+      if (cachedHtml !== undefined) {
+        html = cachedHtml;
+        htmlComplete = true;
+      } else {
+        const decoded = decodePartialString(
+          operations,
+          bodyStart + htmlContentMatch.index + htmlContentMatch[0].length,
+        );
+        html = decoded.value;
+        htmlComplete = decoded.complete;
+      }
+    }
+    headers.push({ index, start, name, x, y, width, height, html, htmlComplete });
   }
 
   return headers;

@@ -15,7 +15,10 @@ import {
   abandonProgressiveBatchSession,
   clearProgressiveBatchSessions,
 } from "@/lib/tools/batchDesign/progressive";
-import { parseCompleteOperationsPrefix } from "@/lib/tools/batchDesign/parser";
+import {
+  createCachedOperationsParser,
+  type CachedOperationsParser,
+} from "@/lib/tools/batchDesign/parser";
 import {
   useAiPendingScreenStore,
   pendingScreenKey,
@@ -59,37 +62,54 @@ function extractOperationsScript(input: Record<string, unknown>): string | undef
 }
 
 /**
- * How many of the syntactically-complete operations at the head of the
- * script already created an embed node — i.e. how many dashed placeholders
- * (in header order) are stale because progressive application already
- * turned them into real nodes.
- *
- * Read-only: reuses `parseCompleteOperationsPrefix`, the exact boundary
- * `progressive.ts` itself trusts, rather than a separate notion of
- * "complete". Never throws — a parse hiccup here must only cost a
- * placeholder, never touch what `applyStreamingBatchDesign` does above.
+ * Per-tool-call scratch state for the placeholder/preview computation:
+ * - `parser`: the cached operations parser, so the boundary scan reuses
+ *   already-parsed statements across frames instead of re-running JSON5 on
+ *   every one of them per frame.
+ * - `completedHtml`: html strings already decoded to their closing quote
+ *   (by header index). Streaming is append-only, so a closed string never
+ *   changes — re-decoding it every frame (with progressive application off,
+ *   that is every screen's full html) is pure waste.
+ * Keyed like the pending-screen store. Dropped on abandon / session clear,
+ * and swept once the store reports the call finalized (the handler finalizes
+ * it directly, without going through this adapter).
  */
-function countAppliedEmbeds(operations: string): number {
-  try {
-    const complete = parseCompleteOperationsPrefix(operations);
-    let count = 0;
-    for (const op of complete) {
-      if (op.op !== "I") continue;
-      const nodeData = op.args[1];
-      if (nodeData?.kind === "json" && isEmbedNodeData(nodeData.value)) count++;
-    }
-    return count;
-  } catch {
-    return 0;
+interface CallState {
+  parser: CachedOperationsParser;
+  completedHtml: Map<number, string>;
+}
+const callStates = new Map<string, CallState>();
+
+function callStateFor(key: string): CallState {
+  let state = callStates.get(key);
+  if (!state) {
+    state = { parser: createCachedOperationsParser(), completedHtml: new Map() };
+    callStates.set(key, state);
+  }
+  return state;
+}
+
+function sweepFinalizedCallStates(): void {
+  const { finalizedKeys } = useAiPendingScreenStore.getState();
+  for (const key of callStates.keys()) {
+    if (finalizedKeys.has(key)) callStates.delete(key);
   }
 }
 
-function isEmbedNodeData(value: unknown): boolean {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    (value as { type?: unknown }).type === "embed"
-  );
+/**
+ * Where the syntactically-complete prefix of `operations` ends — the exact
+ * boundary `progressive.ts` trusts (same scanner, via the cached parser). A
+ * header whose statement starts before it has already been applied as a real
+ * node. Position, not count: a completed embed `I(frame1, ...)` or a header
+ * skipped as malformed must not shift which placeholder is considered
+ * applied. Never throws — a parse hiccup here must only cost a placeholder.
+ */
+function completeBoundary(state: CallState, operations: string): number {
+  try {
+    return state.parser.parseWithBoundary(operations).boundary;
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -101,17 +121,28 @@ function isEmbedNodeData(value: unknown): boolean {
  */
 function updatePendingScreens(sessionId: string, toolCallId: string, operations: string): void {
   try {
-    const headers = parsePendingScreenHeaders(operations);
-    if (headers.length === 0) return;
+    sweepFinalizedCallStates();
+    const key = pendingScreenKey(sessionId, toolCallId);
+    if (useAiPendingScreenStore.getState().finalizedKeys.has(key)) return;
+    const state = callStateFor(key);
 
-    // With progressive application on, the first N headers (by source
-    // order, which is what parsePendingScreenHeaders and
-    // parseCompleteOperationsPrefix both preserve) are already real nodes
-    // on canvas — only the ones after that are still "pending". With the
-    // `pen.streamingMutations=off` kill switch, nothing at all has been
-    // applied yet, so every header still needs a box.
-    const appliedEmbeds = isStreamingMutationsEnabled() ? countAppliedEmbeds(operations) : 0;
-    const screens = headers.slice(appliedEmbeds);
+    // With progressive application on, headers whose statement lies inside
+    // the complete prefix are already real nodes on canvas — only the ones
+    // starting at/after the boundary are still "pending", and their html
+    // never needs decoding. With the `pen.streamingMutations=off` kill
+    // switch nothing has been applied yet, so every header needs a box.
+    const boundary = isStreamingMutationsEnabled() ? completeBoundary(state, operations) : 0;
+    const headers = parsePendingScreenHeaders(operations, {
+      decodeFromOffset: boundary,
+      completedHtml: state.completedHtml,
+    });
+    for (const h of headers) {
+      if (h.htmlComplete && h.start >= boundary && !state.completedHtml.has(h.index)) {
+        state.completedHtml.set(h.index, h.html);
+      }
+    }
+    const screens = headers.filter((h) => h.start >= boundary);
+    if (headers.length === 0) return;
 
     useAiPendingScreenStore.getState().upsert({ sessionId, toolCallId, screens });
   } catch {
@@ -131,11 +162,16 @@ export const batchDesignStreamingAdapter: StreamingToolAdapter = {
 
   onAbandon({ sessionId, toolCallId }: StreamingToolCallRef): void {
     abandonProgressiveBatchSession(sessionId, toolCallId);
-    useAiPendingScreenStore.getState().finalizeCall(pendingScreenKey(sessionId, toolCallId));
+    const key = pendingScreenKey(sessionId, toolCallId);
+    callStates.delete(key);
+    useAiPendingScreenStore.getState().finalizeCall(key);
   },
 
   onSessionClear(sessionId: string): void {
     clearProgressiveBatchSessions(sessionId);
+    for (const key of [...callStates.keys()]) {
+      if (key.startsWith(`${sessionId}:`)) callStates.delete(key);
+    }
     useAiPendingScreenStore.getState().clearSession(sessionId);
   },
 };

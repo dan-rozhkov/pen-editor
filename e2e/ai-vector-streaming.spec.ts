@@ -1,5 +1,13 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { expectEditorMounted } from "./support/editor";
+import {
+  installChatStreamStub,
+  push,
+  closeStream,
+  replyWithText,
+  waitForRequestCount,
+  openChatAndSend,
+} from "./support/chatStream";
 
 // Task 8: real-browser coverage for the streaming AI vector drawing feature
 // (Tasks 3-7). Unlike chat-smoke.spec.ts (which fulfills /api/chat with one
@@ -22,118 +30,11 @@ interface ChatRequestBody {
   messages?: Array<{ role: string; parts: Array<Record<string, unknown>> }>;
 }
 
-async function installFetchStub(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    const w = window as unknown as {
-      __chatRequests: unknown[];
-      __chatControllers: Array<{
-        push: (chunk: Record<string, unknown>) => void;
-        close: () => void;
-      }>;
-      __chatAborted: boolean[];
-    };
-    w.__chatRequests = [];
-    w.__chatControllers = [];
-    w.__chatAborted = [];
-    const encoder = new TextEncoder();
-    const originalFetch = window.fetch.bind(window);
-
-    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input.url;
-
-      if (url.includes("/api/models")) {
-        return new Response(
-          JSON.stringify({
-            models: [
-              { id: "test/vector-model", label: "Vector Model", supportsVision: true },
-            ],
-            default: "test/vector-model",
-          }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        );
-      }
-
-      if (url.includes("/api/chat")) {
-        w.__chatRequests.push(init?.body ? JSON.parse(String(init.body)) : null);
-        const index = w.__chatRequests.length - 1;
-
-        let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
-        const stream = new ReadableStream<Uint8Array>({
-          start(controller) {
-            controllerRef = controller;
-          },
-        });
-        w.__chatControllers[index] = {
-          push(chunk) {
-            controllerRef!.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
-          },
-          close() {
-            controllerRef!.enqueue(encoder.encode("data: [DONE]\n\n"));
-            controllerRef!.close();
-          },
-        };
-        w.__chatAborted[index] = false;
-        init?.signal?.addEventListener("abort", () => {
-          w.__chatAborted[index] = true;
-        });
-
-        return new Response(stream, {
-          status: 200,
-          headers: {
-            "content-type": "text/event-stream",
-            "x-vercel-ai-ui-message-stream": "v1",
-          },
-        });
-      }
-
-      return originalFetch(input, init);
-    };
-  });
-}
-
-async function push(page: Page, index: number, chunk: Record<string, unknown>): Promise<void> {
-  await page.evaluate(
-    ({ index, chunk }) => {
-      (window as unknown as { __chatControllers: Array<{ push: (c: Record<string, unknown>) => void }> })
-        .__chatControllers[index].push(chunk);
-    },
-    { index, chunk }
-  );
-}
-
-async function closeStream(page: Page, index: number): Promise<void> {
-  await page.evaluate((index) => {
-    (window as unknown as { __chatControllers: Array<{ close: () => void }> })
-      .__chatControllers[index].close();
-  }, index);
-}
-
-async function waitForRequestCount(page: Page, count: number): Promise<void> {
-  await page.waitForFunction(
-    (count) =>
-      (window as unknown as { __chatRequests: unknown[] }).__chatRequests.length >= count,
-    count
-  );
-}
-
-async function openChatAndSend(page: Page, message: string): Promise<void> {
-  await page.getByTestId("rail-agents").click();
-  await expect(page.getByText("Design Agent", { exact: true })).toBeVisible();
-  const input = page.getByPlaceholder("Ask the design agent...");
-  await input.fill(message);
-  await input.press("Enter");
-}
-
 test.describe("streaming AI vector drawing (native draw_vector)", () => {
   test("previews before commit, commits one path, auto-continues with success output, and undoes in one step", async ({
     page,
   }) => {
-    await installFetchStub(page);
+    await installChatStreamStub(page);
     await page.goto("/app");
     await expectEditorMounted(page);
 
@@ -232,14 +133,7 @@ test.describe("streaming AI vector drawing (native draw_vector)", () => {
 
     // Exactly one automatic continuation request carrying the tool result.
     await waitForRequestCount(page, 2);
-    await push(page, 1, { type: "start" });
-    await push(page, 1, { type: "start-step" });
-    await push(page, 1, { type: "text-start", id: "t2" });
-    await push(page, 1, { type: "text-delta", id: "t2", delta: "Drawn." });
-    await push(page, 1, { type: "text-end", id: "t2" });
-    await push(page, 1, { type: "finish-step" });
-    await push(page, 1, { type: "finish" });
-    await closeStream(page, 1);
+    await replyWithText(page, 1, "Drawn.");
 
     await expect(page.getByText("Drawn.")).toBeVisible({ timeout: 15_000 });
 
@@ -307,7 +201,7 @@ test.describe("streaming AI vector drawing (native draw_vector)", () => {
   });
 
   test("Stop mid-stream leaves no preview, no new path, and unchanged history", async ({ page }) => {
-    await installFetchStub(page);
+    await installChatStreamStub(page);
     await page.goto("/app");
     await expectEditorMounted(page);
 
