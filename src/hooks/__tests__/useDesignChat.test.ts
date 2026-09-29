@@ -497,6 +497,43 @@ describe("buildCanvasContext", () => {
     expect(serialized).not.toContain("export {};");
     expect(serialized).not.toContain("README.md");
   });
+
+  describe("likedReferences", () => {
+    afterEach(() => {
+      useChatStore.setState({ likedReferences: {} });
+    });
+
+    const canvasOf = (sessionId?: string) =>
+      (buildCanvasContext(sessionId) as { canvasContext: string }).canvasContext;
+
+    it("is omitted (byte-identical JSON) when the chat has no likes", () => {
+      const baseline = canvasOf("chat-1");
+      expect(baseline).not.toContain("likedReferences");
+      useChatStore.getState().toggleLikedReference("chat-1", { url: "https://x.test/a.png" });
+      useChatStore.getState().toggleLikedReference("chat-1", { url: "https://x.test/a.png" });
+      expect(canvasOf("chat-1")).toBe(baseline);
+    });
+
+    it("appends the chat's likes as the last key, dropping undefined fields", () => {
+      const baseline = canvasOf("chat-1");
+      useChatStore.getState().toggleLikedReference("chat-1", {
+        url: "https://x.test/a.png",
+        sourceUrl: "https://mobbin.com/s/1",
+        tool: "search_screens",
+      });
+      useChatStore.getState().toggleLikedReference("chat-1", { url: "https://x.test/b.png" });
+      useChatStore.getState().toggleLikedReference("chat-2", { url: "https://x.test/other.png" });
+
+      const raw = canvasOf("chat-1");
+      const parsed = JSON.parse(raw);
+      expect(parsed.likedReferences).toEqual([
+        { url: "https://x.test/a.png", sourceUrl: "https://mobbin.com/s/1", tool: "search_screens" },
+        { url: "https://x.test/b.png" },
+      ]);
+      expect(Object.keys(parsed).at(-1)).toBe("likedReferences");
+      expect(raw.startsWith(baseline.slice(0, -1))).toBe(true);
+    });
+  });
 });
 
 // clientCapabilities is the single switch that makes the browse_* tools

@@ -177,6 +177,14 @@ export function buildCanvasContext(sessionId?: string): object {
         }
       : undefined;
 
+  const likedReferences = (
+    (sessionId ? useChatStore.getState().likedReferences[sessionId] : undefined) ?? []
+  ).map((r) => ({
+    url: r.url,
+    ...(r.sourceUrl ? { sourceUrl: r.sourceUrl } : {}),
+    ...(r.tool ? { tool: r.tool } : {}),
+  }));
+
   return {
     canvasContext: JSON.stringify({
       roots,
@@ -198,6 +206,10 @@ export function buildCanvasContext(sessionId?: string): object {
       ...(selectionHint ? { selectionHint } : {}),
       ...(selectedEmbedElement ? { selectedEmbedElement } : {}),
       ...(localRepo ? { localRepo } : {}),
+      // Reference images the user hearted in this chat; the agent should
+      // prefer them. Omitted when empty so canvasContext stays byte-identical
+      // (prompt-cache invariant). Appended last for the same reason.
+      ...(likedReferences.length > 0 ? { likedReferences } : {}),
     }),
     model,
     userId: getUserId(),

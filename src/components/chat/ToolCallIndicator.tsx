@@ -1,4 +1,4 @@
-import { createElement, useState } from "react";
+import { createElement, useMemo, useState } from "react";
 import {
   CaretDownIcon,
   DownloadSimpleIcon,
@@ -8,7 +8,8 @@ import { getToolName } from "ai";
 import { getToolDisplayName } from "@/lib/toolDisplayNames";
 import { getToolIcon } from "@/lib/toolIcons";
 import { downloadFile, filenameFromUrl } from "@/lib/downloadFile";
-import { extractImageUrls } from "./extractImageUrls";
+import { extractImageRefs } from "./extractImageUrls";
+import { LikeReferenceButton, type LikeMeta } from "./LikeReferenceButton";
 import { ImagePreview } from "./MessageList";
 import {
   Tooltip,
@@ -72,7 +73,17 @@ export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
   const status = getToolStatus(toolPart);
   const toolName = getToolName(part as Parameters<typeof getToolName>[0]);
   const displayName = getToolDisplayName(toolName);
-  const imageUrls = status === "completed" ? extractImageUrls(toolPart.output) : [];
+  const output = toolPart.output;
+  const imageRefs = useMemo(
+    () => (status === "completed" ? extractImageRefs(output) : []),
+    [status, output],
+  );
+  const imageUrls = useMemo(() => imageRefs.map((r) => r.url), [imageRefs]);
+  const likeMeta = useMemo(() => {
+    const meta: Record<string, LikeMeta> = {};
+    for (const r of imageRefs) meta[r.url] = { sourceUrl: r.sourceUrl, tool: toolName };
+    return meta;
+  }, [imageRefs, toolName]);
 
   const downloadOne = (url: string, index: number) =>
     downloadFile(url, filenameFromUrl(url, index));
@@ -134,7 +145,8 @@ export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
           <div className="flex gap-1.5 overflow-x-auto overflow-y-hidden pb-1 layers-scrollbar">
             {imageUrls.map((url, i) => (
               <div key={url} className="shrink-0 relative group">
-                <ImagePreview url={url} urls={imageUrls} index={i} />
+                <ImagePreview url={url} urls={imageUrls} index={i} likeMeta={likeMeta} />
+                <LikeReferenceButton url={url} {...likeMeta[url]} />
                 <Tooltip>
                   <TooltipTrigger
                     render={

@@ -26,6 +26,7 @@ import { getUserId } from "@/lib/userId";
 import { hasOpenCodeKey, subscribeOpenCodeKey } from "@/lib/opencodeKey";
 import { useOpenCodeKeyDialogStore } from "@/store/openCodeKeyDialogStore";
 import { MessageList } from "./MessageList";
+import { ChatSessionIdContext } from "./ChatSessionContext";
 import { ChatInput } from "./ChatInput";
 import { ChatList } from "./ChatList";
 import { QueuedMessagePanel } from "./QueuedMessagePanel";
@@ -301,6 +302,8 @@ function ChatSession({
         // An empty transcript has no context usage yet — leaving the old
         // reading would show a stale meter over nothing.
         useChatStore.getState().clearContextTokens(sessionId);
+        // Liked references point at images from the wiped transcript.
+        useChatStore.getState().clearLikedReferences(sessionId);
         // A cleared chat starts over, so its cloud browser does too.
         void releaseCloudBrowser(sessionId);
       },
@@ -386,13 +389,15 @@ function ChatSession({
       )}
 
       {/* Messages */}
-      <MessageList
-        messages={messages}
-        isLoading={isLoading}
-        onRollback={isLoading ? undefined : handleRollback}
-        addToolOutput={addToolOutput}
-        isVisible={isVisible}
-      />
+      <ChatSessionIdContext.Provider value={sessionId}>
+        <MessageList
+          messages={messages}
+          isLoading={isLoading}
+          onRollback={isLoading ? undefined : handleRollback}
+          addToolOutput={addToolOutput}
+          isVisible={isVisible}
+        />
+      </ChatSessionIdContext.Provider>
 
       {/* Cloud browser live view (web build only; hides itself on desktop
           and when this chat has no live session). */}

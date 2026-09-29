@@ -12,6 +12,7 @@ import { PanelEmptyState } from "@/components/PanelEmptyState";
 import { messageToMarkdown } from "@/lib/chatExport";
 import { SimpleMarkdown } from "./SimpleMarkdown";
 import { ToolCallIndicator } from "./ToolCallIndicator";
+import type { LikeMeta } from "./LikeReferenceButton";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { ImageLightbox } from "./ImageLightbox";
 import { IconSwap } from "@/components/ui/IconSwap";
@@ -105,9 +106,11 @@ interface ImagePreviewProps {
   urls?: string[];
   /** Index of this thumbnail within the group. Defaults to 0. */
   index?: number;
+  /** When set, the lightbox offers a like button for urls it has an entry for. */
+  likeMeta?: Record<string, LikeMeta>;
 }
 
-export function ImagePreview({ url, alt, urls, index = 0 }: ImagePreviewProps) {
+export function ImagePreview({ url, alt, urls, index = 0, likeMeta }: ImagePreviewProps) {
   const group = urls && urls.length > 0 ? urls : [url];
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
@@ -129,6 +132,7 @@ export function ImagePreview({ url, alt, urls, index = 0 }: ImagePreviewProps) {
       {lightboxIndex !== null && (
         <ImageLightbox
           urls={group}
+          likeMeta={likeMeta}
           index={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
           onNavigate={setLightboxIndex}

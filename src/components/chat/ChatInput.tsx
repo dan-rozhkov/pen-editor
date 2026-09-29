@@ -8,6 +8,7 @@ import {
 } from "@phosphor-icons/react";
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import type { SlashCommand } from "./slashCommands";
+import { LikedReferencesStrip } from "./LikedReferencesStrip";
 import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
 import { useChatStore, NO_ATTACHED_IMAGES } from "@/store/chatStore";
 import {
@@ -451,6 +452,8 @@ export function ChatInput({
           )}
         </div>
       )}
+
+      <LikedReferencesStrip sessionId={sessionId} />
 
       {/* Image previews */}
       {attachedImages.length > 0 && !canAttachImages && (

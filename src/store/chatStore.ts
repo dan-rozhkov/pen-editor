@@ -14,6 +14,27 @@ export const NO_ATTACHED_IMAGES: AttachedImage[] = [];
  * reason as NO_ATTACHED_IMAGES. Never mutated. */
 export const NO_QUEUED_MESSAGES: QueuedChatMessage[] = [];
 
+/** Copy of the liked map with `chatId` set to `next`, or dropped when empty. */
+function withChatLikes(
+  map: Record<string, LikedReference[]>,
+  chatId: string,
+  next: LikedReference[],
+): Record<string, LikedReference[]> {
+  const out = { ...map };
+  if (next.length === 0) delete out[chatId];
+  else out[chatId] = next;
+  return out;
+}
+
+/** A reference image the user hearted; `url` is always http(s). */
+export interface LikedReference {
+  url: string;
+  /** Citation page the image came from (e.g. a Mobbin screen URL). */
+  sourceUrl?: string;
+  /** Name of the tool whose result surfaced the image. */
+  tool?: string;
+}
+
 export interface ChatSummary {
   id: string;
   title: string;
@@ -86,6 +107,12 @@ interface ChatState {
    */
   attachedImages: Record<string, AttachedImage[]>;
   /**
+   * Reference images the user "liked" (hearted) in the agent's tool results,
+   * keyed by chat id. Sent to the backend inside canvasContext so the agent
+   * prioritizes them. In-memory only, like the other per-chat maps.
+   */
+  likedReferences: Record<string, LikedReference[]>;
+  /**
    * The last completed turn's actual input-token count for a chat, keyed by
    * chat id — set from the `/api/chat` `finish` chunk's `messageMetadata.
    * contextTokens` (useDesignChat's onFinish). Per chat, not global, for the
@@ -104,6 +131,10 @@ interface ChatState {
 
   createChat: (opts?: { activate?: boolean; parallelCount?: ParallelCount }) => string;
   closeChat: (chatId: string) => void;
+  /** Likes the reference if absent, unlikes it (matched by url) if present. */
+  toggleLikedReference: (chatId: string, ref: LikedReference) => void;
+  removeLikedReference: (chatId: string, url: string) => void;
+  clearLikedReferences: (chatId: string) => void;
   /** Makes a chat active, restores its parallelCount, and clears unread. */
   openChat: (chatId: string) => void;
   /** Returns to the chat list — no chat is active. */
@@ -252,6 +283,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messageQueue: {},
   sessionActions: {},
   attachedImages: {},
+  likedReferences: {},
   contextTokens: {},
 
   toggleOpen: () => set((s) => ({ isOpen: !s.isOpen })),
@@ -308,6 +340,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       launchQueue,
       messageQueue,
       attachedImages,
+      likedReferences,
       contextTokens,
     } = get();
 
@@ -333,6 +366,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       delete newMessageQueue[chatId];
       const newAttachedImages = { ...attachedImages };
       delete newAttachedImages[chatId];
+      const newLikedReferences = { ...likedReferences };
+      delete newLikedReferences[chatId];
       const newContextTokens = { ...contextTokens };
       delete newContextTokens[chatId];
       set({
@@ -347,6 +382,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         launchQueue: newLaunchQueue,
         messageQueue: newMessageQueue,
         attachedImages: newAttachedImages,
+        likedReferences: newLikedReferences,
         contextTokens: newContextTokens,
       });
       return;
@@ -358,6 +394,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const newMessageQueue = { ...messageQueue };
     const newAttachedImages = { ...attachedImages };
     const newContextTokens = { ...contextTokens };
+    const newLikedReferences = { ...likedReferences };
+    delete newLikedReferences[chatId];
     delete newControllers[chatId];
     delete newLaunchQueue[chatId];
     delete newMessageQueue[chatId];
@@ -375,7 +413,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
       launchQueue: newLaunchQueue,
       messageQueue: newMessageQueue,
       attachedImages: newAttachedImages,
+      likedReferences: newLikedReferences,
       contextTokens: newContextTokens,
+    });
+  },
+
+  toggleLikedReference: (chatId, ref) => {
+    set((s) => {
+      const prev = s.likedReferences[chatId] ?? [];
+      const next = prev.some((r) => r.url === ref.url)
+        ? prev.filter((r) => r.url !== ref.url)
+        : [...prev, ref];
+      return { likedReferences: withChatLikes(s.likedReferences, chatId, next) };
+    });
+  },
+
+  removeLikedReference: (chatId, url) => {
+    set((s) => {
+      const prev = s.likedReferences[chatId];
+      if (!prev?.some((r) => r.url === url)) return s;
+      const next = prev.filter((r) => r.url !== url);
+      return { likedReferences: withChatLikes(s.likedReferences, chatId, next) };
+    });
+  },
+
+  clearLikedReferences: (chatId) => {
+    set((s) => {
+      if (!(chatId in s.likedReferences)) return s;
+      return { likedReferences: withChatLikes(s.likedReferences, chatId, []) };
     });
   },
 

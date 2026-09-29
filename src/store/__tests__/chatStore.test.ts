@@ -455,3 +455,52 @@ describe("chatStore — model selection", () => {
     });
   });
 });
+
+describe("chatStore — liked references", () => {
+  const a = { url: "https://cdn.example.com/a.png", sourceUrl: "https://mobbin.com/a", tool: "search_screens" };
+  const b = { url: "https://cdn.example.com/b.png" };
+
+  beforeEach(() => {
+    useChatStore.setState({ likedReferences: {} });
+  });
+
+  it("toggle likes, then unlikes by url, keyed per chat", () => {
+    const { toggleLikedReference } = useChatStore.getState();
+    toggleLikedReference("c1", a);
+    toggleLikedReference("c1", b);
+    toggleLikedReference("c2", b);
+    expect(useChatStore.getState().likedReferences).toEqual({ c1: [a, b], c2: [b] });
+
+    toggleLikedReference("c1", a);
+    expect(useChatStore.getState().likedReferences.c1).toEqual([b]);
+  });
+
+  it("drops the chat key when the last like is removed", () => {
+    const { toggleLikedReference, removeLikedReference } = useChatStore.getState();
+    toggleLikedReference("c1", a);
+    removeLikedReference("c1", a.url);
+    expect(useChatStore.getState().likedReferences).toEqual({});
+  });
+
+  it("removeLikedReference / clearLikedReferences are no-ops for unknown ids", () => {
+    const before = useChatStore.getState().likedReferences;
+    useChatStore.getState().removeLikedReference("nope", "x");
+    useChatStore.getState().clearLikedReferences("nope");
+    expect(useChatStore.getState().likedReferences).toBe(before);
+  });
+
+  it("clearLikedReferences removes one chat's likes only", () => {
+    const { toggleLikedReference, clearLikedReferences } = useChatStore.getState();
+    toggleLikedReference("c1", a);
+    toggleLikedReference("c2", b);
+    clearLikedReferences("c1");
+    expect(useChatStore.getState().likedReferences).toEqual({ c2: [b] });
+  });
+
+  it("closeChat cleans up that chat's likes", () => {
+    const id = useChatStore.getState().createChat();
+    useChatStore.getState().toggleLikedReference(id, a);
+    useChatStore.getState().closeChat(id);
+    expect(useChatStore.getState().likedReferences[id]).toBeUndefined();
+  });
+});
