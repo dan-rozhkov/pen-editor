@@ -115,7 +115,7 @@ describe("<CloudBrowserPanel />", () => {
     const frame = screen.getByTitle("Cloud browser live view");
     expect(frame.getAttribute("src")).toBe(SESSION.liveViewUrl);
     expect(frame.getAttribute("sandbox")).toBe("allow-scripts allow-same-origin");
-    const link = screen.getByText("Open in new tab").closest("a");
+    const link = screen.getByRole("button", { name: "Open in new tab" });
     expect(link?.getAttribute("href")).toBe(SESSION.liveViewUrl);
     expect(link?.getAttribute("target")).toBe("_blank");
   });
@@ -132,7 +132,7 @@ describe("<CloudBrowserPanel />", () => {
   it("releases the session on Close browser", () => {
     useCloudBrowserStore.getState().setSession("chat-1", SESSION);
     render(<CloudBrowserPanel chatId="chat-1" />);
-    fireEvent.click(screen.getByText("Close browser"));
+    fireEvent.click(screen.getByRole("button", { name: "Close browser" }));
     expect(release).toHaveBeenCalledWith("chat-1");
   });
 });

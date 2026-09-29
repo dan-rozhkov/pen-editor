@@ -21,6 +21,7 @@ import type { ChatSummary, ParallelCount } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
 import { useModelOptions } from "@/hooks/useModelOptions";
 import { useAgentActivityToast } from "@/hooks/useAgentActivityToast";
+import { useReleaseCloudBrowserWhenDone } from "@/hooks/useReleaseCloudBrowserWhenDone";
 import { getUserId } from "@/lib/userId";
 import { hasOpenCodeKey, subscribeOpenCodeKey } from "@/lib/opencodeKey";
 import { useOpenCodeKeyDialogStore } from "@/store/openCodeKeyDialogStore";
@@ -235,6 +236,14 @@ function ChatSession({
   useEffect(() => {
     setChatActivity(sessionId, { needsAnswer: awaitingAnswer, isBusy: isLoading });
   }, [sessionId, awaitingAnswer, isLoading, setChatActivity]);
+
+  // The agent is done (idle, unpaused, queue drained) — free its cloud browser.
+  useReleaseCloudBrowserWhenDone({
+    chatId: sessionId,
+    isBusy: isLoading,
+    awaitingAnswer,
+    hasQueuedMessages,
+  });
 
   // Reports new activity — a new assistant reply, or the agent starting to
   // wait on the user — to the store on every such event, active chat or not.

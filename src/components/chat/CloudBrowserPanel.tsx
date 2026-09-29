@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  ArrowSquareOutIcon,
   CaretDownIcon,
   CaretUpIcon,
   GlobeIcon,
@@ -9,6 +10,7 @@ import { getSessionStaleAt, useCloudBrowserStore } from "@/store/cloudBrowserSto
 import { expireCloudBrowser, releaseCloudBrowser } from "@/lib/cloudBrowser";
 import { isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const MAX_TIMER_MS = 2 ** 31 - 1;
 
@@ -52,24 +54,39 @@ export function CloudBrowserPanel({ chatId }: { chatId: string }) {
       <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-text-muted">
         <GlobeIcon size={14} className="shrink-0" />
         <span className="min-w-0 flex-1 truncate text-xs font-medium">Browser</span>
-        <Button
-          variant="ghost"
-          size="sm"
-          nativeButton={false}
-          render={
-            <a href={session.liveViewUrl} target="_blank" rel="noopener noreferrer" />
-          }
-        >
-          Open in new tab
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => void releaseCloudBrowser(chatId)}
-        >
-          <XIcon data-icon="inline-start" />
-          Close browser
-        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                nativeButton={false}
+                aria-label="Open in new tab"
+                render={
+                  <a href={session.liveViewUrl} target="_blank" rel="noopener noreferrer" />
+                }
+              >
+                <ArrowSquareOutIcon />
+              </Button>
+            }
+          />
+          <TooltipContent>Open in new tab</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Close browser"
+                onClick={() => void releaseCloudBrowser(chatId)}
+              >
+                <XIcon />
+              </Button>
+            }
+          />
+          <TooltipContent>Close browser</TooltipContent>
+        </Tooltip>
         <Button
           variant="ghost"
           size="icon-sm"
