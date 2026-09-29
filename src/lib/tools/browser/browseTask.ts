@@ -1,4 +1,5 @@
 import type { ToolHandler } from "../../toolRegistry";
+import { getBrowserBridge } from "./bridge";
 import {
   buildStepCacheKey,
   deleteCacheEntry,
@@ -1299,8 +1300,8 @@ export async function runBrowseTaskLoop(
   return { status: "budget", steps, url: lastUrl, title: lastTitle, reason: "maxSteps reached", cacheHits };
 }
 
-export const browseTask: ToolHandler = async (args) => {
-  const browser = window.penDesktop?.browser;
+export const browseTask: ToolHandler = async (args, context) => {
+  const browser = getBrowserBridge(context?.sessionId);
   if (!browser) {
     return JSON.stringify({ error: BROWSER_NOT_AVAILABLE_ERROR });
   }

@@ -1,4 +1,5 @@
 import type { ToolHandler } from "../../toolRegistry";
+import { getBrowserBridge } from "./bridge";
 import { callBrowserBridge } from "./shared";
 
 /**
@@ -8,7 +9,7 @@ import { callBrowserBridge } from "./shared";
  * the canvas via `imageFill.url` — no new image plumbing needed (design doc
  * §4). This handler is a thin forwarder onto the preload bridge.
  */
-export const browseFindImages: ToolHandler = async (args) => {
-  const browser = window.penDesktop?.browser;
+export const browseFindImages: ToolHandler = async (args, context) => {
+  const browser = getBrowserBridge(context?.sessionId);
   return callBrowserBridge(browser ? (a) => browser.findImages(a) : undefined, args);
 };

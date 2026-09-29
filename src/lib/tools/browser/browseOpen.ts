@@ -1,4 +1,5 @@
 import type { ToolHandler } from "../../toolRegistry";
+import { getBrowserBridge } from "./bridge";
 import { attachSnapshot, callBrowserBridge, resultError, safeParseObject } from "./shared";
 
 /**
@@ -15,8 +16,8 @@ import { attachSnapshot, callBrowserBridge, resultError, safeParseObject } from 
  * failure under an unrelated field and imply the open landed something to
  * act on when it didn't.
  */
-export const browseOpen: ToolHandler = async (args) => {
-  const browser = window.penDesktop?.browser;
+export const browseOpen: ToolHandler = async (args, context) => {
+  const browser = getBrowserBridge(context?.sessionId);
   const resultStr = await callBrowserBridge(
     browser ? (a) => browser.open(a as { url: string }) : undefined,
     args

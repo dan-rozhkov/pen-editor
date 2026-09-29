@@ -1,4 +1,5 @@
 import type { ToolHandler } from "../../toolRegistry";
+import { getBrowserBridge } from "./bridge";
 import { callBrowserBridge } from "./shared";
 
 /**
@@ -10,7 +11,7 @@ import { callBrowserBridge } from "./shared";
  * onto the desktop shell's `BrowserController`, same conventions as its
  * browse_* siblings.
  */
-export const browseRead: ToolHandler = async (args) => {
-  const browser = window.penDesktop?.browser;
+export const browseRead: ToolHandler = async (args, context) => {
+  const browser = getBrowserBridge(context?.sessionId);
   return callBrowserBridge(browser ? (a) => browser.read(a) : undefined, args);
 };

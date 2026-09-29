@@ -530,7 +530,7 @@ describe("clientCapabilities", () => {
 
     const context = fresh.buildCanvasContext() as Record<string, unknown>;
 
-    expect(context.clientCapabilities).toEqual({ desktopBrowser: true });
+    expect(context.clientCapabilities).toEqual({ desktopBrowser: true, browser: "desktop" });
     // Not nested inside the stringified canvasContext.
     const canvas = JSON.parse((context as { canvasContext: string }).canvasContext);
     expect(canvas.clientCapabilities).toBeUndefined();
@@ -543,7 +543,7 @@ describe("clientCapabilities", () => {
 
     const context = fresh.buildCanvasContext() as Record<string, unknown>;
 
-    expect(context.clientCapabilities).toEqual({ desktopBrowser: false });
+    expect(context.clientCapabilities).toEqual({ desktopBrowser: false, browser: "cloud" });
   });
 });
 

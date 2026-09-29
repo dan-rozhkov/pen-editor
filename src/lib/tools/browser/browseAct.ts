@@ -1,4 +1,5 @@
 import type { ToolHandler } from "../../toolRegistry";
+import { getBrowserBridge } from "./bridge";
 import {
   attachSnapshot,
   BROWSER_NOT_AVAILABLE_ERROR,
@@ -477,8 +478,8 @@ export async function runActionsBatch(
   return JSON.stringify(await attachSnapshot(browser, finalResult));
 }
 
-export const browseAct: ToolHandler = async (args) => {
-  const browser = window.penDesktop?.browser;
+export const browseAct: ToolHandler = async (args, context) => {
+  const browser = getBrowserBridge(context?.sessionId);
   const { actions: actionsRaw, ...topLevelRest } = args;
 
   if (Array.isArray(actionsRaw)) {

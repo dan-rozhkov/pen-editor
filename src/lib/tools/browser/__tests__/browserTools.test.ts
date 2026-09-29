@@ -12,6 +12,17 @@ import {
 } from "@/lib/tools/browser/shared";
 import { setPenDesktop, stubBrowser, stubLocateFetch, type PenDesktopBrowser } from "./helpers";
 
+// These suites pin the desktop-bridge behavior, including the "no bridge at
+// all" degradation path. On the web getBrowserBridge() would otherwise fall
+// back to the cloud bridge (covered in bridge.test.ts / cloudBrowser.test.ts),
+// so the cloud side is stubbed out to keep `window.penDesktop` absence
+// meaning "no browser".
+vi.mock("@/lib/cloudBrowser", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/cloudBrowser")>()),
+  cloudBrowserBridge: undefined,
+  getCloudBrowserBridge: () => undefined,
+}));
+
 afterEach(() => {
   delete window.penDesktop;
   vi.unstubAllGlobals();

@@ -1,4 +1,5 @@
 import type { ToolHandler } from "../../toolRegistry";
+import { getBrowserBridge } from "./bridge";
 import { callBrowserBridge } from "./shared";
 
 /**
@@ -12,7 +13,7 @@ import { callBrowserBridge } from "./shared";
  * this tool just exposes it to the main model directly. Thin forwarder,
  * same conventions as its browse_* siblings.
  */
-export const browseSnapshot: ToolHandler = async () => {
-  const browser = window.penDesktop?.browser;
+export const browseSnapshot: ToolHandler = async (_args, context) => {
+  const browser = getBrowserBridge(context?.sessionId);
   return callBrowserBridge(browser ? () => browser.snapshot() : undefined, {});
 };

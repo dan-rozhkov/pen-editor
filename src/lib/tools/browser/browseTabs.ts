@@ -1,4 +1,5 @@
 import type { ToolHandler } from "../../toolRegistry";
+import { getBrowserBridge } from "./bridge";
 import { BROWSER_BRIDGE_METHOD_MISSING_ERROR, callBrowserBridge } from "./shared";
 
 /**
@@ -13,8 +14,8 @@ import { BROWSER_BRIDGE_METHOD_MISSING_ERROR, callBrowserBridge } from "./shared
  * gets its own, more actionable error instead of the generic "browser not
  * available" one.
  */
-export const browseTabs: ToolHandler = async (args) => {
-  const browser = window.penDesktop?.browser;
+export const browseTabs: ToolHandler = async (args, context) => {
+  const browser = getBrowserBridge(context?.sessionId);
   const call = browser?.tabs
     ? (a: Record<string, unknown>) =>
         browser.tabs!(a as { action: "list" | "switch" | "close" | "new"; tabId?: number; url?: string })

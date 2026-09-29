@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { deriveChatTitle } from "@/lib/chatTitle";
 import { canUseModel, getDefaultModel } from "@/lib/chatModels";
+import { releaseCloudBrowser } from "@/lib/cloudBrowser";
 import { subscribeOpenCodeKey } from "@/lib/opencodeKey";
 import type { AttachedImage, ChatLaunchPayload, QueuedChatMessage } from "@/types/chat";
 
@@ -315,6 +316,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (controller) {
       controller.abort();
     }
+    // Deleting a chat ends its cloud browser session (fire-and-forget;
+    // releaseCloudBrowser never rejects and is a no-op without a handle).
+    void releaseCloudBrowser(chatId);
 
     // If only one chat remains, replace it with a new empty chat
     if (chats.length <= 1) {

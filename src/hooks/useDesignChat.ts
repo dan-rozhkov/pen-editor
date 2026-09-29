@@ -28,6 +28,8 @@ import { hasTouchedEmbeds } from "@/lib/tools/tasteCheckRegistry";
 import type { ChatLaunchPayload } from "@/types/chat";
 import type { UIMessage } from "ai";
 import { hasPendingAskUser } from "@/components/chat/pendingAskUser";
+import { setCloudBrowserChat } from "@/lib/cloudBrowser";
+import { isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";
 import { extractStreamingToolInputs } from "@/hooks/streamingToolParts";
 import {
   streamingToolAdapters,
@@ -46,8 +48,14 @@ const STREAM_RENDER_THROTTLE_MS = 50;
 // request would invalidate prompt caching the same way a rebuilt
 // canvasContext did before that was fixed (root CLAUDE.md's "prompt-cache
 // invariants").
+const DESKTOP_BROWSER = isDesktopBrowserAvailable();
+// `browser` supersedes the legacy `desktopBrowser` boolean: on the web the
+// tools run against a cloud browser, and the backend alone decides whether
+// that is enabled (pen-editor-backend docs/specs/2026-09-29-cloud-browser-
+// steel-design.md §3.7/§4). `desktopBrowser` stays for older backends.
 const CLIENT_CAPABILITIES = {
-  desktopBrowser: Boolean(window.penDesktop?.browser),
+  desktopBrowser: DESKTOP_BROWSER,
+  browser: DESKTOP_BROWSER ? "desktop" : "cloud",
 } as const;
 
 // Whether `model` is an OpenCode BYOK route (pen-editor-backend
@@ -304,8 +312,19 @@ const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
   generate_vector: 185_000,
 };
 
-function getToolCallTimeoutMs(toolName: string): number {
-  return TOOL_CALL_TIMEOUT_MS_OVERRIDES[toolName] ?? DEFAULT_TOOL_CALL_TIMEOUT_MS;
+// Cloud mode (no `window.penDesktop.browser`): the desktop values are sized
+// for local IPC. A cold cloud command can additionally spend a Steel session
+// create (<=20s) and a CDP connect (<=30s) before the command itself, so
+// browse_open (45s nav + those 50s + snapshot) gets 150s and every other
+// browse_* gets its desktop budget + 60s. Desktop values stay unchanged.
+const CLOUD_BROWSE_OPEN_TIMEOUT_MS = 150_000;
+const CLOUD_BROWSE_EXTRA_MS = 60_000;
+
+export function getToolCallTimeoutMs(toolName: string): number {
+  const base = TOOL_CALL_TIMEOUT_MS_OVERRIDES[toolName] ?? DEFAULT_TOOL_CALL_TIMEOUT_MS;
+  if (!toolName.startsWith("browse_") || isDesktopBrowserAvailable()) return base;
+  if (toolName === "browse_open") return CLOUD_BROWSE_OPEN_TIMEOUT_MS;
+  return base + CLOUD_BROWSE_EXTRA_MS;
 }
 
 // The finished message's `metadata` is typed `unknown` (useChat isn't given
@@ -443,6 +462,11 @@ const OFFLINE_SEND_ERROR = new Error(OFFLINE_MESSAGE);
 
 export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const [input, setInput] = useState("");
+  // Fallback chat for cloud-browser calls that carry no chat context; the
+  // browse_* handlers bind to their own session id when they have one.
+  useEffect(() => {
+    setCloudBrowserChat(sessionId);
+  }, [sessionId]);
   // Set when a send is refused because the browser is offline. The error
   // itself is DERIVED from this plus live connectivity (see `offlineError`
   // below) rather than stored: an "you are offline" banner is stale the

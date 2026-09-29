@@ -28,6 +28,8 @@ import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { ChatList } from "./ChatList";
 import { QueuedMessagePanel } from "./QueuedMessagePanel";
+import { CloudBrowserPanel } from "./CloudBrowserPanel";
+import { releaseCloudBrowser } from "@/lib/cloudBrowser";
 import { SkillsPanel } from "./SkillsPanel";
 import { ContextMeter } from "./ContextMeter";
 import { OpenCodeKeyDialog } from "./OpenCodeKeyDialog";
@@ -290,6 +292,8 @@ function ChatSession({
         // An empty transcript has no context usage yet — leaving the old
         // reading would show a stale meter over nothing.
         useChatStore.getState().clearContextTokens(sessionId);
+        // A cleared chat starts over, so its cloud browser does too.
+        void releaseCloudBrowser(sessionId);
       },
     });
     return () => unregisterSessionActions(sessionId);
@@ -380,6 +384,10 @@ function ChatSession({
         addToolOutput={addToolOutput}
         isVisible={isVisible}
       />
+
+      {/* Cloud browser live view (web build only; hides itself on desktop
+          and when this chat has no live session). */}
+      <CloudBrowserPanel chatId={sessionId} />
 
       {/* Queued-message panel — sits between the transcript and
           the composer, its bottom 12px hidden under the composer card. When
