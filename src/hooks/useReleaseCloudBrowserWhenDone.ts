@@ -3,12 +3,13 @@ import { releaseCloudBrowser } from "@/lib/cloudBrowser";
 import { isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";
 import { useCloudBrowserStore } from "@/store/cloudBrowserStore";
 
-// `chat.status` dips to "ready" between tool-loop steps (a failed tool input
-// settles the stream before the SDK auto-continues) and a queued message is
-// sent a tick after the turn ends. Releasing on that dip would kill the browser
-// mid-task and lose page state, so the release waits this long for the chat to
-// turn busy again; the real gaps are milliseconds.
-export const RELEASE_GRACE_MS = 2_000;
+// How long the chat must stay idle before its browser is released. Not
+// released right at turn end: an agent often ends a turn with a plain-text
+// question, and the user's answer should find the same page (login, filled
+// form, scroll) still open. It also absorbs `chat.status`'s brief "ready" dips
+// between tool-loop steps. Kept under the backend's CLOUD_BROWSER_IDLE_MS
+// (5 min) so the preview closes before the session silently dies.
+export const RELEASE_IDLE_MS = 3 * 60_000;
 
 /**
  * Releases the chat's cloud browser once the agent's work has really ended: not
@@ -39,7 +40,7 @@ export function useReleaseCloudBrowserWhenDone({
       if (isDesktopBrowserAvailable()) return;
       if (!useCloudBrowserStore.getState().sessions[chatId]) return;
       void releaseCloudBrowser(chatId);
-    }, RELEASE_GRACE_MS);
+    }, RELEASE_IDLE_MS);
     return () => clearTimeout(timer);
   }, [chatId, working]);
 }

@@ -237,7 +237,7 @@ function ChatSession({
     setChatActivity(sessionId, { needsAnswer: awaitingAnswer, isBusy: isLoading });
   }, [sessionId, awaitingAnswer, isLoading, setChatActivity]);
 
-  // The agent is done (idle, unpaused, queue drained) — free its cloud browser.
+  // Frees the cloud browser once the agent has sat idle for a few minutes.
   useReleaseCloudBrowserWhenDone({
     chatId: sessionId,
     isBusy: isLoading,
