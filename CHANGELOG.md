@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.80.0] - 2026-09-29
+
+Three themes: the agent can drive a browser from the web build too, a screen
+now materializes on the canvas as the agent types it, and the embed became a
+first-class node you can inspect and edit element by element. Components are
+gone.
+
+### Added
+- **The agent's browser works in the web build.** Outside the desktop shell the `browse_*` tools now go through a cloud browser (the backend's `/api/browser/cmd/:name`, a Steel-hosted Chromium driven by the same controller the desktop app uses). A live view of it sits above the chat composer, with icon buttons to open it in a new tab or close it; it closes on its own after 3 minutes of agent idleness — long enough that an answer to the agent's question finds the same page (login, filled form, scroll) still open, short of the backend's 5-minute idle reap.
+- **`browse_task`: a whole browsing goal in one tool call.** The client runs a snapshot → decide → act loop until the goal is done or blocked, without a chat turn per click. It batches actions, presses keys and hovers, handles SELECTs and sliders, guards against loops and against irreversible actions (order/pay/delete/send, including Russian stems), and replays landed steps from an exact-input memo. `browse_read`, `browse_snapshot`, `browse_screenshot` and `browse_tabs` handlers landed alongside.
+- **Screens stream onto the canvas.** A `batch_design` screen used to appear only after its whole HTML had streamed, 70–120 s behind an empty box. A dashed box now claims each screen's spot at once, the partial markup renders live inside it top-to-bottom with a "writing head", and the finished embed replaces the preview in place. Other streaming tool mutations are applied brush by brush the same way.
+- **`generate_vector`**: describe an icon or illustration in prose and watch QuiverAI draw it on the canvas (`draw_vector` stays for exact geometry).
+- **Embeds are editable like native nodes.** Double-click an embed to pick elements; the element's properties panel is built from the very same sections as the native inspector; the layers panel shows the embed's DOM tree with select, rename, hide, reorder and delete; elements reorder by drag; editor variables bind into embed HTML end to end; text edits inline on double-click. An empty embed shows an agent prompt form.
+- **Taste checks.** Screens touched by `batch_design`/`edit_embed_html` are checked by Jev and the findings ride back in the tool result, so the model fixes its own screens.
+- **Mobbin replaces Refero** for references, connected per user over OAuth (the token stays in this browser).
+- **Chat list** instead of the agent tab bar: every chat stays mounted and keeps streaming in the background, with per-row status.
+- **Model picker is back**, per chat, fed by `GET /api/models`, with OpenCode models behind a user-supplied key and a context-usage ring next to it.
+- **Landing page at `/`**: the showcase gained a product story (hero, workflow sections, FAQ) above the gallery.
+- Comment and embed-editing tools are published to agents outside the chat panel (WebMCP/desktop bridge); `read_embed_html` is withheld on someone else's shared canvas.
+
+### Changed
+- A selected frame is sent to the agent as its id, not an auto-attached screenshot. Agent screenshots are downscaled to 1024 px and encoded as WebP, since every one is resent each turn.
+- The Embed tool takes the second slot in the tool dock, with Frame under its chevron; embed size presets added.
+
+### Removed
+- **Components, instances and slots** (breaking). `reusable` frames, `ref` instances with overrides/property values, and slot frames are no longer supported by the editor.
+
+### Fixed
+- File → Export as `.json`/`.pen` produced no file: the object URL was revoked before Chrome started the download.
+- A late-loading image fill no longer leaves a stale raster-cached frame.
+- The zoom control no longer snaps the canvas back to 100%; a gesture the embed picker steals mid-flight is released.
+- Closing the left panel on mobile no longer loses chat history.
+
 ## [0.79.0] - 2026-09-05
 
 Two themes: an agent in the tab can now bring a real codebase with it, and the
