@@ -1,5 +1,5 @@
 import type { ToolHandler } from "../../toolRegistry";
-import { getBrowserBridge } from "./bridge";
+import { getBrowserBridge, isDesktopBrowserAvailable } from "./bridge";
 import {
   buildStepCacheKey,
   deleteCacheEntry,
@@ -53,6 +53,23 @@ const HARD_MAX_STEPS = 25;
 
 /** design doc §3: BROWSE_TASK_DEADLINE_MS = 90_000. */
 const BROWSE_TASK_DEADLINE_MS = 90_000;
+
+/**
+ * The cloud browser (web build, Steel) gets twice the desktop budget. Every
+ * snapshot/perform there is a round trip web → backend → Steel, and a click
+ * measured 3-10 s against ~1 s on the desktop (a remote page script alone is
+ * ~0.2 s, and a heavy page stalls single calls for 4-8 s). With the desktop's
+ * 90 s — 55 s of step starts after STEP_DEADLINE_RESERVE_MS — a real form
+ * (Google Flights, ~11 steps) ran out after 3 steps, every one of them right.
+ * browse_task's cloud tool-call timeout (useDesignChat.ts,
+ * CLOUD_BROWSE_TASK_TIMEOUT_MS) covers 180 - 35 + ~61.5 s plus a cold session.
+ */
+export const CLOUD_BROWSE_TASK_DEADLINE_MS = 180_000;
+
+/** The loop budget for whichever browser is driving this call. */
+export function browseTaskDeadlineMs(): number {
+  return isDesktopBrowserAvailable() ? BROWSE_TASK_DEADLINE_MS : CLOUD_BROWSE_TASK_DEADLINE_MS;
+}
 
 /**
  * browse-speed-contract.md, "Frontend" item 4: how much of the deadline
@@ -727,10 +744,11 @@ export async function runBrowseTaskLoop(
   browser: NonNullable<NonNullable<typeof window.penDesktop>["browser"]>,
   now: () => number = () => Date.now(),
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-  url?: string
+  url?: string,
+  deadlineMs: number = BROWSE_TASK_DEADLINE_MS
 ): Promise<Transcript> {
   const cappedMaxSteps = Math.min(Math.max(1, Math.floor(maxSteps)), HARD_MAX_STEPS);
-  const deadline = now() + BROWSE_TASK_DEADLINE_MS;
+  const deadline = now() + deadlineMs;
   const steps: TranscriptStep[] = [];
   const history: StepHistoryEntry[] = [];
 
@@ -1314,7 +1332,7 @@ export const browseTask: ToolHandler = async (args, context) => {
   const url = typeof args.url === "string" && args.url.length > 0 ? args.url : undefined;
 
   try {
-    const transcript = await runBrowseTaskLoop(goal, maxSteps, browser, undefined, undefined, url);
+    const transcript = await runBrowseTaskLoop(goal, maxSteps, browser, undefined, undefined, url, browseTaskDeadlineMs());
     // Matches every other browser tool handler's "always resolves a real
     // JSON string" contract (see shared.ts's callBrowserBridge comment) —
     // this handler doesn't route through callBrowserBridge since it makes

@@ -331,11 +331,16 @@ const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
 // browse_* gets its desktop budget + 60s. Desktop values stay unchanged.
 const CLOUD_BROWSE_OPEN_TIMEOUT_MS = 150_000;
 const CLOUD_BROWSE_EXTRA_MS = 60_000;
+// browse_task's cloud loop runs CLOUD_BROWSE_TASK_DEADLINE_MS (180s,
+// browseTask.ts): 180 - 35 + 61.5 = 206.5s worst case after it starts, plus
+// the cold session create/connect above (<=50s) — 270s.
+const CLOUD_BROWSE_TASK_TIMEOUT_MS = 270_000;
 
 export function getToolCallTimeoutMs(toolName: string): number {
   const base = TOOL_CALL_TIMEOUT_MS_OVERRIDES[toolName] ?? DEFAULT_TOOL_CALL_TIMEOUT_MS;
   if (!toolName.startsWith("browse_") || isDesktopBrowserAvailable()) return base;
   if (toolName === "browse_open") return CLOUD_BROWSE_OPEN_TIMEOUT_MS;
+  if (toolName === "browse_task") return CLOUD_BROWSE_TASK_TIMEOUT_MS;
   return base + CLOUD_BROWSE_EXTRA_MS;
 }
 

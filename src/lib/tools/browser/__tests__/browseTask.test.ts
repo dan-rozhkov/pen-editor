@@ -7,7 +7,13 @@ import {
   lookupStepCache,
   writeStepCacheEntry,
 } from "@/lib/tools/browser/actionCache";
-import { browseTask, extractUrlFromGoal, runBrowseTaskLoop } from "@/lib/tools/browser/browseTask";
+import {
+  browseTask,
+  browseTaskDeadlineMs,
+  CLOUD_BROWSE_TASK_DEADLINE_MS,
+  extractUrlFromGoal,
+  runBrowseTaskLoop,
+} from "@/lib/tools/browser/browseTask";
 import { BROWSER_NOT_AVAILABLE_ERROR, type SnapshotResult } from "@/lib/tools/browser/shared";
 import {
   setPenDesktop,
@@ -431,6 +437,49 @@ describe("browse_task", () => {
     expect(transcript.status).toBe("budget");
     expect(transcript.reason).toBe("deadline exceeded");
     expect(transcript.steps).toHaveLength(0);
+  });
+
+  it("runs past the desktop's 90s when given the cloud deadline", async () => {
+    // Every landed action costs 40s of wall clock (a slow cloud click): the
+    // desktop budget (90s, 35s reserve) stops after the first one, the cloud
+    // budget reaches DONE.
+    let clock = 0;
+    const slowBrowser = () =>
+      stubBrowser({
+        perform: async () => {
+          clock += 40_000;
+          return {};
+        },
+      });
+    const now = () => clock;
+
+    stubFetchSequence([CLICK_STEP, CLICK_STEP, DONE]);
+    const desktop = await runBrowseTaskLoop("fill the form", 12, slowBrowser(), now);
+    expect(desktop.reason).toBe("deadline exceeded");
+
+    clock = 0;
+    localStorage.clear(); // or the action cache replays the first run's steps
+    stubFetchSequence([CLICK_STEP, CLICK_STEP, DONE]);
+    const cloud = await runBrowseTaskLoop(
+      "fill the form",
+      12,
+      slowBrowser(),
+      now,
+      undefined,
+      undefined,
+      CLOUD_BROWSE_TASK_DEADLINE_MS
+    );
+    expect(cloud.status).toBe("done");
+  });
+
+  it("gives the cloud browser the longer deadline and the desktop the original one", () => {
+    expect(browseTaskDeadlineMs()).toBe(CLOUD_BROWSE_TASK_DEADLINE_MS);
+    window.penDesktop = { onMenuCommand: () => () => {}, browser: {} } as never;
+    try {
+      expect(browseTaskDeadlineMs()).toBe(90_000);
+    } finally {
+      delete window.penDesktop;
+    }
   });
 
   it("records a failing perform step without ending the task", async () => {
