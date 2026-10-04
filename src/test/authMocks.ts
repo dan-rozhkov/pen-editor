@@ -96,13 +96,17 @@ export const sessionModule = () => ({
 });
 
 /** Stub GET /api/auth-config (and fail every other URL loudly). */
-export function stubAuthConfig(config: AuthConfig | "fail"): void {
+// An enabled config gets this page's origin as `appOrigin` unless it names one.
+export function stubAuthConfig(config: (AuthConfig & { appOrigin?: string }) | "fail"): void {
+  const body = config !== "fail" && config.enabled && !("appOrigin" in config)
+    ? { ...config, appOrigin: window.location.origin }
+    : config;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
       if (!String(url).endsWith("/api/auth-config")) throw new Error(`unexpected fetch ${url}`);
       if (config === "fail") throw new Error("network");
-      return new Response(JSON.stringify(config), { status: 200 });
+      return new Response(JSON.stringify(body), { status: 200 });
     }),
   );
 }

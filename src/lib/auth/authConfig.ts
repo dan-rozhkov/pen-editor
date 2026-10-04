@@ -16,6 +16,12 @@ export const AUTH_DISABLED: AuthConfig = {
   emailEnabled: false,
 };
 
+const stripSlash = (url: string) => url.replace(/\/+$/, "");
+
+function isAppOrigin(appOrigin: unknown): boolean {
+  return typeof appOrigin === "string" && stripSlash(appOrigin) === stripSlash(window.location.origin);
+}
+
 let cached: Promise<AuthConfig> | null = null;
 
 // Fetched once per page load, WITHOUT credentials (the flag is still off). ANY failure (offline, 404 on an older backend,
@@ -26,8 +32,12 @@ export function loadAuthConfig(): Promise<AuthConfig> {
     try {
       const res = await apiFetch("/api/auth-config");
       if (!res.ok) return AUTH_DISABLED;
-      const body = (await res.json()) as Partial<AuthConfig> | null;
+      const body = (await res.json()) as Partial<AuthConfig & { appOrigin: string }> | null;
       if (!body || body.enabled !== true) return AUTH_DISABLED;
+      // Credentialed CORS is granted to the backend's APP_ORIGIN only; the same
+      // build served from any other host (or an older backend without
+      // `appOrigin`) must stay anonymous or every request would be blocked.
+      if (!isAppOrigin(body.appOrigin)) return AUTH_DISABLED;
       // From here on every backend call carries the session cookie.
       setCredentialsEnabled(true);
       useAuthStore.setState({ accountsEnabled: true });

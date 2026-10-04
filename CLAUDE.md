@@ -123,7 +123,7 @@ token, tab routing, security).
 
 ### Accounts (Better Auth)
 
-Optional sign-in (Google / email link / password); anonymous use is unchanged. Backend contract: Better Auth at `<backend>/api/auth`, `GET /api/auth-config` -> `{enabled, google, emailEnabled}`, `POST /api/account/claim-anon`.
+Optional sign-in (Google / email link / password); anonymous use is unchanged. Backend contract: Better Auth at `<backend>/api/auth`, `GET /api/auth-config` -> `{enabled, appOrigin?, google, emailEnabled}` (accounts count as enabled ONLY when `enabled` and `appOrigin` equals `window.location.origin`, trailing slash ignored; any other host serving this build, or a backend without `appOrigin`, behaves as `enabled:false`), `POST /api/account/claim-anon`.
 
 - **Client**: `src/lib/auth/authClient.ts` (`better-auth/react` + `magicLinkClient`, `apiKeyClient` from `@better-auth/api-key/client`, `oauthProviderClient` from `@better-auth/oauth-provider/client`). Pin these to the backend's Better Auth version. The auth client chunk is lazy: `AuthMenu` / `AuthBootstrap` fetch `/api/auth-config` first and render nothing (never load the client) when accounts are off or the request fails.
 - **Credentials rule**: every backend call goes through `apiFetch(path)` / `apiFetchUrl(url)` in `src/lib/apiBase.ts` (they set `credentials: "include"` ONLY after `loadAuthConfig()` resolved `enabled:true` — module flag in `apiBase.ts`; before that, or when accounts are off, no credentials); the chat transport resolves it the same way. The auth client always includes (it loads only when enabled). Never write `fetch(resolveApiUrl(...))` — `authPlumbing.test.ts` scans `src/` and fails on it.

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiFetch, apiFetchUrl, credentialsMode, setCredentialsEnabled, withCredentials } from "@/lib/apiBase";
 import { AUTH_DISABLED, loadAuthConfig, resetAuthConfigCache } from "@/lib/auth/authConfig";
+import { useAuthStore } from "@/lib/auth/authState";
 import { describeActionError, describeRedirectError } from "@/lib/auth/errors";
 import { safeNext } from "@/lib/auth/safeNext";
 import { describeScope } from "@/lib/auth/scopes";
@@ -38,6 +39,23 @@ describe("credentials helper", () => {
     await loadAuthConfig();
     expect(vi.mocked(fetch).mock.calls[0][1]?.credentials).toBeUndefined();
     expect(credentialsMode()).toBe("include");
+  });
+
+  it.each([
+    ["on another origin", "https://pen-editor.onrender.com"],
+    ["missing (older backend)", undefined],
+  ])("credentials stay off when appOrigin is %s", async (_label, appOrigin) => {
+    resetAuthConfigCache();
+    stubAuthConfig({ enabled: true, google: true, emailEnabled: true, appOrigin });
+    expect(await loadAuthConfig()).toEqual(AUTH_DISABLED);
+    expect(credentialsMode()).toBeUndefined();
+    expect(useAuthStore.getState().accountsEnabled).toBe(false);
+  });
+
+  it("appOrigin matches this page's origin ignoring a trailing slash", async () => {
+    resetAuthConfigCache();
+    stubAuthConfig({ enabled: true, google: false, emailEnabled: false, appOrigin: `${window.location.origin}/` });
+    expect((await loadAuthConfig()).enabled).toBe(true);
   });
 
   it.each(["fail", { enabled: false, google: false, emailEnabled: false }] as const)(
