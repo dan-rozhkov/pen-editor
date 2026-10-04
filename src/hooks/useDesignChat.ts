@@ -6,8 +6,8 @@ import {
 } from "ai";
 import { track, bucketLength } from "@/lib/analytics";
 import { consumeFirstPromptTiming } from "@/lib/analytics/sessionTiming";
-import { resolveApiUrl, isOffline, OFFLINE_MESSAGE } from "@/lib/apiBase";
-import { getUserId } from "@/lib/userId";
+import { credentialsMode, resolveApiUrl, isOffline, OFFLINE_MESSAGE } from "@/lib/apiBase";
+import { getRequestUserId } from "@/lib/auth/authState";
 import { canSendImages } from "@/lib/chatModels";
 import { getOpenCodeKey } from "@/lib/opencodeKey";
 import { createRetryingFetch, type RetryState } from "@/lib/retryFetch";
@@ -212,7 +212,7 @@ export function buildCanvasContext(sessionId?: string): object {
       ...(likedReferences.length > 0 ? { likedReferences } : {}),
     }),
     model,
-    userId: getUserId(),
+    userId: getRequestUserId(),
     clientCapabilities: CLIENT_CAPABILITIES,
   };
 }
@@ -500,6 +500,9 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     () =>
       new DefaultChatTransport({
         api: resolveChatApiUrl(),
+        // Session cookie only once accounts are known to be enabled (see
+        // apiBase.ts withCredentials); resolved per request.
+        credentials: () => credentialsMode() as RequestCredentials,
         // withMobbinAuthHeader wraps the retrying fetch so the *actual*
         // network call always carries a currently-valid X-Mobbin-Token
         // header (refreshed first if it had expired) or none at all — see

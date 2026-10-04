@@ -58,6 +58,7 @@ import {
   getLastUserMessageText,
   useDesignChat,
 } from "@/hooks/useDesignChat";
+import { setCredentialsEnabled } from "@/lib/apiBase";
 import { toolHandlers, type ToolHandler } from "@/lib/toolRegistry";
 import { clearOpenCodeKey, setOpenCodeKey } from "@/lib/opencodeKey";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -890,6 +891,20 @@ describe("useDesignChat (hook + UI message stream)", () => {
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
       assertHeaders(seenHeaders[0]);
+    });
+
+    it("sends the session cookie from the chat transport only once accounts are enabled", async () => {
+      capturedTransportOptions.length = 0;
+      renderHook(() => useDesignChat({ sessionId: "credentials-gate" }));
+      const credentials = (capturedTransportOptions.at(-1) as { credentials: () => unknown }).credentials;
+      try {
+        setCredentialsEnabled(false);
+        expect(credentials()).toBeUndefined();
+        setCredentialsEnabled(true);
+        expect(credentials()).toBe("include");
+      } finally {
+        setCredentialsEnabled(false);
+      }
     });
 
     // Defect 4 (code review): prepareSendMessagesRequest used to return

@@ -24,6 +24,7 @@ import { useDevModeStore } from "./store/devModeStore";
 import { useLayers3DStore } from "./store/layers3dStore";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { useOnlineStatus } from "./hooks/useOnlineStatus";
+import { useSessionMcpBridge } from "./hooks/useSessionMcpBridge";
 import { launchShowcaseAgentChat } from "./lib/launchShowcaseAgentChat";
 import { startWebMcp, stopWebMcp } from "./lib/webmcp";
 import { importShowcaseScreensFromHandoff } from "./lib/importShowcaseScreens";
@@ -43,6 +44,7 @@ function App() {
   const isMobile = useIsMobile();
   const isOnline = useOnlineStatus();
   const isSharedView = useSharedViewStore((s) => s.isSharedView);
+  useSessionMcpBridge(!isSharedView);
 
   const isPresent = mode === "present";
   const isView = mode === "view";

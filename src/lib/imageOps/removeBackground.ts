@@ -3,7 +3,7 @@
 // CLAUDE.md's split-execution note, which applies here too even though this
 // isn't an AI-agent scene-graph tool: whatever calls into the scene must live
 // once, not be duplicated between the two entry points.
-import { resolveApiUrl, isOffline } from "@/lib/apiBase";
+import { isOffline, apiFetch } from "@/lib/apiBase";
 import { applyImagePaintUrl, findNodeImagePaint, resolveNodeImageUrl } from "./resolveSourceUrl";
 
 export interface RemoveBackgroundResult {
@@ -17,7 +17,7 @@ async function requestRemoveBackground(imageUrl: string): Promise<string> {
   }
   let res: Response;
   try {
-    res = await fetch(resolveApiUrl("/api/remove-background"), {
+    res = await apiFetch("/api/remove-background", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ image_url: imageUrl }),

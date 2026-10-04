@@ -9,6 +9,7 @@ import {
 import { AppleLogoIcon } from "@phosphor-icons/react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
+import { AuthMenu } from "@/components/auth/AuthMenu";
 import { LandingPreview, ShowcaseLanding } from "./ShowcaseLanding";
 import "./showcaseLanding.css";
 
@@ -441,6 +442,7 @@ export function ShowcasePage() {
           </h1>
         </div>
         <div className="sf-header-actions absolute top-[calc(1rem+env(safe-area-inset-top))] right-[calc(1rem+env(safe-area-inset-right))] hidden shrink-0 items-center gap-2 sm:flex">
+          <AuthMenu variant="showcase" />
           {/* The desktop shell ships from its own repo (pen-editor-desktop),
               so its build artifacts live on GitHub Releases, not here. The
               asset filenames carry the version, which would make a direct

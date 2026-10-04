@@ -1,5 +1,5 @@
-import { resolveApiUrl } from "@/lib/apiBase";
-import { getUserId } from "@/lib/userId";
+import { apiFetch } from "@/lib/apiBase";
+import { getRequestUserId } from "@/lib/auth/authState";
 import { useCloudBrowserStore } from "@/store/cloudBrowserStore";
 import type { PenDesktopApi } from "@/lib/desktopBridge";
 
@@ -99,10 +99,10 @@ function errorMessage(body: unknown, status: number): string {
 const releasing = new Map<string, number>();
 
 function postRelease(chatId: string, handle: string): Promise<boolean> {
-  return fetch(resolveApiUrl("/api/browser/release"), {
+  return apiFetch("/api/browser/release", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId: getUserId(), chatId, handle }),
+    body: JSON.stringify({ userId: getRequestUserId(), chatId, handle }),
   }).then(
     async (res) => {
       if (!res.ok) return false;
@@ -133,12 +133,12 @@ async function callCommand(
   }, remaining);
   try {
     const handle = getHandle(chatId);
-    const res = await fetch(resolveApiUrl(`/api/browser/cmd/${name}`), {
+    const res = await apiFetch(`/api/browser/cmd/${name}`, {
       method: "POST",
       signal: controller.signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        userId: getUserId(),
+        userId: getRequestUserId(),
         chatId,
         ...(handle ? { handle } : {}),
         args: args ?? {},

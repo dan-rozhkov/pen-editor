@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { resolveApiUrl } from "@/lib/apiBase";
+import { apiFetch } from "@/lib/apiBase";
 import {
   clearOpenCodeKey,
   getOpenCodeKey,
@@ -134,7 +134,7 @@ export function OpenCodeKeyDialog({ open, onOpenChange }: OpenCodeKeyDialogProps
     setIsVerifying(true);
     setResult({ kind: "checking" });
     try {
-      const res = await fetch(resolveApiUrl("/api/opencode/validate"), {
+      const res = await apiFetch("/api/opencode/validate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

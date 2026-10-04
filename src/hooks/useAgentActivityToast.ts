@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { resolveApiUrl } from "@/lib/apiBase";
+import { apiFetchUrl, resolveApiUrl } from "@/lib/apiBase";
+import { isSignedIn } from "@/lib/auth/authState";
 
 // Two delayed checks per finished turn, both scheduled at turn-finish time
 // (not chained). The backend's background review is a full generateText run
@@ -100,7 +101,8 @@ function activityToastText(events: ActivityEvent[]): string | undefined {
 }
 
 function buildUrl(userId: string, sinceId: number | undefined): string {
-  const params = new URLSearchParams({ userId });
+  // Signed in: no userId param, the session cookie identifies the caller.
+  const params = new URLSearchParams(isSignedIn() || !userId ? {} : { userId });
   if (sinceId !== undefined) {
     params.set("sinceId", String(sinceId));
   }
@@ -109,7 +111,7 @@ function buildUrl(userId: string, sinceId: number | undefined): string {
 
 function checkAgentActivity(userId: string): void {
   const cursor = readCursor(userId);
-  fetch(buildUrl(userId, cursor))
+  apiFetchUrl(buildUrl(userId, cursor))
     .then((res) => (res.ok ? res.json() : null))
     .then((data) => {
       const parsed = parseResponse(data);

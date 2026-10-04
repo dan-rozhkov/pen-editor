@@ -1,4 +1,4 @@
-import { resolveApiUrl, isOffline } from "@/lib/apiBase";
+import { isOffline, apiFetch } from "@/lib/apiBase";
 
 // Shared transport for the two repo-reading tools (read_design_repo,
 // read_repo_files). Both are client-executed — their backend schemas
@@ -39,7 +39,7 @@ export async function postRepoRequest(
   let res: Response;
   let text: string;
   try {
-    res = await fetch(resolveApiUrl(path), {
+    res = await apiFetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

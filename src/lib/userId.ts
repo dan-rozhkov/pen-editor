@@ -19,6 +19,26 @@ function randomId(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/** The stored anonymous id WITHOUT creating one (null if none). Used to decide
+ * whether there is anything to claim into an account. */
+export function peekUserId(): string | null {
+  try {
+    return localStorage.getItem(USER_ID_KEY);
+  } catch {
+    return fallbackId ?? null;
+  }
+}
+
+/** Forget the anonymous id (its data now belongs to an account). */
+export function clearUserId(): void {
+  fallbackId = undefined;
+  try {
+    localStorage.removeItem(USER_ID_KEY);
+  } catch {
+    // storage unavailable: nothing persisted to remove
+  }
+}
+
 export function getUserId(): string {
   try {
     const existing = localStorage.getItem(USER_ID_KEY);

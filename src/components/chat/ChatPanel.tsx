@@ -22,7 +22,7 @@ import { useDesignChat } from "@/hooks/useDesignChat";
 import { useModelOptions } from "@/hooks/useModelOptions";
 import { useAgentActivityToast } from "@/hooks/useAgentActivityToast";
 import { useReleaseCloudBrowserWhenDone } from "@/hooks/useReleaseCloudBrowserWhenDone";
-import { getUserId } from "@/lib/userId";
+import { getActorId, useAuthStore } from "@/lib/auth/authState";
 import { hasOpenCodeKey, subscribeOpenCodeKey } from "@/lib/opencodeKey";
 import { useOpenCodeKeyDialogStore } from "@/store/openCodeKeyDialogStore";
 import { MessageList } from "./MessageList";
@@ -192,7 +192,9 @@ function ChatSession({
   // stream already closed (background review) — the model has no chance to
   // mention these itself. See useAgentActivityToast for the delayed-check
   // design.
-  useAgentActivityToast({ userId: getUserId(), status });
+  // Subscribed so the id re-resolves when the session loads/changes.
+  useAuthStore((s) => s.userId);
+  useAgentActivityToast({ userId: getActorId(), status });
 
   const awaitingAnswer = hasPendingAskUser(messages);
 

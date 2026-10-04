@@ -1,4 +1,4 @@
-import { isOffline, resolveApiUrl } from "@/lib/apiBase";
+import { isOffline, apiFetch } from "@/lib/apiBase";
 import { buildRenderableSvgPrefix } from "./svgStreamPrefix";
 
 /**
@@ -153,7 +153,7 @@ export async function streamQuiverVector(
     );
   }
 
-  const response = await fetch(resolveApiUrl("/api/vector/generate"), {
+  const response = await apiFetch("/api/vector/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

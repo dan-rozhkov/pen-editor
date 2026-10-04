@@ -21,8 +21,8 @@ import { captureEmbedCanvas } from "@/lib/embedScreenshot";
 import { convertDesignNodesToHtml } from "@/lib/designToHtml";
 import { buildVariableStyleBlock } from "@/utils/variableCssUtils";
 import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
-import { resolveApiUrl, isOffline } from "@/lib/apiBase";
-import { getUserId } from "@/lib/userId";
+import { isOffline, apiFetch } from "@/lib/apiBase";
+import { getRequestUserId } from "@/lib/auth/authState";
 import type { EmbedNode } from "@/types/scene";
 
 // Owned by pen-editor-backend/src/showcase/platform.ts (SHOWCASE_VIEWPORTS) —
@@ -328,12 +328,13 @@ export async function publishScreensToShowcase(
     prompt: req.prompt,
     platform,
     // Required by the backend (same anonymous client id /api/chat sends,
-    // via getUserId() — see src/lib/userId.ts). It's a modest gate, not
+    // via getRequestUserId() — undefined (omitted) while signed in, when the
+    // session identifies the caller; see src/lib/auth/authState.ts). It's a modest gate, not
     // authentication: a request missing it, or shaped implausibly, gets a
     // 400. getUserId() always returns something usable (it creates and
     // persists an id on first call, with a per-process fallback when
     // localStorage throws), so this never needs its own error handling here.
-    userId: getUserId(),
+    userId: getRequestUserId(),
     ...(coverIndex >= 0 ? { coverIndex: coverIndex + 1 } : {}),
     screens: resolved.map((screen, i) => ({
       name: screen.title,
@@ -346,7 +347,7 @@ export async function publishScreensToShowcase(
 
   let res: Response;
   try {
-    res = await fetch(resolveApiUrl("/api/showcase/publish"), {
+    res = await apiFetch("/api/showcase/publish", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

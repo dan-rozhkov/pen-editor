@@ -6,7 +6,13 @@ import { useMcpBridgeStore } from "@/store/mcpBridgeStore";
 const MIN_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
 
-function resolveWsUrl(token: string): string {
+// `token === null` is cookie mode: a signed-in user's browser session cookie
+// authenticates the socket (credentials ride the WebSocket handshake
+// automatically; the backend allowlists this origin), so there is no query.
+function resolveWsUrl(token: string | null): string {
+  if (token === null) {
+    return resolveApiUrl("/api/mcp/ws").replace(/^http/, "ws");
+  }
   // VITE_MCP_WS_URL is set (dev-only, via vite.config.ts's define) when the
   // token came from the ~/.pen-editor/mcp.json handshake file, and is
   // derived from that handshake's own url/port — the backend instance that
@@ -35,7 +41,7 @@ export class McpBridge {
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = true;
-  private readonly token: string;
+  private readonly token: string | null;
   private readonly wsFactory: (url: string) => WebSocket;
   // Bumped in connect() every time a new socket is created. Used to pin a
   // queued call's liveness check to the socket it actually arrived on —
@@ -70,21 +76,21 @@ export class McpBridge {
     },
   });
 
-  constructor(token: string, wsFactory: (url: string) => WebSocket = (url) => new WebSocket(url)) {
+  constructor(token: string | null, wsFactory: (url: string) => WebSocket = (url) => new WebSocket(url)) {
     this.token = token;
     this.wsFactory = wsFactory;
   }
 
   start(): void {
     this.stopped = false;
-    window.addEventListener("focus", this.sendActivityPing);
+    window.addEventListener("focus", this.sendFocusPing);
     document.addEventListener("visibilitychange", this.onVisibilityChange);
     this.connect();
   }
 
   stop(): void {
     this.stopped = true;
-    window.removeEventListener("focus", this.sendActivityPing);
+    window.removeEventListener("focus", this.sendFocusPing);
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
@@ -94,12 +100,15 @@ export class McpBridge {
   }
 
   private onVisibilityChange = (): void => {
-    if (document.visibilityState === "visible") this.sendActivityPing();
+    if (document.visibilityState === "visible") this.sendFocusPing();
   };
 
-  private sendActivityPing = (): void => {
+  // Tells the backend this tab is the one the user is looking at, so calls for
+  // an account that has several editor tabs open reach the most recently
+  // focused one. Sent in both token and cookie mode.
+  private sendFocusPing = (): void => {
     if (this.socket?.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify({ type: "activity" }));
+      this.socket.send(JSON.stringify({ type: "focus" }));
     }
   };
 
@@ -178,6 +187,7 @@ export class McpBridge {
 }
 
 let activeBridge: McpBridge | null = null;
+let cookieBridge: McpBridge | null = null;
 
 // Starts the MCP bridge iff VITE_MCP_WS_TOKEN is set at build time. No-op
 // (including on repeat calls) otherwise — the bridge never attempts a
@@ -187,7 +197,24 @@ let activeBridge: McpBridge | null = null;
 // concurrent calls on each could interleave scene mutations.
 export function startMcpBridgeIfConfigured(): void {
   const token = import.meta.env.VITE_MCP_WS_TOKEN as string | undefined;
-  if (!token || activeBridge || isDesktopMcpBridgeActive()) return;
+  if (!token || activeBridge || cookieBridge || isDesktopMcpBridgeActive()) return;
   activeBridge = new McpBridge(token);
   activeBridge.start();
+}
+
+// Cookie mode: a signed-in user's editor tab connects to /api/mcp/ws with no
+// token, so agents authenticated as that user (OAuth / API key on /mcp) can
+// drive THIS tab. Called from the editor only (never the showcase or shared
+// viewer). Skipped when the desktop shell owns the bridge (it takes
+// precedence) or when the build-time VITE_MCP_WS_TOKEN bridge already runs —
+// two bridges would give toolHandlers two independent serial queues.
+export function startMcpBridgeForSession(): void {
+  if (cookieBridge || activeBridge || window.penDesktop || isDesktopMcpBridgeActive()) return;
+  cookieBridge = new McpBridge(null);
+  cookieBridge.start();
+}
+
+export function stopMcpBridgeForSession(): void {
+  cookieBridge?.stop();
+  cookieBridge = null;
 }

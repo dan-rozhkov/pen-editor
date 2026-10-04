@@ -1,5 +1,5 @@
 import type { ToolHandler } from "@/lib/toolRegistry";
-import { resolveApiUrl, isOffline } from "@/lib/apiBase";
+import { isOffline, apiFetch } from "@/lib/apiBase";
 import { useSceneStore } from "@/store/sceneStore";
 import { createImagePaint, clearLegacyFillProps } from "@/utils/fillUtils";
 import { recordIssuedImageUrl } from "./registry";
@@ -25,7 +25,7 @@ async function requestGeneratedImage(prompt: string): Promise<string> {
   if (isOffline()) {
     throw new Error("Offline: image generation requires a network connection.");
   }
-  const res = await fetch(resolveApiUrl("/api/generate-image"), {
+  const res = await apiFetch("/api/generate-image", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt }),

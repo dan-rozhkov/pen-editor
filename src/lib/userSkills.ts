@@ -24,8 +24,8 @@
 // showcasePublish.ts / pluginStore.ts. `userSkillStore.ts` is the only
 // intended caller; it branches on `.ok` and surfaces `.error` in state.
 
-import { resolveApiUrl } from "@/lib/apiBase";
-import { getUserId } from "@/lib/userId";
+import { apiFetch } from "@/lib/apiBase";
+import { getRequestUserId, requestUserIdParam } from "@/lib/auth/authState";
 
 export type UserSkillSource = "manual" | "upload" | "generated";
 
@@ -82,7 +82,7 @@ export type ApiResult<T> =
 async function requestJson<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
   let res: Response;
   try {
-    res = await fetch(resolveApiUrl(path), init);
+    res = await apiFetch(path, init);
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Network error" };
   }
@@ -107,13 +107,17 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<ApiResu
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
+function withQuery(path: string, query: string): string {
+  return query ? `${path}?${query}` : path;
+}
+
 /** GET /api/user-skills — this user's own skills. `available: false` means
  * the backend has no store configured (e.g. no TRACE_DATABASE_URL); that is
  * a normal 200, not an error. */
 export async function listUserSkills(): Promise<
   ApiResult<{ skills: UserSkill[]; available: boolean }>
 > {
-  return requestJson(`/api/user-skills?userId=${encodeURIComponent(getUserId())}`);
+  return requestJson(withQuery("/api/user-skills", requestUserIdParam()));
 }
 
 /** GET /api/skills — the curated, git-owned catalog, so the UI can show
@@ -128,7 +132,7 @@ export async function createUserSkill(input: CreateUserSkillInput): Promise<ApiR
   const result = await requestJson<{ skill: UserSkill }>("/api/user-skills", {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ userId: getUserId(), ...input }),
+    body: JSON.stringify({ userId: getRequestUserId(), ...input }),
   });
   if (!result.ok) return result;
   return { ok: true, data: result.data.skill };
@@ -143,7 +147,7 @@ export async function updateUserSkill(
     {
       method: "PATCH",
       headers: JSON_HEADERS,
-      body: JSON.stringify({ userId: getUserId(), ...patch }),
+      body: JSON.stringify({ userId: getRequestUserId(), ...patch }),
     },
   );
   if (!result.ok) return result;
@@ -151,7 +155,7 @@ export async function updateUserSkill(
 }
 
 export async function deleteUserSkill(name: string): Promise<ApiResult<{ deleted: true }>> {
-  const url = `/api/user-skills/${encodeURIComponent(name)}?userId=${encodeURIComponent(getUserId())}`;
+  const url = withQuery(`/api/user-skills/${encodeURIComponent(name)}`, requestUserIdParam());
   return requestJson(url, { method: "DELETE" });
 }
 
@@ -162,7 +166,7 @@ export async function generateUserSkill(prompt: string): Promise<ApiResult<UserS
   const result = await requestJson<{ draft: UserSkillDraft }>("/api/user-skills/generate", {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ userId: getUserId(), prompt }),
+    body: JSON.stringify({ userId: getRequestUserId(), prompt }),
   });
   if (!result.ok) return result;
   return { ok: true, data: result.data.draft };

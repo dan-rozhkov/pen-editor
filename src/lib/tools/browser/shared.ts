@@ -1,4 +1,4 @@
-import { resolveApiUrl } from "../../apiBase";
+import { apiFetch } from "../../apiBase";
 
 /**
  * Shared plumbing for the browse_* forwarding tools (browse_open, browse_act,
@@ -285,7 +285,7 @@ export async function fetchBrowseBackend(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), BROWSE_BACKEND_REQUEST_TIMEOUT_MS);
   try {
-    const res = await fetch(resolveApiUrl(path), {
+    const res = await apiFetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

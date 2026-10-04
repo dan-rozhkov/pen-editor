@@ -1,4 +1,4 @@
-import { resolveApiUrl } from "@/lib/apiBase";
+import { resolveApiUrl, apiFetch, apiFetchUrl } from "@/lib/apiBase";
 
 // Client for the backend's read-only showcase feed (GET /api/showcase),
 // listing apps the AI design agent produced autonomously (no human in the
@@ -104,7 +104,7 @@ export async function fetchShowcase(
 ): Promise<ShowcaseResult> {
   let res: Response;
   try {
-    res = await fetch(resolveShowcaseApiUrl(cursor, limit, filters));
+    res = await apiFetchUrl(resolveShowcaseApiUrl(cursor, limit, filters));
   } catch {
     return {
       ok: false,
@@ -294,7 +294,7 @@ export async function fetchShowcaseCategories(
 ): Promise<ShowcaseCategoriesResult> {
   let res: Response;
   try {
-    res = await fetch(resolveApiUrl(`/api/showcase/categories?platform=${platform}`));
+    res = await apiFetch(`/api/showcase/categories?platform=${platform}`);
   } catch {
     return { ok: false };
   }
@@ -345,7 +345,7 @@ export async function fetchShowcaseModels(
 ): Promise<ShowcaseModelsResult> {
   let res: Response;
   try {
-    res = await fetch(resolveApiUrl(`/api/showcase/models?platform=${platform}`));
+    res = await apiFetch(`/api/showcase/models?platform=${platform}`);
   } catch {
     return { ok: false };
   }
@@ -390,7 +390,7 @@ export async function likeShowcaseApp(
 ): Promise<LikeShowcaseAppResult> {
   let res: Response;
   try {
-    res = await fetch(resolveApiUrl(`/api/showcase/${encodeURIComponent(runId)}/like`), {
+    res = await apiFetch(`/api/showcase/${encodeURIComponent(runId)}/like`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ count }),

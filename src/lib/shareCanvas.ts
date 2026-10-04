@@ -8,8 +8,8 @@
 import { collectDocumentData } from "@/lib/commands/fileCommands";
 import { deserializeDocument, serializeDocument } from "@/utils/fileUtils";
 import type { DocumentData } from "@/utils/fileUtils";
-import { resolveApiUrl, isOffline } from "@/lib/apiBase";
-import { getUserId } from "@/lib/userId";
+import { isOffline, apiFetch } from "@/lib/apiBase";
+import { getRequestUserId } from "@/lib/auth/authState";
 import { useDocumentStore } from "@/store/documentStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 
@@ -126,7 +126,7 @@ async function postShare(
   credentials: ShareCredentials | null,
 ): Promise<{ ok: true; data: ShareApiSuccess } | { ok: false; status: number; error?: string }> {
   const body = {
-    userId: getUserId(),
+    userId: getRequestUserId(),
     title,
     document,
     ...(credentials ? { shareId: credentials.id, editToken: credentials.editToken } : {}),
@@ -134,7 +134,7 @@ async function postShare(
 
   let res: Response;
   try {
-    res = await fetch(resolveApiUrl("/api/canvas/share"), {
+    res = await apiFetch("/api/canvas/share", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -250,7 +250,7 @@ export async function fetchSharedCanvas(
 
   let res: Response;
   try {
-    res = await fetch(resolveApiUrl(`/api/canvas/${encodeURIComponent(id)}`), {
+    res = await apiFetch(`/api/canvas/${encodeURIComponent(id)}`, {
       method: "GET",
       signal: AbortSignal.timeout(SHARE_TIMEOUT_MS),
     });
@@ -311,7 +311,7 @@ export async function unshareCurrentCanvas(): Promise<{ ok: true } | { ok: false
     // editToken travels in the JSON body, not the query string — a query
     // param lands verbatim in access/request logs, which would leak the
     // secret that's supposed to gate deletion.
-    res = await fetch(resolveApiUrl(`/api/canvas/${encodeURIComponent(credentials.id)}`), {
+    res = await apiFetch(`/api/canvas/${encodeURIComponent(credentials.id)}`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ editToken: credentials.editToken }),

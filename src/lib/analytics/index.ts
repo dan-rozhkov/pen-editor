@@ -1,4 +1,5 @@
-import { getUserId } from "@/lib/userId";
+import { loadAuthConfig } from "@/lib/auth/authConfig";
+import { peekActorId } from "@/lib/auth/authState";
 import type { AnalyticsEventMap } from "./events";
 
 export type { AnalyticsEventMap } from "./events";
@@ -79,7 +80,12 @@ export function initAnalytics(): void {
   state.enabled = true;
   if (state.initPromise) return;
 
-  state.initPromise = import("posthog-js")
+  // Wait for /api/auth-config first (cached, resolves "disabled" on any
+  // failure) so peekActorId() knows whether accounts are on: with accounts on,
+  // the browser may be about to turn out signed in and must not get an
+  // anonymous id minted just for analytics.
+  state.initPromise = loadAuthConfig()
+    .then(() => import("posthog-js"))
     .then((mod) => {
       const client = (mod.default ?? mod) as unknown as PostHogLike;
       client.init(key, {
@@ -103,7 +109,7 @@ export function initAnalytics(): void {
         // Reuse the existing anonymous id (src/lib/userId.ts) so the
         // frontend and backend agree on the same person, without upgrading
         // this to an "identified" (billed) profile.
-        bootstrap: { distinctID: getUserId() },
+        bootstrap: { distinctID: peekActorId() },
       });
       state.client = client;
       const buffered = state.buffer;

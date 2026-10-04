@@ -1,5 +1,5 @@
 import type { PrototypeScreenInput, PrototypeLink } from "@/utils/prototype/types";
-import { resolveApiUrl } from "@/lib/apiBase";
+import { resolveApiUrl, apiFetchUrl } from "@/lib/apiBase";
 
 /** Resolve the `/api/prototype-link` endpoint on the same backend the chat
  * hook talks to (`resolveApiUrl` centralizes the `VITE_AI_API_URL` /
@@ -12,7 +12,7 @@ export function resolvePrototypeApiUrl(): string {
 export async function fetchPrototypeLinks(
   screens: PrototypeScreenInput[],
 ): Promise<PrototypeLink[]> {
-  const res = await fetch(resolvePrototypeApiUrl(), {
+  const res = await apiFetchUrl(resolvePrototypeApiUrl(), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ screens }),

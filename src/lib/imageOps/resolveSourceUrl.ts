@@ -14,7 +14,7 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { getFills, clearLegacyFillProps } from "@/utils/fillUtils";
 import type { ImagePaint } from "@/types/scene";
-import { resolveApiUrl, isOffline } from "@/lib/apiBase";
+import { isOffline, apiFetch } from "@/lib/apiBase";
 
 /** The first image paint on a node's fill stack, or a descriptive error. */
 export function findNodeImagePaint(nodeId: string): ImagePaint {
@@ -51,7 +51,7 @@ async function uploadDataUrl(dataUrl: string): Promise<string> {
   }
   let res: Response;
   try {
-    res = await fetch(resolveApiUrl("/api/upload-image"), {
+    res = await apiFetch("/api/upload-image", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ image: dataUrl }),

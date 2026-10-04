@@ -26,7 +26,7 @@
  * corrupt the tool result the model is waiting on.
  */
 
-import { resolveApiUrl } from "@/lib/apiBase";
+import { apiFetch } from "@/lib/apiBase";
 import { useSceneStore } from "@/store/sceneStore";
 import type { EmbedNode, FlatSceneNode } from "@/types/scene";
 import { takeTouchedEmbeds } from "./tasteCheckRegistry";
@@ -227,7 +227,7 @@ export async function runTasteCheckForEmbeds(
 
     let res: Response;
     try {
-      res = await fetch(resolveApiUrl("/api/taste-check"), {
+      res = await apiFetch("/api/taste-check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

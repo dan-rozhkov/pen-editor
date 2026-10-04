@@ -9,6 +9,7 @@ import { useViewportStore } from "../store/viewportStore";
 import { useCanvasRefStore } from "../store/canvasRefStore";
 import { useMcpBridgeStore } from "../store/mcpBridgeStore";
 import { useRepoContextStore } from "../store/repoContextStore";
+import { AuthMenu } from "./auth/AuthMenu";
 import { useSharedViewStore } from "../store/sharedViewStore";
 import { useShareDialogStore } from "../store/shareDialogStore";
 import { useMobbinAuthStore } from "../store/mobbinAuthStore";
@@ -348,6 +349,12 @@ export function Toolbar() {
           </DropdownMenuSub>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* Right side: "Sign in" / avatar menu; renders nothing when accounts
+          are off on this deployment. */}
+      <div className="ml-auto">
+        <AuthMenu variant="toolbar" />
+      </div>
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
         <DialogContent

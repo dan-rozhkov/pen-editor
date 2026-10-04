@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { McpBridge } from "@/lib/mcpBridge";
+import {
+  McpBridge,
+  startMcpBridgeForSession,
+  startMcpBridgeIfConfigured,
+  stopMcpBridgeForSession,
+} from "@/lib/mcpBridge";
 import { useMcpBridgeStore } from "@/store/mcpBridgeStore";
 import { toolHandlers } from "@/lib/toolRegistry";
 
@@ -326,7 +331,7 @@ describe("McpBridge", () => {
     bridge.stop();
   });
 
-  it("sends an activity ping on window focus while connected", () => {
+  it("sends a focus ping on window focus while connected", () => {
     const factory = makeFactory();
     const bridge = new McpBridge("secret-token", factory);
     bridge.start();
@@ -335,9 +340,38 @@ describe("McpBridge", () => {
     window.dispatchEvent(new Event("focus"));
 
     const pings = FakeWebSocket.instances[0].sent.map((s) => JSON.parse(s));
-    expect(pings).toContainEqual({ type: "activity" });
+    expect(pings).toContainEqual({ type: "focus" });
 
     bridge.stop();
+  });
+
+  describe("cookie mode (no token)", () => {
+    it("connects to /api/mcp/ws without a token query", () => {
+      vi.stubEnv("VITE_MCP_WS_URL", "ws://127.0.0.1:3002/api/mcp/ws");
+      vi.stubEnv("VITE_AI_API_URL", "http://localhost:3001/api/chat");
+      const factory = makeFactory();
+      const bridge = new McpBridge(null, factory);
+      bridge.start();
+
+      // The token handshake URL is for token mode only; cookie mode follows the backend base.
+      expect(FakeWebSocket.instances[0].url).toBe("ws://localhost:3001/api/mcp/ws");
+
+      bridge.stop();
+      vi.unstubAllEnvs();
+    });
+
+    it("sends a focus ping when the tab becomes visible and on window focus", () => {
+      const bridge = new McpBridge(null, makeFactory());
+      bridge.start();
+      const socket = FakeWebSocket.instances[0];
+      socket.open();
+
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("focus"));
+
+      expect(socket.sent.map((m) => JSON.parse(m))).toEqual([{ type: "focus" }, { type: "focus" }]);
+      bridge.stop();
+    });
   });
 
   it("sets status off and does not enter a reconnect loop when the WebSocket constructor throws", () => {
@@ -375,5 +409,36 @@ describe("McpBridge", () => {
     window.dispatchEvent(new Event("focus"));
     expect(FakeWebSocket.instances).toHaveLength(1);
     expect(FakeWebSocket.instances[0].sent).toHaveLength(sentBefore);
+  });
+});
+
+describe("one bridge at a time", () => {
+  beforeEach(() => {
+    FakeWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+  });
+  afterEach(() => {
+    stopMcpBridgeForSession();
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("the token bridge does not start while the cookie bridge runs", () => {
+    vi.stubEnv("VITE_MCP_WS_TOKEN", "secret-token");
+    startMcpBridgeForSession();
+    startMcpBridgeIfConfigured();
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(FakeWebSocket.instances[0].url).not.toContain("token");
+  });
+
+  it("the cookie bridge does not start while the token bridge runs", async () => {
+    vi.stubEnv("VITE_MCP_WS_TOKEN", "secret-token");
+    // activeBridge is module state with no stop(): use a fresh module copy.
+    vi.resetModules();
+    const fresh = await import("@/lib/mcpBridge");
+    fresh.startMcpBridgeIfConfigured();
+    fresh.startMcpBridgeForSession();
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(FakeWebSocket.instances[0].url).toContain("token");
   });
 });

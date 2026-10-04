@@ -23,7 +23,7 @@
 // response with no refresh token is a valid, storable state; a token that
 // later expires with no refresh token is a dead end, not a retry — see
 // `getValidAccessToken()`.
-import { resolveApiUrl } from "@/lib/apiBase";
+import { apiFetch } from "@/lib/apiBase";
 
 const CLIENT_ID_KEY = "pen.mobbin.clientId";
 const ACCESS_TOKEN_KEY = "pen.mobbin.accessToken";
@@ -385,7 +385,7 @@ class MobbinHttpError extends Error {
 }
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(resolveApiUrl(path), {
+  const response = await apiFetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

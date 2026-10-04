@@ -9,7 +9,7 @@
 // non-native-vision model when the backend reports `visionFallback` (an
 // auxiliary vision model describes the image as text server-side).
 
-import { resolveApiUrl } from "@/lib/apiBase";
+import { apiFetch } from "@/lib/apiBase";
 import { hasOpenCodeKey } from "@/lib/opencodeKey";
 
 export interface ChatModelOption {
@@ -308,7 +308,7 @@ export function loadModels(): Promise<void> {
   if (loadPromise) return loadPromise;
   loadPromise = (async () => {
     try {
-      const res = await fetch(resolveApiUrl("/api/models"));
+      const res = await apiFetch("/api/models");
       if (!res.ok) return;
       const data = (await res.json()) as ModelsResponse;
       if (Array.isArray(data.models) && data.models.length > 0) {

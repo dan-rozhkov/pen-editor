@@ -121,6 +121,17 @@ no-ops.
 `../plans/desktop-mcp-bridge.md` for the full cross-repo design (handshake,
 token, tab routing, security).
 
+### Accounts (Better Auth)
+
+Optional sign-in (Google / email link / password); anonymous use is unchanged. Backend contract: Better Auth at `<backend>/api/auth`, `GET /api/auth-config` -> `{enabled, google, emailEnabled}`, `POST /api/account/claim-anon`.
+
+- **Client**: `src/lib/auth/authClient.ts` (`better-auth/react` + `magicLinkClient`, `apiKeyClient` from `@better-auth/api-key/client`, `oauthProviderClient` from `@better-auth/oauth-provider/client`). Pin these to the backend's Better Auth version. The auth client chunk is lazy: `AuthMenu` / `AuthBootstrap` fetch `/api/auth-config` first and render nothing (never load the client) when accounts are off or the request fails.
+- **Credentials rule**: every backend call goes through `apiFetch(path)` / `apiFetchUrl(url)` in `src/lib/apiBase.ts` (they set `credentials: "include"` ONLY after `loadAuthConfig()` resolved `enabled:true` — module flag in `apiBase.ts`; before that, or when accounts are off, no credentials); the chat transport resolves it the same way. The auth client always includes (it loads only when enabled). Never write `fetch(resolveApiUrl(...))` — `authPlumbing.test.ts` scans `src/` and fails on it.
+- **Identity**: `src/lib/auth/authState.ts` mirrors the session (written by `SessionSync`). Request bodies/queries use `getRequestUserId()` / `requestUserIdParam()` (omitted while signed in; never MINTS an anon id while accounts are on and the session is unresolved — `peekActorId()` for analytics), never `getUserId()` directly; `getUserId()` stays the single owner of `pen.userId` (with `peekUserId`/`clearUserId`). First sign-in with a stored anon id -> `claimAnonymousData()` -> clear on 200/409 -> reload skills.
+- **Routes** (lazy, `AppRouter.tsx`): `/sign-in` (`?next=` restricted by `safeNext`, `?error=`, `?token=` reset), `/consent` (OAuth query forwarded by the plugin; needs a session), `/account` (API keys, connected agents). Entry points: `AuthMenu` in the editor `Toolbar` and the showcase header.
+- **MCP bridge cookie mode**: `useSessionMcpBridge` (mounted in `App`) connects `/api/mcp/ws` without a token while signed in; token and desktop bridges keep precedence. The bridge sends `{type:"focus"}` on tab focus/visible in both modes.
+- Test doubles: `src/test/authMocks.ts` (mock client/session, `stubAuthConfig`).
+
 ### MCP bridge
 
 Two independent transports route external MCP calls into the same

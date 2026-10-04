@@ -25,6 +25,40 @@ export function resolveApiUrl(path: string): string {
   return `${resolveBackendBase()}${path}`;
 }
 
+// Every backend call must carry the session cookie (accounts, see
+// src/lib/auth/): the one place that sets `credentials: "include"`. Callers
+// never spell it themselves — use apiFetch (path) or apiFetchUrl (a URL that
+// was already resolved, e.g. one with a query string built elsewhere).
+// Credentialed cross-origin calls only succeed against an origin the backend
+// allowlists (CORS_ALLOWED_ORIGINS / APP_ORIGIN); same-origin is unaffected.
+//
+// The cookie is sent ONLY once GET /api/auth-config resolved `enabled: true`
+// (authConfig.ts sets the flag). Before that, or when accounts are off or the
+// config failed, requests go out exactly as they did before accounts existed:
+// a credentialed request to a backend that has no CORS credentials support
+// would otherwise be blocked by the browser.
+let credentialsEnabled = false;
+
+export function setCredentialsEnabled(enabled: boolean): void {
+  credentialsEnabled = enabled;
+}
+
+export function credentialsMode(): RequestCredentials | undefined {
+  return credentialsEnabled ? "include" : undefined;
+}
+
+export function withCredentials(init?: RequestInit): RequestInit {
+  return credentialsEnabled ? { ...init, credentials: "include" } : { ...init };
+}
+
+export function apiFetchUrl(url: string, init?: RequestInit): Promise<Response> {
+  return fetch(url, withCredentials(init));
+}
+
+export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  return apiFetchUrl(resolveApiUrl(path), init);
+}
+
 // Single source of truth for "is the backend reachable". Every network caller
 // (chat, image generation, ChatInput's send-button title) used to check
 // `!navigator.onLine` independently, which is easy to let drift. Centralizing

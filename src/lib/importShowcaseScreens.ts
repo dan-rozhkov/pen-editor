@@ -14,7 +14,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { saveHistory } from "@/store/sceneStore/helpers/history";
-import { resolveApiUrl } from "@/lib/apiBase";
+import { apiFetch } from "@/lib/apiBase";
 import { getCanvasViewportMetrics } from "@/utils/canvasViewport";
 import { consumeShowcaseScreensHandoff } from "@/lib/showcaseScreenHandoff";
 
@@ -44,8 +44,8 @@ interface ShowcaseHtmlResponse {
 
 async function fetchScreensHtml(runId: string): Promise<FetchedScreen[] | null> {
   try {
-    const res = await fetch(
-      resolveApiUrl(`/api/showcase/${encodeURIComponent(runId)}/html`),
+    const res = await apiFetch(
+      `/api/showcase/${encodeURIComponent(runId)}/html`,
       { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
     );
     if (!res.ok) return null;

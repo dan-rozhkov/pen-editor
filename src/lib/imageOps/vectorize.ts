@@ -1,7 +1,7 @@
 // Core of the "vectorize" image operation, shared by the agent tool
 // (src/lib/tools/vectorizeImage) and the properties-panel button. See
 // removeBackground.ts's header comment for why this lives once.
-import { resolveApiUrl, isOffline } from "@/lib/apiBase";
+import { isOffline, apiFetch } from "@/lib/apiBase";
 import { createSnapshot, useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useHistoryStore, withHistoryBatch } from "@/store/historyStore";
@@ -42,7 +42,7 @@ async function requestVectorize(imageUrl: string): Promise<{ url: string; svg: s
   }
   let res: Response;
   try {
-    res = await fetch(resolveApiUrl("/api/vectorize"), {
+    res = await apiFetch("/api/vectorize", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ image_url: imageUrl }),
