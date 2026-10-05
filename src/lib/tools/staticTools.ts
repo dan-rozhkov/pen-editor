@@ -6,6 +6,7 @@ import type { ToolHandler } from "../toolRegistry";
 // checkout when it exists. Update the backend first, then copy verbatim here.
 export const guidelines: Record<string, string> = {
   "design-system":
+    "For NEW screens or pages, build each screen as one `embed` (prototype skill). The rules below apply when editing existing native frames.\n\n" +
     "## Sizing & Auto-Layout Rules\n" +
     "When creating frames with layout (vertical/horizontal), set width and height explicitly: " +
     "the default is a fixed pixel size, which breaks auto-layout.\n" +
