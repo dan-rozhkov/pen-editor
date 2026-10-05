@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildLoaderSource, embedLoader, embedRenderBuiltUrl, EMBED_LOADER_FILE } from "./embedLoader";
+import { buildLoaderSource, embedLoader, embedRenderBuiltUrl, EMBED_LOADER_FILE, STORAGE_SHIM } from "./embedLoader";
 
 const bundle = {
   "assets/embed-AAA.js": {
@@ -70,5 +70,38 @@ describe("embedRenderBuiltUrl", () => {
 
   it("leaves css/html hosts alone", () => {
     expect(embedRenderBuiltUrl("/")("assets/x.png", { hostType: "css" })).toBeUndefined();
+  });
+});
+
+describe("storage shim", () => {
+  it("is the first statement of the loader", () => {
+    expect(buildLoaderSource(bundle).split("\n").slice(1).join("\n").startsWith(STORAGE_SHIM)).toBe(true);
+  });
+
+  it("replaces storage that throws on access (sandbox without allow-same-origin)", () => {
+    const fakeWindow: Record<string, unknown> = {};
+    for (const name of ["localStorage", "sessionStorage"]) {
+      Object.defineProperty(fakeWindow, name, {
+        configurable: true,
+        get() {
+          throw new DOMException("sandboxed", "SecurityError");
+        },
+      });
+    }
+    new Function("window", STORAGE_SHIM)(fakeWindow);
+    const store = fakeWindow.localStorage as Storage;
+    store.setItem("k", "v");
+    expect(store.getItem("k")).toBe("v");
+    expect(store.length).toBe(1);
+    store.removeItem("k");
+    expect(store.getItem("k")).toBeNull();
+    expect((fakeWindow.sessionStorage as Storage).getItem("x")).toBeNull();
+  });
+
+  it("keeps working storage untouched", () => {
+    const real = { getItem: vi.fn() };
+    const fakeWindow = { localStorage: real, sessionStorage: real };
+    new Function("window", STORAGE_SHIM)(fakeWindow);
+    expect(fakeWindow.localStorage).toBe(real);
   });
 });
