@@ -1,3 +1,4 @@
+import { LegalLinks } from "@/components/legal/LegalLinks";
 import {
   type ReactNode,
   useCallback,
@@ -599,6 +600,7 @@ export function ShowcasePage() {
       </main>
       <footer className="sf-footer">
         <span>Sideform <span className="sf-footer-note">— a space for your next direction.</span></span>
+        <LegalLinks />
         <a href="https://github.com/dan-rozhkov/pen-editor" target="_blank" rel="noreferrer">Explore the source ↗</a>
       </footer>
     </div>

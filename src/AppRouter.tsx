@@ -23,6 +23,11 @@ const SignInPage = lazy(() => import("@/routes/SignInPage"));
 const ConsentPage = lazy(() => import("@/routes/ConsentPage"));
 const AccountPage = lazy(() => import("@/routes/AccountPage"));
 
+// Public legal/support documents: static, no auth, no backend.
+const PrivacyPage = lazy(() => import("@/routes/legal/PrivacyPage"));
+const TermsPage = lazy(() => import("@/routes/legal/TermsPage"));
+const SupportPage = lazy(() => import("@/routes/legal/SupportPage"));
+
 export function AppRouter() {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
@@ -73,6 +78,23 @@ export function AppRouter() {
             </Suspense>
           }
         />
+        {(
+          [
+            ["/privacy", PrivacyPage],
+            ["/terms", TermsPage],
+            ["/support", SupportPage],
+          ] as const
+        ).map(([path, Page]) => (
+          <Route
+            key={path}
+            path={path}
+            element={
+              <Suspense fallback={null}>
+                <Page />
+              </Suspense>
+            }
+          />
+        ))}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 

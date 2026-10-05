@@ -1,5 +1,6 @@
 import { useId, type ComponentProps, type ReactNode } from "react";
 
+import { LegalLinks } from "@/components/legal/LegalLinks";
 import { appHref } from "@/lib/auth/paths";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +33,7 @@ export function AuthShell({
         </a>
         <h1 className="mb-5 text-xl font-semibold tracking-tight text-text-primary">{title}</h1>
         {children}
+        <LegalLinks className="mt-6" />
       </div>
     </main>
   );
