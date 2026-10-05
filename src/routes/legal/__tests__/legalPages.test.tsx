@@ -26,8 +26,15 @@ describe("legal pages", () => {
     expect(screen.getByRole("heading", { level: 1, name: heading })).toBeTruthy();
     expect(container.textContent).toContain("Last updated: 5 October 2026");
     for (const fact of facts) expect(container.textContent).toMatch(fact);
-    expect(container.textContent).toContain("open an issue titled");
-    expect(container.textContent).not.toContain("mailbox");
+    expect(container.textContent).not.toContain("open an issue titled");
+    expect(container.textContent).not.toMatch(/gmail\.com/i);
+    const hrefs = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
+    expect(hrefs).toContain("mailto:support@sideform.pro");
+    expect(hrefs).toContain("mailto:privacy@sideform.pro");
+    expect(hrefs.filter((h) => h?.startsWith("mailto:")).sort()).toEqual([
+      "mailto:privacy@sideform.pro",
+      "mailto:support@sideform.pro",
+    ]);
     expect(screen.getAllByRole("link").some((a) => a.getAttribute("href") === ISSUES)).toBe(true);
   });
 

@@ -4,6 +4,8 @@ import { LegalLinks } from "@/components/legal/LegalLinks";
 import { appHref } from "@/lib/auth/paths";
 
 export const LEGAL_UPDATED = "5 October 2026";
+export const SUPPORT_EMAIL = "support@sideform.pro";
+export const PRIVACY_EMAIL = "privacy@sideform.pro";
 export const ISSUES_URL = "https://github.com/dan-rozhkov/pen-editor-plugin/issues";
 
 /** Document chrome for the public /privacy, /terms and /support pages. */
@@ -61,15 +63,26 @@ export function Contact() {
   return (
     <Section title="Contact">
       <p>
-        Contact us through our public issues page:{" "}
-        <ExtLink href={ISSUES_URL}>{ISSUES_URL}</ExtLink>. Do not post private or sensitive details there.
+        <strong>
+          Email <MailLink address={SUPPORT_EMAIL} />
+        </strong>{" "}
+        for help and questions.
       </p>
       <p>
-        <strong>
-          For privacy requests, open an issue titled &lsquo;Privacy request&rsquo; and we will reply with a private
-          channel.
-        </strong>
+        Send privacy and deletion requests to <MailLink address={PRIVACY_EMAIL} />.
+      </p>
+      <p>
+        For bug reports and public questions you can also use our public issues page:{" "}
+        <ExtLink href={ISSUES_URL}>{ISSUES_URL}</ExtLink>. Do not post private or sensitive details there.
       </p>
     </Section>
+  );
+}
+
+function MailLink({ address }: { address: string }) {
+  return (
+    <a href={`mailto:${address}`} className="text-accent-primary underline-offset-2 hover:underline">
+      {address}
+    </a>
   );
 }
