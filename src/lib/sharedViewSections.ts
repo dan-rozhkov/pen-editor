@@ -27,6 +27,8 @@ export const HIDDEN_IN_SHARED_VIEW = new Set<LeftSection>(["agents", "toolbox", 
 export function resolveVisibleLeftSection(
   activeSection: LeftSection,
   isSharedView: boolean,
+  hiddenSections?: readonly LeftSection[],
 ): LeftSection {
+  if (hiddenSections?.includes(activeSection)) return "pages";
   return isSharedView && HIDDEN_IN_SHARED_VIEW.has(activeSection) ? "pages" : activeSection;
 }

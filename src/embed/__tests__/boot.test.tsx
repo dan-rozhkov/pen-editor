@@ -11,6 +11,12 @@ vi.mock("react-router", () => {
 vi.mock("@/components/chat/ChatPanel", () => {
   throw new Error("embed must not load the chat panel");
 });
+vi.mock("@/components/LeftSidebar", () => {
+  throw new Error("embed must use LeftSidebarBase, not the app sidebar that statically imports chat");
+});
+vi.mock("@/components/Toolbar", () => {
+  throw new Error("embed must not load the app toolbar (auth menu)");
+});
 vi.mock("@/lib/webmcp", () => {
   throw new Error("embed must not load WebMCP");
 });
@@ -21,6 +27,7 @@ import { bootEmbed } from "../boot";
 import { embedDocKey } from "../persistence";
 import { seedScene } from "@/test/fixtures";
 import { useSceneStore } from "@/store/sceneStore";
+import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 
 function fakeHost(overrides: Partial<HostBridge> = {}): HostBridge {
   return {
@@ -43,7 +50,10 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.appendChild(container);
 });
-afterEach(() => container.remove());
+afterEach(() => {
+  container.remove();
+  document.documentElement.classList.remove("dark");
+});
 
 describe("bootEmbed", () => {
   it("renders the editor shell (canvas, layers, properties, top bar) without router or chat", async () => {
@@ -61,6 +71,68 @@ describe("bootEmbed", () => {
     expect(connectHost).toHaveBeenCalledTimes(1);
 
     await act(async () => dispose());
+  });
+
+  it("shows the left rail with every section except Agents, and the properties panel open by default", async () => {
+    await act(async () => {
+      bootEmbed(container, { connectHost: async () => fakeHost() });
+    });
+    const ids = [...container.querySelectorAll('[data-testid^="rail-"]')].map((e) => e.getAttribute("data-testid"));
+    expect(ids).toEqual(["rail-pages", "rail-slides", "rail-toolbox", "rail-comments", "rail-variables", "rail-text-styles", "rail-styles"]);
+    expect(container.querySelector('[aria-label="Toggle properties"]')?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("falls back to Pages when the persisted left section is Agents", async () => {
+    useLeftSidebarStore.setState({ activeSection: "agents" });
+    await act(async () => {
+      bootEmbed(container, { connectHost: async () => fakeHost() });
+    });
+    const active = container.querySelector('[data-testid="rail-pages"] > span');
+    expect(active?.className).toContain("bg-accent-selection");
+  });
+
+  it("applies the host theme to the whole UI, follows context changes, and never persists it", async () => {
+    let theme: "light" | "dark" | undefined = "dark";
+    const listeners = new Set<() => void>();
+    const host = fakeHost({
+      getTheme: () => theme,
+      onContextChange: (l) => {
+        listeners.add(l);
+        return () => listeners.delete(l);
+      },
+    });
+    localStorage.setItem("ui-theme", "light");
+    await act(async () => {
+      bootEmbed(container, { connectHost: async () => host });
+    });
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    await act(async () => {
+      theme = "light";
+      listeners.forEach((l) => l());
+    });
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+    await act(async () => {
+      theme = "dark";
+      listeners.forEach((l) => l());
+    });
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(localStorage.getItem("ui-theme")).toBe("light");
+  });
+
+  it("follows prefers-color-scheme when the host gives no theme", async () => {
+    const mm = vi.spyOn(window, "matchMedia").mockImplementation(
+      (query) =>
+        ({
+          matches: query.includes("prefers-color-scheme"),
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        }) as unknown as MediaQueryList,
+    );
+    await act(async () => {
+      bootEmbed(container, { connectHost: async () => fakeHost({ getTheme: () => undefined }) });
+    });
+    mm.mockRestore();
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
   });
 
   it("restores only the document saved under this widget's key, after the host connects", async () => {

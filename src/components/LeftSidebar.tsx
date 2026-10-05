@@ -1,217 +1,27 @@
-import { ArrowsInLineVertical, CloudSlash } from "@phosphor-icons/react";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { useOnlineStatus } from "@/hooks/useOnlineStatus";
-import { OFFLINE_DOCUMENT_TITLE } from "@/lib/apiBase";
-import { EditableText } from "@/components/ui/EditableText";
-import { LayersPanel } from "./layers";
-import { PluginsPanel } from "./PluginsPanel";
-import { SlidesPanel } from "./SlidesPanel";
-import { PagesPanel } from "./PagesPanel";
 import { ChatPanelContent } from "./chat/ChatPanel";
-import { VariablesPanelContent } from "./VariablesPanel";
-import { TextStylesPanelContent } from "./TextStylesPanel";
-import { StylesPanelContent } from "./StylesPanel";
-import { CommentsPanelContent } from "./CommentsPanel";
 import { Toolbar } from "./Toolbar";
-import { LeftSidebarResizer } from "./LeftSidebarResizer";
-import { useSceneStore } from "@/store/sceneStore";
-import { useDocumentStore } from "@/store/documentStore";
-import { usePageStore } from "@/store/pageStore";
-import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import { useChatStore } from "@/store/chatStore";
-import { useIsMobile } from "@/hooks/useIsMobile";
-import { useSharedViewStore } from "@/store/sharedViewStore";
-import { resolveVisibleLeftSection } from "@/lib/sharedViewSections";
+import { LeftSidebarBase } from "./LeftSidebarBase";
 
-function PagesPanelSection() {
-  const hasPages = usePageStore((s) => s.pages.length > 0);
-  if (!hasPages) return null;
-  return <PagesPanel />;
+// Agents (chat) — always mounted so streams survive section switches.
+// Inline within the body, or fixed full-canvas overlay when expanded.
+function AgentsPane({ active }: { active: boolean }) {
+  const isChatExpanded = useChatStore((s) => s.isExpanded);
+  return (
+    <div
+      className={
+        !active
+          ? "hidden"
+          : isChatExpanded
+            ? "fixed top-0 left-14 right-0 bottom-0 z-[60] flex flex-col bg-surface-panel"
+            : "absolute inset-0 flex flex-col"
+      }
+    >
+      <ChatPanelContent />
+    </div>
+  );
 }
 
 export function LeftSidebar() {
-  const rawActiveSection = useLeftSidebarStore((s) => s.activeSection);
-  const isSharedView = useSharedViewStore((s) => s.isSharedView);
-  // Must agree with LeftRail's derivation (same shared helper) — otherwise
-  // the rail could show "Pages" as active in the shared viewer while this
-  // panel still mounts whatever was persisted (e.g. the Agents chat, whose
-  // tool handlers mutate the scene below `canEditScene`).
-  const activeSection = resolveVisibleLeftSection(rawActiveSection, isSharedView);
-  const isPanelOpen = useLeftSidebarStore((s) => s.isPanelOpen);
-  const isMobile = useIsMobile();
-  const isChatExpanded = useChatStore((s) => s.isExpanded);
-  const isPanelExpanded = useLeftSidebarStore((s) => s.isExpanded);
-  const width = useLeftSidebarStore((s) => s.width);
-  const collapseAllFrames = useSceneStore((s) => s.collapseAllFrames);
-  const fileName = useDocumentStore((s) => s.fileName);
-  const setFileName = useDocumentStore((s) => s.setFileName);
-  const isOnline = useOnlineStatus();
-
-  const displayName = fileName ? fileName.replace(/\.[^.]+$/, "") : "Untitled";
-  const extension = fileName?.match(/\.[^.]+$/)?.[0] ?? "";
-
-  // On mobile the panel is hidden until the rail opens it, then it covers the
-  // full screen width to the right of the rail. On desktop it is a
-  // user-resizable column (via LeftSidebarResizer) that is always visible.
-  //
-  // The closed-mobile state must stay MOUNTED (not unmounted) so that the
-  // Agents chat subtree inside it — kept alive only by staying mounted, same
-  // as ChatPanel's per-session `hidden` panes — survives closing/reopening
-  // the panel. `display: none` keeps it visually absent and unable to
-  // capture pointer events, same as the `hidden` idiom used elsewhere below.
-  const isMobileClosed = isMobile && !isPanelOpen;
-
-  return (
-    <div
-      style={
-        isMobile
-          ? isMobileClosed
-            ? { display: "none" }
-            : undefined
-          : { width }
-      }
-      className={
-        isMobile
-          ? "fixed top-0 left-14 right-0 bottom-0 z-50 flex flex-col bg-surface-panel"
-          : "relative shrink-0 h-full flex flex-col bg-surface-panel border-r border-border-default"
-      }
-    >
-      {!isMobile && <LeftSidebarResizer />}
-      {/* Pages and Slides share the document header; Agents has its own header
-          (inside the chat). Gated on !isMobileClosed: only the Agents subtree
-          below needs to stay mounted while the mobile panel is closed. */}
-      {!isMobileClosed && (activeSection === "pages" || activeSection === "slides") && (
-        <div className="flex flex-row items-center gap-0 pr-1">
-          <div className="flex-1 min-w-0">
-            <Toolbar />
-          </div>
-        </div>
-      )}
-      {!isMobileClosed && (activeSection === "pages" || activeSection === "slides") && (
-        <div className="px-2 pb-2 flex items-center gap-1">
-          <EditableText
-            value={displayName}
-            onCommit={(name) => setFileName(name + extension)}
-            className="flex-1 min-w-0 h-7 px-1 rounded truncate text-sm font-medium text-text-default cursor-text hover:bg-secondary flex items-center"
-            inputClassName="w-full h-7 px-1 py-0.5 rounded text-sm font-medium text-text-default bg-secondary outline-none"
-          />
-          {!isOnline && (
-            <span
-              role="img"
-              aria-label={OFFLINE_DOCUMENT_TITLE}
-              className="shrink-0 flex items-center text-text-muted"
-            >
-              <CloudSlash size={14} />
-            </span>
-          )}
-        </div>
-      )}
-      <div className="flex-1 relative overflow-hidden">
-        {/* Pages section: pages list + layer tree of the active page */}
-        {!isMobileClosed && activeSection === "pages" && (
-          <div className="absolute inset-0 flex flex-col overflow-hidden">
-            <PagesPanelSection />
-            <div className="flex items-center justify-between px-4 pt-3 pb-1">
-              <span className="text-xs font-medium text-secondary-foreground">
-                Layers
-              </span>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      onClick={collapseAllFrames}
-                      aria-label="Collapse all"
-                      className="p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary transition-colors"
-                    >
-                      <ArrowsInLineVertical size={14} />
-                    </button>
-                  }
-                />
-                <TooltipContent side="bottom">Collapse all</TooltipContent>
-              </Tooltip>
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <LayersPanel />
-            </div>
-          </div>
-        )}
-
-        {/* Toolbox (plugins) section */}
-        {!isMobileClosed && activeSection === "toolbox" && (
-          <div className="absolute inset-0 flex flex-col overflow-hidden">
-            <PluginsPanel />
-          </div>
-        )}
-
-        {/* Slides section: one-per-row previews of top-level frames, no
-            layer tree — a separate section from Pages, not a toggle inside it. */}
-        {!isMobileClosed && activeSection === "slides" && (
-          <div className="absolute inset-0 flex flex-col overflow-hidden">
-            <SlidesPanel />
-          </div>
-        )}
-
-        {/* Agents (chat) — always mounted so streams survive section switches.
-            Inline within the body, or fixed full-canvas overlay when expanded. */}
-        <div
-          className={
-            activeSection !== "agents"
-              ? "hidden"
-              : isChatExpanded
-                ? "fixed top-0 left-14 right-0 bottom-0 z-[60] flex flex-col bg-surface-panel"
-                : "absolute inset-0 flex flex-col"
-          }
-        >
-          <ChatPanelContent />
-        </div>
-
-        {/* Variables section — inline within the body, or fixed full-canvas
-            overlay when expanded (same pattern as Agents). */}
-        {!isMobileClosed && activeSection === "variables" && (
-          <div
-            className={
-              isPanelExpanded
-                ? "fixed top-0 left-14 right-0 bottom-0 z-[60] flex flex-col bg-surface-panel"
-                : "absolute inset-0 flex flex-col"
-            }
-          >
-            <VariablesPanelContent />
-          </div>
-        )}
-
-        {/* Text styles section */}
-        {!isMobileClosed && activeSection === "textStyles" && (
-          <div
-            className={
-              isPanelExpanded
-                ? "fixed top-0 left-14 right-0 bottom-0 z-[60] flex flex-col bg-surface-panel"
-                : "absolute inset-0 flex flex-col"
-            }
-          >
-            <TextStylesPanelContent />
-          </div>
-        )}
-
-        {/* Styles section */}
-        {!isMobileClosed && activeSection === "styles" && (
-          <div
-            className={
-              isPanelExpanded
-                ? "fixed top-0 left-14 right-0 bottom-0 z-[60] flex flex-col bg-surface-panel"
-                : "absolute inset-0 flex flex-col"
-            }
-          >
-            <StylesPanelContent />
-          </div>
-        )}
-
-        {/* Comments section (cmt-01) */}
-        {!isMobileClosed && activeSection === "comments" && (
-          <div className="absolute inset-0 flex flex-col overflow-hidden">
-            <CommentsPanelContent />
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  return <LeftSidebarBase renderHeader={() => <Toolbar />} renderAgents={(active) => <AgentsPane active={active} />} />;
 }

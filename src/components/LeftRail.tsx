@@ -76,7 +76,7 @@ const STYLE_SECTIONS: {
   { section: "styles", testid: "rail-styles", title: "Styles", icon: <PaintBrushIcon size={20} weight="light" /> },
 ];
 
-export function LeftRail() {
+export function LeftRail({ hiddenSections }: { hiddenSections?: readonly LeftSection[] } = {}) {
   const rawActiveSection = useLeftSidebarStore((s) => s.activeSection);
   const setActiveSection = useLeftSidebarStore((s) => s.setActiveSection);
   const isPanelOpen = useLeftSidebarStore((s) => s.isPanelOpen);
@@ -90,11 +90,12 @@ export function LeftRail() {
   // Writing through the persisted setter here used to survive the shared
   // session and permanently change which section the visitor's OWN editor
   // opens to next time, just from having viewed someone else's link.
-  const activeSection = resolveVisibleLeftSection(rawActiveSection, isSharedView);
+  const activeSection = resolveVisibleLeftSection(rawActiveSection, isSharedView, hiddenSections);
 
-  const visibleSections = isSharedView
-    ? SECTIONS.filter((item) => !HIDDEN_IN_SHARED_VIEW.has(item.section))
-    : SECTIONS;
+  const visibleSections = SECTIONS.filter(
+    (item) =>
+      !(isSharedView && HIDDEN_IN_SHARED_VIEW.has(item.section)) && !hiddenSections?.includes(item.section),
+  );
 
   // On mobile the panel is a full-width overlay the rail toggles: tapping the
   // active icon closes it, tapping another opens that section.

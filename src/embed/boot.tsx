@@ -1,11 +1,11 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RootErrorBoundary } from "@/components/RootErrorBoundary";
-import { applyStoredUITheme } from "@/lib/uiTheme";
 import { EmbedApp } from "./EmbedApp";
 import { startHostBridge, type HostBridge } from "./hostBridge";
 import { setShareCredentialsKeySuffix } from "@/lib/shareCanvas";
 import { restoreEmbedDocument, startEmbedAutosave } from "./persistence";
+import { syncDefaultPageBackground } from "@/store/uiThemeStore";
 
 export interface BootDeps {
   connectHost?: () => Promise<HostBridge>;
@@ -16,11 +16,8 @@ export interface BootDeps {
 // service worker. The editor renders immediately; the host connection (and
 // with it the agent bridge) attaches when the handshake finishes.
 export function bootEmbed(container: HTMLElement, deps: BootDeps = {}): () => void {
-  try {
-    applyStoredUITheme();
-  } catch {
-    // Storage denied by the sandbox — the default (light) editor chrome stays.
-  }
+  // The UI theme is not read from storage here: EmbedApp applies the host's
+  // theme (or prefers-color-scheme) as a non-persisted override.
   // Storage is namespaced per widget instance, which is only known once the
   // host has answered — so restore/autosave start after the handshake.
   let stopAutosave = () => {};
@@ -47,7 +44,7 @@ export function bootEmbed(container: HTMLElement, deps: BootDeps = {}): () => vo
       host = connected;
       const { key, stable } = connected.widgetKey;
       setShareCredentialsKeySuffix(key);
-      if (stable) restoreEmbedDocument(key);
+      if (stable && restoreEmbedDocument(key)) syncDefaultPageBackground();
       stopAutosave = startEmbedAutosave(key);
       render(connected);
     })

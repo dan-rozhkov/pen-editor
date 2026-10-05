@@ -7,13 +7,27 @@ import { CanvasContextMenu } from "@/components/canvas/CanvasContextMenu";
 import { PrimitivesPanel } from "@/components/PrimitivesPanel";
 import { RightSidebar } from "@/components/RightSidebar";
 import { ReadOnlyProvider } from "@/components/ReadOnlyProvider";
-import { LayersPanel } from "@/components/layers";
 import { PixiCanvas } from "@/pixi/PixiCanvas";
 import { useMcpBridgeStore } from "@/store/mcpBridgeStore";
-import "@/store/uiThemeStore";
+import { setUIThemeTransient } from "@/store/uiThemeStore";
+import { LeftRail } from "@/components/LeftRail";
+import { LeftSidebarBase } from "@/components/LeftSidebarBase";
+import type { LeftSection } from "@/store/leftSidebarStore";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import type { HostBridge } from "./hostBridge";
 import { resolveApiUrl } from "@/lib/apiBase";
 import { openInSideform } from "./openInSideform";
+
+// The Agents chat is not part of the widget; its rail item and panel are omitted.
+const HIDDEN_SECTIONS: readonly LeftSection[] = ["agents"];
+
+function prefersDark(): boolean {
+  try {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  } catch {
+    return false;
+  }
+}
 
 const SHARE_RETRY_MS = 8_000;
 const NO_API_MESSAGE = "Sharing is unavailable: this build has no backend URL configured.";
@@ -23,9 +37,10 @@ const NO_API_MESSAGE = "Sharing is unavailable: this build has no backend URL co
 // analytics, WebMCP or desktop bridge). The host theme styles this top bar
 // only — the design canvas is never themed by the host.
 export function EmbedApp({ host }: { host: HostBridge | null }) {
+  const isMobile = useIsMobile();
   const status = useMcpBridgeStore((s) => s.status);
-  const [layersOpen, setLayersOpen] = useState(() => window.innerWidth >= 700);
-  const [propsOpen, setPropsOpen] = useState(() => window.innerWidth >= 900);
+  const [layersOpen, setLayersOpen] = useState(() => window.innerWidth >= 1000);
+  const [propsOpen, setPropsOpen] = useState(true);
   const [shareError, setShareError] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   // A same-origin (empty) API base would hit the host sandbox, never the backend.
@@ -33,8 +48,15 @@ export function EmbedApp({ host }: { host: HostBridge | null }) {
 
   const hostTheme = useSyncExternalStore(
     (cb) => host?.onContextChange(cb) ?? (() => {}),
-    () => host?.getTheme() ?? "light",
+    () => host?.getTheme(),
   );
+  // The host's theme drives the whole editor chrome (the app's own `.dark`
+  // class mechanism) for this session only — never saved as the user's
+  // preference. No host theme: follow the OS.
+  const appliedTheme = hostTheme ?? (prefersDark() ? "dark" : "light");
+  useEffect(() => {
+    setUIThemeTransient(appliedTheme);
+  }, [appliedTheme]);
   const displayMode = useSyncExternalStore(
     (cb) => host?.onContextChange(cb) ?? (() => {}),
     () => host?.getDisplayMode() ?? "inline",
@@ -54,7 +76,7 @@ export function EmbedApp({ host }: { host: HostBridge | null }) {
     if (!result.ok) setShareError(result.error);
   };
 
-  const dark = hostTheme === "dark";
+  const dark = appliedTheme === "dark";
   const chrome = dark ? "bg-[#1f1f1f] text-[#ededed] border-[#333]" : "bg-white text-[#1a1a1a] border-[#e4e4e4]";
   const statusLabel = status === "connected" ? "Agent connected" : status === "connecting" ? "Connecting…" : "Not connected";
   const statusDot = status === "connected" ? "bg-green-500" : status === "connecting" ? "bg-amber-400" : "bg-neutral-400";
@@ -62,7 +84,7 @@ export function EmbedApp({ host }: { host: HostBridge | null }) {
   return (
     <TooltipProvider delay={400} closeDelay={0}>
       <div className="w-full h-full flex flex-col overflow-hidden" data-testid="embed-root">
-        <div className={`h-9 shrink-0 flex items-center gap-1 px-2 border-b text-xs ${chrome}`} data-testid="embed-topbar" data-theme={hostTheme}>
+        <div className={`h-9 shrink-0 flex items-center gap-1 px-2 border-b text-xs ${chrome}`} data-testid="embed-topbar" data-theme={appliedTheme}>
           <span className="font-medium pr-1">Sideform</span>
           <span className="flex items-center gap-1.5 text-[11px] opacity-80" role="status" aria-label={statusLabel}>
             <span className={`size-1.5 rounded-full ${statusDot}`} />
@@ -101,11 +123,10 @@ export function EmbedApp({ host }: { host: HostBridge | null }) {
           )}
         </div>
         <div className="flex-1 min-h-0 relative flex flex-row">
-          {layersOpen && (
-            <div className="w-[200px] shrink-0 h-full bg-surface-panel border-r border-border-default z-10">
-              <LayersPanel />
-            </div>
-          )}
+          <LeftRail hiddenSections={HIDDEN_SECTIONS} />
+          <ReadOnlyProvider value={false}>
+            {(layersOpen || isMobile) && <LeftSidebarBase hiddenSections={HIDDEN_SECTIONS} />}
+          </ReadOnlyProvider>
           <div className="flex-1 min-w-0 relative">
             <div className="absolute inset-0 isolate">
               <CanvasContextMenu>

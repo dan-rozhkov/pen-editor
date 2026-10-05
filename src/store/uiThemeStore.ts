@@ -34,6 +34,33 @@ function applyThemeWithoutTransitions(theme: UITheme) {
   })
 }
 
+// A theme the embed widget's host forces on the editor chrome. While set it
+// wins over every other setUITheme caller (e.g. opening/restoring a document
+// applies the theme it was saved with), and nothing is written to the user's
+// stored preference.
+let lockedTheme: UITheme | null = null
+
+/** Pin the live UI (store + DOM) to `theme` without saving it as the user's preference. */
+export function setUIThemeTransient(theme: UITheme) {
+  lockedTheme = theme
+  useUIThemeStore.getState().setUITheme(theme)
+  syncDefaultPageBackground()
+}
+
+/**
+ * A document may carry the other theme's default page background (e.g. one
+ * restored after the host theme was applied). Like a theme switch in the app,
+ * a default background follows the current UI theme; a custom one is kept.
+ */
+export function syncDefaultPageBackground() {
+  const scene = useSceneStore.getState()
+  const wanted = useUIThemeStore.getState().uiTheme === 'dark' ? PAGE_BG_DARK : PAGE_BG_LIGHT
+  const current = scene.pageBackground.toLowerCase()
+  if ((current === PAGE_BG_LIGHT || current === PAGE_BG_DARK) && current !== wanted) {
+    scene.setPageBackground(wanted)
+  }
+}
+
 interface UIThemeState {
   uiTheme: UITheme
   setUITheme: (theme: UITheme) => void
@@ -54,8 +81,9 @@ export const useUIThemeStore = create<UIThemeState>((set, get) => {
 
   return {
     uiTheme: initial,
-    setUITheme: (theme) => set({ uiTheme: theme }),
+    setUITheme: (theme) => set({ uiTheme: lockedTheme ?? theme }),
     toggleUITheme: () => {
+      if (lockedTheme) return
       const next = get().uiTheme === 'light' ? 'dark' : 'light'
       set({ uiTheme: next })
     },
@@ -68,7 +96,7 @@ useUIThemeStore.subscribe((state, prev) => {
   } else {
     applyUITheme(state.uiTheme)
   }
-  localStorage.setItem(UI_THEME_STORAGE_KEY, state.uiTheme)
+  if (!lockedTheme) localStorage.setItem(UI_THEME_STORAGE_KEY, state.uiTheme)
   if (state.uiTheme !== prev.uiTheme) {
     const scene = useSceneStore.getState()
     const oldDefault = prev.uiTheme === 'dark' ? PAGE_BG_DARK : PAGE_BG_LIGHT
