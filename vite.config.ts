@@ -5,6 +5,7 @@ import path from "path";
 import { homedir } from "node:os";
 import { deriveMcpWsUrl, resolveDevMcpHandshake, resolveExistingMcpToken } from "./vite/mcpDevToken";
 import { webmcpManifest } from "./vite/webmcpManifest";
+import { embedLoader, embedRenderBuiltUrl } from "./vite/embedLoader";
 
 // GitHub Pages serves this app from a subpath (e.g. /pen-editor/), while
 // local dev/preview/e2e need it to stay at "/". The deploy workflow sets
@@ -54,7 +55,17 @@ export default defineConfig(({ command, mode }) => {
           "import.meta.env.VITE_MCP_WS_URL": JSON.stringify(deriveMcpWsUrl(mcpHandshake)),
         }
       : undefined,
-    plugins: [tailwindcss(), react(), webmcpManifest()],
+    experimental: {
+      // Lazy chunks/CSS that JS pulls in at runtime (dynamic-import preload
+      // deps, JS-referenced assets) resolve against the page origin by
+      // default. Inside the MCP Apps widget the page origin is a host sandbox,
+      // so when the embed loader (dist/embed/loader.js, see vite/embedLoader.ts)
+      // has published the deploy URL as __SIDEFORM_ASSET_BASE__, resolve
+      // against that instead. Everywhere else the global is unset and this
+      // yields the exact URL Vite would have emitted anyway (`base + file`).
+      renderBuiltUrl: embedRenderBuiltUrl(base),
+    },
+    plugins: [tailwindcss(), react(), webmcpManifest(), embedLoader()],
     build: {
       modulePreload: {
         // The showcase route ("/") never touches the editor, but Rolldown's
@@ -71,6 +82,14 @@ export default defineConfig(({ command, mode }) => {
           hostId === "index.html" ? deps.filter((d) => !d.includes("pixi-vendor")) : deps,
       },
       rollupOptions: {
+        // Second HTML entry: the MCP Apps widget (src/embed/). embed.html
+        // itself is not served to anyone — the entry exists so the build
+        // emits a hashed chunk + CSS that vite/embedLoader.ts references from
+        // the fixed-name dist/embed/loader.js.
+        input: {
+          main: path.resolve(__dirname, "index.html"),
+          embed: path.resolve(__dirname, "embed.html"),
+        },
         output: {
           manualChunks(id) {
             if (!id.includes("node_modules")) {

@@ -552,3 +552,45 @@ describe("one bridge at a time", () => {
     expect(FakeWebSocket.instances[0].url).toContain("token");
   });
 });
+
+describe("McpBridge ticket mode", () => {
+  const wsUrl = "wss://api.example.test/api/mcp/ws";
+
+  it("connects to wsUrl?ticket= (encoded), says hello and reports open", () => {
+    const factory = makeFactory();
+    const onOpen = vi.fn();
+    const bridge = McpBridge.forTicket({ wsUrl, ticket: "a/b+c=", onOpen }, factory);
+    bridge.start();
+
+    const socket = FakeWebSocket.instances[0];
+    expect(socket.url).toBe(`${wsUrl}?ticket=${encodeURIComponent("a/b+c=")}`);
+    socket.open();
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(socket.control).toEqual([{ type: "hello", capabilities: ["ack"] }]);
+    bridge.stop();
+  });
+
+  it("never reconnects by itself: a close is reported through onClose (single-use ticket)", () => {
+    vi.useFakeTimers();
+    const factory = makeFactory();
+    const onClose = vi.fn();
+    const bridge = McpBridge.forTicket({ wsUrl, ticket: "t", onClose }, factory);
+    bridge.start();
+    FakeWebSocket.instances[0].open();
+    FakeWebSocket.instances[0].close();
+
+    vi.advanceTimersByTime(60_000);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    bridge.stop();
+  });
+
+  it("does not call onClose for a close it caused with stop()", () => {
+    const factory = makeFactory();
+    const onClose = vi.fn();
+    const bridge = McpBridge.forTicket({ wsUrl, ticket: "t", onClose }, factory);
+    bridge.start();
+    bridge.stop();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});

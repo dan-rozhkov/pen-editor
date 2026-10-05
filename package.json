@@ -20,6 +20,7 @@
     "@base-ui/react": "^1.1.0",
     "@better-auth/api-key": "1.7.7",
     "@better-auth/oauth-provider": "1.7.7",
+    "@modelcontextprotocol/ext-apps": "^1.7.5",
     "@paper-design/shaders-react": "0.0.76",
     "@phosphor-icons/react": "^2.1.10",
     "@tailwindcss/vite": "^4.3.1",

@@ -51,6 +51,19 @@ function resolveWsUrl(token: string | null): string {
   return `${wsUrl}?token=${encodeURIComponent(token)}`;
 }
 
+// Ticket mode (the embedded canvas widget, src/embed/hostBridge.ts): the
+// backend minted a single-use ticket for the page; wsUrl comes from the same
+// payload, not from this build's API base (the widget runs on a sandbox
+// origin). A ticket cannot be replayed, so this mode never reconnects by
+// itself: a closed socket is reported through `onClose` and the owner mints a
+// new ticket and builds a new bridge.
+export interface McpBridgeTicketOptions {
+  wsUrl: string;
+  ticket: string;
+  onOpen?: () => void;
+  onClose?: () => void;
+}
+
 // WebSocket client for the browser tab side of the MCP bridge. Started once
 // from app bootstrap when VITE_MCP_WS_TOKEN is set (see
 // startMcpBridgeIfConfigured below). Dispatches incoming tool_call messages
@@ -63,6 +76,7 @@ export class McpBridge {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = true;
   private readonly token: string | null;
+  private readonly ticketOptions: McpBridgeTicketOptions | null;
   private readonly wsFactory: (url: string) => WebSocket;
   // Bumped in connect() every time a new socket is created. Used to pin a
   // queued call's liveness check to the socket it actually arrived on —
@@ -99,9 +113,21 @@ export class McpBridge {
     },
   });
 
-  constructor(token: string | null, wsFactory: (url: string) => WebSocket = (url) => new WebSocket(url)) {
+  constructor(
+    token: string | null,
+    wsFactory: (url: string) => WebSocket = (url) => new WebSocket(url),
+    ticketOptions: McpBridgeTicketOptions | null = null,
+  ) {
     this.token = token;
     this.wsFactory = wsFactory;
+    this.ticketOptions = ticketOptions;
+  }
+
+  static forTicket(
+    options: McpBridgeTicketOptions,
+    wsFactory?: (url: string) => WebSocket,
+  ): McpBridge {
+    return new McpBridge(null, wsFactory, options);
   }
 
   start(): void {
@@ -142,7 +168,11 @@ export class McpBridge {
 
     let socket: WebSocket;
     try {
-      socket = this.wsFactory(resolveWsUrl(this.token));
+      socket = this.wsFactory(
+        this.ticketOptions
+          ? `${this.ticketOptions.wsUrl}?ticket=${encodeURIComponent(this.ticketOptions.ticket)}`
+          : resolveWsUrl(this.token),
+      );
     } catch {
       // e.g. an unsupported/relative API base resolving to a URL the
       // WebSocket constructor rejects synchronously — protects app boot.
@@ -150,6 +180,7 @@ export class McpBridge {
       // registered and sets status "off"; no reconnect loop, since retrying
       // the same bad URL can't succeed.
       this.stop();
+      this.ticketOptions?.onClose?.();
       return;
     }
     this.socket = socket;
@@ -161,6 +192,7 @@ export class McpBridge {
       // First message on every (re)connect: tells the backend this tab acks
       // tool calls, so a call routed to a dead tab can fail over quickly.
       this.sendRaw({ type: "hello", capabilities: ["ack"] });
+      this.ticketOptions?.onOpen?.();
     });
 
     socket.addEventListener("message", (event: MessageEvent) => {
@@ -171,6 +203,10 @@ export class McpBridge {
       if (this.socket === socket) this.socket = null;
       if (this.stopped) return;
       useMcpBridgeStore.getState().setStatus("connecting");
+      if (this.ticketOptions) {
+        this.ticketOptions.onClose?.();
+        return;
+      }
       this.scheduleReconnect();
     });
 

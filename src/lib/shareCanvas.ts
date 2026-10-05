@@ -13,7 +13,15 @@ import { getRequestUserId } from "@/lib/auth/authState";
 import { useDocumentStore } from "@/store/documentStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 
-const SHARE_CREDENTIALS_KEY = "pen.share.current.v1";
+const DEFAULT_SHARE_CREDENTIALS_KEY = "pen.share.current.v1";
+let shareCredentialsKey = DEFAULT_SHARE_CREDENTIALS_KEY;
+
+// The embedded widget shares one storage origin with every other widget of the
+// same host, so it namespaces the "current share" slot per widget instance —
+// otherwise one conversation could overwrite another conversation's link.
+export function setShareCredentialsKeySuffix(suffix: string | null): void {
+  shareCredentialsKey = suffix ? `${DEFAULT_SHARE_CREDENTIALS_KEY}:${suffix}` : DEFAULT_SHARE_CREDENTIALS_KEY;
+}
 const SHARE_TIMEOUT_MS = 60_000;
 // Mirrors the backend's request-body limit for /api/canvas/share. Kept as a
 // human-readable constant so the 413/400-too-large error message and the
@@ -55,7 +63,7 @@ export function buildShareUrl(id: string): string {
 // branch).
 export function loadShareCredentials(): ShareCredentials | null {
   try {
-    const raw = localStorage.getItem(SHARE_CREDENTIALS_KEY);
+    const raw = localStorage.getItem(shareCredentialsKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<ShareCredentials> | null;
     if (!parsed || typeof parsed.id !== "string" || typeof parsed.editToken !== "string") {
@@ -96,9 +104,9 @@ export function subscribeToShareCredentials(
 export function saveShareCredentials(c: ShareCredentials | null): void {
   try {
     if (c === null) {
-      localStorage.removeItem(SHARE_CREDENTIALS_KEY);
+      localStorage.removeItem(shareCredentialsKey);
     } else {
-      localStorage.setItem(SHARE_CREDENTIALS_KEY, JSON.stringify(c));
+      localStorage.setItem(shareCredentialsKey, JSON.stringify(c));
     }
   } catch {
     // localStorage unavailable (private mode / locked-down embed) — sharing

@@ -7,6 +7,7 @@ import {
   fetchSharedCanvas,
   unshareCurrentCanvas,
   forkSharedCanvasInPlace,
+  setShareCredentialsKeySuffix,
 } from "@/lib/shareCanvas";
 import { serializeDocument } from "@/utils/fileUtils";
 import { useDocumentStore } from "@/store/documentStore";
@@ -263,5 +264,25 @@ describe("forkSharedCanvasInPlace", () => {
     expect(useEditorModeStore.getState().mode).toBe("edit");
     expect(useDocumentStore.getState().fileName).toBe("Some Shared Doc (copy)");
     expect(loadShareCredentials()).toBeNull();
+  });
+});
+
+describe("share credentials key suffix (embed widgets)", () => {
+  afterEach(() => {
+    setShareCredentialsKeySuffix(null);
+    localStorage.clear();
+  });
+
+  it("keeps each widget's share slot separate from the others and from the app's", () => {
+    saveShareCredentials({ id: "app", editToken: "t0" });
+    setShareCredentialsKeySuffix("a");
+    expect(loadShareCredentials()).toBeNull();
+    saveShareCredentials({ id: "A", editToken: "ta" });
+    setShareCredentialsKeySuffix("b");
+    expect(loadShareCredentials()).toBeNull();
+    setShareCredentialsKeySuffix("a");
+    expect(loadShareCredentials()).toEqual({ id: "A", editToken: "ta" });
+    setShareCredentialsKeySuffix(null);
+    expect(loadShareCredentials()).toEqual({ id: "app", editToken: "t0" });
   });
 });
