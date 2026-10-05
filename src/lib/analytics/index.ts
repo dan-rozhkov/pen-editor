@@ -202,6 +202,11 @@ export function capturePageview(pathname: string): void {
   }
 }
 
+/** Test-only: resolves once initAnalytics()'s async setup has finished (never rejects). */
+export function __analyticsReadyForTests(): Promise<void> {
+  return state.initPromise ?? Promise.resolve();
+}
+
 /** Resets all internal module state. Test-only. */
 export function __resetAnalyticsForTests(): void {
   state = freshState();

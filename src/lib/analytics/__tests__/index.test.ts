@@ -14,16 +14,19 @@ vi.mock("@/lib/userId", () => ({
   getUserId: () => "test-user-id",
 }));
 
+// initAnalytics() waits for /api/auth-config before loading posthog-js. The
+// real loadAuthConfig() does a network fetch (happy-dom performs real
+// requests), whose latency under a loaded coverage run used to blow the old
+// 1 s poll and flake these tests. Resolve it immediately as "accounts off".
+vi.mock("@/lib/auth/authConfig", () => ({
+  loadAuthConfig: () => Promise.resolve({ enabled: false, google: false, emailEnabled: false }),
+}));
+
 async function flushMicrotasks() {
-  // The dynamic `import("posthog-js")` inside initAnalytics() takes more
-  // than a couple of microtask ticks to settle under Vitest's module
-  // loader, even against the mocked module — poll with real timers instead
-  // of guessing a fixed number of `Promise.resolve()` ticks.
-  await vi.waitFor(() => {
-    if (initMock.mock.calls.length === 0 && captureMock.mock.calls.length === 0) {
-      throw new Error("dynamic import has not settled yet");
-    }
-  });
+  // Wait for initAnalytics()'s own promise (auth config → dynamic import →
+  // flush) instead of polling with a timeout.
+  const { __analyticsReadyForTests } = await import("../index");
+  await __analyticsReadyForTests();
 }
 
 beforeEach(() => {
