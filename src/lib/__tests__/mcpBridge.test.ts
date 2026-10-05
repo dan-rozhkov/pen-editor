@@ -16,6 +16,8 @@ class FakeWebSocket {
 
   readyState = FakeWebSocket.CONNECTING;
   sent: string[] = [];
+  // hello/ack housekeeping frames; kept apart so `sent` is only outcomes.
+  control: Array<{ type: string; id?: string; capabilities?: string[] }> = [];
   url: string;
   private listeners: Record<string, Array<(event: unknown) => void>> = {};
 
@@ -33,7 +35,9 @@ class FakeWebSocket {
   }
 
   send(data: string): void {
-    this.sent.push(data);
+    const parsed = JSON.parse(data) as { type: string };
+    if (parsed.type === "hello" || parsed.type === "ack") this.control.push(parsed);
+    else this.sent.push(data);
   }
 
   close(): void {
@@ -116,6 +120,112 @@ describe("McpBridge", () => {
 
     bridge.stop();
     vi.unstubAllEnvs();
+  });
+
+  it("sends hello with the ack capability first on every (re)connect", () => {
+    vi.useFakeTimers();
+    const factory = makeFactory();
+    const bridge = new McpBridge("secret-token", factory);
+    bridge.start();
+    const first = FakeWebSocket.instances[0];
+    first.open();
+    expect(first.control).toEqual([{ type: "hello", capabilities: ["ack"] }]);
+
+    first.close();
+    vi.advanceTimersByTime(30_000);
+    const second = FakeWebSocket.instances[1];
+    second.open();
+    expect(second.control).toEqual([{ type: "hello", capabilities: ["ack"] }]);
+    bridge.stop();
+  });
+
+  describe("two-phase ack", () => {
+    function setup() {
+      const bridge = new McpBridge("secret-token", makeFactory());
+      bridge.start();
+      const socket = FakeWebSocket.instances[0];
+      socket.open();
+      const original = toolHandlers.get_variables;
+      const handler = vi.fn(async () => "done");
+      toolHandlers.get_variables = handler;
+      const teardown = () => {
+        toolHandlers.get_variables = original;
+        bridge.stop();
+      };
+      return { socket, handler, teardown };
+    }
+    const call = (id: string, extra: object = {}) => ({ id, type: "tool_call", tool: "get_variables", args: {}, ...extra });
+
+    it("acks an ack:true call without executing it, and executes on go", async () => {
+      const { socket, handler, teardown } = setup();
+      socket.message(call("c1", { ack: true }));
+      expect(socket.control.filter((m) => m.type === "ack").map((m) => m.id)).toEqual(["c1"]);
+      await Promise.resolve();
+      expect(handler).not.toHaveBeenCalled();
+
+      socket.message({ id: "c1", type: "go" });
+      await vi.waitFor(() => expect(socket.sent).toHaveLength(1));
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(socket.sent[0])).toMatchObject({ id: "c1", type: "tool_result", result: "done" });
+      teardown();
+    });
+
+    it("drops a held call on cancel, even if a go arrives afterwards", async () => {
+      const { socket, handler, teardown } = setup();
+      socket.message(call("c1", { ack: true }));
+      socket.message({ id: "c1", type: "cancel" });
+      socket.message({ id: "c1", type: "go" });
+      await new Promise((r) => setTimeout(r, 10));
+      expect(handler).not.toHaveBeenCalled();
+      expect(socket.sent).toHaveLength(0);
+      teardown();
+    });
+
+    it("drops a held call when no go arrives within 30s", async () => {
+      vi.useFakeTimers();
+      const { socket, handler, teardown } = setup();
+      socket.message(call("c1", { ack: true }));
+      vi.advanceTimersByTime(30_000);
+      socket.message({ id: "c1", type: "go" });
+      await vi.advanceTimersByTimeAsync(10);
+      expect(handler).not.toHaveBeenCalled();
+      teardown();
+    });
+
+    it("executes immediately, and sends no ack, when the call has no ack flag (old backend)", async () => {
+      const { socket, handler, teardown } = setup();
+      socket.message(call("c1"));
+      await vi.waitFor(() => expect(socket.sent).toHaveLength(1));
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(socket.control.filter((m) => m.type === "ack")).toEqual([]);
+      teardown();
+    });
+
+    it("forgets the origin generation of a held call on cancel, timeout and stop", () => {
+      vi.useFakeTimers();
+      const bridge = new McpBridge("t", makeFactory());
+      bridge.start();
+      const socket = FakeWebSocket.instances[0];
+      socket.open();
+      const origins = (bridge as unknown as { originGenerationByCallId: Map<string, number> }).originGenerationByCallId;
+      for (const id of ["a", "b", "c"]) socket.message(call(id, { ack: true }));
+      expect(origins.size).toBe(3);
+      socket.message({ id: "a", type: "cancel" });
+      expect(origins.has("a")).toBe(false);
+      vi.advanceTimersByTime(30_000);
+      expect(origins.size).toBe(0);
+      socket.message(call("d", { ack: true }));
+      bridge.stop();
+      expect(origins.size).toBe(0);
+    });
+
+    it("ignores go/cancel for an unknown id", () => {
+      const { socket, handler, teardown } = setup();
+      socket.message({ id: "nope", type: "go" });
+      socket.message({ id: "nope", type: "cancel" });
+      expect(handler).not.toHaveBeenCalled();
+      teardown();
+    });
   });
 
   it("dispatches a tool_call into toolHandlers and replies tool_result", async () => {

@@ -26,7 +26,7 @@ async function fetchKeys(): Promise<KeyRow[] | null> {
 export function ApiKeysSection() {
   const [keys, setKeys] = useState<KeyRow[] | null>(null);
   const [name, setName] = useState("");
-  const [created, setCreated] = useState<string | null>(null);
+  const [created, setCreated] = useState<{ id: string | null; key: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -57,7 +57,7 @@ export function ApiKeysSection() {
       if (res.error || !res.data) {
         setError("Could not create the key.");
       } else {
-        setCreated(res.data.key);
+        setCreated({ id: res.data.id ?? null, key: res.data.key });
         setName("");
         load();
       }
@@ -74,6 +74,7 @@ export function ApiKeysSection() {
     try {
       const res = await authClient.apiKey.delete({ keyId: id });
       if (res.error) setError("Could not revoke the key.");
+      else setCreated((c) => (c && c.id === id ? null : c)); // only the revoked key's reveal goes
       setConfirmId(null);
       load();
     } catch {
@@ -109,12 +110,12 @@ export function ApiKeysSection() {
         <div role="status" className="rounded-md bg-surface-elevated p-3 text-sm">
           <p className="mb-1 text-text-primary">Copy this key now. It is shown only once.</p>
           <code className="block break-all rounded bg-surface-panel p-2 text-xs text-text-primary">
-            {created}
+            {created.key}
           </code>
           <AuthButton
             variant="secondary"
             className="mt-2"
-            onClick={() => void navigator.clipboard?.writeText(created)}
+            onClick={() => void navigator.clipboard?.writeText(created.key)}
           >
             Copy
           </AuthButton>

@@ -6,6 +6,8 @@ export interface ToolCallMessage {
   type: "tool_call";
   tool: string;
   args: unknown;
+  /** Set by a backend that wants two-phase delivery: ack, then wait for `go`. */
+  ack?: boolean;
 }
 
 export function isToolCallMessage(value: unknown): value is ToolCallMessage {

@@ -1,10 +1,31 @@
 import { resolveApiUrl } from "@/lib/apiBase";
 import { isDesktopMcpBridgeActive } from "@/lib/desktopMcpBridge";
-import { createToolDispatcher, isToolCallMessage, type ToolDispatchOutcome } from "@/lib/mcpDispatch";
+import {
+  createToolDispatcher,
+  isToolCallMessage,
+  type ToolCallMessage,
+  type ToolDispatchOutcome,
+} from "@/lib/mcpDispatch";
 import { useMcpBridgeStore } from "@/store/mcpBridgeStore";
 
 const MIN_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
+// Tab-side bound on waiting for the backend's `go`/`cancel` after an ack. A
+// go/cancel arriving later for an unknown or already-released id is ignored;
+// the backend's own deadline then fails the call and nothing executed.
+const HELD_CALL_TIMEOUT_MS = 30_000;
+
+interface HeldCall {
+  message: ToolCallMessage;
+  generation: number;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+function isControlMessage(value: unknown): value is { type: "go" | "cancel"; id: string } {
+  if (!value || typeof value !== "object") return false;
+  const { type, id } = value as { type?: unknown; id?: unknown };
+  return (type === "go" || type === "cancel") && typeof id === "string";
+}
 
 // `token === null` is cookie mode: a signed-in user's browser session cookie
 // authenticates the socket (credentials ride the WebSocket handshake
@@ -56,6 +77,8 @@ export class McpBridge {
   // against the current one so a reconnect cannot resurrect a call that
   // belongs to a dead connection.
   private originGenerationByCallId = new Map<string, number>();
+  // Calls acked but not yet released by `go`/`cancel`, keyed by call id.
+  private held = new Map<string, HeldCall>();
   private readonly dispatcher = createToolDispatcher({
     send: (message) => this.sendOutcome(message),
     // Re-checked immediately before a queued call executes, not only before
@@ -96,6 +119,7 @@ export class McpBridge {
     this.reconnectTimer = null;
     this.socket?.close();
     this.socket = null;
+    for (const id of [...this.held.keys()]) this.release(id);
     useMcpBridgeStore.getState().setStatus("off");
   }
 
@@ -134,6 +158,9 @@ export class McpBridge {
     socket.addEventListener("open", () => {
       this.reconnectAttempt = 0;
       useMcpBridgeStore.getState().setStatus("connected");
+      // First message on every (re)connect: tells the backend this tab acks
+      // tool calls, so a call routed to a dead tab can fail over quickly.
+      this.sendRaw({ type: "hello", capabilities: ["ack"] });
     });
 
     socket.addEventListener("message", (event: MessageEvent) => {
@@ -166,6 +193,10 @@ export class McpBridge {
     } catch {
       return;
     }
+    if (isControlMessage(parsed)) {
+      this.onControl(parsed);
+      return;
+    }
     if (!isToolCallMessage(parsed)) return;
 
     // Capture which socket this call arrived on *now*, at message-arrival
@@ -174,12 +205,46 @@ export class McpBridge {
     // truly arrived on the currently-open connection.
     this.originGenerationByCallId.set(parsed.id, this.generation);
 
+    if (parsed.ack === true) {
+      // Two-phase: confirm receipt, then HOLD until the backend sends `go`
+      // (it withdraws the call with `cancel` if it gave up on this tab). The
+      // tab-side timeout frees the slot if neither ever arrives.
+      const message = parsed;
+      const timer = setTimeout(() => this.release(message.id), HELD_CALL_TIMEOUT_MS);
+      this.held.set(message.id, { message, generation: this.generation, timer });
+      this.sendRaw({ id: message.id, type: "ack" });
+      return;
+    }
+
     // Serial queue (createToolDispatcher): concurrent bridged calls must
     // never interleave scene mutations mid-call.
     this.dispatcher.dispatch(parsed);
   }
 
+  private release(id: string): HeldCall | undefined {
+    const held = this.held.get(id);
+    if (!held) return undefined;
+    clearTimeout(held.timer);
+    this.held.delete(id);
+    this.originGenerationByCallId.delete(id);
+    return held;
+  }
+
+  private onControl(control: { type: "go" | "cancel"; id: string }): void {
+    const held = this.release(control.id);
+    if (!held) return;
+    // isLive reads (and then drops) the origin generation when it runs.
+    if (control.type === "go") {
+      this.originGenerationByCallId.set(held.message.id, held.generation);
+      this.dispatcher.dispatch(held.message);
+    }
+  }
+
   private sendOutcome(message: ToolDispatchOutcome): void {
+    this.sendRaw(message);
+  }
+
+  private sendRaw(message: object): void {
     const socket = this.socket;
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
     socket.send(JSON.stringify(message));

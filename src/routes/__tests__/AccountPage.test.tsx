@@ -59,6 +59,32 @@ describe("<AccountPage />", () => {
     await waitFor(() => expect(authClientMock.apiKey.delete).toHaveBeenCalledWith({ keyId: "k1" }));
   });
 
+  it("clears the revealed secret once a key is revoked", async () => {
+    authClientMock.apiKey.create.mockResolvedValue(ok({ key: "sf_secret", id: "k1" }));
+    authClientMock.apiKey.list.mockResolvedValue(ok({ apiKeys: [KEY] }));
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: "Create key" }));
+    expect(await screen.findByText("sf_secret")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Revoke Cursor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm revoke" }));
+
+    await waitFor(() => expect(screen.queryByText("sf_secret")).toBeNull());
+    expect(screen.queryByText(/shown only once/)).toBeNull();
+  });
+
+  it("keeps the revealed secret when a different key is revoked", async () => {
+    authClientMock.apiKey.create.mockResolvedValue(ok({ key: "sf_secret", id: "k2" }));
+    authClientMock.apiKey.list.mockResolvedValue(ok({ apiKeys: [KEY] }));
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: "Create key" }));
+    expect(await screen.findByText("sf_secret")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Revoke Cursor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm revoke" }));
+
+    await waitFor(() => expect(authClientMock.apiKey.delete).toHaveBeenCalledWith({ keyId: "k1" }));
+    expect(screen.getByText("sf_secret")).toBeTruthy();
+  });
+
   it("reports an API key list failure", async () => {
     authClientMock.apiKey.list.mockResolvedValue({ data: null, error: { status: 500 } });
     open();
