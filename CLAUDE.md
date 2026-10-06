@@ -503,7 +503,7 @@ draft — Postgres rows behind `/api/user-skills`, scoped to the same anonymous
 
 ### File Format
 
-The editor reads/writes `.pen` files. These are accessed exclusively through the Pencil MCP tools — never read `.pen` files directly with file I/O.
+The editor reads/writes `.pen` files: JSON documents (`version` + `children` tree). The node types are declared in `src/types/scene.ts`.
 
 ### Analytics
 
