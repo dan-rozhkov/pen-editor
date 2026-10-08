@@ -69,6 +69,7 @@ function CommitField({
 export function VariableDetails({ variable }: { variable: Variable }) {
   const variables = useVariableStore((s) => s.variables);
   const updateVariable = useVariableStore((s) => s.updateVariable);
+  const [notice, setNotice] = useState<string | null>(null);
   const scopes = variable.scopes ?? [];
   const deprecated = variable.deprecated;
   const replacements = variables.filter((v) => v.type === variable.type && v.id !== variable.id && !isLibraryOwned(v));
@@ -80,9 +81,11 @@ export function VariableDetails({ variable }: { variable: Variable }) {
   const patchDeprecation = (patch: Partial<NonNullable<Variable["deprecated"]>>) => {
     // A replacement goes through the same validation as the deprecate action.
     if (patch.replacedBy) {
-      deprecateVariable(variable.id, { replacedBy: patch.replacedBy, note: deprecated?.note });
+      const result = deprecateVariable(variable.id, { replacedBy: patch.replacedBy, note: deprecated?.note });
+      setNotice("error" in result ? result.error : null);
       return;
     }
+    setNotice(null);
     const next = { ...deprecated, ...patch };
     for (const key of Object.keys(next) as (keyof typeof next)[]) {
       if (next[key] === "" || next[key] === undefined) delete next[key];
@@ -162,6 +165,11 @@ export function VariableDetails({ variable }: { variable: Variable }) {
               value={deprecated.note ?? ""}
               onCommit={(note) => patchDeprecation({ note })}
             />
+            {notice && (
+              <p role="alert" className="text-xs text-red-400">
+                {notice}
+              </p>
+            )}
           </div>
         )}
       </div>

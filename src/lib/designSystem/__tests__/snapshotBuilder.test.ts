@@ -12,6 +12,7 @@ import {
   deprecateComponent,
   deprecateVariable,
   diffSnapshots,
+  planRelease,
   undeprecateComponent,
   undeprecateVariable,
   validateSnapshot,
@@ -184,5 +185,33 @@ describe("buildSnapshot: a library built on a base library", () => {
     expect(snapshot.variables[0].valuesByMode).toEqual({ light: "#0055ff", dark: "#4488ff" });
     expect(snapshot.variables[1].valuesByMode).toEqual({ light: { alias: "var_cta" }, dark: { alias: "var_cta" } });
     expect(notes.map((n) => n.message)).toEqual(["alias to library token Base Brand inlined", "alias to library token Base Brand inlined"]);
+  });
+});
+
+describe("buildSnapshot: inlining a library alias by mode name", () => {
+  it("resolves the library token under the same mode name (dark -> dark)", () => {
+    const libCol = {
+      id: "col_lib",
+      name: "Lib theme",
+      modes: [
+        { id: "lm_day", name: "Light" },
+        { id: "lm_night", name: "Dark" },
+      ],
+      defaultModeId: "lm_day",
+      libraryId: "lib_base",
+    };
+    store().replaceAll(
+      [
+        { id: "base_brand", name: "Base Brand", type: "color", collectionId: "col_lib", valuesByMode: { lm_day: "#0055ff", lm_night: "#4488ff" }, value: "#0055ff", libraryId: "lib_base" },
+        theme("var_cta", "CTA", "#000000", "#000000", { valuesByMode: { light: { alias: "base_brand" }, dark: { alias: "base_brand" } } }),
+      ],
+      [...store().collections, libCol],
+    );
+    const { snapshot, issues, notes } = buildSnapshot();
+    expect(issues).toEqual([]);
+    expect(snapshot.variables[0].valuesByMode).toEqual({ light: "#0055ff", dark: "#4488ff" });
+    expect(notes).toHaveLength(2);
+    const plan = planRelease(null, snapshot, null, notes);
+    expect(plan.notes).toHaveLength(2);
   });
 });

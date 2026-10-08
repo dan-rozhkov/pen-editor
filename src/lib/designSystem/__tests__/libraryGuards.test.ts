@@ -12,6 +12,7 @@ import { resetWorld, parse, seedEmbed } from "@/test/componentFixtures";
 import { useSceneStore } from "@/store/sceneStore";
 import type { EmbedNode } from "@/types/scene";
 import { assertDefined } from "@/test/assertions";
+import { withLibraryWrites } from "@/lib/designSystem/ownership";
 
 const LIB = "lib_acme";
 
@@ -169,6 +170,18 @@ describe("set_variables: library-owned items are read-only", () => {
   });
 });
 
+/** Wrap the seeded "master" embed in a frame named "frame". */
+function putFrame(): void {
+  const st = useSceneStore.getState();
+  useSceneStore.setState({
+    nodesById: { ...st.nodesById, frame: { id: "frame", type: "frame", name: "F", x: 0, y: 0, width: 10, height: 10 } as never },
+    parentById: { ...st.parentById, frame: null, master: "frame" },
+    childrenById: { ...st.childrenById, frame: ["master"] },
+    rootIds: ["frame"],
+    _cachedTree: null,
+  });
+}
+
 describe("library component masters are read-only", () => {
   const libraryMeta = { key: "btn", name: "Button", variants: { kind: ["primary", "secondary"] }, library: { id: LIB, version: "1.0.0" } };
 
@@ -237,16 +250,94 @@ describe("batch_design: library component masters are protected", () => {
   });
 
   it("refuses to delete a frame that holds a library master", async () => {
-    const st = useSceneStore.getState();
-    useSceneStore.setState({
-      nodesById: { ...st.nodesById, frame: { id: "frame", type: "frame", name: "F", x: 0, y: 0, width: 10, height: 10 } as never },
-      parentById: { ...st.parentById, frame: null, master: "frame" },
-      childrenById: { ...st.childrenById, frame: ["master"] },
-      rootIds: ["frame"],
-      _cachedTree: null,
-    });
+    putFrame();
     const result = await run('D("frame")');
     expect(String(result.error)).toContain("Library component");
     expect(useSceneStore.getState().nodesById.frame).toBeDefined();
+  });
+});
+
+describe("library masters: one guard at the commit point", () => {
+  const libraryMeta = { key: "btn", name: "Button", library: { id: LIB, version: "1.0.0" } };
+  const run = async (operations: string) => parse(await batchDesign({ operations }));
+  const ids = () => Object.keys(useSceneStore.getState().nodesById).sort();
+
+  beforeEach(() => {
+    resetWorld();
+    seedEmbed("master", BTN_HTML, { component: libraryMeta });
+  });
+
+  it("R() of a frame holding a library master is refused and changes nothing", async () => {
+    putFrame();
+    const result = await run('R("frame", {type: "frame", name: "New", width: 5, height: 5})');
+    expect(String(result.error)).toContain("Library component");
+    expect(ids()).toEqual(["frame", "master"]);
+  });
+
+  // cloneNodeWithNewId strips `component` from copies, so C() can never mint a
+  // second library master; the commit check still backs that up.
+  const libraryMasters = () =>
+    Object.values(useSceneStore.getState().nodesById).filter(
+      (n) => n.type === "embed" && (n as unknown as EmbedNode).component?.library,
+    );
+
+  it("C() of a library master leaves exactly one library master (the copy is plain)", async () => {
+    const result = await run('c=C("master", document, {})');
+    expect(result.error).toBeUndefined();
+    expect(libraryMasters().map((n) => n.id)).toEqual(["master"]);
+  });
+
+  it("C() of a frame that contains a library master leaves exactly one library master", async () => {
+    putFrame();
+    const result = await run('c=C("frame", document, {})');
+    expect(result.error).toBeUndefined();
+    expect(libraryMasters().map((n) => n.id)).toEqual(["master"]);
+  });
+
+  it("I() of a nested embed carrying library meta is refused", async () => {
+    const html = JSON.stringify(BTN_HTML);
+    const result = await run(
+      `f=I(document, {type: "frame", name: "F2", width: 5, height: 5, children: [{type: "embed", name: "Fake", htmlContent: ${html}, component: {key: "other", name: "O", library: {id: "${LIB}", version: "1.0.0"}}}]})`,
+    );
+    expect(String(result.error ?? "")).toContain("Library component");
+    expect(ids()).toEqual(["master"]);
+  });
+
+  it("I() of a nested local master on a library-held key is refused", async () => {
+    const html = JSON.stringify(BTN_HTML);
+    const result = await run(
+      `f=I(document, {type: "frame", name: "F2", width: 5, height: 5, children: [{type: "embed", name: "Mine", htmlContent: ${html}, component: {key: "btn", name: "Mine"}}]})`,
+    );
+    expect(String(result.error ?? "")).toContain("Library component");
+    expect(ids()).toEqual(["master"]);
+  });
+
+  it("a geometry-only U() on a local master whose key clashes passes", async () => {
+    resetWorld();
+    const st0 = useSceneStore.getState();
+    seedEmbed("lib", BTN_HTML, { component: libraryMeta });
+    seedEmbed("local", BTN_HTML, { component: { key: "btn", name: "Local" } });
+    expect(st0).toBeDefined();
+    const result = await run('U("local", {x: 40})');
+    expect(result.error).toBeUndefined();
+    const blocked = await run('U("local", {component: {key: "btn", name: "Renamed"}})');
+    expect(String(blocked.error)).toContain("Library component");
+  });
+
+  it("meta comparison ignores key order: re-sending identical library meta is allowed", async () => {
+    const reordered = '{library: {version: "1.0.0", id: "' + LIB + '"}, name: "Button", key: "btn"}';
+    const result = await run(`U("master", {component: ${reordered}})`);
+    expect(result.error).toBeUndefined();
+  });
+
+  it("deleteNode and addNode on the store refuse library masters; withLibraryWrites lifts the guard", () => {
+    const st = () => useSceneStore.getState();
+    st().deleteNode("master");
+    expect(st().nodesById.master).toBeDefined();
+    const copy = { ...(st().nodesById.master as unknown as EmbedNode), id: "copy" };
+    st().addNode(copy as never);
+    expect(st().nodesById.copy).toBeUndefined();
+    withLibraryWrites(() => st().deleteNode("master"));
+    expect(st().nodesById.master).toBeUndefined();
   });
 });

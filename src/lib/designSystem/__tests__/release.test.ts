@@ -63,6 +63,12 @@ describe("planRelease", () => {
     expect(plan.publishable).toBe(false);
   });
 
+  it("carries the builder's notes through to the plan", () => {
+    const notes = [{ path: "variables.v.valuesByMode.light", message: "alias to library token X inlined" }];
+    expect(planRelease(null, snap(), null, notes).notes).toEqual(notes);
+    expect(planRelease(null, snap(), null).notes).toEqual([]);
+  });
+
   it("first publish: initial bump, version 1.0.0, publishable", () => {
     const plan = planRelease(null, snap(), null);
     expect(plan.requiredBump).toBe("initial");

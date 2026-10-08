@@ -2,6 +2,7 @@
 // owner can pick, what the policy says, which migrations ship.
 import { bumpRank, nextVersions } from "./semver";
 import { checkRemovalPolicy, deriveMigrations, diffSnapshots } from "./diff";
+import type { SnapshotIssue } from "./validate";
 import type { Bump, Migration, RequiredBump, Snapshot, SnapshotDiff, Violation } from "./types";
 
 /** The smallest bump the change allows, or null for "nothing to publish" (no changes) and the first publish. */
@@ -28,10 +29,25 @@ export interface ReleasePlan {
   noChanges: boolean;
   /** Publishable: changes exist (or this is the first publish) and the policy holds. */
   publishable: boolean;
+  /**
+   * Informational notes from `buildSnapshot` (for example "alias to library
+   * token X inlined"). They never block a publish, but the publish dialog
+   * (step 6.5) MUST show them: they tell the owner the snapshot differs from
+   * the document.
+   */
+  notes: SnapshotIssue[];
 }
 
-/** Everything the Publish dialog shows, computed from the latest published snapshot (`null` = first publish) and the document's. */
-export function planRelease(prev: Snapshot | null, next: Snapshot, latestVersion: string | null): ReleasePlan {
+/**
+ * Everything the Publish dialog shows, computed from the latest published snapshot (`null` = first publish) and the document's.
+ * Pass `buildSnapshot().notes` as `notes` so the dialog can show them (see `ReleasePlan.notes`).
+ */
+export function planRelease(
+  prev: Snapshot | null,
+  next: Snapshot,
+  latestVersion: string | null,
+  notes: SnapshotIssue[] = [],
+): ReleasePlan {
   const diff = diffSnapshots(prev, next);
   const violations = checkRemovalPolicy(prev, next);
   const noChanges = diff.requiredBump === "none";
@@ -43,5 +59,6 @@ export function planRelease(prev: Snapshot | null, next: Snapshot, latestVersion
     versions: nextVersions(latestVersion),
     noChanges,
     publishable: !noChanges && violations.length === 0,
+    notes,
   };
 }

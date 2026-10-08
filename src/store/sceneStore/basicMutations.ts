@@ -4,6 +4,7 @@ import type {
   HistorySnapshot,
   SceneNode,
 } from "../../types/scene";
+import { guardLibraryMasterWrite } from "@/lib/designSystem/ownership";
 import {
   isContainerNode,
   toFlatNode,
@@ -111,11 +112,21 @@ function applySameUpdateToNodes(
   }
 }
 
+/** Ids of a scene-node tree: the node and all its descendants. */
+function subtreeIds(node: SceneNode): string[] {
+  const out: string[] = [];
+  const walk = (n: SceneNode) => {
+    out.push(n.id);
+    if ("children" in n && Array.isArray(n.children)) for (const c of n.children as SceneNode[]) walk(c);
+  };
+  walk(node);
+  return out;
+}
+
 export function createBasicMutations(set: SetState, get: GetState) {
   return {
     addNode: (node: SceneNode) => {
       set((state) => {
-        saveHistory(state);
         const flat = node.type === "text" ? syncTextDimensions(toFlatNode(node)) : toFlatNode(node);
         const newNodesById = { ...state.nodesById, [node.id]: flat };
         const newParentById = { ...state.parentById, [node.id]: null };
@@ -130,6 +141,8 @@ export function createBasicMutations(set: SetState, get: GetState) {
           }
         }
 
+        if (!guardLibraryMasterWrite(state.nodesById, newNodesById, subtreeIds(node))) return state;
+        saveHistory(state);
         markStructuralChange([node.id]);
         return {
           nodesById: newNodesById,
@@ -144,13 +157,14 @@ export function createBasicMutations(set: SetState, get: GetState) {
 
     addChildToFrame: (frameId: string, child: SceneNode) => {
       set((state) => {
-        saveHistory(state);
         const newNodesById = { ...state.nodesById };
         const newParentById = { ...state.parentById };
         const newChildrenById = { ...state.childrenById };
 
         // Insert the child (and its subtree) into flat storage
         insertTreeIntoFlat(child, frameId, newNodesById, newParentById, newChildrenById);
+        if (!guardLibraryMasterWrite(state.nodesById, newNodesById, subtreeIds(child))) return state;
+        saveHistory(state);
 
         // Update parent's children list
         const existingChildren = newChildrenById[frameId] ?? [];
@@ -278,6 +292,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
     deleteNode: (id: string) =>
       set((state) => {
         if (!state.nodesById[id]) return state;
+        if (!guardLibraryMasterWrite(state.nodesById, {}, [id, ...collectDescendantIds(id, state.childrenById)])) return state;
         saveHistory(state);
 
         const parentId = state.parentById[id];

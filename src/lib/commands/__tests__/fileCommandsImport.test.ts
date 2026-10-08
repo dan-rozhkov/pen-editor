@@ -40,4 +40,18 @@ describe("applyImport with a linked library", () => {
     const ids = useVariableStore.getState().variables.map((x) => x.id).sort();
     expect(ids).toEqual(["lib_brand", "n3"]);
   });
+
+  it("skips, transitively, imported variables that alias a skipped one, and reports them", () => {
+    const alias = (id: string, name: string, target: string) =>
+      v(id, name, "theme", { valuesByMode: { light: { alias: target }, dark: { alias: target } } });
+    const { skipped } = applyImport({
+      variables: [v("n1", "brand", "theme"), alias("n4", "Cta", "n1"), alias("n5", "Cta Hover", "n4"), alias("n6", "Ok", "lib_brand")],
+      collections: [],
+      fillStyles: [],
+      effectStyles: [],
+      textStyles: [],
+    });
+    expect(skipped.sort()).toEqual(["Cta", "Cta Hover", "brand"]);
+    expect(useVariableStore.getState().variables.map((x) => x.id).sort()).toEqual(["lib_brand", "n6"]);
+  });
 });

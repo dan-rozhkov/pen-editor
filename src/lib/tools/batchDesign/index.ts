@@ -7,7 +7,7 @@ import { useAiPendingScreenStore, pendingScreenKey } from "@/store/aiPendingScre
 import type { ToolExecutionContext, ToolHandler } from "../../toolRegistry";
 import type { ExecutionContext, ParsedOperation } from "./types";
 import { parseOperations, MAX_OPERATIONS } from "./parser";
-import { executeOperation, serializeCreatedNodes } from "./executor";
+import { executeOperation, libraryCommitError, serializeCreatedNodes } from "./executor";
 import {
   takeProgressiveBatchSession,
   resolveDivergedOrDegradedSession,
@@ -212,6 +212,17 @@ function runRemainderAndFinalize(
       completedOperations: formatCompletedOps(
         executable.slice(0, session.appliedRaw.length + succeeded),
       ),
+      totalOperations: executable.length,
+      ...(truncated ? { truncated: true, operationsSubmitted } : {}),
+    });
+  }
+
+  const refusal = libraryCommitError(historySnapshot.nodesById, ctx);
+  if (refusal) {
+    resolveDivergedOrDegradedSession(session);
+    return JSON.stringify({
+      error: `Execution error: ${refusal}`,
+      completedOperations: formatCompletedOps(executable),
       totalOperations: executable.length,
       ...(truncated ? { truncated: true, operationsSubmitted } : {}),
     });
@@ -426,6 +437,16 @@ function runFreshFromLive(
   } catch (err) {
     return JSON.stringify({
       error: `Execution error: ${err instanceof Error ? err.message : String(err)}`,
+      completedOperations: completedOps,
+      totalOperations: executable.length,
+      ...(truncated ? { truncated: true, operationsSubmitted } : {}),
+    });
+  }
+
+  const refusal = libraryCommitError(originalSnapshot.nodesById, ctx);
+  if (refusal) {
+    return JSON.stringify({
+      error: `Execution error: ${refusal}`,
       completedOperations: completedOps,
       totalOperations: executable.length,
       ...(truncated ? { truncated: true, operationsSubmitted } : {}),

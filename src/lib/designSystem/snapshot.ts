@@ -46,6 +46,24 @@ function cleanDeprecation(d: { since?: string; replacedBy?: string; note?: strin
 }
 
 /**
+ * The mode context for inlining a library alias under mode `modeId` of the
+ * local collection: every library-owned collection shows its mode of the SAME
+ * NAME when it has one (dark -> dark), else its default (left out of the map).
+ */
+function inliningModeContext(index: VariableIndex, collectionId: string, modeId: string): Record<string, string> {
+  const context: Record<string, string> = { [collectionId]: modeId };
+  const norm = (name: string) => name.trim().toLowerCase();
+  const modeName = index.collections.get(collectionId)?.modes.find((m) => m.id === modeId)?.name;
+  if (modeName === undefined) return context;
+  for (const [id, collection] of index.collections) {
+    if (id === collectionId || !isLibraryOwned(collection)) continue;
+    const same = collection.modes.find((m) => norm(m.name) === norm(modeName));
+    if (same) context[id] = same.id;
+  }
+  return context;
+}
+
+/**
  * Per-mode values of a local variable for the snapshot. An alias to a
  * library-owned token is replaced by its resolved literal: snapshot v1 has no
  * cross-library references, and the target is not part of this snapshot.
@@ -57,7 +75,7 @@ function snapshotValues(v: Variable, index: VariableIndex, notes: SnapshotIssue[
     if (typeof value === "string") continue;
     const target = index.byId.get(value.alias);
     if (!target || !isLibraryOwned(target)) continue;
-    const resolved = resolveVariable(index, v.id, { [collectionId]: modeId });
+    const resolved = resolveVariable(index, v.id, inliningModeContext(index, collectionId, modeId));
     if (!resolved.ok) continue;
     values[modeId] = resolved.value;
     notes.push({ path: `variables.${v.id}.valuesByMode.${modeId}`, message: `alias to library token ${target.name} inlined` });

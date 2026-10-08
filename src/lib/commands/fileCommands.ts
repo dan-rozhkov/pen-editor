@@ -164,7 +164,8 @@ function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] 
 /**
  * Merges an imported token document into the open one. Returns the names of
  * the variables it skipped: those in a library collection, whose id is a
- * library item's, or whose CSS name a library token already holds.
+ * library item's, or whose CSS name a library token already holds, plus every
+ * imported variable that aliases a skipped one (transitively).
  */
 export function applyImport(result: ImportResult): { skipped: string[] } {
   // One undo step for the whole import (the setX setters don't snapshot).
@@ -179,15 +180,30 @@ export function applyImport(result: ImportResult): { skipped: string[] } {
   // Library-owned items are read-only: an import never overwrites them (their ids round-trip through an export).
   const owned = new Set([...varStore.variables, ...varStore.collections].filter(isLibraryOwned).map((x) => x.id));
   const libraryCssNames = new Set(varStore.variables.filter(isLibraryOwned).map((v) => getVariableCssName(v)));
-  const skipped: string[] = [];
-  const importable = result.variables.filter((v) => {
+  const blockedIds = new Set<string>();
+  for (const v of result.variables) {
     const blocked =
       owned.has(v.id) ||
       (v.collectionId !== undefined && owned.has(v.collectionId)) ||
       libraryCssNames.has(getVariableCssName(v));
-    if (blocked) skipped.push(v.name);
-    return !blocked;
-  });
+    if (blocked) blockedIds.add(v.id);
+  }
+  // A variable aliasing a skipped one would dangle: skip it too, transitively.
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const v of result.variables) {
+      if (blockedIds.has(v.id)) continue;
+      const aliasesBlocked = Object.values(v.valuesByMode ?? {}).some(
+        (value) => typeof value === "object" && value !== null && blockedIds.has(value.alias),
+      );
+      if (aliasesBlocked) {
+        blockedIds.add(v.id);
+        grew = true;
+      }
+    }
+  }
+  const skipped = result.variables.filter((v) => blockedIds.has(v.id)).map((v) => v.name);
+  const importable = result.variables.filter((v) => !blockedIds.has(v.id));
   varStore.replaceAll(
     mergeById(varStore.variables, importable),
     mergeById(varStore.collections, incoming.filter((c) => !owned.has(c.id))),

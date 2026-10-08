@@ -93,14 +93,14 @@ export function checkSnapshotShape(s: Snapshot): SnapshotIssue[] {
 
   if (s.docs !== undefined && !(isRecord(s.docs) && str(s.docs.readme))) bad("docs", "docs.readme must be a string");
   (s.collections as unknown[]).forEach((c, i) => {
-    if (!isRecord(c) || !str(c.id) || !str(c.defaultModeId) || !Array.isArray(c.modes)) {
-      return bad(`collections.${i}`, "a collection needs string id and defaultModeId and a modes array");
+    if (!isRecord(c) || !str(c.id) || !str(c.name) || !str(c.defaultModeId) || !Array.isArray(c.modes)) {
+      return bad(`collections.${i}`, "a collection needs string id, name and defaultModeId and a modes array");
     }
-    if (!c.modes.every((m) => isRecord(m) && str(m.id))) bad(`collections.${i}.modes`, "every mode needs a string id");
+    if (!c.modes.every((m) => isRecord(m) && str(m.id) && str(m.name))) bad(`collections.${i}.modes`, "every mode needs a string id and name");
   });
   (s.variables as unknown[]).forEach((v, i) => {
-    if (!isRecord(v) || !str(v.id) || !str(v.collectionId) || !str(v.type) || !isRecord(v.valuesByMode)) {
-      return bad(`variables.${i}`, "a variable needs string id, collectionId and type and a valuesByMode object");
+    if (!isRecord(v) || !str(v.id) || !str(v.name) || !str(v.collectionId) || !str(v.type) || !isRecord(v.valuesByMode)) {
+      return bad(`variables.${i}`, "a variable needs string id, name, collectionId and type and a valuesByMode object");
     }
     for (const [modeId, value] of Object.entries(v.valuesByMode)) {
       if (!str(value) && !(isRecord(value) && str(value.alias))) {
@@ -110,7 +110,9 @@ export function checkSnapshotShape(s: Snapshot): SnapshotIssue[] {
     if (!deprecatedOk(v.deprecated)) bad(`variables.${i}.deprecated`, "deprecated must be an object");
   });
   (s.components as unknown[]).forEach((c, i) => {
-    if (!isRecord(c) || !str(c.key) || !isRecord(c.meta)) return bad(`components.${i}`, "a component needs a string key and a meta object");
+    if (!isRecord(c) || !str(c.key) || !isRecord(c.meta) || !str(c.meta.name)) {
+      return bad(`components.${i}`, "a component needs a string key and a meta object with a string name");
+    }
     if (!deprecatedOk(c.meta.deprecated)) bad(`components.${i}.meta.deprecated`, "deprecated must be an object");
   });
   return issues;

@@ -40,4 +40,11 @@ describe("<VariableDetails /> replacement picker", () => {
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "mine" } });
     expect(useVariableStore.getState().variables.find((v) => v.id === "old")?.deprecated?.replacedBy).toBe("mine");
   });
+
+  it("shows the refusal of a replacement as an alert and clears it on the next valid edit", () => {
+    const ghost = color("ghost", "Ghost", { deprecated: {} });
+    render(<VariableDetails variable={ghost} />);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "mine" } });
+    expect(screen.getByRole("alert").textContent).toContain("Variable not found");
+  });
 });
