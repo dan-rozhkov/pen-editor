@@ -207,7 +207,16 @@ function VariableRow({
   const [expanded, setExpanded] = useState(false);
   // renameVariable refuses a colliding name; the draft is discarded and the old
   // name stays, so the reason must be said somewhere.
-  const [renameError, setRenameError] = useState<string | null>(null);
+  // The error is tied to the variable list it was raised against: any later
+  // change (the colliding variable renamed or deleted, this one renamed) makes
+  // it stale, so it stops showing.
+  const variables = useVariableStore((s) => s.variables);
+  const [renameFailure, setRenameFailure] = useState<{
+    message: string;
+    variables: Variable[];
+  } | null>(null);
+  const renameError =
+    renameFailure && renameFailure.variables === variables ? renameFailure.message : null;
   const badge = typeBadge[variable.type];
 
   return (
@@ -229,7 +238,11 @@ function VariableRow({
                 value={variable.name}
                 onCommit={(name) => {
                   const result = renameVariable(variable.id, name);
-                  setRenameError("error" in result ? result.error : null);
+                  setRenameFailure(
+                    "error" in result
+                      ? { message: result.error, variables: useVariableStore.getState().variables }
+                      : null,
+                  );
                 }}
                 allowEmpty
               />

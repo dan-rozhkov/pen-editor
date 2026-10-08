@@ -1,5 +1,6 @@
 import type { FrameNode, FlatSceneNode, Paint, SceneNode } from "@/types/scene";
 import { useSceneStore } from "@/store/sceneStore";
+import { flushNumberBindings } from "@/store/numberBindingSync";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useVariableStore } from "@/store/variableStore";
 import { getFrameModeOverrides } from "@/lib/variables/modeContext";
@@ -45,9 +46,11 @@ function substituteNumberBindingRefs(
 }
 
 /**
- * Frame mode overrides by NAME (`{"Theme": "dark"}`), the form `batch_design`
- * accepts back. The legacy `themeOverride` is folded into it. Ids stay as the
- * name when a collection or mode no longer exists.
+ * Frame mode overrides keyed by collection NAME (`{"Theme": "dark"}`), the form
+ * `batch_design` accepts back. A name shared by several collections would
+ * collide (and be refused on the way in), so those use the collection id. The
+ * legacy `themeOverride` is folded into it. Ids stay as the key when a
+ * collection no longer exists.
  */
 function serializeModeOverrides(result: Record<string, unknown>, node: FlatSceneNode): void {
   const overrides = getFrameModeOverrides(node);
@@ -61,7 +64,10 @@ function serializeModeOverrides(result: Record<string, unknown>, node: FlatScene
     const modeId = overrides[collectionId];
     if (modeId === undefined) continue;
     const collection = collections.find((c) => c.id === collectionId);
-    named[collection?.name ?? collectionId] = collection?.modes.find((m) => m.id === modeId)?.name ?? modeId;
+    const nameIsUnique =
+      collection != null &&
+      collections.filter((c) => c.name.trim().toLowerCase() === collection.name.trim().toLowerCase()).length === 1;
+    named[collection && nameIsUnique ? collection.name : collectionId] = collection?.modes.find((m) => m.id === modeId)?.name ?? modeId;
   }
   if (Object.keys(named).length > 0) result.modeOverrides = named;
 }
@@ -94,6 +100,8 @@ export function serializeNodeToDepth(
   depth: number,
   options?: SerializeOptions,
 ): Record<string, unknown> | null {
+  // Bound-number literals are patched in a microtask; settle them before reading.
+  flushNumberBindings();
   const state = useSceneStore.getState();
   const ctx: SerializeContext = {
     state,

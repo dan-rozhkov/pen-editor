@@ -33,7 +33,7 @@ import {
   removeOrphanedConnectors,
 } from "./helpers/flatStoreHelpers";
 import { flattenRefNodes } from "../migrations/flattenRefNodes";
-import { markNodesDirty } from "./dirtyTracking";
+import { markNodesDirty, markStructuralChange } from "./dirtyTracking";
 import { guardNumberBindings } from "../../lib/variables/numberBindings";
 import type { SceneState } from "./types";
 import type { StoreApi } from "zustand";
@@ -130,6 +130,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
           }
         }
 
+        markStructuralChange([node.id]);
         return {
           nodesById: newNodesById,
           parentById: newParentById,
@@ -155,6 +156,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
         const existingChildren = newChildrenById[frameId] ?? [];
         newChildrenById[frameId] = [...existingChildren, child.id];
 
+        markStructuralChange([child.id]);
         return {
           nodesById: newNodesById,
           parentById: newParentById,
@@ -323,6 +325,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
               ? state.rootIds.filter((rid) => !removedIds.has(rid))
               : state.rootIds);
 
+        markStructuralChange([id]);
         return {
           nodesById: newNodesById,
           parentById: newParentById,

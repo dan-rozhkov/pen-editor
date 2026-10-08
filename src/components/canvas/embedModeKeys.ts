@@ -1,8 +1,8 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
-import { peekDirty } from "@/store/sceneStore/dirtyTracking";
+import { collectModeScopeChanges } from "@/store/sceneStore/modeScopeChanges";
 import { getEffectiveModeContextForNode } from "@/utils/nodeThemeUtils";
-import { getFrameModeOverrides, modeContextKey, modeOverridesEqual } from "@/lib/variables/modeContext";
+import { modeContextKey } from "@/lib/variables/modeContext";
 
 /**
  * One shared subscriber for "did this embed's effective mode context change?".
@@ -39,26 +39,44 @@ function recomputeAll(): void {
   }
 }
 
+/** Recomputes only the registered embeds at or below `roots` (descent over the given `childrenById` maps). */
+function recomputeUnder(roots: Iterable<string>, childMaps: Array<Record<string, string[]>>): void {
+  const seen = new Set<string>();
+  const stack = [...roots];
+  while (stack.length > 0) {
+    const id = stack.pop() as string;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const entry = entries.get(id);
+    if (entry) {
+      const key = keyFor(id);
+      if (key !== entry.key) {
+        entry.key = key;
+        for (const listener of [...entry.listeners]) listener();
+      }
+    }
+    for (const map of childMaps) {
+      const kids = map[id];
+      if (kids) for (const k of kids) stack.push(k);
+    }
+  }
+}
+
 function install(): void {
   const unsubDoc = useThemeStore.subscribe((state, prev) => {
     if (state.modeContext !== prev.modeContext) recomputeAll();
   });
   const unsubScene = useSceneStore.subscribe((state, prev) => {
     if (entries.size === 0) return;
-    const nodesChanged = state.nodesById !== prev.nodesById;
-    const parentsChanged = state.parentById !== prev.parentById;
-    if (!nodesChanged && !parentsChanged) return;
-    const dirty = peekDirty();
+    if (state.nodesById === prev.nodesById && state.parentById === prev.parentById) return;
+    const scope = collectModeScopeChanges(state, prev, { perSet: true });
     // An unmarked mutation could have touched anything: recompute to be safe.
-    if (!dirty.complete) return recomputeAll();
-    for (const id of dirty.ids) {
-      if (parentsChanged && state.parentById[id] !== prev.parentById[id]) return recomputeAll();
-      const node = state.nodesById[id];
-      const before = prev.nodesById[id];
-      if (node === before) continue;
-      if (node?.type !== "frame" && before?.type !== "frame") continue;
-      if (!modeOverridesEqual(getFrameModeOverrides(node), getFrameModeOverrides(before))) return recomputeAll();
-    }
+    if (scope.full) return recomputeAll();
+    // Only embeds at or under a node that moved or changed its picks can see a
+    // different override chain; a new leaf with no embed below it costs nothing.
+    const roots = [...scope.movedIds, ...scope.overrideChangedIds];
+    if (roots.length === 0) return;
+    recomputeUnder(roots, [state.childrenById, prev.childrenById]);
   });
   teardown = () => {
     unsubDoc();

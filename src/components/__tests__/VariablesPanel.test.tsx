@@ -5,6 +5,7 @@ import {
   fireEvent,
   cleanup,
   within,
+  act,
 } from "@testing-library/react";
 import { VariablesPanelContent } from "../VariablesPanel";
 import { useVariableStore } from "@/store/variableStore";
@@ -99,6 +100,19 @@ describe("<VariablesPanelContent />", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     expect(screen.queryByText(/already uses/)).toBeNull();
     expect(findVariable("var-primary")?.name).toBe("--accent");
+  });
+
+  it("drops a stale rename error once the colliding variable is renamed elsewhere", () => {
+    render(<VariablesPanelContent />);
+    fireEvent.click(screen.getByText("--primary"));
+    const input = screen.getByDisplayValue("--primary") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "--radius-m" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.queryByText(/already uses --radius-m/)).not.toBeNull();
+    act(() => {
+      useVariableStore.getState().renameVariable("var-radius", "--radius-l");
+    });
+    expect(screen.queryByText(/already uses/)).toBeNull();
   });
 
   it("renaming rewrites var(--old) in embed HTML (renameVariable, not a bare name write)", async () => {

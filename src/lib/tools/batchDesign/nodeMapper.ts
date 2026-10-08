@@ -38,6 +38,7 @@ import { getVariableIndex } from "@/lib/variables";
 import { generateId } from "@/types/scene";
 import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
 import { resolveVariableReference } from "@/lib/tools/variableResolutionUtils";
+import { findCollection, findMode } from "@/lib/tools/variableToolUtils";
 import {
   clearLegacyFillProps,
   clearLegacyStrokeProps,
@@ -90,11 +91,24 @@ function applyColorVariable(
 }
 
 
-function findByNameOrId<T extends { id: string; name: string }>(items: T[], wanted: string): T | undefined {
-  const exact = items.find((i) => i.id === wanted);
-  if (exact) return exact;
-  const lower = wanted.trim().toLowerCase();
-  return items.find((i) => i.name.toLowerCase() === lower);
+/**
+ * A collection by id first, then by a UNIQUE (trimmed, case-insensitive) name.
+ * An ambiguous name pushes a warning and resolves to nothing.
+ */
+function resolveCollectionRef(
+  collections: VariableCollection[],
+  ref: string,
+  warnings: string[],
+): VariableCollection | undefined {
+  const lower = ref.trim().toLowerCase();
+  const named = collections.filter((c) => c.name.trim().toLowerCase() === lower);
+  if (named.length > 1 && !collections.some((c) => c.id === ref.trim())) {
+    warnings.push(
+      `Collection name "${ref}" is ambiguous (ids: ${named.map((c) => c.id).join(", ")}) — use the collection id in modeOverrides; ignored.`,
+    );
+    return undefined;
+  }
+  return findCollection(collections, ref);
 }
 
 /**
@@ -115,7 +129,7 @@ function parseModeOverridesInput(
   const isClear = value == null || (typeof value === "string" && value.trim().toLowerCase() === "inherit");
   const withTheme = (modeValue: unknown): ModeOverrides | undefined => {
     const theme = collections.find((c) => c.id === THEME_COLLECTION_ID);
-    const mode = theme && typeof modeValue === "string" ? findByNameOrId(theme.modes, modeValue) : undefined;
+    const mode = theme && typeof modeValue === "string" ? findMode(theme, modeValue) : undefined;
     if (!theme || !mode) {
       warnings.push(
         `Unknown mode ${JSON.stringify(modeValue)} for the Theme collection (known: ${(theme?.modes ?? []).map((m) => m.name).join(", ") || "none"}) — "${key}" was ignored.`,
@@ -147,20 +161,28 @@ function parseModeOverridesInput(
     return undefined;
   }
   const next: ModeOverrides = {};
+  let rejected = 0;
   for (const [collName, modeName] of Object.entries(value as Record<string, unknown>)) {
-    const collection = findByNameOrId(collections, collName);
+    const collection = resolveCollectionRef(collections, collName, warnings);
     if (!collection) {
-      warnings.push(`Unknown collection "${collName}" in modeOverrides (known: ${collections.map((c) => c.name).join(", ")}) — ignored.`);
+      // resolveCollectionRef already warned when the name was ambiguous.
+      if (collections.filter((c) => c.name.trim().toLowerCase() === collName.trim().toLowerCase()).length < 2) {
+        warnings.push(`Unknown collection "${collName}" in modeOverrides (known: ${collections.map((c) => c.name).join(", ")}) — ignored.`);
+      }
+      rejected++;
       continue;
     }
     if (modeName == null || (typeof modeName === "string" && modeName.trim().toLowerCase() === "inherit")) continue;
-    const mode = typeof modeName === "string" ? findByNameOrId(collection.modes, modeName) : undefined;
+    const mode = typeof modeName === "string" ? findMode(collection, modeName) : undefined;
     if (!mode) {
       warnings.push(`Unknown mode ${JSON.stringify(modeName)} in collection "${collection.name}" (known: ${collection.modes.map((m) => m.name).join(", ")}) — ignored.`);
+      rejected++;
       continue;
     }
     next[collection.id] = mode.id;
   }
+  // Every entry was unusable: leave the frame's picks alone instead of wiping them.
+  if (rejected > 0 && Object.keys(next).length === 0) return undefined;
   return next;
 }
 

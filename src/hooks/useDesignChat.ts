@@ -1,3 +1,4 @@
+import { flushNumberBindings } from "@/store/numberBindingSync";
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
 import {
@@ -414,8 +415,13 @@ export async function executeToolCall(
     // waited behind a long batch_design must still get its full budget once
     // it actually starts, or a busy editor would time out calls that never
     // ran.
-    const result = await runToolCall(toolName, () =>
-      Promise.race([
+    //
+    // Bound-number patches are applied in a microtask; flush before the handler
+    // reads literals and after it returns, so neither the handler nor whatever
+    // runs right after the result sees a stale literal.
+    const result = await runToolCall(toolName, () => {
+      flushNumberBindings();
+      return Promise.race([
         handler(args, context),
         new Promise<never>((_, reject) =>
           setTimeout(
@@ -423,8 +429,8 @@ export async function executeToolCall(
             getToolCallTimeoutMs(toolName)
           )
         ),
-      ])
-    );
+      ]).finally(flushNumberBindings);
+    });
     // Handlers report failure as a JSON `{"error": ...}` string rather than
     // throwing; detect that shape so `ok` reflects the real outcome. Cheap
     // string check instead of `JSON.parse`-ing every result: some results

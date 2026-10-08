@@ -4,7 +4,7 @@ import { useSceneStore } from "./sceneStore";
 import { peekDirty } from "./sceneStore/dirtyTracking";
 import { useVariableStore } from "./variableStore";
 import { useThemeStore } from "./themeStore";
-import { getFrameModeOverrides, modeOverridesEqual } from "../lib/variables/modeContext";
+import { collectModeScopeChanges } from "./sceneStore/modeScopeChanges";
 
 /**
  * Keeps the literal fields of number-bound nodes (`node.numberBindings`) equal to
@@ -23,6 +23,18 @@ import { getFrameModeOverrides, modeOverridesEqual } from "../lib/variables/mode
  * notifying `setState`. Idempotent: a pass that finds nothing to change writes nothing, and the sync's
  * own write is ignored, so there is no subscribe loop.
  */
+let activeFlush: (() => void) | null = null;
+
+/**
+ * Runs a pending subscriber-triggered pass synchronously (no-op when none is
+ * pending or the sync is not running). Subscriber passes are deferred to a
+ * microtask, so code that reads literals in the same task as the mutation (tool
+ * results, layout, export, codegen) calls this first to see the bound values.
+ */
+export function flushNumberBindings(): void {
+  activeFlush?.();
+}
+
 export function startNumberBindingSync(): () => void {
   const boundIds = new Set<string>();
   let applying = false;
@@ -81,8 +93,14 @@ export function startNumberBindingSync(): () => void {
     else for (const id of ids) pendingIds.add(id);
     if (scheduled) return;
     scheduled = true;
-    queueMicrotask(flushPending);
+    queueMicrotask(() => {
+      if (scheduled) flushPending();
+    });
   };
+  const flushNow = (): void => {
+    if (scheduled) flushPending();
+  };
+  activeFlush = flushNow;
 
   /** Bound ids at or below any of `roots` (children walked via `childrenById`). */
   const boundUnder = (roots: Iterable<string>, childrenById: Record<string, string[]>): string[] => {
@@ -108,18 +126,14 @@ export function startNumberBindingSync(): () => void {
     const parentsChanged = state.parentById !== prev.parentById;
     if (applying || (!nodesChanged && !parentsChanged)) return;
     const dirty = peekDirty();
-    if (!dirty.complete) {
+    const scope = collectModeScopeChanges(state, prev);
+    if (scope.full) {
       rebuild();
       schedule("all");
       return;
     }
     const touched: string[] = [];
-    const moved: string[] = [];
-    let themeScopeChanged = false;
     for (const id of dirty.ids) {
-      // A reparent changes the effective modes of the node and its subtree even
-      // though `nodesById` is untouched (moveNode only edits the parent links).
-      if (parentsChanged && state.parentById[id] !== prev.parentById[id]) moved.push(id);
       const node = state.nodesById[id];
       if (node === prev.nodesById[id]) continue;
       if (isBound(node)) {
@@ -128,21 +142,14 @@ export function startNumberBindingSync(): () => void {
       } else {
         boundIds.delete(id);
       }
-      // A frame's mode picks change the mode of every descendant.
-      if (
-        node?.type === "frame" &&
-        !modeOverridesEqual(
-          getFrameModeOverrides(node),
-          getFrameModeOverrides(prev.nodesById[id]),
-        )
-      ) {
-        themeScopeChanged = true;
-      }
     }
-    if (themeScopeChanged) schedule("all");
+    // A frame's mode picks change the mode of every descendant; a reparent
+    // changes the effective modes of the node and its subtree even though
+    // `nodesById` is untouched (moveNode only edits the parent links).
+    if (scope.overrideChangedIds.length > 0) schedule("all");
     else {
       if (touched.length > 0) schedule(touched);
-      if (moved.length > 0) schedule(boundUnder(moved, state.childrenById));
+      if (scope.movedIds.length > 0) schedule(boundUnder(scope.movedIds, state.childrenById));
     }
   });
 
@@ -158,6 +165,7 @@ export function startNumberBindingSync(): () => void {
 
   return () => {
     stopped = true;
+    if (activeFlush === flushNow) activeFlush = null;
     unsubScene();
     unsubVariables();
     unsubTheme();

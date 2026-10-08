@@ -9,7 +9,7 @@ import { useThemeStore } from "@/store/themeStore";
 import { makeThemeCollection } from "@/lib/variables/collections";
 import type { Variable, VariableCollection } from "@/types/variable";
 import { consumeDirty } from "@/store/sceneStore/dirtyTracking";
-import { startNumberBindingSync } from "@/store/numberBindingSync";
+import { flushNumberBindings, startNumberBindingSync } from "@/store/numberBindingSync";
 import type { FlatSceneNode } from "@/types/scene";
 
 const scene = () => useSceneStore.getState();
@@ -401,5 +401,69 @@ describe("numberBindingSync: reparenting and deferral", () => {
     stop();
     await flush();
     expect(n("a").cornerRadius).toBe(12);
+  });
+});
+
+describe("flushNumberBindings", () => {
+  it("applies a pending subscriber pass synchronously, and is a no-op when idle", async () => {
+    seed([bound("a")]);
+    stop = startNumberBindingSync();
+    expect(n("a").cornerRadius).toBe(12);
+    useVariableStore.getState().setVariables([
+      { id: "r", name: "--radius", type: "number", value: "20" },
+      { id: "sp", name: "--space", type: "number", value: "16", themeValues: { light: "16", dark: "24" } },
+    ]);
+    expect(n("a").cornerRadius).toBe(12); // microtask not run yet
+    flushNumberBindings();
+    expect(n("a").cornerRadius).toBe(20); // same task
+    flushNumberBindings();
+    await flush();
+    expect(n("a").cornerRadius).toBe(20);
+  });
+
+  it("is a no-op once the sync is stopped", () => {
+    seed([bound("a")]);
+    stop = startNumberBindingSync();
+    stop();
+    expect(() => flushNumberBindings()).not.toThrow();
+  });
+});
+
+describe("mode scope: a node that stops being a frame", () => {
+  const brand: VariableCollection = {
+    id: "brand",
+    name: "Brand",
+    modes: [
+      { id: "soft", name: "soft" },
+      { id: "sharp", name: "sharp" },
+    ],
+    defaultModeId: "soft",
+  };
+  const cornerVar: Variable = {
+    id: "br",
+    name: "--brand-radius",
+    type: "number",
+    collectionId: "brand",
+    valuesByMode: { soft: "16", sharp: "2" },
+    value: "16",
+  };
+
+  it("re-materializes descendants when a frame with overrides becomes a rect", async () => {
+    useVariableStore.getState().replaceAll([cornerVar], [makeThemeCollection(), brand]);
+    consumeDirty();
+    const f = frame("f", { modeOverrides: { brand: "sharp" } });
+    const c = frame("c", { cornerRadius: 1, numberBindings: { cornerRadius: { variableId: "br" } } });
+    useSceneStore.setState({
+      nodesById: { f, c },
+      parentById: { f: null, c: "f" },
+      childrenById: { f: ["c"] },
+      rootIds: ["f"],
+      _cachedTree: null,
+    });
+    stop = startNumberBindingSync();
+    expect(n("c").cornerRadius).toBe(2);
+    scene().updateNode("f", { type: "rect" } as never);
+    await flush();
+    expect(n("c").cornerRadius).toBe(16);
   });
 });

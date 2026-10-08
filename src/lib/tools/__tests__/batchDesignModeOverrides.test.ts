@@ -130,3 +130,40 @@ describe("batch_design modeOverrides", () => {
     expect(node(rectId).cornerRadius).toBe(40);
   });
 });
+
+describe("batch_design modeOverrides review fixes", () => {
+  it("keeps existing picks when every entry is invalid", async () => {
+    const r = await run('f=I(document, {type: "frame", width: 10, height: 10, modeOverrides: {"Theme": "dark"}})');
+    const id = r.createdNodes[0].id;
+    const r2 = await run(`U("${id}", {modeOverrides: {"Nope": "x", "Brand": "zzz"}})`);
+    expect(node(id).modeOverrides).toEqual({ theme: "dark" });
+    expect((r2.issues ?? []).join("\\n")).toMatch(/Unknown collection "Nope"/);
+  });
+
+  it("still applies the valid part of a partly invalid set (replacing the rest)", async () => {
+    const r = await run('f=I(document, {type: "frame", width: 10, height: 10, modeOverrides: {"Theme": "dark"}})');
+    const id = r.createdNodes[0].id;
+    await run(`U("${id}", {modeOverrides: {"Nope": "x", "Brand": "acme"}})`);
+    expect(Object.keys(node(id).modeOverrides as Rec)).toHaveLength(1);
+  });
+
+  it("matches names trimmed and case-insensitively, and ids", async () => {
+    const brand = useVariableStore.getState().collections.find((c) => c.name === "Brand")!;
+    const r = await run(`f=I(document, {type: "frame", width: 10, height: 10, modeOverrides: {"${brand.id}": "${brandModeId("globex")}", " THEME ": " Dark "}})`);
+    expect(node(r.createdNodes[0].id).modeOverrides).toEqual({ theme: "dark", [brand.id]: brandModeId("globex") });
+  });
+
+  it("serializes with ids and accepts them back when two collections share a name", async () => {
+    useVariableStore.setState((s) => ({
+      collections: [...s.collections, { id: "brand2", name: "Brand", modes: [{ id: "m-x", name: "x" }], defaultModeId: "m-x" } as never],
+    }));
+    const r = await run(`f=I(document, {type: "frame", width: 10, height: 10, modeOverrides: {"brand2": "x"}})`);
+    const id = r.createdNodes[0].id;
+    expect(node(id).modeOverrides).toEqual({ brand2: "m-x" });
+    const got = (await batchGet({ nodeIds: [id] })) as unknown as string;
+    expect(String(got)).toContain('"modeOverrides":{"brand2":"x"}');
+    const r2 = await run(`U("${id}", {modeOverrides: {"Brand": "acme"}})`);
+    expect((r2.issues ?? []).join("\\n")).toMatch(/ambiguous/);
+    expect(node(id).modeOverrides).toEqual({ brand2: "m-x" });
+  });
+});

@@ -1,3 +1,4 @@
+import { flushNumberBindings } from '@/store/numberBindingSync'
 import { Rectangle, type Container as PixiContainer } from 'pixi.js'
 import type { PixiExportRefs } from '@/store/canvasRefStore'
 import { getExportSettingMimeType, sanitizeExportBaseName } from '@/utils/exportSettingsUtils'
@@ -279,6 +280,7 @@ export async function renderNodeToCanvas(
   size: { width: number; height: number },
   scale: number,
 ): Promise<HTMLCanvasElement> {
+  flushNumberBindings()
   const { nodesById } = useSceneStore.getState()
   const node = nodesById[nodeId]
   if (!node) throw new Error(`Export failed: node "${nodeId}" not found in the scene`)

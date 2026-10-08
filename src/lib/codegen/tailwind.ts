@@ -57,15 +57,15 @@ export function buildSubtreeTokens(
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
 ): { block: string; warnings: string[] } {
-  const all = collectSubtreeVariableIds(rootId, nodesById, childrenById);
   const warnings: string[] = [];
-  if (all.size === 0) return { block: "", warnings };
   const root = nodesById[rootId];
   const rootOwn = root ? collectBoundVariableIds(root) : new Set<string>();
   const contentIds = new Set<string>();
   for (const childId of childrenById[rootId] ?? []) {
     for (const id of collectSubtreeVariableIds(childId, nodesById, childrenById)) contentIds.add(id);
   }
+  const all = new Set<string>([...rootOwn, ...contentIds]);
+  if (all.size === 0) return { block: "", warnings };
   const { variables, collections } = useVariableStore.getState();
   const index = getVariableIndex(variables, collections);
   const ownCtx = codegenModeContext(rootId, nodesById);
