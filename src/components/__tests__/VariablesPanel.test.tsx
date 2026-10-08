@@ -201,4 +201,21 @@ describe("<VariablesPanelContent />", () => {
     expect(added.name).toBe("Color 2");
     expect(added.themeValues).toEqual({ light: "#4a90d9", dark: "#4a90d9" });
   });
+
+  it("picks a free name when the next default clashes with a library or local token", () => {
+    useVariableStore.getState().replaceAll(
+      [
+        ...variables(),
+        { id: "lib-c2", name: "Color 2", type: "color", collectionId: "theme", valuesByMode: { light: "#111111", dark: "#111111" }, value: "#111111", libraryId: "lib_x" },
+        { id: "loc-c3", name: "color 3", type: "color", collectionId: "theme", valuesByMode: { light: "#222222", dark: "#222222" }, value: "#222222" },
+      ],
+      useVariableStore.getState().collections,
+    );
+    render(<VariablesPanelContent />);
+    fireEvent.click(screen.getByLabelText("Add variable"));
+    fireEvent.click(screen.getByText("Color"));
+    const names = variables().map((v) => v.name);
+    expect(names).toContain("Color 4");
+    expect(screen.queryByText(/already used by a library token/)).toBeNull();
+  });
 });

@@ -27,7 +27,7 @@ import {
   removeOrphanedConnectors,
 } from "@/store/sceneStore/helpers/flatStoreHelpers";
 import { createCachedOperationsParser, MAX_OPERATIONS, type CachedOperationsParser } from "./parser";
-import { executeOperation } from "./executor";
+import { executeOperation, libraryCommitError } from "./executor";
 import type { ExecutionContext } from "./types";
 
 /** Same synthetic binding name executeOperation uses for the document root. */
@@ -441,6 +441,12 @@ function applyStreamingBatchDesignImpl(params: {
       return;
     }
     session.appliedRaw.push(op.raw);
+  }
+
+  // A frame that would touch a library master never reaches the live store.
+  if (libraryCommitError(session.baseSnapshot.nodesById, session.ctx)) {
+    degradeAndRollback(session);
+    return;
   }
 
   // One setState per frame, however many statements it contained — never

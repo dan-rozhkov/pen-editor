@@ -6,7 +6,7 @@
 // layer (shareStore.ts and its consumers) decides how/when to show it (same
 // split as showcasePublish's callers owning their own toasts).
 import { collectDocumentData } from "@/lib/commands/fileCommands";
-import { deserializeDocument, serializeDocument } from "@/utils/fileUtils";
+import { deserializeDocument, serializeDocumentData } from "@/utils/fileUtils";
 import type { DocumentData } from "@/utils/fileUtils";
 import { isOffline, apiFetch } from "@/lib/apiBase";
 import { getRequestUserId } from "@/lib/auth/authState";
@@ -212,17 +212,15 @@ export async function shareCurrentCanvas(): Promise<ShareResult> {
 
   const title = titleFromFileName();
   const doc = collectDocumentData();
-  const serialized = serializeDocument(
-    doc.pages,
-    doc.variables,
-    doc.activeTheme,
-    doc.textStyles,
-    doc.fillStyles,
-    doc.effectStyles,
-    doc.variableCollections,
-    doc.modeContext,
-    doc.designSystemScopes,
-  );
+  // A shared document keeps its library pins (the viewer sees what it is linked
+  // to) but is not the author's file: no document id, no authoring state, and
+  // no usage opt-in, so opening a share link can never upload usage.
+  const serialized = serializeDocumentData(doc, {
+    libraries: doc.libraries?.map(({ reportUsage: _reportUsage, ...pin }) => {
+      void _reportUsage;
+      return pin;
+    }),
+  });
 
   const existing = loadShareCredentials();
   const first = await postShare(serialized, title, existing);

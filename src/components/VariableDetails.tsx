@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useVariableStore } from "../store/variableStore";
 import type { Variable, VariableScope, VariableType } from "../types/variable";
+import { isLibraryOwned } from "../lib/designSystem/ownership";
+import { deprecateVariable } from "../lib/designSystem/deprecation";
 import { Checkbox } from "./ui/checkbox";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
@@ -67,15 +69,23 @@ function CommitField({
 export function VariableDetails({ variable }: { variable: Variable }) {
   const variables = useVariableStore((s) => s.variables);
   const updateVariable = useVariableStore((s) => s.updateVariable);
+  const [notice, setNotice] = useState<string | null>(null);
   const scopes = variable.scopes ?? [];
   const deprecated = variable.deprecated;
-  const replacements = variables.filter((v) => v.type === variable.type && v.id !== variable.id);
+  const replacements = variables.filter((v) => v.type === variable.type && v.id !== variable.id && !isLibraryOwned(v));
 
   const toggleScope = (scope: VariableScope, on: boolean) => {
     const next = on ? [...scopes, scope] : scopes.filter((s) => s !== scope);
     updateVariable(variable.id, { scopes: next.length > 0 ? next : undefined });
   };
   const patchDeprecation = (patch: Partial<NonNullable<Variable["deprecated"]>>) => {
+    // A replacement goes through the same validation as the deprecate action.
+    if (patch.replacedBy) {
+      const result = deprecateVariable(variable.id, { replacedBy: patch.replacedBy, note: deprecated?.note });
+      setNotice("error" in result ? result.error : null);
+      return;
+    }
+    setNotice(null);
     const next = { ...deprecated, ...patch };
     for (const key of Object.keys(next) as (keyof typeof next)[]) {
       if (next[key] === "" || next[key] === undefined) delete next[key];
@@ -83,8 +93,10 @@ export function VariableDetails({ variable }: { variable: Variable }) {
     updateVariable(variable.id, { deprecated: next });
   };
 
+  const owned = isLibraryOwned(variable);
+
   return (
-    <div className="flex flex-col gap-3 px-3 py-3" role="group" aria-label={`Details of ${variable.name}`}>
+    <div className="flex flex-col gap-3 px-3 py-3" role="group" aria-label={`Details of ${variable.name}`} inert={owned}>
       <CommitField
         label="Description"
         multiline
@@ -153,6 +165,11 @@ export function VariableDetails({ variable }: { variable: Variable }) {
               value={deprecated.note ?? ""}
               onCommit={(note) => patchDeprecation({ note })}
             />
+            {notice && (
+              <p role="alert" className="text-xs text-red-400">
+                {notice}
+              </p>
+            )}
           </div>
         )}
       </div>

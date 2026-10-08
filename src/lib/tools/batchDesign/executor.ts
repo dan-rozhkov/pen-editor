@@ -33,6 +33,7 @@ import {
 } from "@/utils/fillUtils";
 import { inspectEmbedHtml } from "@/lib/embedHtmlLint/inspectEmbedHtml";
 import { describeUnknownTags, finalizeEmbedHtml } from "@/lib/embedComponents/pipeline";
+import { libraryMasterTransitionError } from "@/lib/designSystem/ownership";
 import { selectComponentRegistry } from "@/store/componentRegistry";
 import { repairGeneratedImageUrls } from "../generateImage/repairImageUrls";
 import { getIssuedImageUrls } from "../generateImage/registry";
@@ -965,4 +966,17 @@ function serializeNodeWithDepth(
 ): Record<string, unknown> {
   return serializeNodeToDepth(nodeId, ctx.nodesById, ctx.childrenById, depth)
     ?? { id: nodeId, error: "not found" };
+}
+
+/**
+ * The one library-master write guard for batch_design, run at the commit
+ * point: compares the scene from before the batch with the working copy, so
+ * C(), R() of an ancestor, nested I() children and D() are all covered.
+ * Returns the refusal text, or null when the batch may commit.
+ */
+export function libraryCommitError(
+  before: Record<string, FlatSceneNode>,
+  ctx: Pick<ExecutionContext, "nodesById">,
+): string | null {
+  return libraryMasterTransitionError(before, ctx.nodesById);
 }

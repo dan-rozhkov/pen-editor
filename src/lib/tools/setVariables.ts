@@ -7,6 +7,7 @@ import {
   type VariableEntry,
 } from "./variablesPlan";
 import { VARIABLE_SCOPES } from "./variableToolUtils";
+import { isRecord } from "@/lib/utils";
 
 const TYPES: readonly string[] = ["color", "number", "string"];
 
@@ -40,10 +41,6 @@ function inferTypeFromValue(value: string): VariableType | undefined {
   if (/^(#|rgb|hsl)/i.test(v)) return "color";
   if (v !== "" && !Number.isNaN(Number(v))) return "number";
   return "string";
-}
-
-function isRecord(x: unknown): x is Record<string, unknown> {
-  return typeof x === "object" && x !== null && !Array.isArray(x);
 }
 
 function textValue(x: unknown): string | undefined {

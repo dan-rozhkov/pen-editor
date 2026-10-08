@@ -1,4 +1,5 @@
 import type { EmbedComponentMeta } from "@/types/scene";
+import { libraryComponentError } from "@/lib/designSystem/ownership";
 import { dependencyKeys, findDependencyCycle } from "./cycles";
 import { expandComponentTags } from "./expand";
 import { validateMaster } from "./master";
@@ -61,6 +62,13 @@ export function finalizeEmbedHtml(html: string, options: FinalizeOptions): Final
   const { registry, previousHtml, masterMeta } = options;
 
   if (masterMeta) {
+    // A master that a linked library owns is read-only here.
+    const libraryRefusal = libraryComponentError(masterMeta.key, masterMeta);
+    if (libraryRefusal) return { ok: false, error: libraryRefusal };
+    // A local master may not take a key a library master already holds.
+    const held = registry.get(masterMeta.key);
+    const clash = libraryComponentError(masterMeta.key, held?.meta);
+    if (clash) return { ok: false, error: clash };
     const expandedMaster = expandMasterHtml(html, masterMeta.key, registry);
     if (expandedMaster.error) {
       return { ok: false, error: `Component "${masterMeta.key}": ${expandedMaster.error}` };

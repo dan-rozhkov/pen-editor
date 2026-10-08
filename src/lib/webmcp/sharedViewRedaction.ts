@@ -1,4 +1,5 @@
 import { useSceneStore } from "@/store/sceneStore";
+import { isRecord } from "@/lib/utils";
 
 /**
  * Narrows what the read-only tools reveal about *someone else's* document.
@@ -79,10 +80,6 @@ export function collectHiddenNodeIds(): Set<string> {
     if (node.visible === false || node.enabled === false) bury(id);
   }
   return hidden;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function redactValue(value: unknown, hidden: Set<string>): unknown {

@@ -7,6 +7,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
 import { useVariableStore } from "@/store/variableStore";
+import { useDocumentStore } from "@/store/documentStore";
 import { useTextStyleStore } from "@/store/textStyleStore";
 import { useStyleStore } from "@/store/styleStore";
 import { useDesignSystemScopeStore } from "@/store/designSystemScopeStore";
@@ -32,6 +33,14 @@ export function applyOpenedDocument(
 
   // Show loading overlay immediately
   useLoadingStore.getState().setCanvasLoading(true);
+
+  // File-level library state: the document's identity and its library pins. A
+  // file without them gets a fresh document id and no pins.
+  useDocumentStore.getState().setLibraryState({
+    documentId: data.documentId,
+    libraries: data.libraries,
+    libraryAuthor: data.libraryAuthor,
+  });
 
   // Variables first: the mode migration below prunes picks against the
   // document's (normalized) collections. One update for both: variables are

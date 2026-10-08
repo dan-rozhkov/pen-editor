@@ -1,9 +1,10 @@
 import { Fragment, useMemo, useState } from "react";
 import clsx from "clsx";
+import { isLibraryOwned, libraryOwnedMessage } from "@/lib/designSystem/ownership";
 import { useVariableStore } from "../store/variableStore";
 import { useDesignSystemScopeStore } from "../store/designSystemScopeStore";
 import { escapeGlob } from "../lib/designSystem/scope";
-import { generateVariableId, THEME_COLLECTION_ID } from "../types/variable";
+import { generateVariableId, getVariableCssName, THEME_COLLECTION_ID } from "../types/variable";
 import type {
   Variable,
   VariableCollection,
@@ -222,6 +223,8 @@ function VariableRow({
   const renameError =
     renameFailure && renameFailure.variables === variables ? renameFailure.message : null;
   const badge = typeBadge[variable.type];
+  // Copies of a linked library's tokens: shown, never edited here.
+  const owned = isLibraryOwned(variable);
 
   return (
     <Fragment>
@@ -237,7 +240,7 @@ function VariableRow({
             >
               {badge.label}
             </span>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1" inert={owned}>
               <EditableText
                 value={variable.name}
                 onCommit={(name) => {
@@ -256,6 +259,11 @@ function VariableRow({
                 </div>
               )}
             </div>
+            {owned && (
+              <Badge variant="outline" title={libraryOwnedMessage("variable", variable.name, variable.libraryId as string)}>
+                Library
+              </Badge>
+            )}
             {variable.deprecated && (
               <Badge variant="outline" title={variable.deprecated.note}>
                 Deprecated
@@ -265,7 +273,7 @@ function VariableRow({
         </TableCell>
         {/* One cell per mode */}
         {collection.modes.map((mode) => (
-          <TableCell key={mode.id} className="py-2 px-3 border-l border-border-light">
+          <TableCell key={mode.id} inert={owned} className="py-2 px-3 border-l border-border-light">
             <ValueCell variable={variable} collection={collection} mode={mode} />
           </TableCell>
         ))}
@@ -283,7 +291,7 @@ function VariableRow({
                 className={clsx("size-3.5 transition-transform", expanded && "rotate-90")}
               />
             </button>
-            <Tooltip>
+            {!owned && <Tooltip>
               <TooltipTrigger
                 render={
                   <button
@@ -299,7 +307,7 @@ function VariableRow({
                 }
               />
               <TooltipContent>Delete variable</TooltipContent>
-            </Tooltip>
+            </Tooltip>}
           </div>
         </TableCell>
       </TableRow>
@@ -567,11 +575,14 @@ export function VariablesPanelContent() {
   const handleAddVariable = (type: VariableType) => {
     if (!active) return;
     const defaultVal = defaultValues[type];
-    const count = variables.filter((v) => v.type === type).length;
+    // Next free name: it must clash with no local or library CSS name.
+    const taken = new Set(variables.map((v) => getVariableCssName(v)));
+    let count = variables.filter((v) => v.type === type).length + 1;
+    while (taken.has(getVariableCssName({ id: "", name: `${defaultNames[type]} ${count}` }))) count++;
     const valuesByMode = Object.fromEntries(active.modes.map((m) => [m.id, defaultVal]));
     const newVar: Variable = {
       id: generateVariableId(),
-      name: `${defaultNames[type]} ${count + 1}`,
+      name: `${defaultNames[type]} ${count}`,
       type,
       collectionId: active.id,
       valuesByMode,
@@ -580,7 +591,16 @@ export function VariablesPanelContent() {
         ? { themeValues: { light: defaultVal, dark: defaultVal } }
         : {}),
     };
-    addVariable(newVar);
+    if (!addVariable(newVar) && isLibraryOwned(active)) {
+      setNotice(libraryOwnedMessage("collection", active.name, active.libraryId as string));
+    }
+  };
+
+  /** Shows why an edit of a library-owned collection was refused; true when it was. */
+  const refuseIfLibraryOwned = (): boolean => {
+    if (!active || !isLibraryOwned(active)) return false;
+    setNotice(libraryOwnedMessage("collection", active.name, active.libraryId as string));
+    return true;
   };
 
   const handleAddCollection = () => {
@@ -589,7 +609,7 @@ export function VariablesPanelContent() {
   };
 
   const handleDeleteCollection = () => {
-    if (!active) return;
+    if (!active || refuseIfLibraryOwned()) return;
     if (!deleteCollection(active.id)) {
       setNotice(
         active.id === THEME_COLLECTION_ID
@@ -605,7 +625,7 @@ export function VariablesPanelContent() {
   const addModeHint = themeModesFixed ? "Theme modes are fixed (Light and Dark)" : "Add mode";
 
   const handleAddMode = () => {
-    if (active && !themeModesFixed) addMode(active.id, `Mode ${active.modes.length + 1}`);
+    if (active && !themeModesFixed && !refuseIfLibraryOwned()) addMode(active.id, `Mode ${active.modes.length + 1}`);
   };
 
   return (
@@ -652,7 +672,7 @@ export function VariablesPanelContent() {
               label="Collection name"
               initial={active.name}
               onDone={(name) => {
-                if (name && name !== active.name) renameCollection(active.id, name);
+                if (name && name !== active.name && !refuseIfLibraryOwned()) renameCollection(active.id, name);
                 setRenamingCollection(false);
               }}
             />

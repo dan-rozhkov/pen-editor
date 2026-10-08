@@ -22,6 +22,11 @@ export interface VariableCollection {
   /** At least one mode. */
   modes: VariableMode[]
   defaultModeId: ModeId
+  /**
+   * Set when a linked design-system library owns this collection (copied into
+   * the document by the link/update code). Read-only for every edit path.
+   */
+  libraryId?: string
 }
 
 /** A mode value that points at another variable of the same `type`. */
@@ -73,6 +78,13 @@ export interface Variable {
   description?: string
   scopes?: VariableScope[]
   deprecated?: VariableDeprecation
+  /**
+   * Set when a linked design-system library owns this variable. Library-owned
+   * variables are read-only (store, tools and panels refuse edits); only the
+   * link/update code writes them, through the bulk setters. Never published
+   * back: the snapshot builder leaves them out.
+   */
+  libraryId?: string
   /**
    * Compat mirror: the RESOLVED value in the collection's default mode.
    * Maintained by the store (`finalizeVariables`); also what an older editor

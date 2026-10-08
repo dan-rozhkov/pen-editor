@@ -24,14 +24,24 @@ import {
 } from '../lib/variables'
 import { useHistoryStore } from './historyStore'
 import { useSceneStore, createSnapshot } from './sceneStore'
+import { isLibraryOwned, libraryOwnedMessage } from '../lib/designSystem/ownership'
 import { rewriteEmbedRefsOnActivePage, rewriteEmbedRefsOnInactivePages } from './embedVarRefs'
 
 interface VariableState {
   variables: Variable[]
   collections: VariableCollection[]
 
-  // CRUD operations
-  addVariable: (variable: Variable) => void
+  // CRUD operations.
+  // Library-owned variables, collections and modes (`libraryId`) are read-only:
+  // every action below refuses them (false / `{ error }` / null) and changes
+  // nothing. The bulk setters at the bottom are the escape hatch the library
+  // link/update code uses, and what document load and undo go through.
+  /**
+   * Returns false (and changes nothing) when the variable goes into a
+   * library-owned collection or its CSS name collides with a library-owned
+   * variable's.
+   */
+  addVariable: (variable: Variable) => boolean
   /**
    * Returns false (and changes nothing) for an unknown id, an alias cycle or
    * type mismatch, a `type` change that breaks aliases, or an unknown collection.
@@ -58,14 +68,15 @@ interface VariableState {
   updateVariableThemeValue: (id: string, theme: ThemeName, value: string) => boolean
   /** Returns false (and changes nothing) for a cycle, a type mismatch or an unknown id/mode. */
   setVariableModeValue: (id: string, modeId: ModeId, value: VariableModeValue) => boolean
-  deleteVariable: (id: string) => void
+  /** Returns false (and changes nothing) for a library-owned variable. */
+  deleteVariable: (id: string) => boolean
 
   // Collections and modes. Boolean results: false = refused, nothing changed.
   addCollection: (name: string, modeNames?: string[]) => CollectionId
-  renameCollection: (id: CollectionId, name: string) => void
+  renameCollection: (id: CollectionId, name: string) => boolean
   deleteCollection: (id: CollectionId) => boolean
   addMode: (collectionId: CollectionId, name: string) => ModeId | null
-  renameMode: (collectionId: CollectionId, modeId: ModeId, name: string) => void
+  renameMode: (collectionId: CollectionId, modeId: ModeId, name: string) => boolean
   deleteMode: (collectionId: CollectionId, modeId: ModeId) => boolean
   setDefaultMode: (collectionId: CollectionId, modeId: ModeId) => boolean
   moveVariableToCollection: (id: string, collectionId: CollectionId) => boolean
@@ -96,6 +107,11 @@ function normalized(
   return upgradeVariablesV2(variables, collections)
 }
 
+/** True when `collectionId` names a library-owned collection. */
+function collectionOwned(collections: VariableCollection[], collectionId: CollectionId): boolean {
+  return isLibraryOwned(collections.find((c) => c.id === collectionId))
+}
+
 export const useVariableStore = create<VariableState>((set, get) => {
   /** Apply a variables transform, then finalize against the (possibly new) collections. */
   const commit = (
@@ -110,18 +126,27 @@ export const useVariableStore = create<VariableState>((set, get) => {
     collections: [makeThemeCollection()],
 
     addVariable: (variable) => {
-      saveVariableHistory()
       const { variables, collections } = get()
       const [added] = normalized([variable], collections).variables
-      if (!added) return
+      if (!added) return false
+      // A local variable must not shadow a library token: `var(--x)` would be ambiguous.
+      const css = getVariableCssName(added)
+      if (variables.some((v) => isLibraryOwned(v) && getVariableCssName(v) === css)) return false
+      if (collectionOwned(collections, added.collectionId ?? THEME_COLLECTION_ID)) return false
+      saveVariableHistory()
       commit([...variables, added])
+      return true
     },
 
     updateVariable: (id, updates) => {
       const { variables, collections } = get()
+      const before = variables.find((v) => v.id === id)
+      if (isLibraryOwned(before)) return false
+      // `libraryId` is set by the library link code only, never through an edit.
+      if (updates.libraryId !== undefined) return false
+      if (updates.collectionId !== undefined && collectionOwned(collections, updates.collectionId)) return false
       const next = applyVariablePatch(variables, collections, id, updates)
       if (!next) return false
-      const before = variables.find((v) => v.id === id)
       const refMap: Record<string, string> = {}
       if (before && next.name !== before.name) {
         const oldCss = getVariableCssName(before)
@@ -142,6 +167,7 @@ export const useVariableStore = create<VariableState>((set, get) => {
       const { variables } = get()
       const before = variables.find((v) => v.id === id)
       if (!before) return { error: `Variable not found: ${id}` }
+      if (isLibraryOwned(before)) return { error: libraryOwnedMessage('variable', before.name, before.libraryId as string) }
       const newCss = getVariableCssName({ id, name })
       if (variables.some((v) => v.id !== id && getVariableCssName(v) === newCss)) {
         return { error: `Another variable already uses ${newCss}` }
@@ -153,7 +179,7 @@ export const useVariableStore = create<VariableState>((set, get) => {
     setVariableModeValue: (id, modeId, value) => {
       const { variables, collections } = get()
       const target = variables.find((v) => v.id === id)
-      if (!target) return false
+      if (!target || isLibraryOwned(target)) return false
       const collection = collections.find((c) => c.id === collectionIdOf(target))
       if (collection && !collection.modes.some((m) => m.id === modeId)) return false
       if (typeof value !== 'string') {
@@ -184,8 +210,9 @@ export const useVariableStore = create<VariableState>((set, get) => {
     },
 
     deleteVariable: (id) => {
-      saveVariableHistory()
       const { variables, collections } = get()
+      if (isLibraryOwned(variables.find((v) => v.id === id))) return false
+      saveVariableHistory()
       const index = buildVariableIndex(variables, collections)
       const next: Variable[] = []
       for (const v of variables) {
@@ -214,6 +241,7 @@ export const useVariableStore = create<VariableState>((set, get) => {
         next.push(out)
       }
       commit(next)
+      return true
     },
 
     addCollection: (name, modeNames = ['Mode 1']) => {
@@ -230,14 +258,17 @@ export const useVariableStore = create<VariableState>((set, get) => {
     },
 
     renameCollection: (id, name) => {
+      if (collectionOwned(get().collections, id)) return false
       saveVariableHistory()
       set((s) => ({ collections: s.collections.map((c) => (c.id === id ? { ...c, name } : c)) }))
+      return true
     },
 
     deleteCollection: (id) => {
       const { variables, collections } = get()
       if (id === THEME_COLLECTION_ID) return false
       if (!collections.some((c) => c.id === id)) return false
+      if (collectionOwned(collections, id)) return false
       // Refuse rather than orphan or silently move variables: the caller decides.
       if (variables.some((v) => collectionIdOf(v) === id)) return false
       saveVariableHistory()
@@ -250,6 +281,7 @@ export const useVariableStore = create<VariableState>((set, get) => {
       const collection = collections.find((c) => c.id === collectionId)
       // Theme modes are fixed (light/dark back the compat mirrors).
       if (!collection || collectionId === THEME_COLLECTION_ID) return null
+      if (isLibraryOwned(collection)) return null
       saveVariableHistory()
       const mode = { id: randomId('mode_'), name }
       commit(
@@ -265,6 +297,7 @@ export const useVariableStore = create<VariableState>((set, get) => {
     },
 
     renameMode: (collectionId, modeId, name) => {
+      if (collectionOwned(get().collections, collectionId)) return false
       saveVariableHistory()
       set((s) => ({
         collections: s.collections.map((c) =>
@@ -273,12 +306,14 @@ export const useVariableStore = create<VariableState>((set, get) => {
             : c,
         ),
       }))
+      return true
     },
 
     deleteMode: (collectionId, modeId) => {
       const { variables, collections } = get()
       const collection = collections.find((c) => c.id === collectionId)
       if (!collection || !collection.modes.some((m) => m.id === modeId)) return false
+      if (isLibraryOwned(collection)) return false
       // The Theme collection's light/dark are structural (the compat mirrors need them).
       if (collectionId === THEME_COLLECTION_ID) return false
       if (collection.defaultModeId === modeId || collection.modes.length <= 1) return false
@@ -301,7 +336,7 @@ export const useVariableStore = create<VariableState>((set, get) => {
       const { variables, collections } = get()
       const collection = collections.find((c) => c.id === collectionId)
       if (!collection || !collection.modes.some((m) => m.id === modeId)) return false
-      if (collectionId === THEME_COLLECTION_ID) return false
+      if (collectionId === THEME_COLLECTION_ID || isLibraryOwned(collection)) return false
       saveVariableHistory()
       commit(
         variables,
@@ -315,6 +350,7 @@ export const useVariableStore = create<VariableState>((set, get) => {
       const target = collections.find((c) => c.id === collectionId)
       const variable = variables.find((v) => v.id === id)
       if (!target || !variable) return false
+      if (isLibraryOwned(variable) || isLibraryOwned(target)) return false
       if (collectionIdOf(variable) === collectionId) return true
       saveVariableHistory()
       const moved = remapToCollection(variables, collections, variable, target)

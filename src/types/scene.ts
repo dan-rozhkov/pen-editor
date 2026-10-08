@@ -940,7 +940,18 @@ export interface EmbedComponentMeta {
   /** axis -> allowed values. */
   variants?: Record<string, string[]>
   status?: 'draft' | 'stable' | 'deprecated'
-  deprecated?: { replacedBy?: string; note?: string }
+  deprecated?: {
+    /** Library version that deprecated it; filled at publish time. */
+    since?: string
+    replacedBy?: string
+    note?: string
+  }
+  /**
+   * Set when a linked design-system library owns this master. Library masters
+   * are read-only here: define_component, edit_embed_html and batch_design
+   * refuse them ("edit it in the library document").
+   */
+  library?: { id: string; version: string }
 }
 
 export interface EmbedNode extends BaseNode {

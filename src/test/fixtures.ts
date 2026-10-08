@@ -54,7 +54,7 @@ export function resetStores(): void {
   // tests in the same file.
   useDevExportStore.setState({ overrides: {} });
   useMcpBridgeStore.setState({ status: "off" });
-  useDocumentStore.setState({ fileName: null });
+  useDocumentStore.setState({ fileName: null, documentId: null, libraries: [], libraryAuthor: null });
   useEmbedPickerStore.getState().reset();
   useRepoContextStore.setState({ name: null, tree: [], filesByPath: new Map(), attachedAt: null });
 }
