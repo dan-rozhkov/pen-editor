@@ -65,5 +65,5 @@ export function runDesignLint(input: LintInput, opts: LintOptions = {}): LintRes
 
   const limit = opts.limit ?? DEFAULT_LIMIT;
   const cut = kept.length > limit;
-  return { findings: cut ? kept.slice(0, limit) : kept, summary, truncated: lc.truncated || cut };
+  return { findings: cut ? kept.slice(0, limit) : kept, summary, truncated: lc.truncated || cut, scanTruncated: lc.truncated };
 }

@@ -229,7 +229,10 @@ function foregroundOf(lc: LintContext, node: TextNode, ctx: ModeContext): { colo
 export function runContrastRule(lc: LintContext): void {
   const seenUnresolved = new Set<string>();
   const found: Finding[] = [];
+  let evaluated = 0;
   for (const base of lc.contexts) {
+    if (lc.expired()) break;
+    evaluated++;
     const mode = lc.label(base);
     for (const id of lc.scopeIds) {
       if (lc.expired()) break;
@@ -243,7 +246,7 @@ export function runContrastRule(lc: LintContext): void {
       }
     }
   }
-  lc.addPerMode(found);
+  lc.addPerMode(found, evaluated);
 }
 
 function textContrast(

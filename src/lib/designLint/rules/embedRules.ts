@@ -11,7 +11,6 @@ import {
   contrastRatio,
   formatRatio,
   isLargeText,
-  oklabDistance,
   parseColor,
   requiredRatio,
   toHex,
@@ -29,8 +28,7 @@ import {
   type StyleRule,
 } from "../embedDom";
 import type { Finding, LintEmbed, LintRuleId } from "../types";
-import { colorScopeOk, numberScopeOk } from "./tokenRules";
-import { NEAR_COLOR_DISTANCE } from "../shared";
+import { colorScopeOk, nearestColor, numberScopeOk } from "./tokenRules";
 
 export const EMBED_CONTRAST_MAX_CHARS = 200_000;
 export const EMBED_CONTRAST_MAX_TEXT_ELEMENTS = 2000;
@@ -44,6 +42,7 @@ interface ParsedEmbed {
 function parsedEmbeds(lc: LintContext): ParsedEmbed[] {
   const out: ParsedEmbed[] = [];
   for (const embed of lc.embeds) {
+    if (lc.expired()) break;
     if (!embed.html) continue;
     const doc = parseEmbedHtml(embed.html);
     if (doc) out.push({ embed, doc });
@@ -80,9 +79,7 @@ export function runEmbedLiteralRule(lc: LintContext, parsed: ParsedEmbed[]): voi
     const seen = new Set<string>();
 
     const report = (path: string, property: string, value: string) => {
-      for (const literal of hasColorTokens ? colorLiterals(property, value) : []) {
-        const color = parseColor(literal);
-        if (!color) continue;
+      for (const { text: literal, color } of hasColorTokens ? colorLiterals(property, value) : []) {
         const id = findingId("embed-literal", embed.nodeId, path, property, literal);
         if (seen.has(id)) continue;
         seen.add(id);
@@ -102,7 +99,7 @@ export function runEmbedLiteralRule(lc: LintContext, parsed: ParsedEmbed[]): voi
             fix: { kind: "embed-replace", nodeId: embed.nodeId, property, from: literal, to: `var(${cssName(best)})` },
           });
         } else {
-          const near = scoped.find((t) => oklabDistance(t.color, color) < NEAR_COLOR_DISTANCE);
+          const near = nearestColor(scoped, color);
           lc.add({
             id,
             rule: "embed-literal",
@@ -286,7 +283,10 @@ export function runEmbedContrastRule(lc: LintContext, parsed: ParsedEmbed[]): vo
     const modeDependent = embed.html.includes("var(");
     const contexts = modeDependent ? lc.contexts : lc.contexts.slice(0, 1);
     const found: Finding[] = [];
+    let evaluated = 0;
     for (const base of contexts) {
+      if (lc.expired()) break;
+      evaluated++;
       const colors = new EmbedColors(lc, cascade, baseModesFor(lc, embed, base));
       const mode = modeDependent ? lc.label(base) : "";
       for (const el of elements.slice(0, EMBED_CONTRAST_MAX_TEXT_ELEMENTS)) {
@@ -312,7 +312,7 @@ export function runEmbedContrastRule(lc: LintContext, parsed: ParsedEmbed[]): vo
         });
       }
     }
-    lc.addPerMode(found, contexts.length);
+    lc.addPerMode(found, evaluated);
   }
 }
 

@@ -82,12 +82,13 @@ export function resolveLintModes(mode: unknown, input: LintInput): ModeResolutio
 }
 
 function intArg(raw: unknown, fallback: number, min: number, max: number): number {
+  if (raw === undefined || raw === null || (typeof raw === "string" && raw.trim() === "")) return fallback;
   const value = typeof raw === "number" ? raw : Number(raw);
   if (!Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, Math.trunc(value)));
 }
 
-function hintFor(result: LintResult, limit: number): string {
+function hintFor(result: LintResult): string {
   const total = result.summary.errors + result.summary.warnings + result.summary.info;
   const parts: string[] = [];
   if (total > result.findings.length) {
@@ -95,7 +96,7 @@ function hintFor(result: LintResult, limit: number): string {
       `Showing ${result.findings.length} of ${total} findings, most severe first. Raise limit, or narrow the check with nodeIds, rules or severity.`,
     );
   }
-  if (result.truncated && total <= limit) {
+  if (result.scanTruncated) {
     parts.push(
       `The scan stopped at a limit (${LINT_MAX_NODES} nodes, ${LINT_MAX_EMBEDS} embeds or ${LINT_BUDGET_MS / 1000} s), so some of the design was not checked. Pass nodeIds to check a smaller part.`,
     );
@@ -103,20 +104,42 @@ function hintFor(result: LintResult, limit: number): string {
   if (result.summary.scanned.embedsPartial) {
     parts.push(`${result.summary.scanned.embedsPartial} embed(s) were only partly checked because they are large.`);
   }
-  if (total === 0 && !result.truncated) parts.push("No findings.");
+  if (total === 0 && !result.scanTruncated) parts.push("No findings.");
   return parts.join(" ");
 }
+
+const fail = (error: string) => JSON.stringify({ error });
 
 export const lintDesign: ToolHandler = async (args) => {
   const input = buildLintInput();
   const modes = resolveLintModes(args.mode, input);
-  if (!modes.ok) return JSON.stringify({ error: modes.error });
+  if (!modes.ok) return fail(modes.error);
 
-  const nodeIds = Array.isArray(args.nodeIds) ? args.nodeIds.filter((s): s is string => typeof s === "string") : undefined;
-  const rules = Array.isArray(args.rules)
-    ? args.rules.filter((r): r is LintRuleId => (LINT_RULE_IDS as readonly string[]).includes(r as string))
-    : undefined;
-  const severity = (SEVERITY_ORDER as readonly unknown[]).includes(args.severity) ? (args.severity as Severity) : undefined;
+  let nodeIds: string[] | undefined;
+  if (args.nodeIds !== undefined && args.nodeIds !== null) {
+    if (!Array.isArray(args.nodeIds) || args.nodeIds.length === 0 || args.nodeIds.some((x) => typeof x !== "string")) {
+      return fail("nodeIds must be a non-empty array of node ids. Omit it to check the whole page.");
+    }
+    nodeIds = args.nodeIds as string[];
+    const unknown = nodeIds.filter((id) => !input.nodesById[id]);
+    if (unknown.length > 0) return fail(`Unknown node ids on the active page: ${unknown.join(", ")}.`);
+  }
+
+  let rules: LintRuleId[] | undefined;
+  if (args.rules !== undefined && args.rules !== null) {
+    if (!Array.isArray(args.rules)) return fail(`rules must be an array. Valid rules: ${LINT_RULE_IDS.join(", ")}.`);
+    const bad = args.rules.filter((r) => !(LINT_RULE_IDS as readonly unknown[]).includes(r));
+    if (bad.length > 0) return fail(`Unknown rules: ${bad.map(String).join(", ")}. Valid rules: ${LINT_RULE_IDS.join(", ")}.`);
+    rules = args.rules as LintRuleId[];
+  }
+
+  let severity: Severity | undefined;
+  if (args.severity !== undefined && args.severity !== null && args.severity !== "") {
+    if (!(SEVERITY_ORDER as readonly unknown[]).includes(args.severity)) {
+      return fail(`Unknown severity: ${String(args.severity)}. Valid values: ${SEVERITY_ORDER.join(", ")}.`);
+    }
+    severity = args.severity as Severity;
+  }
   const limit = intArg(args.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
 
   const result = runDesignLint(input, {
@@ -134,6 +157,7 @@ export const lintDesign: ToolHandler = async (args) => {
     summary: result.summary,
     findings: result.findings.map((f) => toAgentFinding(f, input)),
     truncated: result.truncated,
-    hint: hintFor(result, limit),
+    scanTruncated: result.scanTruncated,
+    hint: hintFor(result),
   });
 };

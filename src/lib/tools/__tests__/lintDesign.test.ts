@@ -8,6 +8,7 @@ interface Out {
   error?: string;
   hint: string;
   truncated: boolean;
+  scanTruncated: boolean;
   summary: { warnings: number; scanned: { nodes: number } };
   findings: Array<{ nodeId: string; rule: string; mode?: string; fix?: unknown; fixHint?: string }>;
 }
@@ -63,5 +64,29 @@ describe("lint_design", () => {
     expect(out.findings).toHaveLength(1);
     expect(out.truncated).toBe(true);
     expect(out.hint).toMatch(/Showing 1 of/);
+  });
+
+  it("falls back to the default limit for null, empty and missing values", async () => {
+    for (const limit of [null, "", undefined]) {
+      expect((await run({ mode: "all", limit })).findings).toHaveLength(2);
+    }
+  });
+
+  it("errors on empty or unknown nodeIds instead of reporting no findings", async () => {
+    expect((await run({ nodeIds: [] })).error).toMatch(/nodeIds/);
+    expect((await run({ nodeIds: ["rect1", "ghost"] })).error).toContain("ghost");
+    expect((await run({ nodeIds: "rect1" })).error).toMatch(/nodeIds/);
+  });
+
+  it("errors on unknown rules and invalid severity, naming them", async () => {
+    expect((await run({ rules: ["contrast", "nope"] })).error).toContain("nope");
+    expect((await run({ severity: "fatal" })).error).toContain("fatal");
+  });
+
+  it("reports scan truncation apart from the findings cut", async () => {
+    const cut = await run({ mode: "all", limit: 1 });
+    expect(cut.truncated).toBe(true);
+    expect(cut.scanTruncated).toBe(false);
+    expect(cut.hint).not.toMatch(/scan stopped/);
   });
 });

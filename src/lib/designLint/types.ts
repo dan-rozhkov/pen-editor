@@ -155,5 +155,8 @@ export interface LintSummary {
 export interface LintResult {
   findings: Finding[];
   summary: LintSummary;
+  /** Findings were cut by `limit`, or the scan stopped early (`scanTruncated`). */
   truncated: boolean;
+  /** A scan cap or the time budget stopped the run before everything was checked. */
+  scanTruncated: boolean;
 }

@@ -78,6 +78,18 @@ describe("embed-literal edge cases", () => {
     expect(found[0].embedPath).toContain("b");
   });
 
+  it("keeps parentheses inside quoted url() strings from ending the call early", () => {
+    const html = `<div style="background:url('a).png#cafe') no-repeat">x</div>`;
+    expect(byRule(lint([embed("e1", html)], { variables: [brand] }), "embed-literal")).toHaveLength(0);
+  });
+
+  it("names the closest token for a near color, not the first one", () => {
+    const far = token("v-far", "--a-far", "#3366f0");
+    const near = token("v-near", "--z-near", "#3366fa");
+    const r = lint([embed("e1", `<div style="color:#3366ff">x</div>`)], { variables: [far, near] });
+    expect(byRule(r, "embed-literal")[0].message).toContain("--z-near");
+  });
+
   it("does not read hex-looking ids inside url() as colors", () => {
     const html = `<style>.a{fill:url(#face)} .b{background:url("#cafe") no-repeat}</style><svg><rect style="fill:url(#abc)"/></svg>`;
     expect(byRule(lint([embed("e1", html)], { variables: [brand] }), "embed-literal")).toHaveLength(0);

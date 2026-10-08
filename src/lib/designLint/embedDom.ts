@@ -1,6 +1,6 @@
 import { ownSlots } from "@/lib/embedComponents/master";
 import { parseCss, type CssNode } from "@/lib/embedComponents/css";
-import { parseColor } from "./colorMath";
+import { parseColor, type Rgba } from "./colorMath";
 
 /**
  * DOM and CSS plumbing for the embed lint rules: declaration parsing, style
@@ -139,34 +139,50 @@ function stripVarCalls(value: string): string {
   return stripCalls(value, ["var(", "url("]);
 }
 
-/** `value` with every balanced call whose name starts with one of `openers` blanked out. */
+/** `value` with every balanced call whose name starts with one of `openers` blanked out; parentheses inside quoted strings do not count. */
 function stripCalls(value: string, openers: string[]): string {
   let out = "";
   let i = 0;
   while (i < value.length) {
     const opener = openers.find((o) => value.slice(i, i + o.length).toLowerCase() === o);
-    if (opener) {
-      let depth = 1;
-      i += opener.length;
-      while (i < value.length && depth > 0) {
-        if (value[i] === "(") depth++;
-        else if (value[i] === ")") depth--;
-        i++;
-      }
-      out += " ";
-    } else out += value[i++];
+    if (!opener) {
+      out += value[i++];
+      continue;
+    }
+    let depth = 1;
+    let quote = "";
+    i += opener.length;
+    while (i < value.length && depth > 0) {
+      const ch = value[i];
+      if (quote) {
+        if (ch === "\\") i++;
+        else if (ch === quote) quote = "";
+      } else if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === "(") depth++;
+      else if (ch === ")") depth--;
+      i++;
+    }
+    out += " ";
   }
   return out;
 }
 
-/** Color literals in a declaration value; a bare named color counts when it is the whole value. */
-export function colorLiterals(property: string, value: string): string[] {
+/** Color literals in a declaration value, parsed once; a bare named color counts when it is the whole value. */
+export function colorLiterals(property: string, value: string): Array<{ text: string; color: Rgba }> {
   if (!isColorProperty(property)) return [];
   const bare = stripVarCalls(value);
   const matches = bare.match(COLOR_LITERAL);
-  if (matches) return [...new Set(matches.map((m) => m.trim()))].filter((m) => parseColor(m) !== null);
-  const whole = bare.trim();
-  return whole && parseColor(whole) && whole.toLowerCase() !== "transparent" ? [whole] : [];
+  const candidates = matches
+    ? [...new Set(matches.map((m) => m.trim()))]
+    : bare.trim() && bare.trim().toLowerCase() !== "transparent"
+      ? [bare.trim()]
+      : [];
+  const out: Array<{ text: string; color: Rgba }> = [];
+  for (const text of candidates) {
+    const color = parseColor(text);
+    if (color) out.push({ text, color });
+  }
+  return out;
 }
 
 const LENGTH_PROPERTIES: Array<[RegExp, "radius" | "spacing" | "fontSize"]> = [

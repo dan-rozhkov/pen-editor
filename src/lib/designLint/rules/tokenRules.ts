@@ -64,7 +64,10 @@ export function runValueRules(lc: LintContext, enabled: ReadonlySet<LintRuleId>)
     found.push(f);
   };
 
+  let evaluated = 0;
   for (const base of lc.contexts) {
+    if (lc.expired()) break;
+    evaluated++;
     const label = lc.label(base);
     for (const id of lc.scopeIds) {
       if (lc.expired()) break;
@@ -75,7 +78,7 @@ export function runValueRules(lc: LintContext, enabled: ReadonlySet<LintRuleId>)
       numberValues(lc, node, ctx, label, hardcoded, offScale, push);
     }
   }
-  lc.addPerMode(found);
+  lc.addPerMode(found, evaluated);
 }
 
 function colorValues(
@@ -145,7 +148,7 @@ function colorValues(
 }
 
 /** The closest token within `NEAR_COLOR_DISTANCE`; `tokens` are already semantic-first, so ties keep that order. */
-function nearestColor(tokens: ColorToken[], color: Rgba): ColorToken | undefined {
+export function nearestColor(tokens: ColorToken[], color: Rgba): ColorToken | undefined {
   const lab = toOklab(color);
   let best: ColorToken | undefined;
   let bestD = NEAR_COLOR_DISTANCE;
