@@ -17,6 +17,13 @@ const full = (role: string) =>
     invitations: [{ id: "i1", email: "eve@example.com", role: "editor", status: "pending" }],
   });
 const org = authClientMock.organization;
+const withExpiredInvitation = () =>
+  org.getFullOrganization.mockResolvedValue(
+    ok({
+      members: [{ id: "m1", userId: USER.id, role: "owner", user: { email: USER.email } }],
+      invitations: [{ id: "i1", email: "eve@example.com", role: "editor", status: "pending", expiresAt: "2020-01-01T00:00:00Z" }],
+    }),
+  );
 const open = () => render(<OrganizationsSection userId={USER.id} />);
 
 beforeEach(() => {
@@ -98,12 +105,7 @@ describe("<OrganizationsSection />", () => {
   });
 
   it("marks expired invitations and resends them", async () => {
-    org.getFullOrganization.mockResolvedValue(
-      ok({
-        members: [{ id: "m1", userId: USER.id, role: "owner", user: { email: USER.email } }],
-        invitations: [{ id: "i1", email: "eve@example.com", role: "editor", status: "pending", expiresAt: "2020-01-01T00:00:00Z" }],
-      }),
-    );
+    withExpiredInvitation();
     open();
     expect(await screen.findByText(/Expired/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Resend invitation to eve@example.com" }));
@@ -115,13 +117,38 @@ describe("<OrganizationsSection />", () => {
   it("retries once on a slug collision", async () => {
     org.list.mockResolvedValue(ok([]));
     org.create
-      .mockResolvedValueOnce(fail("ORGANIZATION_SLUG_ALREADY_TAKEN"))
+      .mockResolvedValueOnce(fail("ORGANIZATION_ALREADY_EXISTS"))
       .mockResolvedValueOnce(ok({}));
     open();
     fireEvent.change(await screen.findByLabelText("Organization name"), { target: { value: "Acme" } });
     fireEvent.click(screen.getByRole("button", { name: "Create organization" }));
     await waitFor(() => expect(org.create).toHaveBeenCalledTimes(2));
     expect(org.create.mock.calls[0][0].slug).not.toBe(org.create.mock.calls[1][0].slug);
+  });
+
+  it("shows an error with Retry and no actions when the first load fails", async () => {
+    org.getFullOrganization.mockResolvedValue(fail("X", 500));
+    open();
+    expect(await screen.findByRole("button", { name: "Retry" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Leave organization" })).toBeNull();
+    expect(screen.queryByLabelText("Invite by email")).toBeNull();
+  });
+
+  it("resend cancels the expired invitation first", async () => {
+    withExpiredInvitation();
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: "Resend invitation to eve@example.com" }));
+    await waitFor(() => expect(org.inviteMember).toHaveBeenCalled());
+    expect(org.cancelInvitation).toHaveBeenCalledWith({ invitationId: "i1" });
+  });
+
+  it("allows one confirm at a time and resets the select", async () => {
+    open();
+    await screen.findByText("bob@example.com");
+    fireEvent.change(screen.getByLabelText("Role for bob@example.com"), { target: { value: "owner" } });
+    fireEvent.click(screen.getByRole("button", { name: "Remove bob@example.com" }));
+    expect((screen.getByLabelText("Role for bob@example.com") as HTMLSelectElement).value).toBe("viewer");
+    expect(screen.queryByRole("button", { name: /Confirm role/ })).toBeNull();
   });
 
   it("keeps the list and offers Retry when reloading fails", async () => {

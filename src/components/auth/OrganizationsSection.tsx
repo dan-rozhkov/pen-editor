@@ -9,7 +9,7 @@ import {
   type OrgRole,
 } from "@/lib/auth/orgAccess";
 import { orgErrorMessage } from "@/lib/auth/orgErrors";
-import { slugify } from "@/lib/variables/shared";
+import { slugify } from "@/lib/slug";
 
 import { AuthButton, FormMessage, LinkButton, TextField } from "./authUi";
 
@@ -40,7 +40,8 @@ const SELECT =
 
 function orgSlug(name: string): string {
   // Slugs are globally unique; a suffix keeps two "Design team"s apart.
-  return `${slugify(name, "org").slice(0, 40)}-${Math.random().toString(36).slice(2, 7)}`;
+  const base = slugify(name, "org", true).slice(0, 40).replace(/-+$/, "") || "org";
+  return `${base}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
 const isExpired = (inv: InvitationRow): boolean =>
@@ -101,7 +102,6 @@ function OrganizationDetail({
       if (!live) return;
       // Keep the previous list on screen; offer a retry instead.
       setLoadFailed(true);
-      setDetail((d) => d ?? { members: [], invitations: [] });
     };
     void authClient.organization
       .getFullOrganization({ query: { organizationId: org.id } })
@@ -149,6 +149,11 @@ function OrganizationDetail({
     } finally {
       setBusy(false);
     }
+  }
+
+  function openConfirm(key: string) {
+    setPendingRole(null);
+    setConfirm(key);
   }
 
   function cancelConfirm() {
@@ -202,7 +207,7 @@ function OrganizationDetail({
           <LinkButton onClick={reload}>Retry</LinkButton>
         </div>
       )}
-      {detail === null ? (
+      {detail === null && loadFailed ? null : detail === null ? (
         <p role="status" className="text-sm text-text-muted">
           Loading…
         </p>
@@ -223,7 +228,7 @@ function OrganizationDetail({
                       <>
                         <RoleSelect
                           label={`Role for ${who}`}
-                          value={pendingRole?.memberId === m.id ? pendingRole.role : asOrgRole(m.role)}
+                          value={confirm === `role-${m.id}` && pendingRole?.memberId === m.id ? pendingRole.role : asOrgRole(m.role)}
                           disabled={busy}
                           onChange={(role) => {
                             setConfirm(`role-${m.id}`);
@@ -242,7 +247,7 @@ function OrganizationDetail({
                             <LinkButton onClick={cancelConfirm}>Cancel</LinkButton>
                           </>
                         )}
-                        {confirm !== `role-${m.id}` && (confirm === `rm-${m.id}` ? (
+                        {(confirm === `rm-${m.id}` ? (
                           <AuthButton
                             variant="danger"
                             disabled={busy}
@@ -262,7 +267,7 @@ function OrganizationDetail({
                             variant="secondary"
                             disabled={busy}
                             aria-label={`Remove ${who}`}
-                            onClick={() => setConfirm(`rm-${m.id}`)}
+                            onClick={() => openConfirm(`rm-${m.id}`)}
                           >
                             Remove
                           </AuthButton>
@@ -291,12 +296,15 @@ function OrganizationDetail({
                       aria-label={`Resend invitation to ${inv.email}`}
                       onClick={() =>
                         void run(
-                          () =>
-                            authClient.organization.inviteMember({
+                          async () => {
+                            const cancelled = await authClient.organization.cancelInvitation({ invitationId: inv.id });
+                            if (cancelled.error) return cancelled;
+                            return authClient.organization.inviteMember({
                               email: inv.email,
                               role: asOrgRole(inv.role),
                               organizationId: org.id,
-                            }),
+                            });
+                          },
                           "Could not resend the invitation.",
                           `Invitation sent to ${inv.email}.`,
                         )
@@ -359,7 +367,7 @@ function OrganizationDetail({
                 Confirm leave
               </AuthButton>
             ) : (
-              <AuthButton variant="secondary" disabled={busy} onClick={() => setConfirm("leave")}>
+              <AuthButton variant="secondary" disabled={busy} onClick={() => openConfirm("leave")}>
                 Leave organization
               </AuthButton>
             )}
@@ -380,7 +388,7 @@ function OrganizationDetail({
                   Confirm delete
                 </AuthButton>
               ) : (
-                <AuthButton variant="danger" disabled={busy} onClick={() => setConfirm("delete")}>
+                <AuthButton variant="danger" disabled={busy} onClick={() => openConfirm("delete")}>
                   Delete organization
                 </AuthButton>
               ))}
@@ -432,7 +440,7 @@ export function OrganizationsSection({ userId }: { userId: string }) {
       let res = await attempt();
       const code = (res.error as { code?: string } | null)?.code;
       // Slugs are random-suffixed; a collision is one-in-millions. Retry once.
-      if (code === "ORGANIZATION_SLUG_ALREADY_TAKEN") res = await attempt();
+      if (code === "ORGANIZATION_ALREADY_EXISTS" || code === "ORGANIZATION_SLUG_ALREADY_TAKEN") res = await attempt();
       if (res.error) setMsg({ error: orgErrorMessage(res.error, "Could not create the organization.") });
       else {
         setName("");

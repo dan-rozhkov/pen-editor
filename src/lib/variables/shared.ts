@@ -1,4 +1,5 @@
 import type { Variable, VariableId, VariableType } from "@/types/variable";
+import { slugify } from "@/lib/slug";
 import { wouldCreateCycle } from "./aliasGraph";
 import { modeValuesOf, type VariableIndex } from "./variableIndex";
 
@@ -10,9 +11,7 @@ export const TYPE_DEFAULTS: Record<VariableType, string> = {
 };
 
 /** `Dark Mode` -> `dark-mode`; `fallback` when nothing survives. */
-export function slugify(name: string, fallback = "mode"): string {
-  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || fallback;
-}
+export { slugify };
 
 /** A slug of `name` not yet in `taken`; the chosen id is added to `taken`. */
 export function uniqueSlug(taken: Set<string>, name: string, fallback = "mode"): string {

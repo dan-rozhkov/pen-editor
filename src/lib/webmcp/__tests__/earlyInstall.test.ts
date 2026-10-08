@@ -23,6 +23,7 @@ describe("isEditorRoute", () => {
   // reason for existing.
   it("does not match account pages under /app", () => {
     expect(isEditorRoute("/app/accept-invitation")).toBe(false);
+    expect(isEditorRoute("/app/")).toBe(true);
   });
 
   it("does not match the showcase", () => {

@@ -50,26 +50,35 @@ describe("<AcceptInvitationPage />", () => {
     expect(authClientMock.organization.rejectInvitation).toHaveBeenCalledWith({ invitationId: "inv-1" });
   });
 
-  it("explains an expired invitation", async () => {
+  it("explains a missing invitation (the server sends no code)", async () => {
     authClientMock.organization.getInvitation.mockResolvedValue({
       data: null,
-      error: { code: "INVITATION_NOT_FOUND", status: 400 },
+      error: { message: "Invitation not found!", status: 400 },
     });
     open();
-    expect((await screen.findByRole("alert")).textContent).toMatch(/expired or was cancelled/);
+    expect((await screen.findByRole("alert")).textContent).toMatch(/no longer valid.*account page/);
+    expect(screen.getByRole("link", { name: "Go to your account" })).toBeTruthy();
   });
 
-  it("shows success for an accepted invitation when already a member", async () => {
+  it("does not call a decline of an existing membership a success", async () => {
+    authClientMock.organization.rejectInvitation.mockResolvedValue({
+      data: null,
+      error: { code: "USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION", status: 400 },
+    });
     open();
-    await screen.findByRole("button", { name: "Accept" });
-    cleanup();
+    fireEvent.click(await screen.findByRole("button", { name: "Decline" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/already a member/);
+  });
+
+  it("shows an error when sign out fails", async () => {
     authClientMock.organization.getInvitation.mockResolvedValue({
       data: null,
-      error: { code: "INVITATION_NOT_FOUND", status: 400 },
+      error: { code: "YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION", status: 403 },
     });
-    authClientMock.organization.list.mockResolvedValue({ data: [{ id: "o1" }], error: null });
+    authClientMock.signOut.mockRejectedValue(new Error("net"));
     open();
-    expect(await screen.findByText("You are already a member of this organization.")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Sign out and continue" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/Could not sign out/);
   });
 
   it("offers sign out when the invitation is for another email", async () => {

@@ -36,7 +36,7 @@ function isEditorRoute(pathname: string): boolean {
   const base = import.meta.env.BASE_URL || "/";
   const path = pathname.startsWith(base) ? pathname.slice(base.length - 1) : pathname;
   // Exactly "/app": routes under it (accept-invitation, ...) are account pages.
-  return path === "/app" || path.startsWith("/c/");
+  return path === "/app" || path === "/app/" || path.startsWith("/c/");
 }
 
 export function installModelContextForEditorRoute(

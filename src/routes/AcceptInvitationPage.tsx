@@ -23,35 +23,13 @@ type State =
   | { kind: "error"; message: string; wrongEmail?: boolean };
 
 const GENERIC = "Could not load this invitation. Try again later.";
-const memoKey = (id: string) => `pen.invitation.${id}`;
+// Better Auth's getInvitation answers 400 "Invitation not found!" with no code
+// for missing, expired, cancelled and already-accepted invitations alike.
+const isNotFound = (error: { code?: string; message?: string; status?: number }): boolean =>
+  error.code === "INVITATION_NOT_FOUND" || /not found/i.test(error.message ?? "") || error.status === 404;
 
-// An accepted invitation is no longer "pending", so a reload cannot read it
-// back. The organization id is remembered per invitation to tell "already
-// accepted" from "expired".
-function remember(id: string, orgId: string): void {
-  try {
-    sessionStorage.setItem(memoKey(id), orgId);
-  } catch {
-    // storage blocked: the expired message is shown instead
-  }
-}
-function remembered(id: string): string | null {
-  try {
-    return sessionStorage.getItem(memoKey(id));
-  } catch {
-    return null;
-  }
-}
-
-async function isMember(orgId: string | null): Promise<boolean> {
-  if (!orgId) return false;
-  try {
-    const res = await authClient.organization.list();
-    return ((res.data ?? []) as { id: string }[]).some((o) => o.id === orgId);
-  } catch {
-    return false;
-  }
-}
+const GONE =
+  "This invitation is no longer valid. If you already joined, you will find the organization on your account page.";
 
 function InvitationFlow({ id, returnTo }: { id: string; returnTo: string }) {
   const navigate = useNavigate();
@@ -64,20 +42,14 @@ function InvitationFlow({ id, returnTo }: { id: string; returnTo: string }) {
       .getInvitation({ query: { id } })
       .then(async (res) => {
         if (res.error || !res.data) {
-          const code = (res.error as { code?: string } | null)?.code;
-          if (code === "INVITATION_NOT_FOUND" || !code) {
-            if (await isMember(remembered(id))) {
-              return set({ kind: "done", message: "You are already a member of this organization." });
-            }
+          const err = (res.error ?? {}) as { code?: string; message?: string; status?: number };
+          if (err.code === "YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION") {
+            return set({ kind: "error", message: orgErrorMessage(err, GENERIC), wrongEmail: true });
           }
-          return set({
-            kind: "error",
-            message: orgErrorMessage(res.error, GENERIC),
-            wrongEmail: code === "YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION",
-          });
+          if (isNotFound(err)) return set({ kind: "error", message: GONE });
+          return set({ kind: "error", message: orgErrorMessage(err, GENERIC) });
         }
         const invitation = res.data as unknown as Invitation;
-        remember(id, invitation.organizationId);
         set({ kind: "ready", invitation });
       })
       .catch(() => set({ kind: "error", message: GENERIC }));
@@ -93,7 +65,8 @@ function InvitationFlow({ id, returnTo }: { id: string; returnTo: string }) {
         ? await authClient.organization.acceptInvitation({ invitationId: id })
         : await authClient.organization.rejectInvitation({ invitationId: id });
       const code = (res.error as { code?: string } | null)?.code;
-      if (!res.error || code === "USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION") {
+      const already = code === "USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION";
+      if (!res.error || (accept && already)) {
         setState({
           kind: "done",
           message: accept
@@ -103,7 +76,9 @@ function InvitationFlow({ id, returnTo }: { id: string; returnTo: string }) {
       } else {
         setState({
           kind: "error",
-          message: orgErrorMessage(res.error, "Could not complete this. Try again later."),
+          message: already
+            ? "You are already a member of this organization."
+            : orgErrorMessage(res.error, "Could not complete this. Try again later."),
           wrongEmail: code === "YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION",
         });
       }
@@ -163,7 +138,11 @@ function InvitationFlow({ id, returnTo }: { id: string; returnTo: string }) {
             <div className="mt-4">
               <AuthButton
                 variant="secondary"
-                onClick={() => void signOut().then(() => navigate(signInPath(returnTo), { replace: true }))}
+                onClick={() =>
+                  void signOut()
+                    .then(() => navigate(signInPath(returnTo), { replace: true }))
+                    .catch(() => setState({ kind: "error", message: "Could not sign out. Try again." }))
+                }
               >
                 Sign out and continue
               </AuthButton>
