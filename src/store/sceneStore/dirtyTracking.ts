@@ -32,3 +32,15 @@ export function consumeDirty(): { ids: Set<string>; complete: boolean } {
   armed = false;
   return out;
 }
+
+/**
+ * Non-consuming view of the dirty channel for other store subscribers (the
+ * number-binding sync). `ids` is a superset of what the latest mutation touched
+ * (it accumulates until pixiSync's flush consumes it); when `complete` is false
+ * some mutation since the last flush was unmarked and the caller must full-scan.
+ * Relies on `noteSceneSetState` having run first (it is subscribed in
+ * sceneStore/index.ts, before any later subscriber).
+ */
+export function peekDirty(): { ids: ReadonlySet<string>; complete: boolean } {
+  return { ids: pending, complete };
+}

@@ -90,6 +90,13 @@ const rasterCacheEnabled = localStorage.getItem("pen.rasterCache") !== "off";
  * NOTE: if a new `*Binding` field is added to scene nodes (see
  * `src/types/scene.ts`), it MUST be added here, or bound nodes will stop
  * live-updating on variable changes.
+ *
+ * DELIBERATE EXCEPTION: `numberBindings` is NOT checked here. Number bindings
+ * are materialized into the literal fields (`cornerRadius`, `layout.gap`, ...)
+ * by `numberBindingSync` through ordinary node updates, so a bound node
+ * re-renders via its own changed literals. Adding it would put every
+ * number-bound node into the THEME_SENTINEL recolor pass and make
+ * `incrementalThemeUpdate` scale with number bindings instead of color ones.
  */
 export function isVariableDependent(node: FlatSceneNode): boolean {
   return (

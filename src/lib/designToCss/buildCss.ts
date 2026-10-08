@@ -58,9 +58,17 @@ function uniqueClassName(className: string, used: Set<string>): string {
  * bindings exist on `ShadowEffect.colorBinding` but `generateShadowCss`
  * doesn't resolve them yet), so collecting anything else here would emit a
  * `:root` token that never appears in the CSS body.
+ *
+ * Number bindings (`node.numberBindings`) ARE included on purpose: the tokens
+ * block should list the radius/spacing tokens a design uses even though the
+ * emitted declarations are still the materialized literals (emitting
+ * `var(--x, 8px)` for numbers is a follow-up).
  */
 export function collectBoundVariableIds(node: FlatSceneNode): Set<string> {
   const ids = new Set<string>();
+  for (const binding of Object.values(node.numberBindings ?? {})) {
+    if (binding) ids.add(binding.variableId);
+  }
   for (const paint of getRenderableFills(node)) {
     if (paint.type === "solid" && paint.colorBinding) {
       ids.add(paint.colorBinding.variableId);

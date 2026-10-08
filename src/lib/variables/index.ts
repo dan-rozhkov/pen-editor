@@ -5,3 +5,5 @@ export * from "./aliasGraph";
 export * from "./migrate";
 export * from "./patch";
 export * from "./shared";
+export * from "./rewriteCssVarRefs";
+export * from "./numberBindings";

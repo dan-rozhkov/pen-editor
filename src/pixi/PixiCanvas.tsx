@@ -59,6 +59,7 @@ import {
 } from "@/utils/nodeUtils";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
 import { saveShareCredentials } from "@/lib/shareCanvas";
+import { startNumberBindingSync } from "@/store/numberBindingSync";
 import { createPixiSync } from "./pixiSync";
 import { setupPixiViewport } from "./pixiViewport";
 import { setupPixiInteraction } from "./interaction";
@@ -396,6 +397,10 @@ export function PixiCanvas() {
         // Set up store -> PixiJS sync
         const syncCleanup = createPixiSync(sceneRoot);
 
+        // Number-variable bindings -> literal node fields, through the normal
+        // store flush (no direct Pixi mutation).
+        const numberBindingCleanup = startNumberBindingSync();
+
         // Set up selection overlay
         const selectionCleanup = createSelectionOverlay(
           selectionContainer,
@@ -441,6 +446,7 @@ export function PixiCanvas() {
           // Scheduler cleanup must run while the app/ticker still exist.
           renderSchedulerCleanup();
           viewportCleanup();
+          numberBindingCleanup();
           syncCleanup();
           selectionCleanup();
           overlayCleanup();

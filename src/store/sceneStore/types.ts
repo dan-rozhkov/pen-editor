@@ -55,6 +55,12 @@ export interface SceneState {
   updateNodesWithoutHistory: (
     updatesById: Record<string, Partial<SceneNode>>,
   ) => void;
+  /**
+   * Materialize number-variable bindings into the literal fields (T1.5). Derived
+   * write: no history entry, and unlike every other update path it does NOT drop
+   * the bindings it is realizing. Only `numberBindingSync` should call this.
+   */
+  applyBoundNumberPatches: (patches: Record<string, Partial<SceneNode>>) => void;
   /** Batched per-id update (each id gets its own partial updates), recorded as a single history entry. */
   updateNodesById: (updatesById: Record<string, Partial<SceneNode>>) => void;
   deleteNode: (id: string) => void;

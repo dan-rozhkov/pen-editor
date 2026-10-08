@@ -23,6 +23,7 @@ import {
 import { buildLayoutMap, getEffectiveBounds, type Bounds } from "./helpers/effectiveBounds";
 import { computeBooleanOp, BOOLEAN_SUPPORTED_TYPES, type BooleanOpKind } from "../../lib/booleanOps";
 import { computeScaleUpdates } from "./scaleOperations";
+import { guardNumberBindings } from "../../lib/variables/numberBindings";
 import type { SceneState } from "./types";
 
 /** Compute bounding box + boundsMap + insertIndex for a set of nodes being wrapped. */
@@ -820,7 +821,13 @@ export function createComplexOperations(
       const updates = computeScaleUpdates(validIds, factor, state.nodesById, state.childrenById, anchors, baseSizes);
       const newNodesById = { ...state.nodesById };
       for (const id in updates) {
-        newNodesById[id] = { ...newNodesById[id], ...updates[id] } as FlatSceneNode;
+        // Scaling rewrites literals => bound fields drop their bindings.
+        const existing = newNodesById[id];
+        newNodesById[id] = guardNumberBindings(
+          existing,
+          { ...existing, ...updates[id] } as FlatSceneNode,
+          updates[id] as Partial<FlatSceneNode>,
+        );
       }
 
       setState({ nodesById: newNodesById, _cachedTree: null });

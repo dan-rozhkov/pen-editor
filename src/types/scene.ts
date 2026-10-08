@@ -12,6 +12,29 @@ export interface VariableBinding {
 // Color binding (alias for backward compatibility)
 export type ColorBinding = VariableBinding
 
+/**
+ * Node fields that can be bound to a number variable (`BaseNode.numberBindings`).
+ * `strokeWidth`/`opacity`/`width`/`height`/`cornerRadius`/`fontSize` live on the node;
+ * `padding*`/`gap`/`rowGap`/`columnGap` live in `node.layout`.
+ * See `src/lib/variables/numberBindings.ts`.
+ */
+export type NumberBindingKey =
+  | 'cornerRadius'
+  | 'paddingTop'
+  | 'paddingRight'
+  | 'paddingBottom'
+  | 'paddingLeft'
+  | 'gap'
+  | 'rowGap'
+  | 'columnGap'
+  | 'width'
+  | 'height'
+  | 'fontSize'
+  | 'strokeWidth'
+  | 'opacity'
+
+export type NumberBindings = Partial<Record<NumberBindingKey, VariableBinding>>
+
 // Image fill for shapes
 export type ImageFillMode = 'fill' | 'fit' | 'stretch'
 
@@ -414,6 +437,13 @@ export interface BaseNode {
   // Variable bindings for colors
   fillBinding?: ColorBinding
   strokeBinding?: ColorBinding
+  /**
+   * Number-variable bindings. The literal field (e.g. `cornerRadius`) ALWAYS holds
+   * the resolved value (materialized by `numberBindingSync`), so layout, text
+   * measurement and renderers never read this. A manual write to a bound field
+   * drops its binding (see `guardNumberBindings`).
+   */
+  numberBindings?: NumberBindings
   // Rotation in degrees (0-360)
   rotation?: number
   // Opacity (0-1, defaults to 1)

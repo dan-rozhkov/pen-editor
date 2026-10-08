@@ -16,6 +16,8 @@ import { saveHistory } from "./helpers/history";
 import { useGuidesStore } from "../guidesStore";
 import { useSelectionStore } from "../selectionStore";
 import { useVariableStore } from "../variableStore";
+import { getVariableCssName } from "../../types/variable";
+import { rewriteEmbedRefsOnInactivePages } from "../embedVarRefs";
 import { useTextStyleStore } from "../textStyleStore";
 import { useStyleStore } from "../styleStore";
 import { useMeasurementsStore } from "../measurementsStore";
@@ -32,6 +34,7 @@ import {
 } from "./helpers/flatStoreHelpers";
 import { flattenRefNodes } from "../migrations/flattenRefNodes";
 import { markNodesDirty } from "./dirtyTracking";
+import { guardNumberBindings } from "../../lib/variables/numberBindings";
 import type { SceneState } from "./types";
 import type { StoreApi } from "zustand";
 
@@ -42,6 +45,7 @@ function computeUpdatedNode(
   existing: FlatSceneNode,
   updates: Partial<SceneNode>,
   deepMergeKeys?: readonly string[],
+  keepBindings = false,
 ): FlatSceneNode {
   let updated = { ...existing, ...updates } as FlatSceneNode;
   if (deepMergeKeys) {
@@ -61,6 +65,9 @@ function computeUpdatedNode(
       }
     }
   }
+  // Unbind invariant (T1.5): a manual write to a number-bound field drops its
+  // binding. `keepBindings` is the materializer's own write path.
+  if (!keepBindings) updated = guardNumberBindings(existing, updated, updates);
   if (updated.type === "text" && hasTextMeasureProps(updates)) {
     updated = syncTextDimensions(updated);
   }
@@ -237,6 +244,19 @@ export function createBasicMutations(set: SetState, get: GetState) {
         return { nodesById: newNodesById, _cachedTree: null };
       }),
 
+    applyBoundNumberPatches: (patches: Record<string, Partial<SceneNode>>) =>
+      set((state) => {
+        const ids = Object.keys(patches).filter((id) => state.nodesById[id]);
+        if (ids.length === 0) return state;
+        // Derived write: no history, bindings kept (see numberBindingSync).
+        const newNodesById = { ...state.nodesById };
+        for (const id of ids) {
+          newNodesById[id] = computeUpdatedNode(state.nodesById[id], patches[id], undefined, true);
+        }
+        markNodesDirty(ids);
+        return { nodesById: newNodesById, _cachedTree: null };
+      }),
+
     updateNodesById: (updatesById: Record<string, Partial<SceneNode>>) =>
       set((state) => {
         const ids = Object.keys(updatesById).filter((id) => state.nodesById[id]);
@@ -370,7 +390,23 @@ export function createBasicMutations(set: SetState, get: GetState) {
       // snapshots do), so undo/redo of variable edits round-trips. Snapshots that
       // omit variables (unknown sources) leave the variable store untouched.
       if (snapshot.variables) {
+        const before = useVariableStore.getState().variables;
         useVariableStore.getState().replaceAll(snapshot.variables, snapshot.collections);
+        // A variable rename rewrites `var(--old)` in the embeds of EVERY page,
+        // but a snapshot holds the active page only. If this restore flips a
+        // variable's CSS name, carry the same rename over to the other pages
+        // so their embeds keep resolving (the active page comes from the
+        // snapshot itself).
+        const after = new Map(useVariableStore.getState().variables.map((v) => [v.id, v]));
+        const refMap: Record<string, string> = {};
+        for (const v of before) {
+          const restored = after.get(v.id);
+          if (!restored) continue;
+          const from = getVariableCssName(v);
+          const to = getVariableCssName(restored);
+          if (from !== to) refMap[from] = to;
+        }
+        rewriteEmbedRefsOnInactivePages(refMap);
       }
       // Restore persistent ruler guides when the snapshot carries them (all
       // createSnapshot-based snapshots do), mirroring the variables restore

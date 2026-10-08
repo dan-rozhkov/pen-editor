@@ -7,7 +7,7 @@ import type {
   VariableCollection,
   VariableModeValue,
 } from '../types/variable'
-import { THEME_COLLECTION_ID } from '../types/variable'
+import { THEME_COLLECTION_ID, getVariableCssName } from '../types/variable'
 import {
   buildVariableIndex,
   collectionIdOf,
@@ -24,6 +24,7 @@ import {
 } from '../lib/variables'
 import { useHistoryStore } from './historyStore'
 import { useSceneStore, createSnapshot } from './sceneStore'
+import { rewriteEmbedRefsOnActivePage, rewriteEmbedRefsOnInactivePages } from './embedVarRefs'
 
 interface VariableState {
   variables: Variable[]
@@ -35,8 +36,20 @@ interface VariableState {
    * Returns false (and changes nothing) for an unknown id, an alias cycle or
    * type mismatch, a `type` change that breaks aliases, or an unknown collection.
    * A `collectionId` change remaps modes like `moveVariableToCollection`.
+   * A `name` change that alters the CSS name rewrites `var(--old)` in every embed
+   * on every page (see `renameVariable`); a CSS-name collision with another
+   * variable is refused.
    */
   updateVariable: (id: string, updates: Partial<Variable>) => boolean
+  /**
+   * Rename a variable. When the CSS custom-property name changes, every embed
+   * `htmlContent` on every page has `var(--old)` rewritten to `var(--new)` as
+   * part of ONE undo step. Refuses (`{ error }`, nothing changed) an unknown id,
+   * or a name whose CSS name belongs to another variable.
+   * Undo caveat: the history snapshot holds the active page only; undo
+   * reconciles the other pages' embeds (see `restoreSnapshot`).
+   */
+  renameVariable: (id: string, name: string) => { ok: true } | { error: string }
   /**
    * Legacy light/dark wrapper over `setVariableModeValue`. For a variable in a
    * non-Theme collection, `light` means the collection's default mode and `dark`
@@ -108,9 +121,33 @@ export const useVariableStore = create<VariableState>((set, get) => {
       const { variables, collections } = get()
       const next = applyVariablePatch(variables, collections, id, updates)
       if (!next) return false
+      const before = variables.find((v) => v.id === id)
+      const refMap: Record<string, string> = {}
+      if (before && next.name !== before.name) {
+        const oldCss = getVariableCssName(before)
+        const newCss = getVariableCssName(next)
+        if (oldCss !== newCss) {
+          if (variables.some((v) => v.id !== id && getVariableCssName(v) === newCss)) return false
+          refMap[oldCss] = newCss
+        }
+      }
       saveVariableHistory()
       commit(variables.map((v) => (v.id === id ? next : v)))
+      rewriteEmbedRefsOnActivePage(refMap)
+      rewriteEmbedRefsOnInactivePages(refMap)
       return true
+    },
+
+    renameVariable: (id, name) => {
+      const { variables } = get()
+      const before = variables.find((v) => v.id === id)
+      if (!before) return { error: `Variable not found: ${id}` }
+      const newCss = getVariableCssName({ id, name })
+      if (variables.some((v) => v.id !== id && getVariableCssName(v) === newCss)) {
+        return { error: `Another variable already uses ${newCss}` }
+      }
+      if (name === before.name) return { ok: true }
+      return get().updateVariable(id, { name }) ? { ok: true } : { error: 'Rename refused' }
     },
 
     setVariableModeValue: (id, modeId, value) => {
