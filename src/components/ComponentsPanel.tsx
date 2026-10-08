@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useDeferredValue, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CubeIcon, MagnifyingGlassIcon, WarningIcon } from "@phosphor-icons/react";
 import type { ComponentMaster } from "@/lib/embedComponents";
@@ -30,9 +30,15 @@ function findInsertTargetId(selectedIds: readonly string[], ..._changed: unknown
 }
 
 function describeUsage(usage: ComponentUsage): string {
-  if (usage.instances === 0) return "Not used yet";
-  const uses = `${usage.instances} ${usage.instances === 1 ? "use" : "uses"}`;
-  return `${uses} in ${usage.embeds} ${usage.embeds === 1 ? "screen" : "screens"}`;
+  const parts: string[] = [];
+  if (usage.instances > 0) {
+    const uses = `${usage.instances} ${usage.instances === 1 ? "use" : "uses"}`;
+    parts.push(`${uses} in ${usage.embeds} ${usage.embeds === 1 ? "screen" : "screens"}`);
+  }
+  if (usage.components > 0) {
+    parts.push(`used in ${usage.components} ${usage.components === 1 ? "component" : "components"}`);
+  }
+  return parts.length > 0 ? parts.join("; ") : "Not used yet";
 }
 
 /**
@@ -45,15 +51,17 @@ function buildRows(..._changed: unknown[]): Row[] {
   const duplicates = selectDuplicateMasters();
   return Array.from(registry.values()).map((master) => ({
     master,
-    usage: usage.get(master.key) ?? { instances: 0, embeds: 0 },
+    usage: usage.get(master.key) ?? { instances: 0, embeds: 0, components: 0 },
     duplicates: duplicates.get(master.key)?.length ?? 0,
   }));
 }
 
 /** Registered components over every page and the live scene. */
 function useComponentRows(): Row[] {
-  const nodesById = useSceneStore((s) => s.nodesById);
-  const pages = usePageStore((s) => s.pages);
+  // Deferred: drags and other scene writes must not rescan every embed per frame.
+  // Per-embed region counts are cached by node identity (see `countUsage`).
+  const nodesById = useDeferredValue(useSceneStore((s) => s.nodesById));
+  const pages = useDeferredValue(usePageStore((s) => s.pages));
   const activePageId = usePageStore((s) => s.activePageId);
   return useMemo(() => buildRows(nodesById, pages, activePageId), [nodesById, pages, activePageId]);
 }
@@ -72,9 +80,9 @@ function ComponentRowView({ row, otherKeys, insertTarget, readOnly }: ComponentR
   const detailsId = useId();
   const isLibrary = isLibraryComponent(meta);
 
-  function handleInsert() {
+  async function handleInsert() {
     if (!insertTarget) return;
-    const result = insertInstance(meta.key, insertTarget);
+    const result = await insertInstance(meta.key, insertTarget);
     if (result.ok) toast.success(`Inserted "${meta.name}" into "${result.embedName}".`);
     else toast.error(result.error);
   }
@@ -123,7 +131,7 @@ function ComponentRowView({ row, otherKeys, insertTarget, readOnly }: ComponentR
           size="sm"
           aria-label={`Insert instance, ${meta.name}`}
           disabled={readOnly || !insertTarget}
-          onClick={handleInsert}
+          onClick={() => void handleInsert()}
         >
           Insert instance
         </Button>

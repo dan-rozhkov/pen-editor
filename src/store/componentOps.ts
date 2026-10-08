@@ -186,27 +186,47 @@ export function removeMasterNode(key: string): boolean {
 }
 
 export interface ComponentUsage {
-  /** Regions placed, counting each `data-c` element. */
+  /** Regions placed in screens, counting each `data-c` element. */
   instances: number;
-  /** Embeds (any page, masters excluded) holding at least one region. */
+  /** Screens (embeds on any page, masters excluded) holding at least one region. */
   embeds: number;
+  /** Other component masters that contain this component (nested use). */
+  components: number;
 }
 
-/** Usage per registered component key. Keys that no embed uses count zero. */
+// Region counts per embed node object: the store replaces a node when its
+// html changes, so unchanged nodes keep their cached counts.
+const regionCountCache = new WeakMap<object, Map<string, number>>();
+
+function regionCounts(embed: EmbedNode): Map<string, number> {
+  let counts = regionCountCache.get(embed);
+  if (!counts) {
+    counts = embed.htmlContent ? countRegionsByKey(embed.htmlContent) : new Map();
+    regionCountCache.set(embed, counts);
+  }
+  return counts;
+}
+
+/** Usage per registered component key. Keys that nothing uses count zero. */
 export function countUsage(registry: ComponentRegistry): Map<string, ComponentUsage> {
   const counts = new Map<string, ComponentUsage>();
-  for (const key of registry.keys()) counts.set(key, { instances: 0, embeds: 0 });
+  for (const key of registry.keys()) counts.set(key, { instances: 0, embeds: 0, components: 0 });
   for (const page of allPageNodes()) {
     for (const id in page.nodesById) {
       const n = page.nodesById[id];
       if (n.type !== "embed") continue;
       const embed = n as unknown as EmbedNode;
-      if (embed.component || !embed.htmlContent) continue;
-      for (const [key, regions] of countRegionsByKey(embed.htmlContent)) {
+      if (!embed.htmlContent) continue;
+      const ownKey = embed.component?.key;
+      for (const [key, regions] of regionCounts(embed)) {
         const entry = counts.get(key);
         if (!entry) continue;
-        entry.embeds += 1;
-        entry.instances += regions;
+        if (!ownKey) {
+          entry.embeds += 1;
+          entry.instances += regions;
+        } else if (key !== ownKey) {
+          entry.components += 1;
+        }
       }
     }
   }

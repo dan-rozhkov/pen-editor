@@ -2,6 +2,8 @@ import { useId, useState, type FormEvent } from "react";
 import type { ComponentMaster } from "@/lib/embedComponents";
 import type { EmbedComponentMeta } from "@/types/scene";
 import { defineComponent } from "@/lib/tools/components";
+import { runToolCall } from "@/lib/toolCallQueue";
+import { selectComponentRegistry } from "@/store/componentRegistry";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,7 +33,8 @@ function Field({ id, label, children }: { id: string; label: string; children: R
 
 /** Edit form for a local master's meta. Saves through the `define_component` handler. */
 export function ComponentMetaForm({ master, otherKeys, onDone }: ComponentMetaFormProps) {
-  const { meta } = master;
+  // The meta this form opened with: edits are diffed against it, not against later changes.
+  const [meta] = useState(master.meta);
   const uid = useId();
   const [name, setName] = useState(meta.name);
   const [description, setDescription] = useState(meta.description ?? "");
@@ -50,21 +53,41 @@ export function ComponentMetaForm({ master, otherKeys, onDone }: ComponentMetaFo
       return;
     }
     setSaving(true);
-    const raw = await defineComponent({
-      key: meta.key,
-      name,
-      html: master.html,
-      description,
-      status: status || null,
-      deprecated: status === "deprecated" ? { replacedBy, note } : null,
-    });
-    setSaving(false);
-    const result = JSON.parse(raw) as { error?: string };
-    if (result.error) {
-      setError(result.error);
-      return;
+    setError(null);
+    try {
+      // Send only what this form changed, on top of the CURRENT master: a
+      // field somebody else (the agent, undo) changed meanwhile is never overwritten.
+      const latest = selectComponentRegistry().get(meta.key);
+      if (!latest) {
+        setError("This component no longer exists.");
+        return;
+      }
+      const nextStatus = status || null;
+      const statusChanged = (meta.status ?? null) !== nextStatus;
+      const depChanged =
+        (meta.deprecated?.replacedBy ?? "") !== replacedBy.trim() || (meta.deprecated?.note ?? "") !== note.trim();
+      const args: Record<string, unknown> = {
+        key: meta.key,
+        name: name.trim() !== meta.name ? name : latest.meta.name,
+        html: latest.html,
+      };
+      if (description.trim() !== (meta.description ?? "").trim()) args.description = description;
+      if (statusChanged) args.status = nextStatus;
+      if (status === "deprecated" ? statusChanged || depChanged : statusChanged) {
+        args.deprecated = status === "deprecated" ? { replacedBy, note } : null;
+      }
+      const raw = await runToolCall("define_component", () => defineComponent(args));
+      const result = JSON.parse(raw) as { error?: string };
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save the component.");
+    } finally {
+      setSaving(false);
     }
-    onDone();
   }
 
   return (

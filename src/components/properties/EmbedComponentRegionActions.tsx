@@ -1,8 +1,8 @@
-import { useMemo } from "react";
 import { toast } from "sonner";
-import { findPickedComponentRegion } from "@/lib/embedComponents";
+import { useManagedRegion } from "./useManagedRegion";
 import { goToMaster } from "@/lib/componentPanelActions";
 import { detachInstance } from "@/lib/tools/components";
+import { runToolCall } from "@/lib/toolCallQueue";
 import { selectComponentRegistry } from "@/store/componentRegistry";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useReadOnly } from "@/hooks/useReadOnly";
@@ -24,20 +24,26 @@ interface EmbedComponentRegionActionsProps {
  */
 export function EmbedComponentRegionActions({ embedId, path, htmlContent }: EmbedComponentRegionActionsProps) {
   const readOnly = useReadOnly();
-  const region = useMemo(() => findPickedComponentRegion(htmlContent, path), [htmlContent, path]);
-  if (!region || region.zone !== "managed") return null;
+  const region = useManagedRegion(embedId, path, htmlContent);
+  if (!region) return null;
   const master = selectComponentRegistry().get(region.key);
   if (!master) return null;
 
   async function handleDetach() {
     if (!region) return;
-    const result = JSON.parse(await detachInstance({ nodeId: embedId, selector: region.regionSelector })) as {
-      error?: string;
-    };
-    if (result.error) toast.error(result.error);
-    else {
+    try {
+      const raw = await runToolCall("detach_instance", () =>
+        detachInstance({ nodeId: embedId, selector: region.regionSelector }),
+      );
+      const result = JSON.parse(raw) as { error?: string };
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
       useEmbedPickerStore.getState().clearSelection();
       toast.success("Detached instance. It is now plain HTML.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not detach the instance.");
     }
   }
 
@@ -45,7 +51,8 @@ export function EmbedComponentRegionActions({ embedId, path, htmlContent }: Embe
     <div data-testid="embed-component-region-actions">
       <PropertySection title="Component">
         <p className="text-[11px] text-text-muted">
-          Part of the main component {master.meta.name}. Edit the main component to change it everywhere.
+          Part of the main component {master.meta.name}. Its look is locked here. Edit the main component to change
+          it everywhere, or detach this instance to edit it freely.
         </p>
         <div className="flex flex-wrap gap-1">
           <Button variant="outline" size="sm" onClick={() => goToMaster(region.key)}>

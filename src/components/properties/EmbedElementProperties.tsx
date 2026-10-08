@@ -14,7 +14,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useEffectiveModeContext } from "@/hooks/useEffectiveModeContext";
 import type { FlatParentContext } from "@/utils/nodeUtils";
-import { useReadOnly } from "@/hooks/useReadOnly";
+import { ReadOnlyContext, useReadOnly } from "@/hooks/useReadOnly";
 import { PropertySection, TextInput } from "@/components/ui/PropertyInputs";
 import { SizeSection } from "@/components/properties/SizeSection";
 import { AutoLayoutSection } from "@/components/properties/AutoLayoutSection";
@@ -23,6 +23,7 @@ import { FillSection } from "@/components/properties/FillSection";
 import { StrokeSection } from "@/components/properties/StrokeSection";
 import { EffectsSection } from "@/components/properties/EffectsSection";
 import { EmbedComponentRegionActions } from "@/components/properties/EmbedComponentRegionActions";
+import { useManagedRegion } from "@/components/properties/useManagedRegion";
 import { TypographySection } from "@/components/properties/TypographySection";
 import type { Effect, SceneNode, TextNode } from "@/types/scene";
 import type { FillKind } from "@/components/properties/fillSectionUtils";
@@ -104,7 +105,7 @@ function findEmbedLayerName(
  *   keyed by `node.id`.
  */
 export function EmbedElementProperties() {
-  const readOnly = useReadOnly();
+  const panelReadOnly = useReadOnly();
   const selection = useEmbedPickerStore((s) => s.selection);
   // Selection is guaranteed non-null by the PropertiesPanel gate that
   // renders this component, but keep the hooks unconditional below by
@@ -115,6 +116,11 @@ export function EmbedElementProperties() {
   const htmlContent = useSceneStore((s) =>
     embedId ? ((s.nodesById[embedId] as { htmlContent?: string } | undefined)?.htmlContent ?? null) : null,
   );
+
+  // Elements in the managed zone of a component instance are locked: the master
+  // owns their look (the write guard would refuse the edit anyway).
+  const managedRegion = useManagedRegion(embedId ?? "", path ?? "", htmlContent ?? "");
+  const readOnly = panelReadOnly || managedRegion !== null;
 
   const variables = useVariableStore((s) => s.variables);
   const colorVariables = useMemo(() => variables.filter((v) => v.type === "color"), [variables]);
@@ -357,7 +363,8 @@ export function EmbedElementProperties() {
           Element unavailable — it may no longer exist in this embed.
         </div>
       ) : (
-        <>
+        <ReadOnlyContext.Provider value={readOnly}>
+          <div inert={managedRegion !== null} className={managedRegion ? "opacity-50" : undefined}>
           <SizeSection
             node={node}
             onUpdate={onUpdate}
@@ -409,7 +416,8 @@ export function EmbedElementProperties() {
               <TextInput value={node.text ?? ""} onChange={onTextChange} />
             </PropertySection>
           )}
-        </>
+          </div>
+        </ReadOnlyContext.Provider>
       )}
     </>
   );

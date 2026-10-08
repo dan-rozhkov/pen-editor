@@ -13,6 +13,11 @@ import { readEmbedElementSnapshot } from "@/lib/embedElementStyle";
 import * as embedElementStyle from "@/lib/embedElementStyle";
 import { mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
 import type { EmbedNode } from "@/types/scene";
+import { resetWorld } from "@/test/componentFixtures";
+import { defineComponent } from "@/lib/tools/components";
+import { finalizeEmbedHtml } from "@/lib/embedComponents";
+import { selectComponentRegistry } from "@/store/componentRegistry";
+import { BTN_HTML } from "@/lib/embedComponents/__tests__/fixtures";
 import type { Variable } from "@/types/variable";
 
 // Same rationale as embedElementStyle.test.ts: DOMPurify's tag walk is a
@@ -760,6 +765,29 @@ describe("<EmbedElementProperties />", () => {
 
       expect(currentHtml().toLowerCase()).not.toContain("var(--brand-500");
       expect(currentHtml().toLowerCase()).toContain(variable.value.toLowerCase());
+    });
+  });
+
+  describe("component instances", () => {
+    let instanceHtml = "";
+    beforeEach(async () => {
+      resetWorld();
+      await defineComponent({ key: "btn", name: "Button", html: BTN_HTML });
+      const out = finalizeEmbedHtml(`<main><c-btn>Go</c-btn></main>`, { registry: selectComponentRegistry() });
+      instanceHtml = out.ok ? out.html : "";
+    });
+
+    it("locks style controls and offers the component actions for a managed element", async () => {
+      await setupEmbedElement(instanceHtml, "button");
+      expect(screen.getByRole("button", { name: "Edit main component" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Detach" })).toBeTruthy();
+      expect(getSection("Fill").closest("[inert]")).not.toBeNull();
+    });
+
+    it("keeps slot content editable and shows no component actions", async () => {
+      await setupEmbedElement(instanceHtml, "span");
+      expect(screen.queryByRole("button", { name: "Edit main component" })).toBeNull();
+      expect(getSection("Fill").closest("[inert]")).toBeNull();
     });
   });
 });

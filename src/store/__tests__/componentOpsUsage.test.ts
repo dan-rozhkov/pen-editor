@@ -11,8 +11,18 @@ describe("countUsage", () => {
     seedEmbed("s1", `<b data-c="btn"></b><b data-c="btn"></b><i data-c="other"></i>`);
     seedEmbed("s2", `<b data-c="btn"></b>`);
     const usage = countUsage(registry);
-    expect(usage.get("btn")).toEqual({ instances: 3, embeds: 2 });
-    expect(usage.get("card")).toEqual({ instances: 0, embeds: 0 });
+    expect(usage.get("btn")).toEqual({ instances: 3, embeds: 2, components: 0 });
+    expect(usage.get("card")).toEqual({ instances: 0, embeds: 0, components: 0 });
     expect(usage.has("other")).toBe(false);
+  });
+
+  it("counts masters that contain a component separately, not their own root", () => {
+    const registry = new Map([["btn", {}], ["card", {}]]) as unknown as ComponentRegistry;
+    seedEmbed("m", `<section data-c="card"><b data-c="btn"></b></section>`, {
+      component: { key: "card", name: "Card" },
+    });
+    const usage = countUsage(registry);
+    expect(usage.get("btn")).toEqual({ instances: 0, embeds: 0, components: 1 });
+    expect(usage.get("card")).toEqual({ instances: 0, embeds: 0, components: 0 });
   });
 });

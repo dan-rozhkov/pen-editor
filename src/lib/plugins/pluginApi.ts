@@ -4,11 +4,9 @@ import { runToolCall } from "@/lib/toolCallQueue";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
-import { useLayoutStore } from "@/store/layoutStore";
 import { usePluginPanelStore } from "@/store/pluginPanelStore";
 import { useDevModeStore } from "@/store/devModeStore";
-import { getNodeAbsolutePositionWithLayout } from "@/utils/nodeUtils";
-import type { SceneNode } from "@/types/scene";
+import { resolveAbsoluteNodes } from "@/utils/absoluteNodes";
 import { PLUGIN_ALLOWED_TOOLS, READ_ONLY_PLUGIN_TOOLS } from "./toolAllowlist";
 
 /** encodeURIComponent leaves '.' unescaped; also escape it so pluginId/key
@@ -46,26 +44,6 @@ async function runTool(name: unknown, args: unknown): Promise<string> {
   // alongside one from chat or the WebMCP surface would interleave, and the
   // later commit would discard the earlier one's nodes.
   return runToolCall(name, () => handler((args ?? {}) as Record<string, unknown>));
-}
-
-/**
- * Resolve ids to synthetic root-level nodes carrying ABSOLUTE x/y, suitable
- * for `fitToContent`/`calculateNodesBounds`, which treat top-level array
- * entries as canvas-absolute. `nodesById` entries are parent-relative.
- */
-function resolveAbsoluteNodes(ids: ReadonlySet<string>): SceneNode[] {
-  const { nodesById, getNodes } = useSceneStore.getState();
-  const tree = getNodes();
-  const calc = useLayoutStore.getState().calculateLayoutForFrame;
-  const resolved: SceneNode[] = [];
-  for (const id of ids) {
-    const node = nodesById[id];
-    if (!node) continue;
-    const abs = getNodeAbsolutePositionWithLayout(tree, id, calc);
-    if (!abs) continue;
-    resolved.push({ ...node, x: abs.x, y: abs.y, children: [] } as SceneNode);
-  }
-  return resolved;
 }
 
 /**

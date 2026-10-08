@@ -63,7 +63,7 @@ export const getDesignSystem: ToolHandler = async (args) => {
   const usage = countUsage(registry);
   const components: ComponentInput[] = [...registry.values()].map((master) => ({
     master,
-    usage: usage.get(master.key) ?? { instances: 0, embeds: 0 },
+    usage: { instances: usage.get(master.key)?.instances ?? 0, embeds: usage.get(master.key)?.embeds ?? 0 },
     warnings: duplicateKeyWarnings(master.key),
   }));
 

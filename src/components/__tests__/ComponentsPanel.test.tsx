@@ -122,9 +122,9 @@ describe("<ComponentsPanel />", () => {
       useSelectionStore.getState().setSelectedIds(["s1"]);
       render(<ComponentsPanel />);
       fireEvent.click(within(row("btn")).getByRole("button", { name: "Insert instance, Button" }));
+      await waitFor(() => expect(toast.success).toHaveBeenCalled());
       expect(activeHtml("s1")).toMatch(/<main><h1>Home<\/h1><\/main><button data-c="btn"/);
       expect(activeHtml("s1")).toContain('<style data-c-style="btn">');
-      expect(toast.success).toHaveBeenCalled();
       await waitFor(() => expect(within(row("btn")).getByText("1 use in 1 screen")).toBeTruthy());
     });
 
@@ -140,7 +140,33 @@ describe("<ComponentsPanel />", () => {
     });
   });
 
+  it("shows nested use in other components separately from screen uses", async () => {
+    await defineBtn();
+    await defineComponent({
+      key: "bar",
+      name: "Bar",
+      html: `<style>.x{gap:4px}</style><div data-c="bar"><c-btn>Ok</c-btn></div>`,
+    });
+    seedEmbed("s1", expand("<main><c-btn>A</c-btn></main>"));
+    render(<ComponentsPanel />);
+    expect(within(row("btn")).getByText("1 use in 1 screen; used in 1 component")).toBeTruthy();
+    expect(within(row("bar")).getByText("Not used yet")).toBeTruthy();
+  });
+
   describe("edit details", () => {
+    it("does not overwrite a field changed elsewhere while the form is open", async () => {
+      await defineBtn({ description: "Old" });
+      render(<ComponentsPanel />);
+      const r = within(row("btn"));
+      fireEvent.click(r.getByRole("button", { name: "Edit details, Button" }));
+      await defineBtn({ description: "Changed by the agent" });
+      expect(selectComponentRegistry().get("btn")?.meta.description).toBe("Changed by the agent");
+      fireEvent.change(r.getByLabelText("Name"), { target: { value: "Renamed" } });
+      fireEvent.click(r.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(selectComponentRegistry().get("btn")?.meta.name).toBe("Renamed"));
+      expect(selectComponentRegistry().get("btn")?.meta.description).toBe("Changed by the agent");
+    });
+
     it("saves name, description, status and deprecation through define_component", async () => {
       await defineBtn();
       await defineComponent({ key: "btn2", name: "Button 2", html: BTN_HTML.replaceAll('"btn"', '"btn2"') });

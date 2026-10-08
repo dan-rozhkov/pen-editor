@@ -59,6 +59,15 @@ describe("<EmbedComponentRegionActions />", () => {
     expect(plain.container.textContent).toBe("");
   });
 
+  it("renders nothing when the picked embed is itself a master", () => {
+    const master = selectComponentRegistry().get("card")!;
+    usePageStore.getState().switchToPage(master.pageId!);
+    const { container } = render(
+      <EmbedComponentRegionActions embedId={master.nodeId!} path={sourcePathToShadowPath("section:nth-of-type(1)", master.html)} htmlContent={master.html} />,
+    );
+    expect(container.textContent).toBe("");
+  });
+
   it("navigates to the master", () => {
     renderActions(SECTION);
     fireEvent.click(screen.getByRole("button", { name: "Edit main component" }));

@@ -16,15 +16,61 @@ export interface PickedRegion {
   regionPath: string;
 }
 
+/**
+ * Classify `el` against its enclosing regions. Returns the OUTERMOST region
+ * whose managed zone holds `el` (a slot of an outer region frees `el` from
+ * that region, so a nested instance inside a slot is judged on its own). When
+ * every enclosing region only holds `el` in a slot, returns the innermost
+ * region with zone `slot`; null when `el` is in no region.
+ */
 function regionOf(el: Element): { region: Element; zone: "managed" | "slot" } | null {
-  let slot = false;
-  let cur: Element | null = el;
-  while (cur && cur.tagName !== "BODY") {
-    if (cur.hasAttribute("data-c")) return { region: cur, zone: slot ? "slot" : "managed" };
-    if (cur.hasAttribute("data-c-slot")) slot = true;
-    cur = cur.parentElement;
+  const chain: Element[] = [];
+  for (let cur: Element | null = el; cur && cur.tagName !== "BODY"; cur = cur.parentElement) chain.push(cur);
+  let outermostManaged: Element | null = null;
+  let innermost: Element | null = null;
+  chain.forEach((candidate, i) => {
+    if (!candidate.hasAttribute("data-c")) return;
+    innermost ??= candidate;
+    // Is `el` in a slot that belongs to `candidate`? (slot elements between el and candidate)
+    const inOwnSlot = chain
+      .slice(0, i)
+      .some((n) => n.hasAttribute("data-c-slot") && n.parentElement?.closest("[data-c]") === candidate);
+    if (!inOwnSlot) outermostManaged = candidate;
+  });
+  if (outermostManaged) return { region: outermostManaged, zone: "managed" };
+  return innermost ? { region: innermost, zone: "slot" } : null;
+}
+
+/** Parents that take block-level flow content. */
+const FLOW_PARENTS = new Set([
+  "DIV", "SECTION", "MAIN", "ARTICLE", "ASIDE", "HEADER", "FOOTER", "NAV", "FORM", "LI", "BLOCKQUOTE",
+  "FIGURE", "DETAILS", "DIALOG", "FIELDSET", "TD", "TH", "BODY",
+]);
+/** A flow parent inside one of these cannot take a block-level instance. */
+const INLINE_CONTEXT = "p,span,a,button,svg,select,label,h1,h2,h3,h4,h5,h6,ul,ol,table";
+
+function acceptsFlow(parent: Element): boolean {
+  if (parent.tagName === "BODY") return true;
+  if (!FLOW_PARENTS.has(parent.tagName)) return false;
+  // `li` and table cells are the content slots of ul/ol and table.
+  const outer = parent.parentElement?.closest(INLINE_CONTEXT);
+  if (!outer) return true;
+  return (outer.tagName === "UL" || outer.tagName === "OL" || outer.tagName === "TABLE") &&
+    !outer.parentElement?.closest("p,span,a,button,svg,select,label,h1,h2,h3,h4,h5,h6");
+}
+
+/** Climb from `start` to the nearest element after which a block-level instance may go. */
+function flowAnchor(start: Element): Element {
+  let anchor = start;
+  for (let guard = 0; guard < 1000; guard++) {
+    const found = regionOf(anchor);
+    if (found?.zone === "managed") anchor = found.region;
+    const parent = anchor.parentElement;
+    if (!parent || parent.tagName === "BODY") return anchor;
+    if (acceptsFlow(parent) && regionOf(parent)?.zone !== "managed") return anchor;
+    anchor = parent;
   }
-  return null;
+  return anchor;
 }
 
 function resolvePicked(html: string, shadowPath: string): { doc: Document; el: Element } | null {
@@ -54,10 +100,11 @@ export function findPickedComponentRegion(html: string, shadowPath: string): Pic
 }
 
 /**
- * Add `<c-KEY></c-KEY>` to an embed's HTML: right after the picked element
- * (after its whole region when the pick is inside a managed zone, so the
- * write guard never sees a change inside a managed zone), else at the end
- * of `<body>`. The caller runs the result through `finalizeEmbedHtml`, which
+ * Add `<c-KEY></c-KEY>` to an embed's HTML at a block-level flow position:
+ * after the picked element, climbing to the nearest ancestor whose parent
+ * takes flow content (never inside inline text, svg, a list or table except
+ * as `li`/cell content, a select, a button or a link, and never inside a
+ * managed zone), else at the end of `<body>`. The caller runs the result through `finalizeEmbedHtml`, which
  * expands the tag.
  */
 export function insertInstanceTag(html: string, key: string, anchorShadowPath?: string | null): string | null {
@@ -67,10 +114,7 @@ export function insertInstanceTag(html: string, key: string, anchorShadowPath?: 
   let anchor: Element | null = null;
   const sourcePath = anchorShadowPath ? normalizeShadowPathToSourcePath(anchorShadowPath, html) : null;
   const picked = sourcePath ? resolveElementPath(doc.body, sourcePath) : null;
-  if (picked) {
-    const found = regionOf(picked);
-    anchor = found?.zone === "managed" ? found.region : picked;
-  }
+  if (picked) anchor = flowAnchor(picked);
   if (anchor && anchor !== doc.body) anchor.after(tag);
   else doc.body.append(tag);
   return serializeEmbedDoc(html, doc);

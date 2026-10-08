@@ -1,4 +1,4 @@
-import type { EmbedNode, SceneNode } from "@/types/scene";
+import type { EmbedNode } from "@/types/scene";
 import { finalizeEmbedHtml, insertInstanceTag } from "@/lib/embedComponents";
 import { findWinningMaster, selectComponentRegistry } from "@/store/componentRegistry";
 import { applyEmbedHtmlUpdates } from "@/store/componentOps";
@@ -8,6 +8,8 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { getCanvasViewportMetrics } from "@/utils/canvasViewport";
+import { resolveAbsoluteNodes } from "@/utils/absoluteNodes";
+import { runToolCall } from "@/lib/toolCallQueue";
 
 /**
  * Switch to the page that holds the master of `key`, select it and fit the
@@ -18,11 +20,11 @@ export function goToMaster(key: string): boolean {
   if (!found) return false;
   const pages = usePageStore.getState();
   if (found.page.pageId !== pages.activePageId) pages.switchToPage(found.page.pageId);
-  const node = useSceneStore.getState().nodesById[found.node.id];
-  if (!node) return false;
-  useSelectionStore.getState().setSelectedIds([node.id]);
+  const id = found.node.id;
+  if (!useSceneStore.getState().nodesById[id]) return false;
+  useSelectionStore.getState().setSelectedIds([id]);
   const { width, height } = getCanvasViewportMetrics();
-  useViewportStore.getState().fitToContent([node as unknown as SceneNode], width, height);
+  useViewportStore.getState().fitToContent(resolveAbsoluteNodes([id]), width, height);
   return true;
 }
 
@@ -38,10 +40,15 @@ export type InsertResult = { ok: true; embedName: string } | { ok: false; error:
 /**
  * Write `<c-KEY>` into an embed through the same path the agent's edits take
  * (`finalizeEmbedHtml`: tag expansion, write guard, reconcile), as one undo
- * step. The tag lands after the element picked in that embed, else at the end
+ * step, queued with other scene writes. The tag lands after the element picked in that embed, else at the end
  * of `<body>`.
  */
-export function insertInstance(key: string, embedId: string): InsertResult {
+export function insertInstance(key: string, embedId: string): Promise<InsertResult> {
+  // Same serialization point as every other scene-mutating call (chat, bridges, plugins).
+  return runToolCall("edit_embed_html", async () => insertInstanceNow(key, embedId));
+}
+
+function insertInstanceNow(key: string, embedId: string): InsertResult {
   const node = useSceneStore.getState().nodesById[embedId] as unknown as EmbedNode | undefined;
   if (node?.type !== "embed" || node.component) {
     return { ok: false, error: "Select a screen to insert into." };
