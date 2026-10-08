@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetStores, seedScene } from "@/test/fixtures";
 import { useSceneStore } from "@/store/sceneStore";
+import { useDesignSystemScopeStore } from "@/store/designSystemScopeStore";
 import { embedDocKey, restoreEmbedDocument, saveEmbedDocument, startEmbedAutosave } from "../persistence";
 
 beforeEach(() => {
@@ -22,6 +23,16 @@ describe("embed persistence", () => {
     resetStores();
     expect(restoreEmbedDocument("a", { width: 800, height: 600 })).toBe(true);
     expect(Object.values(useSceneStore.getState().nodesById).map((n) => n.name)).toContain("Screen");
+  });
+
+  it("restores saved design-system scopes", () => {
+    seedScene();
+    useDesignSystemScopeStore.getState().setScopes([{ id: "s1", name: "Brand", collections: ["brand"] }]);
+    saveEmbedDocument("a");
+
+    resetStores();
+    restoreEmbedDocument("a", { width: 800, height: 600 });
+    expect(useDesignSystemScopeStore.getState().scopes).toEqual([{ id: "s1", name: "Brand", collections: ["brand"] }]);
   });
 
   it("keeps two widgets' documents apart", () => {

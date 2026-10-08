@@ -3,6 +3,8 @@ import type { Variable, ThemeName, VariableCollection, ModeContext } from '../ty
 import { upgradeVariablesV2, withThemeOverrideMirror } from '../lib/variables'
 import type { TextStyle } from '../types/textStyle'
 import type { FillStyle, EffectStyle } from '../types/style'
+import type { DesignSystemScope } from '../types/designSystemScope'
+import { sanitizeDesignSystemScopes } from '../lib/designSystem/savedScopes'
 import { generateId } from '../types/scene'
 import { serializePublicPenDocument } from "@/utils/publicPenExport";
 import { saveBlob } from "@/lib/downloadFile";
@@ -38,6 +40,8 @@ export interface PenDocument {
   activeTheme?: ThemeName
   /** v1.2+: the mode each collection was showing. Absent = `{ theme: activeTheme }`. */
   modeContext?: ModeContext
+  /** Saved design-system scopes (`get_design_system` scope presets). Absent = none. */
+  designSystemScopes?: DesignSystemScope[]
 }
 
 export interface DocumentPageData {
@@ -61,6 +65,8 @@ export interface DocumentData {
   effectStyles: EffectStyle[]
   activeTheme: ThemeName
   modeContext?: ModeContext
+  /** Optional so hand-built `DocumentData` stays valid; absent = none. */
+  designSystemScopes?: DesignSystemScope[]
 }
 
 const CURRENT_VERSION = '1.2'
@@ -76,6 +82,7 @@ export function serializeDocument(
   effectStyles: EffectStyle[] = [],
   collections?: VariableCollection[],
   modeContext?: ModeContext,
+  designSystemScopes?: DesignSystemScope[],
 ): string {
   // Dual-write: each variable carries both the v2 fields and the legacy
   // `value`/`themeValues` mirrors, so an older build can still open the file.
@@ -100,6 +107,7 @@ export function serializeDocument(
     effectStyles,
     activeTheme,
     ...(modeContext && Object.keys(modeContext).length > 0 ? { modeContext } : {}),
+    ...(designSystemScopes && designSystemScopes.length > 0 ? { designSystemScopes } : {}),
   }
   return JSON.stringify(doc, null, 2)
 }
@@ -144,6 +152,7 @@ export function deserializeDocument(json: string): DocumentData {
     effectStyles: doc.effectStyles ?? [],
     activeTheme: doc.activeTheme ?? 'light',
     ...(doc.modeContext ? { modeContext: doc.modeContext } : {}),
+    designSystemScopes: sanitizeDesignSystemScopes(doc.designSystemScopes),
   }
 }
 
@@ -157,6 +166,7 @@ export function downloadDocument(
   effectStyles: EffectStyle[] = [],
   collections?: VariableCollection[],
   modeContext?: ModeContext,
+  designSystemScopes?: DesignSystemScope[],
 ) {
   const json = serializeDocument(
     pages,
@@ -167,6 +177,7 @@ export function downloadDocument(
     effectStyles,
     collections,
     modeContext,
+    designSystemScopes,
   )
   downloadTextFile(json, filename)
 }

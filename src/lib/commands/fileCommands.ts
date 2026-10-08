@@ -3,6 +3,7 @@ import { buildTree } from "@/types/scene";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useTextStyleStore } from "@/store/textStyleStore";
+import { useDesignSystemScopeStore } from "@/store/designSystemScopeStore";
 import { useStyleStore } from "@/store/styleStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useDocumentStore } from "@/store/documentStore";
@@ -52,11 +53,12 @@ export function collectDocumentData(): DocumentData {
     effectStyles: useStyleStore.getState().effectStyles,
     activeTheme: useThemeStore.getState().activeTheme,
     modeContext: { ...useThemeStore.getState().modeContext },
+    designSystemScopes: useDesignSystemScopeStore.getState().scopes,
   };
 }
 
 export function exportAsJson(): void {
-  const { pages, variables, variableCollections, textStyles, fillStyles, effectStyles, activeTheme, modeContext } =
+  const { pages, variables, variableCollections, textStyles, fillStyles, effectStyles, activeTheme, modeContext, designSystemScopes } =
     collectDocumentData();
   const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
   downloadDocument(
@@ -69,6 +71,7 @@ export function exportAsJson(): void {
     effectStyles,
     variableCollections,
     modeContext,
+    designSystemScopes,
   );
 }
 

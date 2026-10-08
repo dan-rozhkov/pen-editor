@@ -5,6 +5,7 @@ import { useHistoryStore } from "@/store/historyStore";
 import { useVariableStore } from "@/store/variableStore";
 import { makeThemeCollection, makeThemeVariable } from "@/lib/variables";
 import { useTextStyleStore } from "@/store/textStyleStore";
+import { useDesignSystemScopeStore } from "@/store/designSystemScopeStore";
 import { useStyleStore } from "@/store/styleStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useViewportStore } from "@/store/viewportStore";
@@ -39,6 +40,7 @@ export function resetStores(): void {
   useHistoryStore.setState({ past: [], future: [], batchMode: false, batchDepth: 0 });
   useVariableStore.setState({ variables: [], collections: [makeThemeCollection()] });
   useTextStyleStore.setState({ textStyles: [] });
+  useDesignSystemScopeStore.setState({ scopes: [] });
   useStyleStore.setState({ fillStyles: [], effectStyles: [] });
   useThemeStore.setState({ activeTheme: "light", modeContext: { theme: "light" } });
   useViewportStore.setState({ scale: 1, x: 0, y: 0 });

@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState } from "react";
 import clsx from "clsx";
 import { useVariableStore } from "../store/variableStore";
+import { useDesignSystemScopeStore } from "../store/designSystemScopeStore";
 import { generateVariableId, THEME_COLLECTION_ID } from "../types/variable";
 import type {
   Variable,
@@ -35,12 +36,14 @@ import {
   LinkBreakIcon,
   CaretRightIcon,
   DotsThreeIcon,
+  BookmarksSimpleIcon,
 } from "@phosphor-icons/react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
 } from "./ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import { Badge } from "./ui/badge";
@@ -452,6 +455,72 @@ function AddVariableDropdown({
 }
 
 /**
+ * Saved design-system scopes (presets the agent can request by name). They are
+ * created here only — the agent reads them but never writes them.
+ */
+function ScopesMenu({
+  activeCollection,
+  searchQuery,
+}: {
+  activeCollection: VariableCollection | undefined;
+  searchQuery: string;
+}) {
+  const scopes = useDesignSystemScopeStore((s) => s.scopes);
+  const addScope = useDesignSystemScopeStore((s) => s.addScope);
+  const deleteScope = useDesignSystemScopeStore((s) => s.deleteScope);
+  const query = searchQuery.trim();
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Scopes"
+        title="Saved design-system scopes"
+        className="p-1 rounded hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
+      >
+        <BookmarksSimpleIcon className="size-4" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="min-w-[180px] bg-popover text-popover-foreground ring-foreground/10 rounded-lg shadow-md ring-1"
+      >
+        <DropdownMenuItem
+          className="text-xs cursor-pointer"
+          disabled={!activeCollection}
+          onClick={() => {
+            if (activeCollection) {
+              addScope({ name: activeCollection.name, collections: [activeCollection.id] });
+            }
+          }}
+        >
+          {activeCollection ? `Save "${activeCollection.name}" as scope` : "Save collection as scope"}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="text-xs cursor-pointer"
+          disabled={query === ""}
+          onClick={() => addScope({ name: `Search: ${query}`, names: [`*${query}*`] })}
+        >
+          Save search as scope
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {scopes.length === 0 ? (
+          <div className="px-2 py-1.5 text-xs text-text-muted">No saved scopes</div>
+        ) : (
+          scopes.map((scope) => (
+            <DropdownMenuItem
+              key={scope.id}
+              className="text-xs cursor-pointer"
+              onClick={() => deleteScope(scope.id)}
+            >
+              {`Delete scope "${scope.name}"`}
+            </DropdownMenuItem>
+          ))
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/**
  * Standalone panel body (no Dialog wrapper) rendered inside the left sidebar's
  * "Variables" section — mirrors `ChatPanelContent`'s shape (self-contained
  * header incl. expand/collapse, body below).
@@ -538,6 +607,7 @@ export function VariablesPanelContent() {
         <span className="text-sm font-medium text-text-primary flex-1">
           Variables
         </span>
+        <ScopesMenu activeCollection={active} searchQuery={searchQuery} />
         <AddVariableDropdown onAdd={handleAddVariable}>
           <Tooltip>
             <TooltipTrigger

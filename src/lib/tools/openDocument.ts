@@ -1,6 +1,7 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useTextStyleStore } from "@/store/textStyleStore";
+import { useDesignSystemScopeStore } from "@/store/designSystemScopeStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
@@ -21,6 +22,7 @@ export const openDocument: ToolHandler = async (args) => {
     // Collections too, or the previous document's leak into the new one.
     useVariableStore.getState().replaceAll([], [makeThemeCollection()]);
     useTextStyleStore.getState().setTextStyles([]);
+    useDesignSystemScopeStore.getState().setScopes([]);
     useUIThemeStore.getState().setUITheme("light");
     useHistoryStore.getState().clear();
     useSelectionStore.getState().clearSelection();

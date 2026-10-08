@@ -28,7 +28,7 @@ export function saveEmbedDocument(widgetKey: string): boolean {
     const doc = collectDocumentData();
     localStorage.setItem(
       embedDocKey(widgetKey),
-      serializeDocument(doc.pages, doc.variables, doc.activeTheme, doc.textStyles, doc.fillStyles, doc.effectStyles, doc.variableCollections, doc.modeContext),
+      serializeDocument(doc.pages, doc.variables, doc.activeTheme, doc.textStyles, doc.fillStyles, doc.effectStyles, doc.variableCollections, doc.modeContext, doc.designSystemScopes),
     );
     return true;
   } catch {
