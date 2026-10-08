@@ -32,6 +32,8 @@ import {
   getFills,
 } from "@/utils/fillUtils";
 import { inspectEmbedHtml } from "@/lib/embedHtmlLint/inspectEmbedHtml";
+import { describeUnknownTags, finalizeEmbedHtml } from "@/lib/embedComponents/pipeline";
+import { selectComponentRegistry } from "@/store/componentRegistry";
 import { repairGeneratedImageUrls } from "../generateImage/repairImageUrls";
 import { getIssuedImageUrls } from "../generateImage/registry";
 import type { ParsedArg, ParsedOperation, ExecutionContext } from "./types";
@@ -93,12 +95,39 @@ function normalizeEmbedNode(
   ctx: ExecutionContext,
   htmlTouched: boolean,
   created = false,
+  /** The embed's HTML before this operation (U() only): enables the component write guard. */
+  previousHtml?: string,
+  line?: number,
 ): void {
   if (node.type !== "embed") return;
   const embed = node as EmbedNode;
 
   if (created) {
     ctx.createdEmbedIds.add(embed.id);
+  }
+
+  // Component pipeline (see lib/embedComponents/pipeline.ts): expand
+  // `<c-key>` tags of registered components, refuse edits to a component
+  // region's managed zone, validate/normalize a master. Runs on stored text
+  // before the image repair below, so repairs never see unexpanded tags.
+  if (htmlTouched && embed.htmlContent) {
+    const text = embed.htmlContent;
+    const maybeComponent =
+      embed.component !== undefined || text.includes("<c-") || text.includes("data-c");
+    if (maybeComponent) {
+      const finalized = finalizeEmbedHtml(text, {
+        registry: selectComponentRegistry(),
+        previousHtml: created ? null : previousHtml,
+        masterMeta: embed.component,
+      });
+      if (!finalized.ok) {
+        throw new Error(`${line !== undefined ? `Line ${line}: ` : ""}${finalized.error}`);
+      }
+      embed.htmlContent = finalized.html;
+      const unknown = describeUnknownTags(finalized.unknownTags);
+      if (unknown) ctx.issues.push(unknown);
+      ctx.issues.push(...finalized.warnings);
+    }
   }
 
   if (htmlTouched && embed.htmlContent) {
@@ -605,7 +634,14 @@ function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
   // is only present when the update script set it). Otherwise an unrelated
   // update (e.g. `{x: 10}`) would silently rewrite persisted HTML the model
   // never submitted this turn.
-  normalizeEmbedNode(updated, ctx, mappedRecord.htmlContent !== undefined);
+  normalizeEmbedNode(
+    updated,
+    ctx,
+    mappedRecord.htmlContent !== undefined,
+    false,
+    node.type === "embed" ? (node as EmbedNode).htmlContent : undefined,
+    op.line,
+  );
 
   // Sync text dimensions if text node
   if (updated.type === "text") {

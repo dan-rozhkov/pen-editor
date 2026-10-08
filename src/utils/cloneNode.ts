@@ -54,5 +54,9 @@ export function cloneNodeWithNewId(
     x: node.x + offset,
     y: node.y + offset,
   } as SceneNode;
+  // A duplicate of a component master is NOT a second master (that would
+  // fight over the key): it keeps the master's HTML and so becomes an
+  // ordinary instance-bearing embed.
+  if (cloned.type === "embed" && "component" in cloned) delete cloned.component;
   return withClonedParagraphs(cloned);
 }

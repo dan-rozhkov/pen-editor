@@ -924,9 +924,30 @@ export interface PolygonNode extends BaseNode {
   innerRadiusRatio?: number
 }
 
+/**
+ * Marks an embed as a component MASTER (see
+ * docs/superpowers/specs/2026-10-08-embed-html-components-design.md). The
+ * embed's `htmlContent` is the master HTML (one `<style>` block + one root
+ * element carrying `data-c="<key>"`); every other embed that contains a
+ * `data-c="<key>"` region is an instance consumer and is re-rendered from it.
+ */
+export interface EmbedComponentMeta {
+  /** Stable slug (/^[a-z][a-z0-9-]{0,39}$/). Never renamed. */
+  key: string
+  /** Display name; may change. */
+  name: string
+  description?: string
+  /** axis -> allowed values. */
+  variants?: Record<string, string[]>
+  status?: 'draft' | 'stable' | 'deprecated'
+  deprecated?: { replacedBy?: string; note?: string }
+}
+
 export interface EmbedNode extends BaseNode {
   type: 'embed'
   htmlContent: string
+  /** Present only on component masters. */
+  component?: EmbedComponentMeta
 }
 
 export type SceneNode = FrameNode | GroupNode | RectNode | EllipseNode | TextNode | PathNode | LineNode | PolygonNode | EmbedNode | ConnectorNode

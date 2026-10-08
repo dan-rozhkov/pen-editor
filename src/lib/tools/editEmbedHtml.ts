@@ -3,6 +3,8 @@ import { saveHistory } from "@/store/sceneStore/helpers/history";
 import { applyAnchorEdits } from "@/lib/embedHtmlEdit/applyAnchorEdits";
 import { parseAnchorEditsInput } from "@/lib/embedHtmlEdit/parseEdits";
 import { inspectEmbedHtml } from "@/lib/embedHtmlLint/inspectEmbedHtml";
+import { describeUnknownTags, finalizeEmbedHtml } from "@/lib/embedComponents/pipeline";
+import { selectComponentRegistry } from "@/store/componentRegistry";
 import {
   takeProgressiveEmbedHtmlSession,
   restoreProgressiveSessionHtml,
@@ -63,7 +65,18 @@ export const editEmbedHtml: ToolHandler = async (args, context) => {
     return JSON.stringify({ error: err instanceof Error ? err.message : String(err) });
   }
 
-  const updated = { ...embed, htmlContent: edited.html } as EmbedNode;
+  // Components: expand registered `<c-key>` tags the edit introduced, refuse
+  // an edit that changes a region's managed zone (the master owns it), or
+  // validate/normalize the HTML when the node IS a master. Nothing is
+  // written on a refusal, same as a failed anchor match.
+  const finalized = finalizeEmbedHtml(edited.html, {
+    registry: selectComponentRegistry(),
+    previousHtml: source,
+    masterMeta: embed.component,
+  });
+  if (!finalized.ok) return JSON.stringify({ error: finalized.error });
+
+  const updated = { ...embed, htmlContent: finalized.html } as EmbedNode;
 
   // Static HTML warnings (unknown Phosphor icon classes render as blank space
   // with no error anywhere else). Only the ones this edit INTRODUCED: linting
@@ -72,6 +85,9 @@ export const editEmbedHtml: ToolHandler = async (args, context) => {
   // markup nobody asked about.
   const preexisting = new Set(inspectEmbedHtml(embed.htmlContent));
   const issues = inspectEmbedHtml(updated.htmlContent).filter((w) => !preexisting.has(w));
+  const unknownNote = describeUnknownTags(finalized.unknownTags);
+  if (unknownNote) issues.push(unknownNote);
+  issues.push(...finalized.warnings);
 
   const newNodesById: Record<string, FlatSceneNode> = {
     ...state.nodesById,

@@ -6,6 +6,7 @@ import { reconcileModels } from "./store/chatStore";
 import { useCustomFontStore } from "./store/customFontStore";
 import { usePluginStore } from "./store/pluginStore";
 import { useSceneStore } from "./store/sceneStore";
+import { installComponentSync } from "./store/componentSync";
 import { LeftRail } from "./components/LeftRail";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { RightPanel } from "./components/RightPanel";
@@ -149,6 +150,11 @@ function App() {
     void startWebMcp();
     return () => stopWebMcp();
   }, []);
+
+  // Embed HTML components: re-render consumers when a master changes (edit,
+  // undo, redo) and catch stale regions up on page activation. See
+  // store/componentSync.ts.
+  useEffect(() => installComponentSync(), []);
 
   // Dev-only synthetic document seeding for perf work, via `?perf=N` (approx
   // total node count). Dynamically imported so the generator is tree-shaken

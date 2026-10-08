@@ -140,6 +140,30 @@ describe("publish_to_showcase", () => {
     expect(result.theme).toBe("My App");
   });
 
+  it("refuses a component master: it is a library entry, not a screen", async () => {
+    const component = { key: "btn", name: "Button" };
+    const state = useSceneStore.getState();
+    useSceneStore.setState({
+      nodesById: {
+        ...state.nodesById,
+        master1: {
+          id: "master1", type: "embed", name: "Button", x: 0, y: 0, width: 100, height: 40,
+          htmlContent: "<button data-c=\"btn\"></button>", component,
+        } as unknown as FlatSceneNode,
+      },
+      parentById: { ...state.parentById, master1: null },
+      rootIds: [...state.rootIds, "master1"],
+      _cachedTree: null,
+    });
+
+    const result = JSON.parse(
+      await publishToShowcase({ theme: "App", screens: [{ nodeId: "master1", title: "Button" }] }),
+    );
+
+    expect(result.error).toMatch(/component master/);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it("always posts a userId matching the shape the backend accepts (dashed UUID or 32-hex)", async () => {
     // Not stubbing getUserId here deliberately: the backend's isPlausibleUserId
     // regex is the actual contract (POST /api/showcase/publish 400s on a

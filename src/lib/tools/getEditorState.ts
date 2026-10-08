@@ -3,7 +3,30 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { usePageStore } from "@/store/pageStore";
 import { useDocumentStore } from "@/store/documentStore";
+import { effectiveVariants, parseMaster } from "@/lib/embedComponents";
+import { duplicateKeyWarnings, selectComponentRegistry } from "@/store/componentRegistry";
+import { countUsage } from "@/store/componentOps";
 import type { ToolHandler } from "../toolRegistry";
+
+/** `components` entries for every registered master, or [] when there are none. */
+function describeComponents() {
+  const registry = selectComponentRegistry();
+  if (registry.size === 0) return [];
+  const usage = countUsage(registry);
+  return [...registry.values()].map((master) => {
+    const parsed = parseMaster(master);
+    const warnings = duplicateKeyWarnings(master.key);
+    return {
+      key: master.key,
+      name: master.meta.name,
+      status: master.meta.status ?? "stable",
+      variants: parsed ? effectiveVariants(master, parsed) : (master.meta.variants ?? {}),
+      slots: parsed?.slots ?? [],
+      usedBy: usage.get(master.key) ?? 0,
+      ...(warnings.length > 0 ? { warnings } : {}),
+    };
+  });
+}
 
 export const getEditorState: ToolHandler = async () => {
   const { rootIds, nodesById } = useSceneStore.getState();
@@ -41,6 +64,10 @@ export const getEditorState: ToolHandler = async () => {
   // omitted/undefined) so JSON.stringify always emits the key.
   const { fileName } = useDocumentStore.getState();
 
+  // Omitted entirely when no components are defined, so the output of a
+  // document without them is byte-identical to what it was before.
+  const components = describeComponents();
+
   return JSON.stringify({
     fileName,
     pages: pagesInfo,
@@ -49,5 +76,6 @@ export const getEditorState: ToolHandler = async () => {
     selectedIds,
     selectedNodes,
     viewport: { scale, x, y },
+    ...(components.length > 0 ? { components } : {}),
   });
 };

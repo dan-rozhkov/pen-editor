@@ -48,6 +48,7 @@ import { browseSnapshot } from "./tools/browser/browseSnapshot";
 import { browseScreenshot } from "./tools/browser/browseScreenshot";
 import { browseTabs } from "./tools/browser/browseTabs";
 import { browseTask } from "./tools/browser/browseTask";
+import { defineComponent, extractComponent, detachInstance, deleteComponent } from "./tools/components";
 import { applyLoopGuard } from "./tools/browser/loopGuard";
 
 /**
@@ -93,6 +94,14 @@ export const toolHandlers: Record<string, ToolHandler> = {
   batch_design: batchDesign,
   read_embed_html: readEmbedHtml,
   edit_embed_html: editEmbedHtml,
+  // Embed HTML components (docs/superpowers/specs/
+  // 2026-10-08-embed-html-components-design.md). Deliberately NOT in
+  // mcpToolNames.ts: chat-path tools, not part of the MCP/WebMCP surfaces.
+  // All four mutate, so they stay serialized (not in UNSERIALIZED_TOOL_NAMES).
+  define_component: defineComponent,
+  extract_component: extractComponent,
+  detach_instance: detachInstance,
+  delete_component: deleteComponent,
   set_variables: setVariables,
   get_text_styles: getTextStyles,
   set_text_styles: setTextStyles,

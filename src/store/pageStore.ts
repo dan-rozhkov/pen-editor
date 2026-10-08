@@ -43,6 +43,11 @@ interface PageStoreState {
   activePageId: string;
 
   addPage: (name?: string) => string;
+  /**
+   * Append an empty page WITHOUT switching to it (the active page, selection
+   * and viewport stay put). Used for tool-created pages such as "Components".
+   */
+  addBackgroundPage: (name: string) => string;
   deletePage: (pageId: string) => void;
   renamePage: (pageId: string, name: string) => void;
   duplicatePage: (pageId: string) => string;
@@ -71,6 +76,23 @@ function createEmptyPage(name: string): PageData {
   };
 }
 
+/**
+ * Copy of a node map with `component` stripped from every embed. A duplicated
+ * page keeps its node ids' content but must not keep component masters:
+ * the copies would shadow the real masters (same key, second registry hit).
+ */
+function withoutComponentMasters(nodesById: PageData["nodesById"]): PageData["nodesById"] {
+  const out = { ...nodesById };
+  for (const id in out) {
+    const node = out[id] as unknown as { type: string; component?: unknown };
+    if (node.type === "embed" && node.component) {
+      const { component: _component, ...rest } = node;
+      out[id] = rest as unknown as PageData["nodesById"][string];
+    }
+  }
+  return out;
+}
+
 const defaultPage = createEmptyPage("Page 1");
 
 export const usePageStore = create<PageStoreState>((set, get) => ({
@@ -89,6 +111,15 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
 
     // Switch to the new page
     get().switchToPage(newPage.id);
+    return newPage.id;
+  },
+
+  addBackgroundPage: (name: string) => {
+    // The active page's live state is held in sceneStore, not in `pages`;
+    // persist it first so a later reader of `pages` sees current data.
+    get().saveCurrentPageState();
+    const newPage = createEmptyPage(name);
+    set({ pages: [...get().pages, newPage] });
     return newPage.id;
   },
 
@@ -136,7 +167,7 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
       ...sourceAfterSave,
       id: newId,
       name: `${sourceAfterSave.name} copy`,
-      nodesById: { ...sourceAfterSave.nodesById },
+      nodesById: withoutComponentMasters(sourceAfterSave.nodesById),
       parentById: { ...sourceAfterSave.parentById },
       childrenById: { ...sourceAfterSave.childrenById },
       rootIds: [...sourceAfterSave.rootIds],
