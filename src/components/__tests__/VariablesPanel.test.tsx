@@ -74,6 +74,27 @@ describe("<VariablesPanelContent />", () => {
     expect(findVariable("var-primary")?.name).toBe("--accent");
   });
 
+  it("renaming rewrites var(--old) in embed HTML (renameVariable, not a bare name write)", async () => {
+    const { useSceneStore } = await import("@/store/sceneStore");
+    useSceneStore.setState({
+      nodesById: {
+        e1: { id: "e1", type: "embed", x: 0, y: 0, width: 10, height: 10, htmlContent: "<i style='color:var(--primary)'></i>" } as never,
+      },
+      parentById: { e1: null },
+      childrenById: {},
+      rootIds: ["e1"],
+    });
+    render(<VariablesPanelContent />);
+    fireEvent.click(screen.getByText("--primary"));
+    const input = screen.getByDisplayValue("--primary") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "--accent" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect((useSceneStore.getState().nodesById.e1 as unknown as { htmlContent: string }).htmlContent).toBe(
+      "<i style='color:var(--accent)'></i>",
+    );
+  });
+
   it("edits a number variable's theme value via the editable cell", () => {
     render(<VariablesPanelContent />);
 

@@ -6,6 +6,7 @@ import { useClipboardStore } from "@/store/clipboardStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useVariableStore } from "@/store/variableStore";
+import { dropDanglingNumberBindingsInTree } from "@/lib/variables/numberBindings";
 import { cloneNodeWithNewId } from "@/utils/cloneNode";
 import { parseSvgToNodes } from "@/utils/svgUtils";
 import { convertFigmaClipboardHtml, isFigmaClipboardHtml } from "@/lib/figmaPaste";
@@ -65,7 +66,12 @@ export function createClipboardActions(deps: ClipboardActionDeps) {
   const pasteInternalNodes = (sourceNodes: SceneNode[]): void => {
     const selectionState = useSelectionStore.getState();
 
-    const clonedNodes = sourceNodes.map((node) => cloneNodeWithNewId(node));
+    // Cloned nodes keep their number bindings (same variable ids); drop the ones
+    // whose variable does not exist in THIS document (copied from another one).
+    const knownVariableIds = new Set(useVariableStore.getState().variables.map((v) => v.id));
+    const clonedNodes = sourceNodes.map((node) =>
+      dropDanglingNumberBindingsInTree(cloneNodeWithNewId(node), (id) => knownVariableIds.has(id)),
+    );
     const nodes = useSceneStore.getState().getNodes();
     const targetContainerId = resolvePasteTargetContainerId(nodes, selectionState);
 

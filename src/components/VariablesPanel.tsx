@@ -202,7 +202,7 @@ function VariableRow({
   variable: Variable;
   collection: VariableCollection;
 }) {
-  const updateVariable = useVariableStore((s) => s.updateVariable);
+  const renameVariable = useVariableStore((s) => s.renameVariable);
   const deleteVariable = useVariableStore((s) => s.deleteVariable);
   const [expanded, setExpanded] = useState(false);
   const badge = typeBadge[variable.type];
@@ -224,7 +224,7 @@ function VariableRow({
             <div className="min-w-0 flex-1">
               <EditableText
                 value={variable.name}
-                onCommit={(name) => updateVariable(variable.id, { name })}
+                onCommit={(name) => renameVariable(variable.id, name)}
                 allowEmpty
               />
             </div>

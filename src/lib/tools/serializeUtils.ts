@@ -1,7 +1,38 @@
 import type { FrameNode, FlatSceneNode, Paint, SceneNode } from "@/types/scene";
 import { useSceneStore } from "@/store/sceneStore";
 import { useLayoutStore } from "@/store/layoutStore";
+import { useVariableStore } from "@/store/variableStore";
+import { NUMBER_BINDING_SPECS } from "@/lib/variables/numberBindings";
+import type { NumberBindingKey } from "@/types/scene";
 import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize } from "@/utils/nodeUtils";
+
+/**
+ * Replace number-bound literals with `"$<variable name>"` (the syntax
+ * `batch_design` accepts), so a read followed by a write round-trips the
+ * binding instead of flattening it to a number. The raw `numberBindings` map is
+ * dropped from the output — the `$` strings are the single representation.
+ */
+function substituteNumberBindingRefs(result: Record<string, unknown>, node: FlatSceneNode): void {
+  const bindings = node.numberBindings;
+  if (!bindings) return;
+  delete result.numberBindings;
+  const { variables } = useVariableStore.getState();
+  let layout: Record<string, unknown> | undefined;
+  for (const key of Object.keys(bindings) as NumberBindingKey[]) {
+    const binding = bindings[key];
+    const spec = NUMBER_BINDING_SPECS[key];
+    const variable = binding && spec ? variables.find((v) => v.id === binding.variableId) : undefined;
+    if (!variable) continue;
+    const ref = `$${variable.name}`;
+    if (spec.where === "layout") {
+      layout ??= { ...(result.layout as Record<string, unknown> | undefined) };
+      layout[key] = ref;
+    } else {
+      result[key] = ref;
+    }
+  }
+  if (layout) result.layout = layout;
+}
 
 type SerializeOptions = {
   resolveVars?: boolean;
@@ -142,6 +173,8 @@ function serializeNodeInternal(
       }
     }
   }
+
+  substituteNumberBindingRefs(result, node);
 
   // Resolve variable bindings if requested
   if (options?.resolveVars && options.variableLookup) {

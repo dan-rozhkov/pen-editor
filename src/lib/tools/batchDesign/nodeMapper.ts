@@ -14,7 +14,18 @@ import type {
   NodeConstraints,
   ParagraphAttrs,
 } from "@/types/scene";
+import type { NumberBindingKey, NumberBindings } from "@/types/scene";
 import type { ThemeName } from "@/types/variable";
+import { useVariableStore } from "@/store/variableStore";
+import {
+  NUMBER_BINDING_PADDING_KEYS,
+  NUMBER_BINDING_SPECS,
+  clampForKey,
+  isNumberBindingKey,
+  pruneNumberBindings,
+  resolveNumberBinding,
+} from "@/lib/variables/numberBindings";
+import { getVariableIndex } from "@/lib/variables";
 import { generateId } from "@/types/scene";
 import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
 import { resolveVariableReference } from "@/lib/tools/variableResolutionUtils";
@@ -69,6 +80,59 @@ function applyColorVariable(
   }
 }
 
+
+function isVariableRef(value: unknown): value is string {
+  return typeof value === "string" && value.trim().startsWith("$");
+}
+
+/**
+ * Resolve a `"$--var"` reference for a numeric property. On success records the
+ * binding in `sets` and returns the literal to materialize; otherwise pushes a
+ * warning and returns null (the property is then left alone). Warns, but still
+ * binds, when the variable's `scopes` exclude the property or it is deprecated.
+ */
+function bindNumberVariable(
+  key: NumberBindingKey,
+  value: string,
+  theme: ThemeName | undefined,
+  sets: NumberBindings,
+  warnings: string[],
+): number | null {
+  const ref = resolveVariableReference(value, theme);
+  if (!ref) {
+    warnings.push(`Variable ${value} not found — "${key}" was left unchanged.`);
+    return null;
+  }
+  const { variables, collections } = useVariableStore.getState();
+  const variable = variables.find((v) => v.id === ref.variableId);
+  if (!variable || variable.type !== "number") {
+    warnings.push(
+      `Variable ${value} is a ${variable?.type ?? "unknown"} variable, not a number — "${key}" was left unchanged.`,
+    );
+    return null;
+  }
+  const resolved = resolveNumberBinding(variable, getVariableIndex(variables, collections), theme ?? "light");
+  if (resolved === null) {
+    warnings.push(`Variable ${value} has no numeric value — "${key}" was left unchanged.`);
+    return null;
+  }
+  const scopes = NUMBER_BINDING_SPECS[key].scopes;
+  if (variable.scopes && variable.scopes.length > 0 && !variable.scopes.some((sc) => scopes.includes(sc))) {
+    warnings.push(
+      `Variable ${value} is scoped to [${variable.scopes.join(", ")}], which does not include "${key}" (expected one of: ${scopes.join(", ")}). Bound anyway.`,
+    );
+  }
+  if (variable.deprecated) {
+    const replacement = variable.deprecated.replacedBy
+      ? variables.find((v) => v.id === variable.deprecated?.replacedBy)
+      : undefined;
+    warnings.push(
+      `Variable ${value} is deprecated${replacement ? ` — use ${replacement.name} instead` : ""}.`,
+    );
+  }
+  sets[key] = { variableId: variable.id };
+  return clampForKey(key, resolved);
+}
 
 /**
  * Normalize a single AI-format paint entry into a typed Paint object.
@@ -362,6 +426,11 @@ export function mapNodeData(
   let hasSizing = false;
   let children: AiNodeData[] | undefined;
   const warnings: string[] = [];
+  // Number-variable bindings written by this data (`"$--radius-m"` on a numeric
+  // property). Reconciled with the existing node's bindings after the loop.
+  const numberSets: NumberBindings = {};
+  const bindNumber = (key: NumberBindingKey, value: string): number | null =>
+    bindNumberVariable(key, value, options?.theme, numberSets, warnings);
   // Effective node type for this data, used to gate paints that only some
   // node types can render (e.g. pattern fills — see PATTERN_SUPPORTED_NODE_TYPES).
   const nodeTypeForFills =
@@ -380,7 +449,14 @@ export function mapNodeData(
         } else if (typeof value === "object" && value !== null) {
           // Direct layout object pass-through
           hasLayout = true;
-          Object.assign(layout, value);
+          for (const [lk, lv] of Object.entries(value as Record<string, unknown>)) {
+            if (isVariableRef(lv) && isNumberBindingKey(lk) && NUMBER_BINDING_SPECS[lk].where === "layout") {
+              const lit = bindNumber(lk, lv);
+              if (lit !== null) (layout as Record<string, number>)[lk] = lit;
+            } else {
+              (layout as Record<string, unknown>)[lk] = lv;
+            }
+          }
         }
         break;
       }
@@ -471,7 +547,14 @@ export function mapNodeData(
 
       // Padding shorthand (single number → all sides)
       case "padding": {
-        if (typeof value === "number") {
+        if (isVariableRef(value)) {
+          for (const pk of NUMBER_BINDING_PADDING_KEYS) {
+            const lit = bindNumber(pk, value);
+            if (lit === null) break;
+            hasLayout = true;
+            (layout as Record<string, number>)[pk] = lit;
+          }
+        } else if (typeof value === "number") {
           hasLayout = true;
           layout.paddingTop = value;
           layout.paddingRight = value;
@@ -483,7 +566,13 @@ export function mapNodeData(
 
       // Gap shorthand
       case "gap": {
-        if (typeof value === "number") {
+        if (isVariableRef(value)) {
+          const lit = bindNumber("gap", value);
+          if (lit !== null) {
+            hasLayout = true;
+            layout.gap = lit;
+          }
+        } else if (typeof value === "number") {
           hasLayout = true;
           layout.gap = value;
         }
@@ -493,14 +582,26 @@ export function mapNodeData(
       // Per-axis gaps (CSS row-gap/column-gap semantics) — used together with
       // wrap for card grids/tag lists; each falls back to `gap` when unset.
       case "rowGap": {
-        if (typeof value === "number") {
+        if (isVariableRef(value)) {
+          const lit = bindNumber("rowGap", value);
+          if (lit !== null) {
+            hasLayout = true;
+            layout.rowGap = lit;
+          }
+        } else if (typeof value === "number") {
           hasLayout = true;
           layout.rowGap = value;
         }
         break;
       }
       case "columnGap": {
-        if (typeof value === "number") {
+        if (isVariableRef(value)) {
+          const lit = bindNumber("columnGap", value);
+          if (lit !== null) {
+            hasLayout = true;
+            layout.columnGap = lit;
+          }
+        } else if (typeof value === "number") {
           hasLayout = true;
           layout.columnGap = value;
         }
@@ -535,7 +636,13 @@ export function mapNodeData(
       // per-corner radii. Setting one representation clears the other so they
       // never diverge.
       case "cornerRadius": {
-        if (Array.isArray(value)) {
+        if (isVariableRef(value)) {
+          const lit = bindNumber("cornerRadius", value);
+          if (lit !== null) {
+            result.cornerRadius = lit;
+            result.cornerRadiusPerCorner = undefined;
+          }
+        } else if (Array.isArray(value)) {
           result.cornerRadiusPerCorner = expandCornerRadiusArray(value);
           result.cornerRadius = undefined;
         } else if (typeof value === "number") {
@@ -586,15 +693,43 @@ export function mapNodeData(
       }
 
       // Stroke thickness alias used by some generated payloads
-      case "strokeThickness": {
-        if (typeof value === "number") {
+      case "strokeThickness":
+      case "strokeWidth": {
+        if (isVariableRef(value)) {
+          const lit = bindNumber("strokeWidth", value);
+          if (lit !== null) result.strokeWidth = lit;
+        } else if (typeof value === "number") {
           result.strokeWidth = value;
+        } else if (key === "strokeWidth") {
+          result.strokeWidth = value;
+        }
+        break;
+      }
+
+      // fontSize / opacity: a `$--var` reference binds; anything else passes through.
+      case "fontSize":
+      case "opacity": {
+        if (isVariableRef(value)) {
+          const lit = bindNumber(key, value);
+          if (lit !== null) result[key] = lit;
+        } else {
+          result[key] = value;
         }
         break;
       }
 
       // Width with sizing string support
       case "width": {
+        // A `$--var` reference is checked BEFORE the sizing keywords.
+        if (isVariableRef(value)) {
+          const lit = bindNumber("width", value);
+          if (lit !== null) {
+            hasSizing = true;
+            sizing.widthMode = "fixed";
+            result.width = lit;
+          }
+          break;
+        }
         const parsed = parseSizingValue(value);
         if (parsed) {
           hasSizing = true;
@@ -610,6 +745,15 @@ export function mapNodeData(
 
       // Height with sizing string support
       case "height": {
+        if (isVariableRef(value)) {
+          const lit = bindNumber("height", value);
+          if (lit !== null) {
+            hasSizing = true;
+            sizing.heightMode = "fixed";
+            result.height = lit;
+          }
+          break;
+        }
         const parsed = parseSizingValue(value);
         if (parsed) {
           hasSizing = true;
@@ -689,6 +833,24 @@ export function mapNodeData(
     }
   } else if (mode === "insert" && existingNode?.sizing) {
     result.sizing = existingNode.sizing;
+  }
+
+  // Number bindings: merge with the node's existing ones. A plain number written
+  // over a bound field unbinds it (the same invariant the store enforces on
+  // updateNode); a `$--var` write (re)binds it. U() does not go through the
+  // store's update path, so this must happen here.
+  const baseBindings = mode === "update" ? existingNode?.numberBindings : undefined;
+  if (baseBindings || Object.keys(numberSets).length > 0) {
+    const merged = { ...existingNode, ...result } as FlatSceneNode;
+    const kept = baseBindings
+      ? pruneNumberBindings(existingNode as FlatSceneNode, merged, result as Partial<FlatSceneNode>, new Set(Object.keys(numberSets)))
+      : undefined;
+    const next: NumberBindings = { ...kept, ...numberSets };
+    if (Object.keys(next).length > 0) {
+      if (kept !== baseBindings || Object.keys(numberSets).length > 0) result.numberBindings = next;
+    } else if (baseBindings) {
+      result.numberBindings = undefined;
+    }
   }
 
   // Regular polygon / star: regenerate `points` from `sides`/`innerRadiusRatio`

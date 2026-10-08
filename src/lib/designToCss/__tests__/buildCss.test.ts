@@ -71,6 +71,21 @@ describe("buildCssForNodes", () => {
     expect(css).toContain("background-color: var(--primary, #3366ff);");
   });
 
+  it("lists number-bound tokens in the :root block (literals stay materialized)", () => {
+    seedVariables();
+    const node = {
+      ...autoLayoutFrame(),
+      cornerRadius: 8,
+      numberBindings: { cornerRadius: { variableId: "var-radius" } },
+    } as FlatSceneNode;
+
+    const { css } = buildCssForNodes(["frame1"], { frame1: node });
+
+    expect(css).toContain(":root {");
+    expect(css).toContain("--radius-m: 8;");
+    expect(css).toContain("border-radius: 8px");
+  });
+
   it("does not emit a :root block when nothing is bound to a variable", () => {
     seedVariables();
     const node = gradientRect();
