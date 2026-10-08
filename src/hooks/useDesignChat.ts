@@ -17,7 +17,7 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
-import { getVariableCssName } from "@/types/variable";
+import { THEME_COLLECTION_ID, getVariableCssName } from "@/types/variable";
 import { useRepoContextStore } from "@/store/repoContextStore";
 import { useChatStore, NO_QUEUED_MESSAGES } from "@/store/chatStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
@@ -99,7 +99,7 @@ export function buildCanvasContext(sessionId?: string): object {
   const { selectedIds } = useSelectionStore.getState();
   const { rootIds, nodesById } = useSceneStore.getState();
   const { activeTheme } = useThemeStore.getState();
-  const { variables } = useVariableStore.getState();
+  const { variables, collections } = useVariableStore.getState();
 
   const roots = rootIds.map((id) => {
     const n = nodesById[id];
@@ -210,6 +210,25 @@ export function buildCanvasContext(sessionId?: string): object {
       // prefer them. Omitted when empty so canvasContext stays byte-identical
       // (prompt-cache invariant). Appended last for the same reason.
       ...(likedReferences.length > 0 ? { likedReferences } : {}),
+      // Collections and the mode each one shows. Omitted while the document
+      // has only the built-in Theme collection, so a legacy document's
+      // payload stays byte-identical. Appended last for the same reason.
+      ...(collections.length > 1
+        ? {
+            collections: collections.map((c) => ({
+              id: c.id,
+              name: c.name,
+              modes: c.modes.map((m) => ({ id: m.id, name: m.name })),
+              defaultModeId: c.defaultModeId,
+            })),
+            modeContext: Object.fromEntries(
+              collections.map((c) => [
+                c.id,
+                c.id === THEME_COLLECTION_ID ? activeTheme : c.defaultModeId,
+              ]),
+            ),
+          }
+        : {}),
     }),
     model,
     userId: getRequestUserId(),
