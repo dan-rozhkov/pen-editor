@@ -87,6 +87,8 @@ interface VariableState {
   setCollections: (collections: VariableCollection[]) => void
   /** Replace variables and (when given) collections in one update; used by undo/redo restore. */
   replaceAll: (variables: Variable[], collections?: VariableCollection[]) => void
+  /** Like replaceAll, but records one undo step first (bulk edits from the UI). */
+  replaceAllWithHistory: (variables: Variable[], collections?: VariableCollection[]) => void
 }
 
 /**
@@ -372,6 +374,11 @@ export const useVariableStore = create<VariableState>((set, get) => {
     replaceAll: (variables, collections) => {
       const next = normalized(variables, collections ?? get().collections)
       set({ variables: next.variables, collections: next.collections })
+    },
+
+    replaceAllWithHistory: (variables, collections) => {
+      saveVariableHistory()
+      get().replaceAll(variables, collections)
     },
   }
 })
