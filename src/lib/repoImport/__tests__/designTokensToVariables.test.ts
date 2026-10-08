@@ -22,7 +22,6 @@ describe("convertDesignTokens", () => {
       colors: shadcnLight,
       dark: { colors: { background: "#0a0a0a", "primary.DEFAULT": "#fafafa", muted: "#f5f5f5", "dark.only": "#111111" } },
     });
-    expect(c.hasDark).toBe(true);
     expect(c.args.collections.Primitives.modes).toEqual(["Default"]);
     const get = (n: string) => c.args.variables.find((v) => v.name === n);
     expect(get("--color-background")).toMatchObject({ value: "#ffffff" });
@@ -53,7 +52,6 @@ describe("convertDesignTokens", () => {
       fontFamily: { sans: "Inter, sans-serif" },
       boxShadow: { sm: "0 1px 2px #0003" },
     });
-    expect(c.hasDark).toBe(false);
     expect(c.args.collections.Primitives.modes).toEqual(["Default"]);
     const get = (n: string) => c.args.variables.find((v) => v.name === n);
     expect(get("--color-brand-500")).toMatchObject({ type: "color", value: "#3366ff" });
@@ -81,5 +79,23 @@ describe("convertDesignTokens", () => {
     const c = convertDesignTokens({ spacing: { "Gap.Lg": "1rem", "gap-lg": "2rem" } });
     expect(c.counts.spacing).toBe(1);
     expect(c.notes.some((n) => n.includes("already taken"))).toBe(true);
+  });
+
+  it("never lets a generated dark primitive take a real token's name", () => {
+    const c = convertDesignTokens({
+      colors: { bg: "#ffffff", "bg.dark": "#222222", other: "#111111" },
+      dark: { colors: { bg: "#000000" } },
+    });
+    const get = (n: string) => c.args.variables.find((v) => v.name === n);
+    expect(get("--color-bg-dark")?.value).toBe("#222222");
+    expect(get("--color-bg-on-dark")?.value).toBe("#000000");
+    expect(c.notes.some((n) => n.includes("--color-bg-on-dark"))).toBe(true);
+    expect(c.counts.colors).toBe(4);
+  });
+
+  it("notes which key wins when two keys become one name", () => {
+    const c = convertDesignTokens({ colors: { "Brand.A": "#111111", "brand-a": "#222222" } });
+    expect(c.args.variables.find((v) => v.name === "--color-brand-a")?.value).toBe("#222222");
+    expect(c.notes.some((n) => n.includes("both become --color-brand-a") && n.includes("later one (brand-a) wins"))).toBe(true);
   });
 });

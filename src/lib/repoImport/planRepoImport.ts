@@ -1,6 +1,3 @@
-import { useHistoryStore } from "@/store/historyStore";
-import { createSnapshot, useSceneStore } from "@/store/sceneStore";
-import { useVariableStore } from "@/store/variableStore";
 import { THEME_COLLECTION_ID, getVariableCssName, type Variable, type VariableCollection } from "@/types/variable";
 import { collectionIdOf } from "@/lib/variables";
 import { isLibraryOwned, libraryOwnedMessage } from "@/lib/designSystem/ownership";
@@ -35,7 +32,7 @@ export interface RepoImportPreview {
 
 export type RepoImportPlan =
   | { ok: false; error: string }
-  | { ok: true; preview: RepoImportPreview; apply: () => void };
+  | { ok: true; preview: RepoImportPreview; next: { variables: Variable[]; collections: VariableCollection[] } };
 
 const cssOf = (name: string): string => getVariableCssName({ id: "", name });
 
@@ -66,21 +63,23 @@ export function planRepoImport(
     skipped.push({ name: e.name ?? "Untitled", reason });
   };
 
-  const themeId = THEME_COLLECTION_ID;
   const nameOf = (id: string): string => collections.find((c) => c.id === id)?.name ?? id;
 
   if (existingPrimitives && isLibraryOwned(existingPrimitives)) {
     collectionSpecs = undefined;
   }
+  const theme = collections.find((c) => c.id === THEME_COLLECTION_ID);
   for (const e of parsed.entries) {
     const css = cssOf(e.name ?? "");
+    // The converter says "Theme"; the user may have renamed it, so address it by id.
+    if ((e.collection ?? "").toLowerCase() === THEME_COLLECTION_NAME.toLowerCase()) e.collection = THEME_COLLECTION_ID;
     const target = findCollection(collections, e.collection ?? "");
     if (target && isLibraryOwned(target)) {
       skip(e, libraryOwnedMessage("collection", target.name, target.libraryId as string));
       continue;
     }
-    const isTheme = (e.collection ?? "").toLowerCase() === THEME_COLLECTION_NAME.toLowerCase();
-    const targetId = target?.id ?? (isTheme ? themeId : undefined);
+    const isTheme = e.collection === THEME_COLLECTION_ID || (theme !== undefined && target?.id === theme.id);
+    const targetId = target?.id;
     const same = variables.filter((v) => getVariableCssName(v) === css);
     const lib = same.find((v) => isLibraryOwned(v));
     if (lib) {
@@ -92,9 +91,20 @@ export function planRepoImport(
       skip(e, `${css} already exists in the "${nameOf(collectionIdOf(elsewhere))}" collection.`);
       continue;
     }
-    if (same.length > 0) {
-      if (isTheme) skip(e, `${css} already exists in Theme; kept as it is.`);
-      else overwrites.push(e.name ?? css);
+    const existing = same[0];
+    if (existing) {
+      if (isTheme) {
+        skip(e, `${css} already exists in Theme; kept as it is.`);
+        continue;
+      }
+      if (existing.type !== e.type) {
+        skip(e, `${css} exists as a ${existing.type} variable; the import would change it to ${e.type}.`);
+        continue;
+      }
+      // Address it exactly as the planner will, so a name like "color-x" is updated, not duplicated.
+      e.id = existing.id;
+      e.name = existing.name;
+      overwrites.push(existing.name);
     }
   }
   // An alias whose primitive was dropped has nothing to point at.
@@ -136,10 +146,6 @@ export function planRepoImport(
       updateCount: plan.updated.length,
       warnings: plan.warnings,
     },
-    // One undo step: a single history snapshot, then one replaceAll.
-    apply: () => {
-      useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()));
-      useVariableStore.getState().replaceAll(plan.variables, plan.collections);
-    },
+    next: { variables: plan.variables, collections: plan.collections },
   };
 }

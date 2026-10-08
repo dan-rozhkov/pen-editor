@@ -38,7 +38,6 @@ export interface TokenConversion {
   counts: Record<ImportCategory, number>;
   /** Tokens left out, and tokens kept with a caveat. */
   notes: string[];
-  hasDark: boolean;
 }
 
 export interface ConvertOptions {
@@ -94,13 +93,19 @@ function parseLength(raw: string): Length {
   return { kind: "string", value: v, why: "not a plain length, kept as a string" };
 }
 
+/** `-dark`, then `-on-dark`, then numbered; never a name a real token owns or one already used. */
+function freeDarkName(base: string, reserved: Set<string>, taken: Set<string>): string {
+  const free = (n: string): boolean => !reserved.has(n) && !taken.has(n);
+  for (const suffix of ["-dark", "-on-dark"]) if (free(base + suffix)) return base + suffix;
+  for (let i = 2; ; i++) if (free(`${base}-on-dark-${i}`)) return `${base}-on-dark-${i}`;
+}
+
 export function convertDesignTokens(tokens: RepoDesignTokens, options: ConvertOptions = {}): TokenConversion {
   const notes: string[] = [];
   const counts: Record<ImportCategory, number> = {
     colors: 0, spacing: 0, borderRadius: 0, fontFamily: 0, themeAliases: 0,
   };
   const darkColors = tokens.dark?.colors ?? {};
-  const hasDark = Object.keys(darkColors).length > 0;
   const existingModes = options.existingPrimitivesModes ?? [];
   const primitiveModes = existingModes.length > 0 ? existingModes : ["Default"];
   if (existingModes.length > 1) {
@@ -122,14 +127,19 @@ export function convertDesignTokens(tokens: RepoDesignTokens, options: ConvertOp
 
   // Colors: light (or only) values first, then dark-only keys.
   const colorKeys = new Map<string, { light?: string; dark?: string; label: string }>();
-  for (const [key, raw] of Object.entries(tokens.colors ?? {})) {
+  const merge = (key: string, raw: string, side: "light" | "dark"): void => {
     const norm = normalizeKey(key);
-    if (norm) colorKeys.set(norm, { ...colorKeys.get(norm), light: raw, label: key });
-  }
-  for (const [key, raw] of Object.entries(darkColors)) {
-    const norm = normalizeKey(key);
-    if (norm) colorKeys.set(norm, { ...colorKeys.get(norm), dark: raw, label: colorKeys.get(norm)?.label ?? key });
-  }
+    if (!norm) return;
+    const prev = colorKeys.get(norm);
+    if (prev && prev[side] !== undefined) {
+      notes.push(`colors.${key}${side === "dark" ? " (dark)" : ""} and colors.${prev.label} both become --color-${norm}; the later one (${key}) wins.`);
+    }
+    colorKeys.set(norm, { ...prev, [side]: raw, label: prev?.label ?? key });
+  };
+  for (const [key, raw] of Object.entries(tokens.colors ?? {})) merge(key, raw, "light");
+  for (const [key, raw] of Object.entries(darkColors)) merge(key, raw, "dark");
+  // Every real color name is reserved up front, so a generated "-dark" primitive can never take one.
+  const reserved = new Set([...colorKeys.keys()].map((n) => `--color-${n}`));
   for (const [norm, entry] of colorKeys) {
     const light = entry.light !== undefined ? colorValue(entry.light) : null;
     const dark = entry.dark !== undefined ? colorValue(entry.dark) : null;
@@ -150,7 +160,10 @@ export function convertDesignTokens(tokens: RepoDesignTokens, options: ConvertOp
     // Theme dark must work on its own: a differing dark value gets its own primitive.
     let darkName = name;
     if (light !== null && dark !== null && dark !== light) {
-      const candidate = `${name}-dark`;
+      const candidate = freeDarkName(name, reserved, taken);
+      if (candidate !== `${name}-dark`) {
+        notes.push(`colors.${entry.label}: --color-${norm}-dark is a real token, so the dark value is named ${candidate}.`);
+      }
       if (claim(candidate, `colors.${entry.label} (dark)`)) {
         variables.push({ name: candidate, type: "color", collection: PRIMITIVES_COLLECTION, value: dark });
         counts.colors++;
@@ -204,6 +217,5 @@ export function convertDesignTokens(tokens: RepoDesignTokens, options: ConvertOp
     },
     counts,
     notes,
-    hasDark,
   };
 }

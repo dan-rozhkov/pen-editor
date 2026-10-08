@@ -20,6 +20,10 @@ function mustPlan(...args: Parameters<typeof planRepoImport>) {
   return plan;
 }
 
+function applyPlan(plan: ReturnType<typeof mustPlan>): void {
+  useVariableStore.getState().replaceAllWithHistory(plan.next.variables, plan.next.collections);
+}
+
 function state() {
   const { variables, collections } = useVariableStore.getState();
   return { variables, collections };
@@ -32,7 +36,7 @@ describe("planRepoImport", () => {
     const { variables, collections } = state();
     const plan = mustPlan(tokens, variables, collections);
     expect(plan.preview.createCount).toBe(6);
-    plan.apply();
+    applyPlan(plan);
 
     const s = useVariableStore.getState();
     const prim = s.collections.find((c) => c.name === "Primitives");
@@ -50,7 +54,7 @@ describe("planRepoImport", () => {
   it("matches what set_variables does with the same arguments", async () => {
     const { variables, collections } = state();
     const plan = mustPlan(tokens, variables, collections);
-    plan.apply();
+    applyPlan(plan);
     const viaPlanner = useVariableStore.getState().variables.map((v) => v.name).sort();
 
     resetStores();
@@ -72,7 +76,7 @@ describe("planRepoImport", () => {
     const { variables, collections } = state();
     const plan = mustPlan(tokens, variables, collections);
     expect(plan.preview.skipped.map((s) => s.name)).toEqual(expect.arrayContaining(["--color-primary", "--primary"]));
-    plan.apply();
+    applyPlan(plan);
     const after = useVariableStore.getState().variables;
     expect(after.find((v) => v.id === "lib-v")?.value).toBe("#abcdef");
     expect(after.some((v) => v.name === "--color-background")).toBe(true);
@@ -92,12 +96,12 @@ describe("planRepoImport", () => {
 
   it("overwrites local Primitives on re-import but keeps existing Theme variables", () => {
     const first = mustPlan(tokens, [], useVariableStore.getState().collections);
-    first.apply();
+    applyPlan(first);
     const { variables, collections } = state();
     const second = mustPlan(tokens, variables, collections);
     expect(second.preview.overwrites).toContain("--color-background");
     expect(second.preview.skipped.some((s) => s.name === "--background" && s.reason.includes("kept"))).toBe(true);
-    second.apply();
+    applyPlan(second);
     expect(useVariableStore.getState().variables).toHaveLength(variables.length);
   });
 
@@ -110,5 +114,47 @@ describe("planRepoImport", () => {
     expect(plan.preview.skipped.some((s) => s.name === "--color-background" && s.reason.includes("Theme"))).toBe(true);
     // its Theme alias has nothing to point at
     expect(plan.preview.skipped.some((s) => s.name === "--background")).toBe(true);
+  });
+
+  it("addresses a renamed Theme collection by id", () => {
+    useVariableStore.setState({
+      collections: useVariableStore.getState().collections.map((c) => (c.id === THEME_COLLECTION_ID ? { ...c, name: "Semantic" } : c)),
+    });
+    const { variables, collections } = state();
+    const plan = mustPlan(tokens, variables, collections);
+    applyPlan(plan);
+    const s = useVariableStore.getState();
+    expect(s.variables.find((v) => v.name === "--background")?.collectionId).toBe(THEME_COLLECTION_ID);
+    expect(s.collections.filter((c) => c.name === "Theme")).toHaveLength(0);
+  });
+
+  it("updates an existing variable with the same CSS name instead of duplicating it", () => {
+    const first = mustPlan(tokens, [], useVariableStore.getState().collections);
+    applyPlan(first);
+    // The user's copy is named without the leading dashes.
+    useVariableStore.setState({
+      variables: useVariableStore.getState().variables.map((v) => (v.name === "--color-background" ? { ...v, name: "color-background" } : v)),
+    });
+    const { variables, collections } = state();
+    const plan = mustPlan(tokens, variables, collections);
+    expect(plan.preview.overwrites).toContain("color-background");
+    applyPlan(plan);
+    const css = useVariableStore.getState().variables.filter((v) => v.name.replace(/^--/, "") === "color-background");
+    expect(css).toHaveLength(1);
+  });
+
+  it("skips an overwrite that would change a variable's type", () => {
+    useVariableStore.setState({
+      collections: [
+        ...useVariableStore.getState().collections,
+        { id: "prim", name: "Primitives", modes: [{ id: "default", name: "Default" }], defaultModeId: "default" },
+      ],
+      variables: [{ id: "n", name: "--color-primary", type: "number", collectionId: "prim", valuesByMode: { default: "4" }, value: "4" }],
+    });
+    const { variables, collections } = state();
+    const plan = mustPlan(tokens, variables, collections);
+    expect(plan.preview.skipped.find((s) => s.name === "--color-primary")?.reason).toContain("change it to color");
+    applyPlan(plan);
+    expect(useVariableStore.getState().variables.find((v) => v.id === "n")?.type).toBe("number");
   });
 });

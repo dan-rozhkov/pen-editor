@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useVariableStore } from "@/store/variableStore";
 import { planRepoImport, type RepoImportPlan } from "@/lib/repoImport/planRepoImport";
 import { fetchRepoTokens } from "@/lib/repoImport/fetchRepoTokens";
@@ -24,21 +24,40 @@ const CATEGORY_LABELS = [
 type Step =
   | { kind: "input"; error?: string }
   | { kind: "loading" }
-  | { kind: "preview"; repo: string; plan: Extract<RepoImportPlan, { ok: true }>; briefNotes: string[] };
+  | {
+      kind: "preview";
+      repo: string;
+      plan: Extract<RepoImportPlan, { ok: true }>;
+      briefNotes: string[];
+      /** Set when the variables changed after the preview was shown. */
+      changed?: boolean;
+    };
+
+/** What the user saw: apply is only silent when a re-plan gives the same picture. */
+function previewSignature(plan: Extract<RepoImportPlan, { ok: true }>): string {
+  const p = plan.preview;
+  return JSON.stringify([p.conversion.counts, p.createCount, p.updateCount, p.overwrites, p.skipped, p.warnings]);
+}
 
 /** Variables panel: read a GitHub repo's design tokens, preview, then apply in one undo step. */
 export function ImportFromRepoDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [repo, setRepo] = useState("");
   const [step, setStep] = useState<Step>({ kind: "input" });
 
+  // Bumped on close, Back and every new read: a late response from an older read is ignored.
+  const requestRef = useRef(0);
+
   const close = (next: boolean): void => {
+    requestRef.current++;
     onOpenChange(next);
     if (!next) setStep({ kind: "input" });
   };
 
   const load = async (): Promise<void> => {
+    const request = ++requestRef.current;
     setStep({ kind: "loading" });
     const result = await fetchRepoTokens(repo);
+    if (request !== requestRef.current) return;
     if (!result.ok) {
       setStep({ kind: "input", error: result.error });
       return;
@@ -61,7 +80,11 @@ export function ImportFromRepoDialog({ open, onOpenChange }: { open: boolean; on
       setStep({ kind: "input", error: fresh.error });
       return;
     }
-    fresh.apply();
+    if (previewSignature(fresh) !== previewSignature(step.plan)) {
+      setStep({ ...step, plan: fresh, changed: true });
+      return;
+    }
+    useVariableStore.getState().replaceAllWithHistory(fresh.next.variables, fresh.next.collections);
     close(false);
   };
 
@@ -94,6 +117,9 @@ export function ImportFromRepoDialog({ open, onOpenChange }: { open: boolean; on
               <p role="alert" className="text-xs text-destructive">{step.error}</p>
             )}
             <DialogFooter>
+              {step.kind === "input" && step.error && (
+                <Button type="button" variant="outline" onClick={() => void load()}>Retry</Button>
+              )}
               <Button type="submit" disabled={step.kind === "loading" || repo.trim() === ""}>
                 {step.kind === "loading" ? "Reading…" : "Read tokens"}
               </Button>
@@ -104,6 +130,11 @@ export function ImportFromRepoDialog({ open, onOpenChange }: { open: boolean; on
         {step.kind === "preview" && (
           <div className="flex flex-col gap-3 text-xs">
             <p className="text-text-muted">{step.repo}</p>
+            {step.changed && (
+              <p role="alert" className="text-destructive">
+                The variables changed since this preview. Check the new numbers and confirm again.
+              </p>
+            )}
             <ul aria-label="Tokens to import" className="flex flex-col gap-0.5">
               {CATEGORY_LABELS.map(([key, label]) => (
                 <li key={key} className="flex justify-between">
@@ -131,6 +162,13 @@ export function ImportFromRepoDialog({ open, onOpenChange }: { open: boolean; on
                 </ul>
               </div>
             )}
+            {step.plan.preview.warnings.length > 0 && (
+              <ul aria-label="Warnings" className="list-disc pl-4">
+                {step.plan.preview.warnings.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
+            )}
             {[...step.plan.preview.conversion.notes, ...step.briefNotes].length > 0 && (
               <ul aria-label="Notes" className="list-disc pl-4 text-text-muted">
                 {[...step.plan.preview.conversion.notes, ...step.briefNotes].slice(0, 8).map((n) => (
@@ -139,7 +177,10 @@ export function ImportFromRepoDialog({ open, onOpenChange }: { open: boolean; on
               </ul>
             )}
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setStep({ kind: "input" })}>Back</Button>
+              <Button variant="ghost" onClick={() => {
+                requestRef.current++;
+                setStep({ kind: "input" });
+              }}>Back</Button>
               <Button onClick={apply}>Import</Button>
             </DialogFooter>
           </div>
