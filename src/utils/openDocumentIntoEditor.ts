@@ -1,4 +1,4 @@
-import type { ThemeName } from "@/types/variable";
+import { THEME_COLLECTION_ID, type ThemeName } from "@/types/variable";
 import type { DocumentData } from "@/utils/fileUtils";
 import { flattenTree } from "@/types/scene";
 import { useHistoryStore } from "@/store/historyStore";
@@ -13,6 +13,7 @@ import { useViewportStore } from "@/store/viewportStore";
 import { usePageStore } from "@/store/pageStore";
 import type { PageData } from "@/store/pageStore";
 import { flattenRefNodesAcrossPages } from "@/store/migrations/flattenRefNodes";
+import { migrateFrameModeOverrides, sanitizeModeContext } from "@/lib/variables";
 
 interface ApplyOpenedDocumentOptions {
   viewportWidth: number;
@@ -30,6 +31,15 @@ export function applyOpenedDocument(
   // Show loading overlay immediately
   useLoadingStore.getState().setCanvasLoading(true);
 
+  // Variables first: the mode migration below prunes picks against the
+  // document's (normalized) collections. One update for both: variables are
+  // normalized against the NEW collections (never the previous document's) and
+  // subscribers fire once. `replaceAll` upgrades legacy shapes, so a
+  // `DocumentData` built without going through `deserializeDocument` (tools,
+  // tests) is migrated here too — idempotent.
+  useVariableStore.getState().replaceAll(data.variables, data.variableCollections ?? []);
+  const collections = useVariableStore.getState().collections;
+
   // Convert document pages into PageData format (flat storage). Documents
   // written before components/instances were removed may still carry `ref`
   // nodes and `reusable`/`isSlot`/`properties` frames; migrate the WHOLE
@@ -41,10 +51,12 @@ export function applyOpenedDocument(
   );
   const pageDataList: PageData[] = data.pages.map((page, index) => {
     const flat = migrated[index];
+    // `themeOverride` -> `modeOverrides: { theme }`, stale picks pruned.
+    const nodesById = migrateFrameModeOverrides(flat.nodesById, collections);
     return {
       id: page.id,
       name: page.name,
-      nodesById: flat.nodesById,
+      nodesById,
       parentById: flat.parentById,
       childrenById: flat.childrenById,
       rootIds: flat.rootIds,
@@ -60,18 +72,17 @@ export function applyOpenedDocument(
   });
 
   // Set up shared state
-  // One update for both: variables are normalized against the NEW collections
-  // (never the previous document's) and subscribers fire once. `replaceAll`
-  // upgrades legacy shapes, so a `DocumentData` built without going through
-  // `deserializeDocument` (tools, tests) is migrated here too — idempotent.
-  useVariableStore.getState().replaceAll(data.variables, data.variableCollections ?? []);
   useTextStyleStore.getState().setTextStyles(data.textStyles ?? []);
   useStyleStore.getState().setFillStyles(data.fillStyles ?? []);
   useStyleStore.getState().setEffectStyles(data.effectStyles ?? []);
   // Apply the saved theme to BOTH the design-theme store (drives variable
   // resolution) and the editor-chrome theme store, so the document reopens in
   // the theme it was saved with instead of always falling back to light.
-  useThemeStore.getState().setActiveTheme(themeToApply);
+  // A file without `modeContext` (v1.1 and older) shows `{ theme: activeTheme }`.
+  useThemeStore.getState().setModeContext({
+    [THEME_COLLECTION_ID]: themeToApply,
+    ...sanitizeModeContext(data.modeContext, collections),
+  });
   useUIThemeStore.getState().setUITheme(themeToApply);
 
   // Clear selection and history before page init

@@ -328,6 +328,7 @@ export function createComplexOperations(
         delete (group as unknown as Partial<FlatFrameNode>).layout;
         delete (group as unknown as Partial<FlatFrameNode>).layoutGrids;
         delete (group as unknown as Partial<FlatFrameNode>).themeOverride;
+        delete (group as unknown as Partial<FlatFrameNode>).modeOverrides;
         delete (group as unknown as Partial<FlatFrameNode>).clip;
         setState({
           nodesById: { ...state.nodesById, [id]: group as FlatSceneNode },

@@ -3,12 +3,12 @@ import { useThemeStore } from "@/store/themeStore";
 import {
   THEME_COLLECTION_ID,
   getVariableCssName,
-  type ModeContext,
   type Variable,
   type VariableCollection,
 } from "@/types/variable";
 import {
   buildVariableIndex,
+  completeModeContext,
   collectionIdOf,
   modeValuesOf,
   resolveVariable,
@@ -37,10 +37,8 @@ export const getVariables: ToolHandler = async (args) => {
   const index = buildVariableIndex(variables, collections);
   const allCollections: VariableCollection[] = [...index.collections.values()];
 
-  // The mode each collection shows right now. Only Theme can be switched today.
-  const modeContext: ModeContext = {};
-  for (const c of allCollections) modeContext[c.id] = c.defaultModeId;
-  modeContext[THEME_COLLECTION_ID] = useThemeStore.getState().activeTheme;
+  // The mode each collection shows right now (document level).
+  const modeContext = completeModeContext(allCollections, useThemeStore.getState().modeContext);
 
   const hints: string[] = [];
   let selected: Variable[] = variables;

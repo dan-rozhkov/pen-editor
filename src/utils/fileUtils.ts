@@ -1,6 +1,6 @@
 import type { SceneNode } from '../types/scene'
 import type { Variable, ThemeName, VariableCollection, ModeContext } from '../types/variable'
-import { upgradeVariablesV2 } from '../lib/variables'
+import { upgradeVariablesV2, withThemeOverrideMirror } from '../lib/variables'
 import type { TextStyle } from '../types/textStyle'
 import type { FillStyle, EffectStyle } from '../types/style'
 import { generateId } from '../types/scene'
@@ -36,7 +36,7 @@ export interface PenDocument {
   fillStyles?: FillStyle[]
   effectStyles?: EffectStyle[]
   activeTheme?: ThemeName
-  /** v1.2+: the mode each collection was showing. Not applied to the canvas yet. */
+  /** v1.2+: the mode each collection was showing. Absent = `{ theme: activeTheme }`. */
   modeContext?: ModeContext
 }
 
@@ -85,7 +85,8 @@ export function serializeDocument(
     pages: pages.map((p) => ({
       id: p.id,
       name: p.name,
-      nodes: p.nodes,
+      // Dual-write frame mode picks: `modeOverrides` plus the `themeOverride` mirror.
+      nodes: withThemeOverrideMirror(p.nodes),
       ...(p.pageBackground !== '#f5f5f5' ? { pageBackground: p.pageBackground } : {}),
       ...(p.guides && p.guides.length > 0 ? { guides: p.guides } : {}),
       ...(p.slideOrder && p.slideOrder.length > 0 ? { slideOrder: p.slideOrder } : {}),
