@@ -142,6 +142,13 @@ export interface LintOptions {
   now?: () => number;
   /** Also check strokes of shapes against 3:1 (WCAG non-text contrast). Off by default. */
   uiContrast?: boolean;
+  /**
+   * Counts fast path: skip fix retention and sorting, and return `findings: []`
+   * with only the summary filled in.
+   */
+  countsOnly?: boolean;
+  /** With `countsOnly`: only findings this accepts reach the summary. */
+  countFilter?: (finding: Finding) => boolean;
 }
 
 export interface LintSummary {

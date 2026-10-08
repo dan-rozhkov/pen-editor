@@ -34,20 +34,25 @@ export function runDesignLint(input: LintInput, opts: LintOptions = {}): LintRes
   runRules(lc, enabled);
 
   const minRank = opts.severity ? SEVERITY_ORDER.indexOf(opts.severity) : SEVERITY_ORDER.length - 1;
-  const sceneOrder = new Map(lc.scopeIds.map((id, i) => [id, i]));
-  const embedOrder = new Map(input.embeds.map((e, i) => [e.nodeId, i]));
-  const position = (f: Finding) => sceneOrder.get(f.nodeId) ?? 1e9 + (embedOrder.get(f.nodeId) ?? 0);
-  const kept = lc.findings
-    .filter((f) => SEVERITY_ORDER.indexOf(f.severity) <= minRank)
-    .map((f, i) => ({ f, i }))
-    .sort(
-      (a, b) =>
-        SEVERITY_ORDER.indexOf(a.f.severity) - SEVERITY_ORDER.indexOf(b.f.severity) ||
-        ruleRank(a.f.rule) - ruleRank(b.f.rule) ||
-        position(a.f) - position(b.f) ||
-        a.i - b.i,
-    )
-    .map((x) => x.f);
+  const visible = lc.findings.filter(
+    (f) => SEVERITY_ORDER.indexOf(f.severity) <= minRank && (!opts.countsOnly || !opts.countFilter || opts.countFilter(f)),
+  );
+  let kept = visible;
+  if (!opts.countsOnly) {
+    const sceneOrder = new Map(lc.scopeIds.map((id, i) => [id, i]));
+    const embedOrder = new Map(input.embeds.map((e, i) => [e.nodeId, i]));
+    const position = (f: Finding) => sceneOrder.get(f.nodeId) ?? 1e9 + (embedOrder.get(f.nodeId) ?? 0);
+    kept = visible
+      .map((f, i) => ({ f, i }))
+      .sort(
+        (a, b) =>
+          SEVERITY_ORDER.indexOf(a.f.severity) - SEVERITY_ORDER.indexOf(b.f.severity) ||
+          ruleRank(a.f.rule) - ruleRank(b.f.rule) ||
+          position(a.f) - position(b.f) ||
+          a.i - b.i,
+      )
+      .map((x) => x.f);
+  }
 
   const summary: LintSummary = {
     errors: 0,
@@ -63,6 +68,7 @@ export function runDesignLint(input: LintInput, opts: LintOptions = {}): LintRes
     summary.byRule[f.rule] = (summary.byRule[f.rule] ?? 0) + 1;
   }
 
+  if (opts.countsOnly) return { findings: [], summary, truncated: lc.truncated, scanTruncated: lc.truncated };
   const limit = opts.limit ?? DEFAULT_LIMIT;
   const cut = kept.length > limit;
   return { findings: cut ? kept.slice(0, limit) : kept, summary, truncated: lc.truncated || cut, scanTruncated: lc.truncated };

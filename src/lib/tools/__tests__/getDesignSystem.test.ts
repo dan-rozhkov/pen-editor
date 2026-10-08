@@ -129,14 +129,14 @@ describe("get_design_system lint section", () => {
     });
   });
 
-  type LintResult = { lint?: { rules: { id: string; severity: string; description: string; autoFix: boolean }[]; available: boolean; counts?: Record<string, number>; countsTruncated?: boolean } };
+  type LintResult = { lint?: { rules: { id: string; severity: string; description: string; autoFix: boolean }[]; available: boolean; counts?: Record<string, number>; countsScope?: string; countsTruncated?: boolean } };
   const runLint = async (args: Record<string, unknown>) => JSON.parse(await getDesignSystem(args)) as LintResult;
 
   it("omits the lint section by default", async () => {
     expect((await runLint({})).lint).toBeUndefined();
   });
 
-  it("returns the rule catalog without counts when lint is included", async () => {
+  it("returns the rule catalog with page-wide counts when lint is included", async () => {
     const { lint } = await runLint({ include: ["lint"] });
     expect(lint?.available).toBe(true);
     expect(lint?.rules.map((r) => r.id)).toContain("hardcoded-value");
@@ -145,11 +145,22 @@ describe("get_design_system lint section", () => {
     expect(lint?.countsTruncated).toBeUndefined();
   });
 
-  it("counts findings by rule only when lint is explicitly included", async () => {
+  it("counts findings by rule when lint is included, and labels token-only scopes as page-wide", async () => {
     seedEmbed("e1", '<div style="color:#111111">Hi</div>');
-    const withLint = await runLint({ include: ["tokens", "lint"] });
+    const withLint = await runLint({ include: ["tokens", "lint"], scope: { names: ["--ink"] } });
     expect(withLint.lint?.counts?.["embed-literal"]).toBeGreaterThan(0);
-    const without = await runLint({ include: ["tokens"] });
-    expect(without.lint).toBeUndefined();
+    expect(withLint.lint?.countsScope).toBe("page");
+  });
+
+  it("counts only findings in the scoped components and the embeds that use them", async () => {
+    await defineComponent({ key: "btn", name: "Button", html: BTN_HTML, variants: { kind: ["primary", "secondary"] } });
+    const region = `<button data-c="btn" data-v-kind="primary"><span data-c-slot="label">A</span></button>`;
+    seedEmbed("s1", `${region}<div style="color:#111111">Hi</div>`);
+    seedEmbed("s2", '<div style="color:#111111">Other</div><div style="color:#111111">Other</div>');
+    const all = await runLint({ include: ["lint"] });
+    const scoped = await runLint({ include: ["lint"], scope: { components: ["btn"] } });
+    expect(scoped.lint?.countsScope).toBe("components");
+    expect(scoped.lint?.counts?.["embed-literal"]).toBeGreaterThan(0);
+    expect(scoped.lint?.counts?.["embed-literal"]).toBeLessThan(all.lint?.counts?.["embed-literal"] ?? 0);
   });
 });

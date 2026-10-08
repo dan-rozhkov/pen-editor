@@ -73,14 +73,14 @@ describe("WebMCP tool specs", () => {
     ]);
   });
 
-  // publish_to_showcase publishes a design to a public gallery: irreversible
-  // from the agent's side and consequential by any reading. It is not in the
-  // MCP subset and must not drift into this one.
   it("publishes lint_design's rule enum in step with the lint engine", () => {
     const spec = WEBMCP_TOOL_SPECS.find((s) => s.name === "lint_design")!;
     expect(spec.inputSchema.properties!.rules.items?.enum).toEqual([...LINT_RULE_IDS]);
   });
 
+  // publish_to_showcase publishes a design to a public gallery: irreversible
+  // from the agent's side and consequential by any reading. It is not in the
+  // MCP subset and must not drift into this one.
   it("publishes nothing consequential", () => {
     const names = WEBMCP_TOOL_SPECS.map((spec) => spec.name);
     for (const forbidden of ["publish_to_showcase", "create_plugin", "ask_user"]) {

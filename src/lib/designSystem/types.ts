@@ -129,6 +129,12 @@ export interface DesignSystemResult {
     counts?: Record<string, number>;
     /** True when the count scan stopped at its budget, so `counts` may be low. */
     countsTruncated?: boolean;
+    /**
+     * What `counts` covers: "components" when the scope named components (only
+     * findings in those components and the embeds that use them), "page" when
+     * it did not (token-only scopes do not narrow counts: they stay page-wide).
+     */
+    countsScope?: "page" | "components";
   };
   truncated: boolean;
   hint?: string;

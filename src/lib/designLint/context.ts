@@ -9,6 +9,7 @@ import { selectComponentRegistry, selectDuplicateMasters } from "@/store/compone
 import { listAllEmbeds } from "@/store/componentOps";
 import { prepareFrameNode } from "@/utils/instanceUtils";
 import { shortHash } from "@/lib/embedComponents";
+import type { ComponentRegistry } from "@/lib/embedComponents";
 import {
   buildVariableIndex,
   completeModeContext,
@@ -27,7 +28,7 @@ export const DEFAULT_MAX_NODES = 20_000;
 export const DEFAULT_MAX_EMBEDS = 50;
 
 /** The only impure function of the lint: snapshot the active page and the document-wide data. */
-export function buildLintInput(): LintInput {
+export function buildLintInput(registry: ComponentRegistry = selectComponentRegistry()): LintInput {
   const scene = useSceneStore.getState();
   const rects: Record<string, Rect> = {};
   const calc = useLayoutStore.getState().calculateLayoutForFrame;
@@ -80,7 +81,7 @@ export function buildLintInput(): LintInput {
     variables,
     collections,
     baseModes: useThemeStore.getState().modeContext,
-    registry: selectComponentRegistry(),
+    registry,
     duplicateMasters: selectDuplicateMasters(),
     embeds: listAllEmbeds().map(({ node, pageId: embedPageId }: { node: EmbedNode; pageId: string }) => ({
       nodeId: node.id,
@@ -265,6 +266,11 @@ export class LintContext {
   }
 
   add(finding: Finding): void {
+    if (this.opts.countsOnly && finding.fix) {
+      const { fix: _fix, ...rest } = finding;
+      this.findings.push(rest);
+      return;
+    }
     this.findings.push(finding);
   }
 
