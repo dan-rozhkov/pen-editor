@@ -78,7 +78,7 @@ describe("buildSnapshot", () => {
     await defineBtn();
     seedEmbed("libmaster", CARD_HTML, { component: { key: "card", name: "Card", library: { id: "lib_x", version: "1.0.0" } } });
     store().replaceAll(
-      [...store().variables, theme("var_lib", "Lib token", "#000", "#000", { libraryId: "lib_x" }), { id: "var_lib_space", name: "Lib space", type: "number", collectionId: "col_x", valuesByMode: { a: "1" }, value: "1", libraryId: "lib_x" }],
+      [...store().variables, theme("var_lib", "Lib token", "#000", "#000", { libraryId: "lib_x", type: "number" }), { id: "var_lib_space", name: "Lib space", type: "number", collectionId: "col_x", valuesByMode: { a: "1" }, value: "1", libraryId: "lib_x" }],
       [...store().collections, { id: "col_x", name: "X", modes: [{ id: "a", name: "A" }], defaultModeId: "a", libraryId: "lib_x" }],
     );
     const { snapshot, issues } = buildSnapshot();
@@ -88,9 +88,9 @@ describe("buildSnapshot", () => {
     expect(snapshot.components.map((c) => c.key)).toEqual(["btn"]);
   });
 
-  it("reports an alias into a library token (it would dangle in the published snapshot)", () => {
+  it("still reports an alias into a library token that cannot be inlined (type mismatch)", () => {
     store().replaceAll(
-      [theme("var_lib", "Lib token", "#000", "#000", { libraryId: "lib_x" }), theme("var_mine", "Mine", "#111", "#111", { valuesByMode: { light: { alias: "var_lib" }, dark: "#111" } })],
+      [theme("var_lib", "Lib token", "#000", "#000", { libraryId: "lib_x", type: "number" }), theme("var_mine", "Mine", "#111", "#111", { valuesByMode: { light: { alias: "var_lib" }, dark: "#111" } })],
     );
     const { issues } = buildSnapshot();
     expect(issues.map((i) => i.message).join(" ")).toContain('alias target "var_lib" does not exist');
@@ -164,5 +164,25 @@ describe("deprecation authoring", () => {
     expect(byId("var_bg")?.deprecated).toEqual({ since: "1.1.0", note: "old" });
     expect(selectComponentRegistry().get("btn")?.meta.deprecated).toEqual({ since: "1.1.0", note: "old" });
     expect(applyDeprecationSince("1.2.0")).toBe(0);
+  });
+});
+
+describe("buildSnapshot: a library built on a base library", () => {
+  it("inlines aliases to library-owned tokens and publishes cleanly", () => {
+    store().replaceAll(
+      [
+        theme("base_brand", "Base Brand", "#0055ff", "#4488ff", { libraryId: "lib_base" }),
+        theme("var_cta", "CTA", "#000000", "#000000", { valuesByMode: { light: { alias: "base_brand" }, dark: { alias: "base_brand" } } }),
+        theme("var_chain", "Chain", "#000000", "#000000", { valuesByMode: { light: { alias: "var_cta" }, dark: { alias: "var_cta" } } }),
+      ],
+      store().collections,
+    );
+    const { snapshot, issues, notes } = buildSnapshot();
+    expect(issues).toEqual([]);
+    expect(validateSnapshot(snapshot).ok).toBe(true);
+    expect(snapshot.variables.map((v) => v.id)).toEqual(["var_cta", "var_chain"]);
+    expect(snapshot.variables[0].valuesByMode).toEqual({ light: "#0055ff", dark: "#4488ff" });
+    expect(snapshot.variables[1].valuesByMode).toEqual({ light: { alias: "var_cta" }, dark: { alias: "var_cta" } });
+    expect(notes.map((n) => n.message)).toEqual(["alias to library token Base Brand inlined", "alias to library token Base Brand inlined"]);
   });
 });

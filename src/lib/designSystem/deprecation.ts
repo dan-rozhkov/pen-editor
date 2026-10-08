@@ -7,7 +7,7 @@ import type { EmbedComponentMeta } from "@/types/scene";
 import { useVariableStore } from "@/store/variableStore";
 import { selectComponentRegistry, findWinningMaster } from "@/store/componentRegistry";
 import { upsertMasterNode } from "@/store/componentOps";
-import { isLibraryComponent, isLibraryOwned, libraryComponentError, libraryOwnedMessage } from "./ownership";
+import { isLibraryComponent, isLibraryOwned, libraryComponentError, libraryOwnedMessage, variableReplacementError } from "./ownership";
 import type { Snapshot, SnapshotDeprecation } from "./types";
 
 export interface DeprecationInput {
@@ -38,13 +38,8 @@ export function deprecateVariable(id: string, input: DeprecationInput = {}): Dep
   if (input.replacedBy !== undefined) {
     const replacement = store.variables.find((v) => v.id === input.replacedBy);
     if (!replacement) return { error: `Replacement not found: ${input.replacedBy}` };
-    if (replacement.id === id) return { error: "A variable cannot replace itself." };
-    if (replacement.type !== target.type) {
-      return { error: `The replacement has type ${replacement.type}; ${target.name} is ${target.type}.` };
-    }
-    if (isLibraryOwned(replacement)) {
-      return { error: `"${replacement.name}" belongs to another library; a replacement must be in this library.` };
-    }
+    const refusal = variableReplacementError(target, replacement);
+    if (refusal) return { error: refusal };
   }
   const deprecated = clean(input, target.deprecated?.since);
   if (!store.updateVariable(id, { deprecated })) return { error: "Deprecation refused" };
@@ -95,7 +90,7 @@ export function undeprecateComponent(key: string): DeprecationResult {
 /** Fills `deprecated.since` on every deprecated entity that has none. Returns a new snapshot. */
 export function stampDeprecationSince(snapshot: Snapshot, version: string): Snapshot {
   const stamp = <T extends { deprecated?: SnapshotDeprecation }>(item: T): T =>
-    item.deprecated && !item.deprecated.since ? { ...item, deprecated: { since: version, ...item.deprecated } } : item;
+    item.deprecated && !item.deprecated.since ? { ...item, deprecated: { ...item.deprecated, since: version } } : item;
   return {
     ...snapshot,
     variables: snapshot.variables.map(stamp),
@@ -114,13 +109,13 @@ export function applyDeprecationSince(version: string): number {
   const variables = store.variables.map((v) => {
     if (isLibraryOwned(v) || !v.deprecated || v.deprecated.since) return v;
     stamped++;
-    return { ...v, deprecated: { since: version, ...v.deprecated } };
+    return { ...v, deprecated: { ...v.deprecated, since: version } };
   });
   if (stamped > 0) store.replaceAll(variables, store.collections);
   for (const master of selectComponentRegistry().values()) {
     const d = master.meta.deprecated;
     if (!d || d.since || isLibraryComponent(master.meta)) continue;
-    upsertMasterNode({ meta: { ...master.meta, deprecated: { since: version, ...d } }, html: master.html });
+    upsertMasterNode({ meta: { ...master.meta, deprecated: { ...d, since: version } }, html: master.html });
     stamped++;
   }
   return stamped;

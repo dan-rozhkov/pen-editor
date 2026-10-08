@@ -3,7 +3,8 @@
 // masters. Library-owned items (copies of another library) and masters pinned
 // to a library are left out: a library publishes only what it authors.
 import { THEME_COLLECTION_ID, type Variable, type VariableCollection } from "@/types/variable";
-import { modeValuesOf } from "@/lib/variables/variableIndex";
+import { buildVariableIndex, modeValuesOf, type VariableIndex } from "@/lib/variables/variableIndex";
+import { resolveVariable } from "@/lib/variables/resolve";
 import { computeRev } from "@/lib/embedComponents/master";
 import type { ComponentMaster, ComponentRegistry } from "@/lib/embedComponents/types";
 import { useVariableStore } from "@/store/variableStore";
@@ -30,6 +31,8 @@ export interface BuildSnapshotResult {
   snapshot: Snapshot;
   /** Integrity problems the server would reject; empty when the snapshot can be published. */
   issues: SnapshotIssue[];
+  /** Informational; never blocks publishing (for example an alias to a library token that was inlined). */
+  notes: SnapshotIssue[];
 }
 
 /** Copies the defined fields only, so `undefined` never reaches the hashed form. */
@@ -42,14 +45,34 @@ function cleanDeprecation(d: { since?: string; replacedBy?: string; note?: strin
   };
 }
 
-function snapshotVariable(v: Variable): SnapshotVariable {
+/**
+ * Per-mode values of a local variable for the snapshot. An alias to a
+ * library-owned token is replaced by its resolved literal: snapshot v1 has no
+ * cross-library references, and the target is not part of this snapshot.
+ */
+function snapshotValues(v: Variable, index: VariableIndex, notes: SnapshotIssue[]): SnapshotVariable["valuesByMode"] {
+  const values = { ...modeValuesOf(v) };
+  const collectionId = v.collectionId ?? THEME_COLLECTION_ID;
+  for (const [modeId, value] of Object.entries(values)) {
+    if (typeof value === "string") continue;
+    const target = index.byId.get(value.alias);
+    if (!target || !isLibraryOwned(target)) continue;
+    const resolved = resolveVariable(index, v.id, { [collectionId]: modeId });
+    if (!resolved.ok) continue;
+    values[modeId] = resolved.value;
+    notes.push({ path: `variables.${v.id}.valuesByMode.${modeId}`, message: `alias to library token ${target.name} inlined` });
+  }
+  return values;
+}
+
+function snapshotVariable(v: Variable, index: VariableIndex, notes: SnapshotIssue[]): SnapshotVariable {
   const deprecated = cleanDeprecation(v.deprecated);
   return {
     id: v.id,
     name: v.name,
     type: v.type,
     collectionId: v.collectionId ?? THEME_COLLECTION_ID,
-    valuesByMode: { ...modeValuesOf(v) },
+    valuesByMode: snapshotValues(v, index, notes),
     ...(v.description ? { description: v.description } : {}),
     ...(v.scopes && v.scopes.length > 0 ? { scopes: [...v.scopes] } : {}),
     ...(deprecated ? { deprecated } : {}),
@@ -83,7 +106,9 @@ export function buildSnapshotFrom(input: BuildSnapshotInput): BuildSnapshotResul
       modes: c.modes.map((m) => ({ id: m.id, name: m.name })),
       defaultModeId: c.defaultModeId,
     }));
-  const variables = input.variables.filter((v) => !isLibraryOwned(v)).map(snapshotVariable);
+  const notes: SnapshotIssue[] = [];
+  const index = buildVariableIndex(input.variables, input.collections);
+  const variables = input.variables.filter((v) => !isLibraryOwned(v)).map((v) => snapshotVariable(v, index, notes));
   const components = [...input.registry.values()]
     .filter((m) => !isLibraryComponent(m.meta))
     .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
@@ -96,7 +121,7 @@ export function buildSnapshotFrom(input: BuildSnapshotInput): BuildSnapshotResul
     components,
     ...(readme ? { docs: { readme } } : {}),
   };
-  return { snapshot, issues: checkSnapshotIntegrity(snapshot) };
+  return { snapshot, issues: checkSnapshotIntegrity(snapshot), notes };
 }
 
 /** Builds the snapshot of the open document. `issues` holds the Theme-modes rule and every other integrity rule. */

@@ -10,6 +10,7 @@ import type { Guide } from "@/store/guidesStore";
 import type { PersistedMeasurement } from "@/store/measurementsStore";
 import type { CommentThread } from "@/store/commentsStore";
 import type { LibraryAuthor, LibraryPin } from "@/lib/designSystem/types";
+import { isRecord } from '@/lib/utils'
 
 /**
  * File-level design-system library state (v1.3+). All optional: a file without
@@ -183,10 +184,6 @@ export function deserializeDocument(json: string): DocumentData {
     ...(Array.isArray(doc.libraries) ? { libraries: sanitizeLibraryPins(doc.libraries) } : {}),
     ...(isLibraryAuthor(doc.libraryAuthor) ? { libraryAuthor: doc.libraryAuthor } : {}),
   }
-}
-
-function isRecord(x: unknown): x is Record<string, unknown> {
-  return typeof x === 'object' && x !== null && !Array.isArray(x)
 }
 
 /** Keep well-formed pins only (a hand-edited or corrupt file must not break the load). */

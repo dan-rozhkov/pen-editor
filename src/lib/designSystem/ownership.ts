@@ -31,3 +31,45 @@ export function isLibraryComponent(meta: Pick<EmbedComponentMeta, "library"> | n
 export function libraryComponentError(key: string, meta: Pick<EmbedComponentMeta, "library"> | null | undefined): string | null {
   return isLibraryComponent(meta) ? `Component "${key}": ${LIBRARY_COMPONENT_MESSAGE}.` : null;
 }
+
+/** The component meta of an embed node, or undefined for any other node. */
+function masterMetaOf(node: { type: string; component?: EmbedComponentMeta } | null | undefined): EmbedComponentMeta | undefined {
+  return node?.type === "embed" ? node.component : undefined;
+}
+
+/**
+ * A refusal for a scene write that would create, alter or remove a library
+ * master, or that would create a local master on a key a library master holds.
+ * `prev` is the node before the write (absent for a new node), `next` the node
+ * after (absent for a delete). `held` is the registry master that owns the key.
+ */
+export function libraryMasterWriteError(
+  prev: { type: string; component?: EmbedComponentMeta } | null | undefined,
+  next: { type: string; component?: EmbedComponentMeta } | null | undefined,
+  held: { meta: Pick<EmbedComponentMeta, "library"> } | undefined,
+): string | null {
+  const before = masterMetaOf(prev);
+  const after = masterMetaOf(next);
+  if (before && isLibraryComponent(before)) {
+    if (!after || JSON.stringify(before) !== JSON.stringify(after)) return libraryComponentError(before.key, before);
+    return null;
+  }
+  if (after && isLibraryComponent(after)) return libraryComponentError(after.key, after);
+  if (after && held && isLibraryComponent(held.meta)) return libraryComponentError(after.key, held.meta);
+  return null;
+}
+
+/** Why `replacement` cannot replace the deprecated variable `target`, or null when it can. */
+export function variableReplacementError(
+  target: { id: string; name: string; type: string },
+  replacement: { id: string; name: string; type: string; libraryId?: string },
+): string | null {
+  if (replacement.id === target.id) return "A variable cannot replace itself.";
+  if (replacement.type !== target.type) {
+    return `The replacement has type ${replacement.type}; ${target.name} is ${target.type}.`;
+  }
+  if (isLibraryOwned(replacement)) {
+    return `"${replacement.name}" belongs to another library; a replacement must be in this library.`;
+  }
+  return null;
+}

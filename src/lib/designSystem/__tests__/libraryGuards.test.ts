@@ -5,6 +5,7 @@ import { useHistoryStore } from "@/store/historyStore";
 import { selectComponentRegistry } from "@/store/componentRegistry";
 import { setVariables } from "@/lib/tools/setVariables";
 import { defineComponent, deleteComponent } from "@/lib/tools/components";
+import { batchDesign } from "@/lib/tools/batchDesign";
 import { editEmbedHtml } from "@/lib/tools/editEmbedHtml";
 import { BTN_HTML } from "@/lib/embedComponents/__tests__/fixtures";
 import { resetWorld, parse, seedEmbed } from "@/test/componentFixtures";
@@ -155,6 +156,12 @@ describe("set_variables: library-owned items are read-only", () => {
     expect(byId("var_brand")?.libraryId).toBe(LIB);
   });
 
+  it("refuses a library token as deprecated.replacedBy and keeps the variable unchanged", async () => {
+    const result = parse(await setVariables({ variables: { Mine: { deprecated: { replacedBy: "Brand" } } } }));
+    expect(String(result.error)).toContain("belongs to another library");
+    expect(byId("var_mine")?.deprecated).toBeUndefined();
+  });
+
   it("still updates local variables", async () => {
     const result = parse(await setVariables({ variables: { Mine: { value: "#abcdef" } } }));
     expect(result.success).toBe(true);
@@ -195,5 +202,51 @@ describe("library component masters are read-only", () => {
     seedEmbed("master", BTN_HTML, { component: { key: "btn", name: "Button" } });
     const result = parse(await defineComponent({ key: "btn", name: "Button 2", html: BTN_HTML }));
     expect(result.error).toBeUndefined();
+  });
+});
+
+describe("batch_design: library component masters are protected", () => {
+  const libraryMeta = { key: "btn", name: "Button", library: { id: LIB, version: "1.0.0" } };
+  const run = async (operations: string) => parse(await batchDesign({ operations }));
+  const master = () => useSceneStore.getState().nodesById.master as unknown as EmbedNode;
+
+  beforeEach(() => {
+    resetWorld();
+    seedEmbed("master", BTN_HTML, { component: libraryMeta });
+  });
+
+  it("refuses to create a local master on a key a library master holds", async () => {
+    const html = JSON.stringify(BTN_HTML);
+    const result = await run(`m=I(document, {type: "embed", name: "Mine", htmlContent: ${html}, component: {key: "btn", name: "Mine"}})`);
+    expect(String(result.error)).toContain("Library component; edit it in the library document");
+    expect(Object.keys(useSceneStore.getState().nodesById)).toEqual(["master"]);
+  });
+
+  it("refuses to change or strip component.library with U()", async () => {
+    const strip = await run('U("master", {component: {key: "btn", name: "Button"}})');
+    expect(String(strip.error)).toContain("Library component");
+    const other = await run(`U("master", {component: {key: "btn", name: "Button", library: {id: "lib_evil", version: "9.9.9"}}})`);
+    expect(String(other.error)).toContain("Library component");
+    expect(master().component?.library).toEqual({ id: LIB, version: "1.0.0" });
+  });
+
+  it("refuses to delete a library master with D()", async () => {
+    const result = await run('D("master")');
+    expect(String(result.error)).toContain("Library component");
+    expect(useSceneStore.getState().nodesById.master).toBeDefined();
+  });
+
+  it("refuses to delete a frame that holds a library master", async () => {
+    const st = useSceneStore.getState();
+    useSceneStore.setState({
+      nodesById: { ...st.nodesById, frame: { id: "frame", type: "frame", name: "F", x: 0, y: 0, width: 10, height: 10 } as never },
+      parentById: { ...st.parentById, frame: null, master: "frame" },
+      childrenById: { ...st.childrenById, frame: ["master"] },
+      rootIds: ["frame"],
+      _cachedTree: null,
+    });
+    const result = await run('D("frame")');
+    expect(String(result.error)).toContain("Library component");
+    expect(useSceneStore.getState().nodesById.frame).toBeDefined();
   });
 });

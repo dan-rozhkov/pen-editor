@@ -1,4 +1,5 @@
 import { resolveApiUrl, apiFetch, apiFetchUrl } from "@/lib/apiBase";
+import { isRecord } from "@/lib/utils";
 
 // Client for the backend's read-only showcase feed (GET /api/showcase),
 // listing apps the AI design agent produced autonomously (no human in the
@@ -161,10 +162,6 @@ export async function fetchShowcase(
 // rather than a generic "something broke".
 const STALE_CLIENT_ERROR =
   "The showcase feed returned data this page doesn't recognize — try reloading the page to get the latest version.";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 // Validates exactly the fields the render path dereferences unconditionally
 // (array .length/.map, array indexing, string interpolation used as a DOM

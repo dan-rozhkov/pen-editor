@@ -34,6 +34,7 @@ import {
 import { inspectEmbedHtml } from "@/lib/embedHtmlLint/inspectEmbedHtml";
 import { describeUnknownTags, finalizeEmbedHtml } from "@/lib/embedComponents/pipeline";
 import { selectComponentRegistry } from "@/store/componentRegistry";
+import { libraryMasterWriteError } from "@/lib/designSystem/ownership";
 import { repairGeneratedImageUrls } from "../generateImage/repairImageUrls";
 import { getIssuedImageUrls } from "../generateImage/registry";
 import type { ParsedArg, ParsedOperation, ExecutionContext } from "./types";
@@ -282,6 +283,7 @@ function executeInsert(op: ParsedOperation, ctx: ExecutionContext): void {
   // Repair generated-image urls / expand document component tags in embed HTML.
   // A fresh I() insert always supplies the embed's full htmlContent, and
   // always CREATES the embed.
+  assertMasterWritable(undefined, node, op.line);
   normalizeEmbedNode(node, ctx, true, true);
 
   // Insert into flat storage
@@ -568,6 +570,22 @@ function reconcileLegacyFillUpdate(
   return { ...mapped, fills, ...clearLegacyFillProps() };
 }
 
+/** Throws when a write would create, alter or remove a library master (see ownership.ts). */
+function assertMasterWritable(
+  prev: FlatSceneNode | undefined,
+  next: FlatSceneNode | undefined,
+  line: number,
+): void {
+  const key = (next as EmbedNode | undefined)?.component?.key;
+  const held = key ? selectComponentRegistry().get(key) : undefined;
+  const refusal = libraryMasterWriteError(
+    prev as EmbedNode | undefined,
+    next as EmbedNode | undefined,
+    held,
+  );
+  if (refusal) throw new Error(`Line ${line}: ${refusal}`);
+}
+
 /**
  * Execute an Update operation.
  * U(nodeId, updateData)
@@ -617,6 +635,7 @@ function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
   }
 
   let updated = { ...node, ...reconcileLegacyFillUpdate(node, mapped) } as FlatSceneNode;
+  assertMasterWritable(node, updated, op.line);
 
   // Repair generated-image urls / expand document component tags in embed
   // HTML — but only when this U() actually supplied htmlContent (mapNodeData
@@ -671,6 +690,7 @@ function executeReplace(op: ParsedOperation, ctx: ExecutionContext): void {
   // supplies the embed's full htmlContent, and counts as CREATING it — the
   // old node at this path is gone, replaced by a node the model just
   // authored, exactly like I().
+  assertMasterWritable(existingNode, newNode, op.line);
   normalizeEmbedNode(newNode, ctx, true, true);
 
   // Find position in parent's children
@@ -813,6 +833,10 @@ function executeDelete(op: ParsedOperation, ctx: ExecutionContext): void {
 
   if (!ctx.nodesById[nodeId]) {
     throw new Error(`Line ${op.line}: Node not found: "${nodeId}"`);
+  }
+
+  for (const id of [nodeId, ...collectDescendantIds(nodeId, ctx.childrenById)]) {
+    assertMasterWritable(ctx.nodesById[id], undefined, op.line);
   }
 
   const parentId = ctx.parentById[nodeId];

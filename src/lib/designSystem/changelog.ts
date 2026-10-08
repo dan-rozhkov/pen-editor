@@ -75,8 +75,8 @@ function valueChanges(
 ): ModeValueChange[] {
   const out: ModeValueChange[] = [];
   const nameOf = (s: Snapshot, id: string) => s.variables.find((v) => v.id === id)?.name ?? id;
-  const modeName = (variable: SnapshotVariable, snap: Snapshot, modeId: string) =>
-    snap.collections.find((c) => c.id === variable.collectionId)?.modes.find((m) => m.id === modeId)?.name ?? modeId;
+  const modeName = (variable: SnapshotVariable, snap: Snapshot, modeId: string): string | undefined =>
+    snap.collections.find((c) => c.id === variable.collectionId)?.modes.find((m) => m.id === modeId)?.name;
   const modeIds = [...new Set([...Object.keys(p.valuesByMode), ...Object.keys(n.valuesByMode)])];
   for (const modeId of modeIds) {
     const before = p.valuesByMode[modeId];
@@ -91,7 +91,7 @@ function valueChanges(
     const to = resolve(indexes.next, n, after);
     out.push({
       modeId,
-      modeName: modeName(n, next, modeId) || modeName(p, prev, modeId),
+      modeName: modeName(n, next, modeId) ?? modeName(p, prev, modeId) ?? modeId,
       ...(from !== undefined ? { from } : {}),
       ...(to !== undefined ? { to } : {}),
       ...(before && typeof before !== "string" ? { fromAlias: nameOf(prev, before.alias) } : {}),

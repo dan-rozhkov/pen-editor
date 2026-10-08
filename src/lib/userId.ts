@@ -13,7 +13,7 @@ let fallbackId: string | undefined;
 // crypto.randomUUID is secure-context-only; a dev server opened over LAN http
 // (the standard mobile-Safari repro setup) doesn't have it, and chat must not
 // break there.
-function randomId(): string {
+export function randomId(): string {
   if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");

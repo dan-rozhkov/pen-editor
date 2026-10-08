@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { randomId } from "@/lib/userId";
 import type { LibraryAuthor, LibraryPin } from "@/lib/designSystem/types";
 
 interface DocumentState {
@@ -21,11 +22,7 @@ interface DocumentState {
   setLibraryAuthor: (author: LibraryAuthor | null) => void;
 }
 
-function newDocumentId(): string {
-  const c = globalThis.crypto;
-  if (c && typeof c.randomUUID === "function") return c.randomUUID();
-  return `doc_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
-}
+const newDocumentId = randomId;
 
 export const useDocumentStore = create<DocumentState>((set, get) => ({
   fileName: null,

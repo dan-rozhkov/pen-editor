@@ -12,7 +12,7 @@ import type { DocumentData, DocumentLibraryMeta } from "@/utils/fileUtils";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
 import { getCanvasViewportMetrics } from "@/utils/canvasViewport";
 import { toDtcg, fromDtcg, toCss, toTailwindTheme, type ImportResult } from "@/lib/designTokens";
-import { THEME_COLLECTION_ID } from "@/types/variable";
+import { THEME_COLLECTION_ID, getVariableCssName } from "@/types/variable";
 import type { DtcgDocument } from "@/lib/designTokens";
 import { useHistoryStore } from "@/store/historyStore";
 import { isLibraryOwned } from "@/lib/designSystem/ownership";
@@ -161,7 +161,12 @@ function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] 
   return Array.from(byId.values());
 }
 
-function applyImport(result: ImportResult): void {
+/**
+ * Merges an imported token document into the open one. Returns the names of
+ * the variables it skipped: those in a library collection, whose id is a
+ * library item's, or whose CSS name a library token already holds.
+ */
+export function applyImport(result: ImportResult): { skipped: string[] } {
   // One undo step for the whole import (the setX setters don't snapshot).
   useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()));
   const varStore = useVariableStore.getState();
@@ -173,13 +178,24 @@ function applyImport(result: ImportResult): void {
   );
   // Library-owned items are read-only: an import never overwrites them (their ids round-trip through an export).
   const owned = new Set([...varStore.variables, ...varStore.collections].filter(isLibraryOwned).map((x) => x.id));
+  const libraryCssNames = new Set(varStore.variables.filter(isLibraryOwned).map((v) => getVariableCssName(v)));
+  const skipped: string[] = [];
+  const importable = result.variables.filter((v) => {
+    const blocked =
+      owned.has(v.id) ||
+      (v.collectionId !== undefined && owned.has(v.collectionId)) ||
+      libraryCssNames.has(getVariableCssName(v));
+    if (blocked) skipped.push(v.name);
+    return !blocked;
+  });
   varStore.replaceAll(
-    mergeById(varStore.variables, result.variables.filter((v) => !owned.has(v.id))),
+    mergeById(varStore.variables, importable),
     mergeById(varStore.collections, incoming.filter((c) => !owned.has(c.id))),
   );
   styleStore.setFillStyles(mergeById(styleStore.fillStyles, result.fillStyles));
   styleStore.setEffectStyles(mergeById(styleStore.effectStyles, result.effectStyles));
   textStore.setTextStyles(mergeById(textStore.textStyles, result.textStyles));
+  return { skipped };
 }
 
 export async function importDesignTokens(): Promise<void> {
@@ -197,12 +213,13 @@ export async function importDesignTokens(): Promise<void> {
     return;
   }
   const { result, warnings } = fromDtcg(doc);
-  applyImport(result);
+  const { skipped } = applyImport(result);
   const count =
-    result.variables.length + result.fillStyles.length + result.effectStyles.length + result.textStyles.length;
+    result.variables.length - skipped.length + result.fillStyles.length + result.effectStyles.length + result.textStyles.length;
+  const problems = warnings.length + skipped.length;
   toast(
-    warnings.length
-      ? `Imported ${count} token(s). ${warnings.length} skipped or downgraded.`
+    problems
+      ? `Imported ${count} token(s). ${problems} skipped or downgraded${skipped.length ? ` (${skipped.length} clash with a library token or collection)` : ""}.`
       : `Imported ${count} token(s).`,
   );
 }

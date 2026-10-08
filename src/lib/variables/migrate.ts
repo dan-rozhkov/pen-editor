@@ -8,10 +8,7 @@ import {
 import { ensureThemeCollection } from "./collections";
 import { resolveVariable } from "./resolve";
 import { buildVariableIndex, collectionIdOf, modeValuesOf } from "./variableIndex";
-
-function isRecord(x: unknown): x is Record<string, unknown> {
-  return typeof x === "object" && x !== null;
-}
+import { isRecord } from "@/lib/utils";
 
 function isModeValue(x: unknown): x is VariableModeValue {
   return typeof x === "string" || (isRecord(x) && typeof x.alias === "string");

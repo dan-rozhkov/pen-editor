@@ -2,7 +2,7 @@ import { Fragment, useMemo, useState } from "react";
 import clsx from "clsx";
 import { isLibraryOwned, libraryOwnedMessage } from "@/lib/designSystem/ownership";
 import { useVariableStore } from "../store/variableStore";
-import { generateVariableId, THEME_COLLECTION_ID } from "../types/variable";
+import { generateVariableId, getVariableCssName, THEME_COLLECTION_ID } from "../types/variable";
 import type {
   Variable,
   VariableCollection,
@@ -498,11 +498,14 @@ export function VariablesPanelContent() {
   const handleAddVariable = (type: VariableType) => {
     if (!active) return;
     const defaultVal = defaultValues[type];
-    const count = variables.filter((v) => v.type === type).length;
+    // Next free name: it must clash with no local or library CSS name.
+    const taken = new Set(variables.map((v) => getVariableCssName(v)));
+    let count = variables.filter((v) => v.type === type).length + 1;
+    while (taken.has(getVariableCssName({ id: "", name: `${defaultNames[type]} ${count}` }))) count++;
     const valuesByMode = Object.fromEntries(active.modes.map((m) => [m.id, defaultVal]));
     const newVar: Variable = {
       id: generateVariableId(),
-      name: `${defaultNames[type]} ${count + 1}`,
+      name: `${defaultNames[type]} ${count}`,
       type,
       collectionId: active.id,
       valuesByMode,
@@ -511,12 +514,8 @@ export function VariablesPanelContent() {
         ? { themeValues: { light: defaultVal, dark: defaultVal } }
         : {}),
     };
-    if (!addVariable(newVar)) {
-      setNotice(
-        isLibraryOwned(active)
-          ? libraryOwnedMessage("collection", active.name, active.libraryId as string)
-          : "That name is already used by a library token.",
-      );
+    if (!addVariable(newVar) && isLibraryOwned(active)) {
+      setNotice(libraryOwnedMessage("collection", active.name, active.libraryId as string));
     }
   };
 

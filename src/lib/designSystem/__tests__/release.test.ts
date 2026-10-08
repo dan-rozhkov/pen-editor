@@ -14,7 +14,7 @@ import {
   validateSnapshot,
 } from "@/lib/designSystem";
 import { assertDefined } from "@/test/assertions";
-import { colorVar, snap } from "./snapshotFixtures";
+import { THEME, colorVar, snap } from "./snapshotFixtures";
 
 describe("semver", () => {
   it("parses plain versions only", () => {
@@ -128,6 +128,17 @@ describe("changelog", () => {
     expect(changelog.bump).toBe("patch");
   });
 
+  it("falls back to the previous snapshot's mode name when the new one lost the mode", () => {
+    const mk = (modes: { id: string; name: string }[]) => ({ id: "col", name: "Density", modes, defaultModeId: modes[0].id });
+    const v = (value: string) => ({ id: "sp", name: "Space", type: "number" as const, collectionId: "col", valuesByMode: { compact: value } });
+    const before = snap({ collections: [THEME, mk([{ id: "compact", name: "Compact" }])], variables: [v("4")] });
+    const after = snap({ collections: [THEME, mk([{ id: "roomy", name: "Roomy" }])], variables: [v("8")] });
+    const changelog = buildChangelog(before, after, diffSnapshots(before, after), { from: "1.0.0", to: "1.0.1" });
+    const entry = changelog.entries.find((e) => e.entity === "variable:sp");
+    assertDefined(entry);
+    expect(entry.values?.[0].modeName).toBe("Compact");
+  });
+
   it("groups reasons per entity and orders removed, added, deprecated, changed", () => {
     const before = snap({ variables: [colorVar("a", "A", "#111"), colorVar("b", "B", "#222", "#222", { deprecated: { note: "old" } }), colorVar("c", "C", "#333")] });
     const after = snap({
@@ -174,5 +185,16 @@ describe("stampDeprecationSince", () => {
     const out = stampDeprecationSince(s, "1.1.0");
     expect(out.variables.map((v) => v.deprecated?.since)).toEqual(["1.1.0", "1.0.0", undefined]);
     expect(s.variables[0].deprecated?.since).toBeUndefined();
+  });
+
+  it("overrides an explicit empty or undefined since", () => {
+    const s = snap({
+      variables: [
+        colorVar("a", "A", "#1", "#1", { deprecated: { since: undefined, note: "n" } }),
+        colorVar("b", "B", "#2", "#2", { deprecated: { since: "", note: "n" } }),
+      ],
+    });
+    const out = stampDeprecationSince(s, "2.0.0");
+    expect(out.variables.map((v) => v.deprecated?.since)).toEqual(["2.0.0", "2.0.0"]);
   });
 });

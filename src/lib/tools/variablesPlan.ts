@@ -19,7 +19,7 @@ import {
   randomId,
   uniqueSlug,
 } from "@/lib/variables";
-import { isLibraryOwned, libraryOwnedMessage } from "@/lib/designSystem/ownership";
+import { isLibraryOwned, libraryOwnedMessage, variableReplacementError } from "@/lib/designSystem/ownership";
 import {
   findCollection,
   findMode,
@@ -373,7 +373,9 @@ export function planVariableChanges(input: PlanInput): Plan {
     v.valuesByMode = resolved;
     if (p.replacedBy !== undefined) {
       const hits = resolveVariableRef(next, collections, p.replacedBy);
-      if (hits.length === 1) v.deprecated = { ...(v.deprecated ?? {}), replacedBy: hits[0].id };
+      const refusal = hits.length === 1 ? variableReplacementError(v, hits[0]) : null;
+      if (refusal) errors.push(`variable "${v.name}": deprecated.replacedBy "${p.replacedBy}": ${refusal}`);
+      else if (hits.length === 1) v.deprecated = { ...(v.deprecated ?? {}), replacedBy: hits[0].id };
       else errors.push(`variable "${v.name}": deprecated.replacedBy "${p.replacedBy}" ${hits.length === 0 ? "does not exist" : "is ambiguous"}.`);
     }
   }

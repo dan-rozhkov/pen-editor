@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useVariableStore } from "../store/variableStore";
 import type { Variable, VariableScope, VariableType } from "../types/variable";
 import { isLibraryOwned } from "../lib/designSystem/ownership";
+import { deprecateVariable } from "../lib/designSystem/deprecation";
 import { Checkbox } from "./ui/checkbox";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
@@ -70,13 +71,18 @@ export function VariableDetails({ variable }: { variable: Variable }) {
   const updateVariable = useVariableStore((s) => s.updateVariable);
   const scopes = variable.scopes ?? [];
   const deprecated = variable.deprecated;
-  const replacements = variables.filter((v) => v.type === variable.type && v.id !== variable.id);
+  const replacements = variables.filter((v) => v.type === variable.type && v.id !== variable.id && !isLibraryOwned(v));
 
   const toggleScope = (scope: VariableScope, on: boolean) => {
     const next = on ? [...scopes, scope] : scopes.filter((s) => s !== scope);
     updateVariable(variable.id, { scopes: next.length > 0 ? next : undefined });
   };
   const patchDeprecation = (patch: Partial<NonNullable<Variable["deprecated"]>>) => {
+    // A replacement goes through the same validation as the deprecate action.
+    if (patch.replacedBy) {
+      deprecateVariable(variable.id, { replacedBy: patch.replacedBy, note: deprecated?.note });
+      return;
+    }
     const next = { ...deprecated, ...patch };
     for (const key of Object.keys(next) as (keyof typeof next)[]) {
       if (next[key] === "" || next[key] === undefined) delete next[key];

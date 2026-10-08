@@ -5,6 +5,7 @@
 import { THEME_COLLECTION_ID, type Variable } from "@/types/variable";
 import { findCycles } from "@/lib/variables/aliasGraph";
 import { COMPONENT_KEY_PATTERN } from "@/lib/embedComponents/types";
+import { isRecord } from "@/lib/utils";
 import { canonicalJson } from "./canonical";
 import {
   MAX_README_BYTES,
@@ -66,11 +67,53 @@ export function validateSnapshot(raw: unknown): SnapshotValidation {
   }
   const snapshot = candidate as Snapshot;
   if (containsNul(snapshot)) return fail([{ path: "", message: "Strings may not contain U+0000." }]);
-  const issues = checkSnapshotIntegrity(snapshot);
+  const shapeIssues = checkSnapshotShape(snapshot);
+  if (shapeIssues.length > 0) return fail(shapeIssues);
+  let issues: SnapshotIssue[];
+  try {
+    issues = checkSnapshotIntegrity(snapshot);
+  } catch {
+    return fail([{ path: "", message: "The snapshot has an unexpected structure." }]);
+  }
   if (issues.length === 0 && byteLength(canonicalJson(snapshot)) > MAX_SNAPSHOT_BYTES) {
     issues.push({ path: "", message: "The snapshot is larger than 4 MB." });
   }
   return issues.length > 0 ? fail(issues) : { ok: true, snapshot };
+}
+
+/**
+ * The nested shapes `checkSnapshotIntegrity` reads without checking. Untrusted
+ * input (a downloaded snapshot) must produce issues here, never a throw there.
+ */
+export function checkSnapshotShape(s: Snapshot): SnapshotIssue[] {
+  const issues: SnapshotIssue[] = [];
+  const bad = (path: string, message: string) => issues.push({ path, message });
+  const str = (x: unknown) => typeof x === "string";
+  const deprecatedOk = (d: unknown) => d === undefined || (isRecord(d) && (d.replacedBy === undefined || str(d.replacedBy)));
+
+  if (s.docs !== undefined && !(isRecord(s.docs) && str(s.docs.readme))) bad("docs", "docs.readme must be a string");
+  (s.collections as unknown[]).forEach((c, i) => {
+    if (!isRecord(c) || !str(c.id) || !str(c.defaultModeId) || !Array.isArray(c.modes)) {
+      return bad(`collections.${i}`, "a collection needs string id and defaultModeId and a modes array");
+    }
+    if (!c.modes.every((m) => isRecord(m) && str(m.id))) bad(`collections.${i}.modes`, "every mode needs a string id");
+  });
+  (s.variables as unknown[]).forEach((v, i) => {
+    if (!isRecord(v) || !str(v.id) || !str(v.collectionId) || !str(v.type) || !isRecord(v.valuesByMode)) {
+      return bad(`variables.${i}`, "a variable needs string id, collectionId and type and a valuesByMode object");
+    }
+    for (const [modeId, value] of Object.entries(v.valuesByMode)) {
+      if (!str(value) && !(isRecord(value) && str(value.alias))) {
+        bad(`variables.${i}.valuesByMode.${modeId}`, "a value must be a string or an {alias} object");
+      }
+    }
+    if (!deprecatedOk(v.deprecated)) bad(`variables.${i}.deprecated`, "deprecated must be an object");
+  });
+  (s.components as unknown[]).forEach((c, i) => {
+    if (!isRecord(c) || !str(c.key) || !isRecord(c.meta)) return bad(`components.${i}`, "a component needs a string key and a meta object");
+    if (!deprecatedOk(c.meta.deprecated)) bad(`components.${i}.meta.deprecated`, "deprecated must be an object");
+  });
+  return issues;
 }
 
 export function checkSnapshotIntegrity(s: Snapshot): SnapshotIssue[] {

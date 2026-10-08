@@ -2,6 +2,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useTextStyleStore } from "@/store/textStyleStore";
 import { useHistoryStore } from "@/store/historyStore";
+import { useDocumentStore } from "@/store/documentStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
 import { makeThemeCollection } from "@/lib/variables";
@@ -27,6 +28,8 @@ export const openDocument: ToolHandler = async (args) => {
     // A brand-new document has no relationship to whatever share link was
     // active for the previous one.
     saveShareCredentials(null);
+    // Nor to the previous document's identity, library pins or authorship.
+    useDocumentStore.getState().setLibraryState({});
 
     return JSON.stringify({ success: true, message: "New document created" });
   }
