@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetStores, seedVariables } from "@/test/fixtures";
 import { useVariableStore } from "@/store/variableStore";
+import { useSceneStore } from "@/store/sceneStore";
+import { useThemeStore } from "@/store/themeStore";
+import { makeThemeCollection, makeThemeVariable } from "@/lib/variables";
+import type { Variable } from "@/types/variable";
 import { buildCssForNodes } from "../buildCss";
 import type { FlatFrameNode, FlatSceneNode, RectNode } from "@/types/scene";
 import { boundFillButtonRect, gradientRect } from "./cssNodeFixtures";
@@ -183,3 +187,96 @@ describe("buildCssForNodes", () => {
     expect(css).not.toContain("--unused");
   });
 });
+
+describe("buildCssForNodes mode contexts", () => {
+  const primary: Variable = { ...makeThemeVariable("--primary", "#ffffff", "#000000"), id: "var-primary" };
+  const accent: Variable = {
+    id: "var-accent",
+    name: "--accent",
+    type: "color",
+    collectionId: "brand",
+    valuesByMode: { acme: "#aa0000", globex: "#00aa00" },
+    value: "#aa0000",
+  };
+  const brand = {
+    id: "brand",
+    name: "Brand",
+    modes: [
+      { id: "acme", name: "Acme" },
+      { id: "globex", name: "Globex" },
+    ],
+    defaultModeId: "acme",
+  };
+
+  function bound(id: string, variableId: string, extra: Record<string, unknown> = {}): FlatSceneNode {
+    return {
+      id,
+      type: "frame",
+      name: id,
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      fills: [{ id: `p-${id}`, type: "solid", color: "#123456", colorBinding: { variableId } }],
+      ...extra,
+    } as unknown as FlatSceneNode;
+  }
+
+  beforeEach(() => {
+    resetStores();
+    useVariableStore.setState({ variables: [primary, accent], collections: [makeThemeCollection(), brand] });
+  });
+
+  it("uses the document context when no frame overrides it", () => {
+    const { css } = buildCssForNodes(["a"], { a: bound("a", "var-primary") });
+    expect(css).toContain("--primary: #ffffff;");
+  });
+
+  it("resolves tokens in the frame's own modeOverrides", () => {
+    const { css, warnings } = buildCssForNodes(["a"], { a: bound("a", "var-primary", { modeOverrides: { theme: "dark" } }) });
+    expect(css).toContain("--primary: #000000;");
+    expect(warnings).toEqual([]);
+  });
+
+  it("honors a legacy themeOverride", () => {
+    const { css } = buildCssForNodes(["a"], { a: bound("a", "var-primary", { themeOverride: "dark" }) });
+    expect(css).toContain("--primary: #000000;");
+  });
+
+  it("inherits from a dark ancestor frame", () => {
+    const parent = bound("p", "var-primary", { modeOverrides: { theme: "dark" } });
+    const child = bound("c", "var-primary");
+    useSceneStore.setState({ parentById: { c: "p", p: null } });
+    const { css } = buildCssForNodes(["c"], { p: parent, c: child });
+    expect(css).toContain("--primary: #000000;");
+  });
+
+  it("combines Theme and Brand picks", () => {
+    const node = bound("a", "var-primary", {
+      modeOverrides: { theme: "dark", brand: "globex" },
+      fills: [
+        { id: "p1", type: "solid", color: "#1", colorBinding: { variableId: "var-primary" } },
+        { id: "p2", type: "solid", color: "#2", colorBinding: { variableId: "var-accent" } },
+      ],
+    });
+    const { css } = buildCssForNodes(["a"], { a: node });
+    expect(css).toContain("--primary: #000000;");
+    expect(css).toContain("--accent: #00aa00;");
+  });
+
+  it("warns and uses the first context when selected nodes differ", () => {
+    const a = bound("a", "var-primary");
+    const b = bound("b", "var-primary", { modeOverrides: { theme: "dark" } });
+    const { css, warnings } = buildCssForNodes(["a", "b"], { a, b });
+    expect(css).toContain("--primary: #ffffff;");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/different modes/);
+  });
+
+  it("follows the document mode context", () => {
+    useThemeStore.getState().setCollectionMode("brand", "globex");
+    const { css } = buildCssForNodes(["a"], { a: bound("a", "var-accent") });
+    expect(css).toContain("--accent: #00aa00;");
+  });
+});
+

@@ -3,6 +3,7 @@ import { resetStores, seedVariables } from "@/test/fixtures";
 import { buildReactCode } from "../react";
 import type { FlatFrameNode, RectNode } from "@/types/scene";
 import { frameNode, pathNode, titleText } from "./codegenNodeFixtures";
+import { useSceneStore } from "@/store/sceneStore";
 
 function avatarImage(): RectNode {
   return {
@@ -218,3 +219,52 @@ describe("buildReactCode", () => {
     await assertCompiles(code);
   });
 });
+
+describe("buildReactCode tokens block per mode context", () => {
+  const opts = { units: "px", remBase: 16, styleMode: "inline" } as const;
+  const boundFill = [
+    { id: "p1", type: "solid", color: "#3366ff", colorBinding: { variableId: "var-primary" } },
+  ];
+
+  beforeEach(() => {
+    resetStores();
+    seedVariables();
+  });
+
+  it("resolves tokens in the generated frame's own mode override", () => {
+    const frame = frameNode({ layout: undefined, fills: boundFill, modeOverrides: { theme: "dark" } } as unknown as Partial<FlatFrameNode>);
+    const { code, warnings } = buildReactCode("frame1", { frame1: frame }, {}, opts);
+    expect(code).toContain("--primary: #99bbff;");
+    expect(warnings).toEqual([]);
+  });
+
+  it("resolves tokens in an ancestor's mode override", () => {
+    const frame = frameNode({ layout: undefined, fills: boundFill } as unknown as Partial<FlatFrameNode>);
+    const parent = frameNode({ id: "outer", modeOverrides: { theme: "dark" } } as unknown as Partial<FlatFrameNode>);
+    useSceneStore.setState({ parentById: { frame1: "outer", outer: null } });
+    const { code } = buildReactCode("frame1", { frame1: frame, outer: parent }, {}, opts);
+    expect(code).toContain("--primary: #99bbff;");
+  });
+
+  it("warns when a nested frame resolves in a different mode", () => {
+    const root = frameNode({ layout: undefined, fills: boundFill } as unknown as Partial<FlatFrameNode>);
+    const inner = frameNode({ id: "inner", fills: boundFill, modeOverrides: { theme: "dark" } } as unknown as Partial<FlatFrameNode>);
+    const leaf = frameNode({ id: "leaf", fills: boundFill } as unknown as Partial<FlatFrameNode>);
+    const { code, warnings } = buildReactCode(
+      "frame1",
+      { frame1: root, inner, leaf },
+      { frame1: ["inner"], inner: ["leaf"] },
+      opts,
+    );
+    expect(code).toContain("--primary: #3366ff;");
+    expect(warnings.some((w) => /different modes/.test(w))).toBe(true);
+  });
+
+  it("does not warn without nested differences", () => {
+    const root = frameNode({ layout: undefined, fills: boundFill } as unknown as Partial<FlatFrameNode>);
+    const inner = frameNode({ id: "inner", fills: boundFill } as unknown as Partial<FlatFrameNode>);
+    const { warnings } = buildReactCode("frame1", { frame1: root, inner }, { frame1: ["inner"] }, opts);
+    expect(warnings).toEqual([]);
+  });
+});
+

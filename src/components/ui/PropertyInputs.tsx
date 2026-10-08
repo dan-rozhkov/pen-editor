@@ -435,6 +435,8 @@ interface SelectInputProps {
   labelOutside?: boolean;
   labelClassName?: string;
   isMixed?: boolean;
+  /** Accessible name for the trigger; defaults to nothing, so pass it when there is no visible `label`. */
+  ariaLabel?: string;
 }
 
 export function SelectInput({
@@ -446,6 +448,7 @@ export function SelectInput({
   labelOutside = false,
   labelClassName,
   isMixed = false,
+  ariaLabel,
 }: SelectInputProps) {
   const readOnly = useReadOnly();
   const handleChange = (val: string | null) => {
@@ -470,6 +473,7 @@ export function SelectInput({
           options={selectOptions}
           triggerPrefix={prefix}
           size="sm"
+          ariaLabel={ariaLabel}
           className="w-full"
         />
       </div>
@@ -486,6 +490,7 @@ export function SelectInput({
           options={selectOptions}
           triggerPrefix={prefix}
           size="sm"
+          ariaLabel={ariaLabel}
           className="w-full"
         />
       </div>
@@ -500,6 +505,7 @@ export function SelectInput({
         options={selectOptions}
         triggerPrefix={prefix}
         size="sm"
+          ariaLabel={ariaLabel}
         className="w-full"
       />
     </div>
