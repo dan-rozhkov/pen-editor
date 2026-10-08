@@ -54,6 +54,15 @@ describe("<LeftRail />", () => {
     expect(useLeftSidebarStore.getState().activeSection).toBe("variables");
   });
 
+  it("switches to the lint section, and hides it where the host omits it", () => {
+    const { unmount } = render(<LeftRail />);
+    fireEvent.click(screen.getByTestId("rail-lint"));
+    expect(useLeftSidebarStore.getState().activeSection).toBe("lint");
+    unmount();
+    render(<LeftRail hiddenSections={["lint"]} />);
+    expect(screen.queryByTestId("rail-lint")).toBeNull();
+  });
+
   it("switches to the text styles section when its rail icon is clicked", () => {
     render(<LeftRail />);
     fireEvent.click(screen.getByTestId("rail-text-styles"));
@@ -72,6 +81,7 @@ describe("<LeftRail /> in a shared (/c/:shareId) view", () => {
     expect(screen.queryByTestId("rail-agents")).toBeNull();
     expect(screen.queryByTestId("rail-toolbox")).toBeNull();
     expect(screen.queryByTestId("rail-comments")).toBeNull();
+    expect(screen.queryByTestId("rail-lint")).toBeNull();
     expect(screen.getByTestId("rail-pages")).toBeTruthy();
   });
 

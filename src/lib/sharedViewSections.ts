@@ -7,8 +7,9 @@ import type { LeftSection } from "@/store/leftSidebarStore";
 // way to open the chat (and therefore invoke a tool) is the actual
 // enforcement of "view only" here, not a UI nicety. "toolbox" (plugins) and
 // "comments" (a discussion surface tied to an editable document) are hidden
-// for the same "this isn't your document" reason.
-export const HIDDEN_IN_SHARED_VIEW = new Set<LeftSection>(["agents", "toolbox", "comments"]);
+// for the same "this isn't your document" reason. "lint" is hidden because
+// its Fix buttons write to the scene.
+export const HIDDEN_IN_SHARED_VIEW = new Set<LeftSection>(["agents", "toolbox", "comments", "lint"]);
 
 /**
  * The section to actually render, given the persisted user preference and
