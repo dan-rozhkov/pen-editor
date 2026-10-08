@@ -8,6 +8,7 @@ import { useUIThemeStore } from "@/store/uiThemeStore";
 import { useRenderModeStore } from "@/store/renderModeStore";
 import { formatShortcut } from "./shortcutFormat";
 import type { PaletteCommand } from "./types";
+import { toggleCanvasMode } from "@/lib/variables/canvasMode";
 import { getCanvasViewportMetrics } from "@/utils/canvasViewport";
 
 function fitToContent(): void {
@@ -67,6 +68,15 @@ export function getViewCommands(): PaletteCommand[] {
       label: "Dark theme",
       group: "View",
       run: () => useUIThemeStore.getState().setUITheme("dark"),
+    },
+    {
+      id: "view-toggle-canvas-mode",
+      label: "Toggle canvas mode",
+      group: "View",
+      keywords: ["light dark", "canvas theme", "mode", "variables mode"],
+      run: () => {
+        toggleCanvasMode();
+      },
     },
   ];
 }
