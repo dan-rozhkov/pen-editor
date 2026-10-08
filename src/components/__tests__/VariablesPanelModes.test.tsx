@@ -53,6 +53,18 @@ describe("<VariablesPanelContent /> collections and modes", () => {
     expect(Object.keys(added.valuesByMode ?? {})).toHaveLength(2);
   });
 
+  it("disables Add mode for the Theme collection, with an explanation, and the store refuses too", () => {
+    seedVariables();
+    render(<VariablesPanelContent />);
+    const button = screen.getByLabelText("Add mode") as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute("title")).toMatch(/fixed/i);
+    fireEvent.click(button);
+    expect(store().collections.find((c) => c.id === "theme")?.modes).toHaveLength(2);
+    expect(store().addMode("theme", "Sepia")).toBeNull();
+    expect(store().collections.find((c) => c.id === "theme")?.modes).toHaveLength(2);
+  });
+
   it("adds a mode as a new column and protects the default mode from deletion", () => {
     render(<VariablesPanelContent />);
     const created = addCollectionViaUi();

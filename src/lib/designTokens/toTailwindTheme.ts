@@ -1,6 +1,6 @@
 // src/lib/designTokens/toTailwindTheme.ts
 import { THEME_COLLECTION_ID, getVariableCssName, type Variable } from "@/types/variable";
-import { formatDecls, planCssTokens, type CssDecl, type CssTokenInput } from "./cssTokens";
+import { formatDecls, isLengthScoped, planCssTokens, type CssDecl, type CssTokenInput } from "./cssTokens";
 
 /** The Tailwind v4 theme namespace a variable belongs to, or undefined if none maps. */
 export function tailwindNamespace(v: Variable): string | undefined {
@@ -26,7 +26,11 @@ export function tailwindName(v: Variable): string {
  * when the Theme collection has a dark mode.
  */
 export function toTailwindTheme(input: CssTokenInput): { css: string; warnings: string[] } {
-  const plan = planCssTokens(input, { nameOf: tailwindName });
+  // Length namespaces (radius, spacing, text) take px, like any other length-scoped number.
+  const plan = planCssTokens(input, {
+    nameOf: tailwindName,
+    isLength: isLengthScoped,
+  });
   const themed: CssDecl[] = plan.defaults.filter((d) => tailwindNamespace(d.variable));
   const plain: CssDecl[] = plan.defaults.filter((d) => !tailwindNamespace(d.variable));
   const blocks: string[] = [];

@@ -18,7 +18,8 @@ import {
   applyVariablePatch,
   remapToCollection,
   upgradeVariablesV2,
-  wouldCreateCycle,
+  aliasEdgeProblem,
+  randomId,
   ensureThemeCollection,
 } from '../lib/variables'
 import { useHistoryStore } from './historyStore'
@@ -74,10 +75,6 @@ function saveVariableHistory(): void {
   useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()))
 }
 
-function randomId(prefix: string): string {
-  return prefix + Math.random().toString(36).substring(2, 9)
-}
-
 /** Upgrade + finalize in one go: the single normalizing boundary of the store. */
 function normalized(
   variables: unknown[],
@@ -124,9 +121,7 @@ export const useVariableStore = create<VariableState>((set, get) => {
       if (collection && !collection.modes.some((m) => m.id === modeId)) return false
       if (typeof value !== 'string') {
         const index = buildVariableIndex(variables, collections)
-        const aliased = index.byId.get(value.alias)
-        if (!aliased || aliased.type !== target.type) return false
-        if (wouldCreateCycle(index, id, value.alias)) return false
+        if (aliasEdgeProblem(index, id, target.type, value.alias) !== null) return false
       }
       saveVariableHistory()
       commit(
@@ -216,7 +211,8 @@ export const useVariableStore = create<VariableState>((set, get) => {
     addMode: (collectionId, name) => {
       const { variables, collections } = get()
       const collection = collections.find((c) => c.id === collectionId)
-      if (!collection) return null
+      // Theme modes are fixed (light/dark back the compat mirrors).
+      if (!collection || collectionId === THEME_COLLECTION_ID) return null
       saveVariableHistory()
       const mode = { id: randomId('mode_'), name }
       commit(

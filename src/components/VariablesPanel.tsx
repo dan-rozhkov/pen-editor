@@ -79,7 +79,7 @@ const headClass =
   "text-[11px] font-semibold text-text-muted uppercase tracking-wide px-3 py-2.5 h-auto border-l border-border-light";
 
 const iconButtonClass =
-  "p-1 rounded hover:bg-white/10 text-text-muted hover:text-text-primary transition-colors focus-visible:ring-1 focus-visible:ring-accent-light outline-none";
+  "p-1 rounded hover:bg-white/10 text-text-muted hover:text-text-primary transition-colors focus-visible:ring-1 focus-visible:ring-accent-light outline-none disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent";
 
 // Color cell with swatch + hex value
 function ColorCell({
@@ -500,8 +500,11 @@ export function VariablesPanelContent() {
     setNotice(null);
   };
 
+  const themeModesFixed = active?.id === THEME_COLLECTION_ID;
+  const addModeHint = themeModesFixed ? "Theme modes are fixed (Light and Dark)" : "Add mode";
+
   const handleAddMode = () => {
-    if (active) addMode(active.id, `Mode ${active.modes.length + 1}`);
+    if (active && !themeModesFixed) addMode(active.id, `Mode ${active.modes.length + 1}`);
   };
 
   return (
@@ -663,6 +666,8 @@ export function VariablesPanelContent() {
                   type="button"
                   className={iconButtonClass}
                   aria-label="Add mode"
+                  title={addModeHint}
+                  disabled={themeModesFixed}
                   onClick={handleAddMode}
                 >
                   <PlusIcon className="size-3.5" />

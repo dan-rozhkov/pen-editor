@@ -157,7 +157,9 @@ function cssResolver(css: string, nameOf: (v: Variable) => string) {
       if (raw.startsWith('"')) return raw.slice(1, -1).replace(/\\a /g, "\n").replace(/\\(.)/g, "$1");
       return raw;
     };
-    return chase(nameOf(index.byId.get(id) as Variable));
+    // Lengths carry px; compare the number.
+    const value = chase(nameOf(index.byId.get(id) as Variable));
+    return /^-?[\d.]+px$/.test(value) ? value.slice(0, -2) : value;
   };
 }
 
@@ -204,8 +206,8 @@ describe("tokens v2 exit criteria: every token and mode agrees across DTCG, CSS 
     expect(tw.css).toContain("@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));");
     expect(tw.css).toContain("@theme {");
     expect(tw.css).toContain("--color-bg: var(--color-color-white);");
-    expect(tw.css).toContain("--radius-radius-md: 8;");
-    expect(tw.css).toContain("--spacing-space-4: 4;");
+    expect(tw.css).toContain("--radius-radius-md: 8px;");
+    expect(tw.css).toContain("--spacing-space-4: 4px;");
     expect(tw.css).toMatch(/@layer base \{\s*\[data-theme="dark"\]/);
     expect(tw.css).toMatch(/Tokens with no Tailwind theme namespace \*\/\s*:root \{[^}]*--font-body/);
   });

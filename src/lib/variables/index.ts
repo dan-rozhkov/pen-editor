@@ -4,3 +4,4 @@ export * from "./resolve";
 export * from "./aliasGraph";
 export * from "./migrate";
 export * from "./patch";
+export * from "./shared";

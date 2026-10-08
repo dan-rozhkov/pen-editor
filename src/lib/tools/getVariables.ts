@@ -18,14 +18,15 @@ import type { ToolHandler } from "../toolRegistry";
 import {
   findCollection,
   findMode,
-  findVariablesByRef,
+  formatVariableRef,
+  resolveVariableRef,
 } from "./variableToolUtils";
 
-/** `$--name` for an alias, so a raw value reads the same as a `set_variables` input. */
-function aliasText(index: VariableIndex, targetId: string): string {
+/** `$--name` for an alias (`$Collection/--name` when the name is ambiguous). */
+function aliasText(index: VariableIndex, variables: Variable[], collections: VariableCollection[], targetId: string): string {
   const target = index.byId.get(targetId);
   if (!target) return `$${targetId}`;
-  return `$${target.name.trim().replace(/^\$/, "")}`;
+  return formatVariableRef(variables, collections, target);
 }
 
 function asStringList(x: unknown): string[] {
@@ -64,7 +65,7 @@ export const getVariables: ToolHandler = async (args) => {
     const wanted = new Set<string>();
     const missing: string[] = [];
     for (const name of names) {
-      const hits = findVariablesByRef(selected, name);
+      const hits = resolveVariableRef(selected, allCollections, name);
       if (hits.length === 0) missing.push(name);
       for (const hit of hits) wanted.add(hit.id);
     }
@@ -103,7 +104,7 @@ export const getVariables: ToolHandler = async (args) => {
       if (entry === undefined) continue;
       const resolved = resolveVariable(index, v.id, { [cid]: mode.id });
       values[mode.name] = {
-        raw: typeof entry === "string" ? entry : aliasText(index, entry.alias),
+        raw: typeof entry === "string" ? entry : aliasText(index, variables, allCollections, entry.alias),
         resolved: resolved.ok ? resolved.value : v.value,
       };
     }
@@ -111,7 +112,7 @@ export const getVariables: ToolHandler = async (args) => {
       ? {
           ...v.deprecated,
           ...(v.deprecated.replacedBy
-            ? { replacedBy: aliasText(index, v.deprecated.replacedBy) }
+            ? { replacedBy: aliasText(index, variables, allCollections, v.deprecated.replacedBy) }
             : {}),
         }
       : undefined;

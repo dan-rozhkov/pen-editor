@@ -5,10 +5,10 @@ import {
   type VariableCollection,
   type VariableModeValue,
 } from "@/types/variable";
-import { wouldCreateCycle } from "./aliasGraph";
 import { patchVariable } from "./migrate";
 import { resolveVariable } from "./resolve";
-import { buildVariableIndex, collectionIdOf, modeValuesOf } from "./variableIndex";
+import { aliasEdgeProblem, typeChangeBreaksAliases } from "./shared";
+import { buildVariableIndex, collectionIdOf } from "./variableIndex";
 
 /**
  * Move `variable` into `target`: every mode of the target gets the value the
@@ -70,24 +70,10 @@ export function applyVariablePatch(
     for (const [modeId, entry] of Object.entries(next.valuesByMode ?? {})) {
       if (collection && !collection.modes.some((m) => m.id === modeId)) return null;
       if (typeof entry === "string") continue;
-      const aliased = index.byId.get(entry.alias);
-      if (!aliased || aliased.type !== next.type) return null;
-      if (wouldCreateCycle(index, id, entry.alias)) return null;
+      if (aliasEdgeProblem(index, id, next.type, entry.alias) !== null) return null;
     }
   }
 
-  if (next.type !== prev.type) {
-    for (const entry of Object.values(modeValuesOf(next))) {
-      if (typeof entry === "string") continue;
-      if (index.byId.get(entry.alias)?.type !== next.type) return null;
-    }
-    for (const holder of index.byId.values()) {
-      if (holder.type === next.type) continue;
-      const aliasesIt = Object.values(modeValuesOf(holder)).some(
-        (e) => typeof e !== "string" && e.alias === id,
-      );
-      if (aliasesIt) return null;
-    }
-  }
+  if (next.type !== prev.type && typeChangeBreaksAliases(index, next)) return null;
   return next;
 }

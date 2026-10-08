@@ -56,7 +56,23 @@ export function cssValue(raw: string): string {
   return `"${escaped}"`;
 }
 
+/** Add `px` to a bare non-zero number (`8` -> `8px`); anything else, and `0`, is kept. */
+export function withPx(raw: string): string {
+  const t = raw.trim();
+  return /^-?(\d+\.?\d*|\.\d+)$/.test(t) && Number(t) !== 0 ? `${t}px` : raw;
+}
+
+/** A number variable whose scopes say it is a length (not opacity, weight or unscoped). */
+export function isLengthScoped(v: Variable): boolean {
+  if (v.type !== "number") return false;
+  const scopes = v.scopes ?? [];
+  if (scopes.includes("opacity") || scopes.includes("fontWeight")) return false;
+  return scopes.some((s) => ["radius", "spacing", "gap", "size", "fontSize", "strokeWidth"].includes(s));
+}
+
 export interface PlanOptions {
+  /** Whether a number variable is a length and so is written with `px`. Default: `isLengthScoped`. */
+  isLength?: (v: Variable) => boolean;
   /** Custom-property name for a variable; defaults to `getVariableCssName`. */
   nameOf?: (v: Variable) => string;
 }
@@ -65,6 +81,7 @@ export function planCssTokens(input: CssTokenInput, options: PlanOptions = {}): 
   const warnings: string[] = [];
   const index = buildVariableIndex(input.variables, input.collections);
   const baseName = options.nameOf ?? getVariableCssName;
+  const isLength = options.isLength ?? isLengthScoped;
 
   const names = new Map<string, string>();
   const used = new Set<string>();
@@ -81,24 +98,34 @@ export function planCssTokens(input: CssTokenInput, options: PlanOptions = {}): 
   }
 
   const emit = (v: Variable, entry: VariableModeValue): string => {
-    if (typeof entry === "string") return cssValue(entry);
+    if (typeof entry === "string") return cssValue(isLength(v) ? withPx(entry) : entry);
     const target = names.get(entry.alias);
     if (target) return `var(${target})`;
     warnings.push(`Variable "${v.name}" aliases a deleted variable; wrote its resolved value.`);
-    return cssValue(v.value);
+    return cssValue(isLength(v) ? withPx(v.value) : v.value);
   };
 
   const defaults: CssDecl[] = [];
   const modes: CssModeBlock[] = [];
   const usedSelectors = new Set<string>();
+  const defaultById = new Map<string, CssDecl>();
+  const varsByCollection = new Map<string, Variable[]>();
+  for (const v of input.variables) {
+    const cid = collectionIdOf(v);
+    const list = varsByCollection.get(cid);
+    if (list) list.push(v);
+    else varsByCollection.set(cid, [v]);
+  }
   for (const collection of index.collections.values()) {
-    const vars = input.variables.filter((v) => collectionIdOf(v) === collection.id);
+    const vars = varsByCollection.get(collection.id) ?? [];
     if (vars.length === 0) continue;
     const attr = collection.id === THEME_COLLECTION_ID ? "theme" : slugify(collection.name) || slugify(collection.id);
     for (const v of vars) {
       const entry = modeValuesOf(v)[collection.defaultModeId];
       const fallback = entry ?? Object.values(modeValuesOf(v))[0] ?? v.value;
-      defaults.push({ variable: v, name: names.get(v.id) as string, value: emit(v, fallback) });
+      const decl: CssDecl = { variable: v, name: names.get(v.id) as string, value: emit(v, fallback) };
+      defaults.push(decl);
+      defaultById.set(v.id, decl);
     }
     for (const mode of collection.modes) {
       if (mode.id === collection.defaultModeId) continue;
@@ -113,7 +140,7 @@ export function planCssTokens(input: CssTokenInput, options: PlanOptions = {}): 
         const own = modeValuesOf(v)[mode.id];
         if (own === undefined) continue; // falls back to the default
         const value = emit(v, own);
-        const def = defaults.find((d) => d.variable.id === v.id);
+        const def = defaultById.get(v.id);
         if (def?.value === value) continue;
         decls.push({ variable: v, name: names.get(v.id) as string, value });
       }

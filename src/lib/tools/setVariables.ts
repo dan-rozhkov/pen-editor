@@ -16,19 +16,18 @@ function normalizeVariableName(name: unknown): string {
   return normalized || "Untitled";
 }
 
+/** Every key that marks an object as one variable definition (also with a `$` prefix). */
+const DEFINITION_KEYS = [
+  "id", "name", "type", "value", "color", "themeValues", "valuesByMode",
+  "description", "scopes", "deprecated", "collection",
+];
+
+function isDefinitionKey(key: string): boolean {
+  return DEFINITION_KEYS.includes(key.startsWith("$") ? key.slice(1) : key);
+}
+
 function isVariableDefinition(obj: Record<string, unknown>): boolean {
-  return (
-    "type" in obj ||
-    "$type" in obj ||
-    "value" in obj ||
-    "$value" in obj ||
-    "color" in obj ||
-    "$color" in obj ||
-    "themeValues" in obj ||
-    "$themeValues" in obj ||
-    "valuesByMode" in obj ||
-    "$valuesByMode" in obj
-  );
+  return Object.keys(obj).some(isDefinitionKey);
 }
 
 // Infer a variable type from a bare string value so the intuitive shorthand
@@ -128,6 +127,8 @@ function extractEntries(
   const extracted: VariableEntry[] = [];
 
   for (const [key, val] of Object.entries(obj)) {
+    // A field name is never a variable name (`{ description: "x" }` next to tokens).
+    if (isDefinitionKey(key)) continue;
     // Shorthand: a bare string maps a name straight to a value, e.g.
     // `{ "--brand-primary": "#3b82f6", "--radius-lg": "16" }`.
     if (typeof val === "string") {
@@ -178,7 +179,7 @@ export const setVariables: ToolHandler = async (args) => {
   const incoming = args.variables as Record<string, unknown> | unknown[] | undefined;
   const replace = (args.replace as boolean) ?? false;
 
-  if (!incoming) {
+  if (!incoming && args.collections === undefined) {
     return JSON.stringify({ error: "No variables provided" });
   }
 
@@ -190,7 +191,9 @@ export const setVariables: ToolHandler = async (args) => {
   const normalizedIncoming =
     isRecord(incoming) && isRecord(incoming.variables) ? incoming.variables : incoming;
 
-  if (Array.isArray(normalizedIncoming)) {
+  if (!normalizedIncoming) {
+    // collections-only call
+  } else if (Array.isArray(normalizedIncoming)) {
     for (const v of normalizedIncoming) {
       if (isRecord(v)) entries.push(parseEntry(v, undefined, errors));
     }
@@ -206,7 +209,7 @@ export const setVariables: ToolHandler = async (args) => {
   if (errors.length > 0) {
     return JSON.stringify({ error: `set_variables changed nothing. ${errors.join(" ")}` });
   }
-  if (entries.length === 0) {
+  if (entries.length === 0 && (collectionSpecs === undefined || Object.keys(collectionSpecs).length === 0)) {
     return JSON.stringify({ error: "No valid variables found in input" });
   }
 

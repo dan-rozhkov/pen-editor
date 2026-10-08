@@ -12,7 +12,8 @@ import {
   finalizeVariables,
   makeThemeCollection,
   resolveVariable,
-  wouldCreateCycle,
+  aliasEdgeProblem,
+  TYPE_DEFAULTS,
 } from "@/lib/variables";
 import type { FillStyle, EffectStyle } from "@/types/style";
 import { generateFillStyleId, generateEffectStyleId } from "@/types/style";
@@ -174,7 +175,6 @@ export function fromDtcg(doc: DtcgDocument): { result: ImportResult; warnings: s
   // Pass 2: literals first, then aliases one by one (cycle and type checked against what is already linked).
   const aliasPath = (value: unknown): string | undefined =>
     typeof value === "string" ? ALIAS_RE.exec(value)?.[1] : undefined;
-  const typeDefault = (t: VariableType): string => (t === "color" ? "#000000" : t === "number" ? "0" : "");
   for (const variable of result.variables) {
     for (const [modeId, value] of Object.entries(rawByVar.get(variable.id) ?? {})) {
       if (aliasPath(value) === undefined) variable.valuesByMode![modeId] = String(value);
@@ -186,15 +186,14 @@ export function fromDtcg(doc: DtcgDocument): { result: ImportResult; warnings: s
       const path = aliasPath(value);
       if (path === undefined) continue;
       const target = pathToVar.get(path);
-      let entry: VariableModeValue = typeDefault(variable.type);
+      let entry: VariableModeValue = TYPE_DEFAULTS[variable.type];
       if (!target) {
         warnings.push(`Variable "${variable.name}" references unknown alias ${value}; used a default value.`);
-      } else if (target.type !== variable.type) {
-        warnings.push(`Variable "${variable.name}" aliases ${value} of a different type; used a default value.`);
-      } else if (wouldCreateCycle(index, variable.id, target.id)) {
-        warnings.push(`Variable "${variable.name}" aliasing ${value} would form a cycle; used a default value.`);
       } else {
-        entry = { alias: target.id };
+        const problem = aliasEdgeProblem(index, variable.id, variable.type, target.id);
+        if (problem === "type") warnings.push(`Variable "${variable.name}" aliases ${value} of a different type; used a default value.`);
+        else if (problem !== null) warnings.push(`Variable "${variable.name}" aliasing ${value} would form a cycle; used a default value.`);
+        else entry = { alias: target.id };
       }
       variable.valuesByMode![modeId] = entry;
     }

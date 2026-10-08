@@ -10,15 +10,18 @@ import {
   type VariableType,
 } from "@/types/variable";
 import {
+  TYPE_DEFAULTS,
   collectionIdOf,
   ensureThemeCollection,
   findCycles,
   modeValuesOf,
+  randomId,
+  uniqueSlug,
 } from "@/lib/variables";
 import {
   findCollection,
   findMode,
-  findVariablesByRef,
+  resolveVariableRef,
   stripVariableRef,
 } from "./variableToolUtils";
 
@@ -59,20 +62,6 @@ export type Plan =
       updated: string[];
       warnings: string[];
     };
-
-const TYPE_DEFAULTS: Record<VariableType, string> = { color: "#000000", number: "0", string: "" };
-
-function slug(name: string): string {
-  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "mode";
-}
-
-function uniqueModeId(taken: Set<string>, name: string): string {
-  const base = slug(name);
-  let id = base;
-  for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
-  taken.add(id);
-  return id;
-}
 
 function sameName(a: string, b: string): boolean {
   return stripVariableRef(a) === stripVariableRef(b);
@@ -124,7 +113,7 @@ export function planVariableChanges(input: PlanInput): Plan {
       const taken = new Set(existing.modes.map((m) => m.id));
       for (const modeName of spec.modes) {
         if (findMode(existing, modeName)) continue;
-        const mode = { id: uniqueModeId(taken, modeName), name: modeName.trim() };
+        const mode = { id: uniqueSlug(taken, modeName), name: modeName.trim() };
         existing.modes.push(mode);
         // A new mode starts as a copy of the default mode.
         next = next.map((v) => {
@@ -142,9 +131,9 @@ export function planVariableChanges(input: PlanInput): Plan {
       continue;
     }
     const taken = new Set<string>();
-    const modes = spec.modes.map((m) => ({ id: uniqueModeId(taken, m), name: m.trim() }));
+    const modes = spec.modes.map((m) => ({ id: uniqueSlug(taken, m), name: m.trim() }));
     const created: VariableCollection = {
-      id: "col_" + Math.random().toString(36).substring(2, 9),
+      id: randomId("col_"),
       name: name.trim(),
       modes,
       defaultModeId: modes[0].id,
@@ -163,7 +152,7 @@ export function planVariableChanges(input: PlanInput): Plan {
     const found = findCollection(collections, ref);
     if (found || !create) return found;
     const made: VariableCollection = {
-      id: "col_" + Math.random().toString(36).substring(2, 9),
+      id: randomId("col_"),
       name: ref.trim(),
       modes: [{ id: "default", name: "Default" }],
       defaultModeId: "default",
@@ -200,9 +189,15 @@ export function planVariableChanges(input: PlanInput): Plan {
     let match = entry.id ? next.find((v) => v.id === entry.id) : undefined;
     if (!match && entry.name !== undefined) {
       const name = entry.name;
-      match = next.find(
+      const hits = next.filter(
         (v) => sameName(v.name, name) && (target === undefined || collectionIdOf(v) === target.id),
       );
+      if (hits.length > 1) {
+        const where = hits.map((v) => collections.find((c) => c.id === collectionIdOf(v))?.name ?? collectionIdOf(v));
+        errors.push(`variable "${label}": the name is ambiguous (in collections ${where.join(", ")}). Set \`collection\` to choose one.`);
+        continue;
+      }
+      match = hits[0];
     }
     if (match && entry.collection !== undefined && target && collectionIdOf(match) !== target.id) {
       errors.push(`variable "${label}": it lives in another collection; set_variables cannot move it.`);
@@ -233,9 +228,18 @@ export function planVariableChanges(input: PlanInput): Plan {
 
     if (match) {
       if (entry.value !== undefined) {
-        raw[own.defaultModeId] = entry.value;
-        if (own.modes.length > 1 && Object.keys(entry.modeValues ?? {}).length === 0) {
-          warnings.push(`"${label}": \`value\` set the default mode "${own.modes.find((m) => m.id === own.defaultModeId)?.name}" only. Use \`valuesByMode\` to set other modes.`);
+        // Explicit `valuesByMode` entries win over `value` (same as on create).
+        const explicit = Object.keys(raw).length > 0;
+        const current = modeValuesOf(match);
+        const distinct = new Set(own.modes.map((m) => JSON.stringify(current[m.id] ?? null)));
+        if (own.id === THEME_COLLECTION_ID && distinct.size <= 1) {
+          // A single-valued Theme variable means "the one value": set every mode.
+          for (const mode of own.modes) raw[mode.id] ??= entry.value;
+        } else {
+          raw[own.defaultModeId] ??= entry.value;
+          if (own.modes.length > 1 && !explicit) {
+            warnings.push(`"${label}": \`value\` set the default mode "${own.modes.find((m) => m.id === own.defaultModeId)?.name}" only. Use \`valuesByMode\` to set other modes.`);
+          }
         }
       }
       const idx = next.indexOf(match);
@@ -302,7 +306,7 @@ export function planVariableChanges(input: PlanInput): Plan {
     if (v) v.type = type;
   };
   const lookup = (ref: string, label: string): Variable | undefined => {
-    const hits = findVariablesByRef(next, ref);
+    const hits = resolveVariableRef(next, collections, ref);
     if (hits.length === 1) return hits[0];
     errors.push(
       hits.length === 0
@@ -318,7 +322,7 @@ export function planVariableChanges(input: PlanInput): Plan {
     for (const p of pending) {
       if (!p.typeFromAlias) continue;
       const first = Object.values(p.raw).find((v) => v.startsWith("$"));
-      const targets = first ? findVariablesByRef(next, first) : [];
+      const targets = first ? resolveVariableRef(next, collections, first) : [];
       if (targets.length === 1 && !pending.some((q) => q.typeFromAlias && q.id === targets[0].id)) {
         setType(p.id, targets[0].type);
         p.typeFromAlias = false;
@@ -341,7 +345,7 @@ export function planVariableChanges(input: PlanInput): Plan {
     }
     v.valuesByMode = resolved;
     if (p.replacedBy !== undefined) {
-      const hits = findVariablesByRef(next, p.replacedBy);
+      const hits = resolveVariableRef(next, collections, p.replacedBy);
       if (hits.length === 1) v.deprecated = { ...(v.deprecated ?? {}), replacedBy: hits[0].id };
       else errors.push(`variable "${v.name}": deprecated.replacedBy "${p.replacedBy}" ${hits.length === 0 ? "does not exist" : "is ambiguous"}.`);
     }
