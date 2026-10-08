@@ -4,6 +4,7 @@ import { applyAnchorEdits } from "@/lib/embedHtmlEdit/applyAnchorEdits";
 import { parseAnchorEditsInput } from "@/lib/embedHtmlEdit/parseEdits";
 import { inspectEmbedHtml } from "@/lib/embedHtmlLint/inspectEmbedHtml";
 import { describeUnknownTags, finalizeEmbedHtml } from "@/lib/embedComponents/pipeline";
+import { collapseComponentRegions } from "@/lib/embedComponents";
 import { selectComponentRegistry } from "@/store/componentRegistry";
 import {
   takeProgressiveEmbedHtmlSession,
@@ -57,12 +58,30 @@ export const editEmbedHtml: ToolHandler = async (args, context) => {
   const embed = node as unknown as EmbedNode;
   const source = embed.htmlContent;
 
+  // Anchors match the compact view (component regions as `<c-key>` tags) by
+  // default. A master is always edited as stored. A compact miss retries on
+  // the expanded text, which is what older anchors were copied from.
+  const registry = selectComponentRegistry();
+  const wantsCompact = args.view !== "expanded" && !embed.component;
+  const compactSource = wantsCompact ? collapseComponentRegions(source, registry) : source;
+
   let edited;
+  let viewNote: string | null = null;
   try {
-    edited = applyAnchorEdits(source, edits);
+    edited = applyAnchorEdits(compactSource, edits);
   } catch (err) {
     // Nothing was written to the store — the failure is fully atomic.
-    return JSON.stringify({ error: err instanceof Error ? err.message : String(err) });
+    if (compactSource === source) {
+      return JSON.stringify({ error: err instanceof Error ? err.message : String(err) });
+    }
+    try {
+      edited = applyAnchorEdits(source, edits);
+      viewNote =
+        "The anchors were not found in the compact view and matched the expanded view instead. " +
+        'Pass view: "expanded" to read and edit that text, or use the <c-key> tags from the compact view.';
+    } catch {
+      return JSON.stringify({ error: err instanceof Error ? err.message : String(err) });
+    }
   }
 
   // Components: expand registered `<c-key>` tags the edit introduced, refuse
@@ -70,7 +89,7 @@ export const editEmbedHtml: ToolHandler = async (args, context) => {
   // validate/normalize the HTML when the node IS a master. Nothing is
   // written on a refusal, same as a failed anchor match.
   const finalized = finalizeEmbedHtml(edited.html, {
-    registry: selectComponentRegistry(),
+    registry,
     previousHtml: source,
     masterMeta: embed.component,
   });
@@ -88,6 +107,7 @@ export const editEmbedHtml: ToolHandler = async (args, context) => {
   const unknownNote = describeUnknownTags(finalized.unknownTags);
   if (unknownNote) issues.push(unknownNote);
   issues.push(...finalized.warnings);
+  if (viewNote) issues.push(viewNote);
 
   const newNodesById: Record<string, FlatSceneNode> = {
     ...state.nodesById,

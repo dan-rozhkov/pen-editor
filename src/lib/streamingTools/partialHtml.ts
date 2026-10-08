@@ -22,8 +22,30 @@ function hasOpenStyle(html: string): boolean {
   return open !== -1 && lower.indexOf("</style", open) === -1;
 }
 
+/** Index of a trailing `<c-…` tag that is still open (quote-aware), else -1. */
+function openComponentTagStart(html: string): number {
+  const start = html.lastIndexOf("<c-");
+  if (start === -1) return -1;
+  let quote: string | null = null;
+  for (let i = start; i < html.length; i++) {
+    const ch = html[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === ">") {
+      return -1;
+    }
+  }
+  return start;
+}
+
 export function repairPartialHtml(html: string): string {
   if (hasOpenComment(html)) return `${html}-->`;
+  // A cut-off component tag (`<c-btn kind="pri`, or `title="a>b` inside a
+  // quote) goes first: the generic rule below stops at the first `>`.
+  const cut = openComponentTagStart(html);
+  if (cut !== -1) html = html.slice(0, cut);
   let out = html.replace(INCOMPLETE_TAG_RE, "");
   out = out.replace(INCOMPLETE_ENTITY_RE, "");
   if (hasOpenStyle(out)) out += "</style>";

@@ -9,6 +9,7 @@ export {
   type ValidateMasterResult,
 } from "./master";
 export { renderInstance, renderRegionElement, readRegionSpec } from "./render";
+export { collapseComponentRegions } from "./collapse";
 export { expandComponentTags, mentionsRegisteredTag, type ExpandResult } from "./expand";
 export {
   reconcileHtml,

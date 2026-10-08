@@ -592,6 +592,12 @@ export const WEBMCP_TOOL_SPECS: readonly WebMcpToolSpec[] = [
           description:
             "outline = elided structure (default), grep = matches for `pattern`, full = entire HTML.",
         },
+        view: {
+          type: "string",
+          enum: ["compact", "expanded"],
+          description:
+            "compact (default) shows each component instance as one <c-KEY …> tag. expanded shows the full managed markup of each instance.",
+        },
         pattern: {
           type: "string",
           description: "Literal substring to search for (not a regex). Required when mode is 'grep'.",

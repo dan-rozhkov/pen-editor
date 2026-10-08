@@ -8,7 +8,8 @@ import { useViewportStore } from "@/store/viewportStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useThemeStore } from "@/store/themeStore";
 import { PLACEHOLDER_COLOR_CSS as ACCENT } from "@/lib/streamingTools/pendingScreenColor";
-import { repairPartialHtml } from "@/lib/streamingTools/partialHtml";
+import { repairAndExpandPartialHtml } from "@/lib/streamingTools/partialComponents";
+import { selectComponentRegistry } from "@/store/componentRegistry";
 import { morphChildren } from "@/lib/streamingTools/morphDom";
 import { measureFrontier } from "@/lib/streamingTools/measureFrontier";
 import {
@@ -84,7 +85,7 @@ function buildContent(raw: string, w: number, h: number) {
   content.style.height = `${h}px`;
   content.style.overflow = "hidden";
   applyEmbedInheritedDefaults(content);
-  const mountResult = mountHtmlWithBodyStyles(content, repairPartialHtml(raw), w, h);
+  const mountResult = mountHtmlWithBodyStyles(content, repairAndExpandPartialHtml(raw, selectComponentRegistry()), w, h);
   applyEditorVariableProperties(content, mountResult.root, previewVariableValues());
   return { content, root: mountResult.root };
 }

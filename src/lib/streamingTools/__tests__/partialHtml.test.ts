@@ -17,6 +17,9 @@ describe("repairPartialHtml", () => {
     ["unclosed style", "<style>.a{color:red}.b{col", "<style>.a{color:red}.b{col</style>"],
     ["closed style untouched", "<style>.a{}</style><p>x", "<style>.a{}</style><p>x"],
     ["half-typed style close tag", "<style>.a{}</sty", "<style>.a{}</style>"],
+    ["cut-off component tag", '<div><c-btn kind="pri', "<div>"],
+    ["component tag cut inside a quote holding >", '<div><c-btn title="a>b', "<div>"],
+    ["complete component tag kept", '<c-btn kind="primary">Hi', '<c-btn kind="primary">Hi'],
     ["empty", "", ""],
   ])("%s", (_name, input, expected) => {
     expect(repairPartialHtml(input)).toBe(expected);
