@@ -102,6 +102,7 @@ describe.runIf(backendExists)("WebMCP schemas against the backend zod shapes", (
       batch_get: mod.batchGetInputShape as Record<string, ZodLike>,
       snapshot_layout: mod.snapshotLayoutInputShape as Record<string, ZodLike>,
       get_variables: mod.getVariablesInputShape as Record<string, ZodLike>,
+      get_design_system: mod.getDesignSystemInputShape as Record<string, ZodLike>,
       set_variables: mod.setVariablesInputShape as Record<string, ZodLike>,
       batch_design: mod.batchDesignInputShape as Record<string, ZodLike>,
       read_comments: mod.readCommentsInputShape as Record<string, ZodLike>,

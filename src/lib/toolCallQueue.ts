@@ -36,6 +36,7 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   "batch_get",
   "snapshot_layout",
   "get_variables",
+  "get_design_system",
   "get_screenshot",
   "get_text_styles",
   "get_styles",

@@ -240,6 +240,102 @@ export const WEBMCP_TOOL_SPECS: readonly WebMcpToolSpec[] = [
     mutating: false,
   },
   {
+    name: "get_design_system",
+    description:
+      "Read the design system of the .pen file: the design tokens (variables) with their collections, modes, scopes, and deprecation, and the registered components with their variants, slots, status, usage, and the tokens each one uses. " +
+      "Call it with no arguments to read everything. Pass `scope` to read a slice, `mode` to resolve values in one Theme mode (for example \"dark\"), `include` to choose the parts, and `limit` to cap the count. " +
+      "A filter that matches nothing returns empty lists and a hint, not an error. " +
+      "Prefer a semantic token over a primitive token. Do not bind a deprecated token or component.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        scope: {
+          type: "object",
+          description: "Filters. Omit it to read the whole design system.",
+          properties: {
+            saved: {
+              type: "string",
+              description:
+                "Name or id of a saved scope. Its filters apply first. The other fields in this object narrow it further.",
+            },
+            collections: {
+              type: "array",
+              items: { type: "string" },
+              description: "Collection names or ids. Returns only the tokens of these collections.",
+            },
+            components: {
+              type: "array",
+              items: { type: "string" },
+              description: "Component keys. Returns only these components.",
+            },
+            componentStatus: {
+              type: "array",
+              items: { type: "string", enum: ["draft", "stable", "deprecated"] },
+              description: "Component lifecycle statuses. Returns only components with one of these statuses.",
+            },
+            tokenScopes: {
+              type: "array",
+              items: { type: "string" },
+              description: 'Token scopes, for example "fill" or "radius". Returns only tokens that carry one of these scopes.',
+            },
+            names: {
+              type: "array",
+              items: { type: "string" },
+              description: 'Name globs, for example "--color-*". Each glob matches token names and component keys.',
+            },
+          },
+          additionalProperties: false,
+        },
+        // The backend also accepts an object that maps collection names to
+        // mode names. The validator subset has no union type, so this surface
+        // publishes the string form alone (tighter, never looser).
+        mode: {
+          type: "string",
+          description:
+            'Limits the returned values to one mode of the Theme collection, for example "dark". Omit it to use the mode context of the document.',
+        },
+        include: {
+          type: "array",
+          items: { type: "string", enum: ["tokens", "components", "lint"] },
+          description:
+            'Parts of the result to return. Omit it to get "tokens" and "components". Add "lint" to get the lint rule catalog and, when available, finding counts.',
+        },
+        limit: {
+          type: "integer",
+          minimum: 1,
+          maximum: 2000,
+          description:
+            "Maximum number of tokens and of components to return. Default 400. The result sets `truncated` when it cuts items.",
+        },
+      },
+      additionalProperties: false,
+    },
+    annotations: readOnly,
+    mutating: false,
+    // The result carries data read out of component master HTML (the tokens
+    // each component uses, their descriptions). sharedViewRedaction.ts cannot
+    // walk that shape, so a shared canvas gets no design-system tool at all —
+    // the same reasoning as read_embed_html.
+    withheldOnSharedView: true,
+  },
+  {
+    name: "get_styles",
+    description:
+      "Read all named, reusable fill (color, gradient, image, or pattern paint) and effect (shadow or blur stack) styles defined in the .pen file. " +
+      "A fill style can hold a full gradient or image, and its solid color may reference a variable.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: readOnly,
+    mutating: false,
+  },
+  {
+    name: "get_text_styles",
+    description:
+      "Read all named, reusable text styles defined in the .pen file: fontFamily, fontSize, fontWeight, lineHeight, letterSpacing, and textTransform.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: readOnly,
+    mutating: false,
+  },
+  {
     name: "get_screenshot",
     description:
       "Take a screenshot of a node for visual verification. Omit nodeId to screenshot the current selection (errors if none or more than one node is selected). Returns a PNG data URL.",

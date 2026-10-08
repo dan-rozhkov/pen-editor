@@ -174,6 +174,14 @@ describe("registerWebMcpTools", () => {
       expect(spec.withheldOnSharedView).toBe(true);
     });
 
+    it("withholds get_design_system in the shared viewer, but publishes the style readers", () => {
+      const byName = (n: string) => WEBMCP_TOOL_SPECS.find((s) => s.name === n)!;
+      expect(byName("get_design_system").mutating).toBe(false);
+      expect(byName("get_design_system").withheldOnSharedView).toBe(true);
+      expect(byName("get_styles").withheldOnSharedView).toBeFalsy();
+      expect(byName("get_text_styles").withheldOnSharedView).toBeFalsy();
+    });
+
     it("does not withhold read_embed_html in ?view mode on the user's own document", async () => {
       useEditorModeStore.getState().enterView();
 

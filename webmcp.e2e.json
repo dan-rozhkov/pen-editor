@@ -28,6 +28,25 @@
       "input": {}
     },
     {
+      "name": "get_design_system",
+      "risk": "read-only",
+      "expectedAnnotations": { "readOnly": true, "untrustedContent": true },
+      "input": {},
+      "$comment": "Withheld on a /c/:shareId shared canvas (withheldOnSharedView): the result carries data read out of component master HTML."
+    },
+    {
+      "name": "get_styles",
+      "risk": "read-only",
+      "expectedAnnotations": { "readOnly": true, "untrustedContent": true },
+      "input": {}
+    },
+    {
+      "name": "get_text_styles",
+      "risk": "read-only",
+      "expectedAnnotations": { "readOnly": true, "untrustedContent": true },
+      "input": {}
+    },
+    {
       "name": "get_screenshot",
       "risk": "read-only",
       "expectedAnnotations": { "readOnly": true, "untrustedContent": true },
