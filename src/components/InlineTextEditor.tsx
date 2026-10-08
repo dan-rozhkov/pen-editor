@@ -338,6 +338,7 @@ export function InlineTextEditor({
   const x = useViewportStore((s) => s.x)
   const y = useViewportStore((s) => s.y)
   const variables = useVariableStore((state) => state.variables)
+  const collections = useVariableStore((state) => state.collections)
 
   // Resolve the fill color. An explicit color always wins; a linked node with
   // no resolvable color of its own falls back to the link accent color — same
@@ -347,6 +348,7 @@ export function InlineTextEditor({
     node.fillBinding,
     variables,
     effectiveTheme ?? 'light',
+    collections,
   )
   const fillColor = resolvedFill ?? (node.link ? TEXT_LINK_COLOR : '#000000')
 

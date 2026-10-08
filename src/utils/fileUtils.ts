@@ -77,6 +77,9 @@ export function serializeDocument(
   collections?: VariableCollection[],
   modeContext?: ModeContext,
 ): string {
+  // Dual-write: each variable carries both the v2 fields and the legacy
+  // `value`/`themeValues` mirrors, so an older build can still open the file.
+  const upgraded = collections ? upgradeVariablesV2(variables, collections) : null
   const doc: PenDocument = {
     version: CURRENT_VERSION,
     pages: pages.map((p) => ({
@@ -89,10 +92,8 @@ export function serializeDocument(
       ...(p.measurements && p.measurements.length > 0 ? { measurements: p.measurements } : {}),
       ...(p.comments && p.comments.length > 0 ? { comments: p.comments } : {}),
     })),
-    // Dual-write: each variable carries both the v2 fields and the legacy
-    // `value`/`themeValues` mirrors, so an older build can still open the file.
-    variables: collections ? upgradeVariablesV2(variables, collections).variables : variables,
-    ...(collections ? { variableCollections: upgradeVariablesV2(variables, collections).collections } : {}),
+    variables: upgraded ? upgraded.variables : variables,
+    ...(upgraded ? { variableCollections: upgraded.collections } : {}),
     textStyles,
     fillStyles,
     effectStyles,

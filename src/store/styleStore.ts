@@ -18,8 +18,8 @@ import { getEffectiveThemeForNode } from "../utils/nodeThemeUtils";
 function freezePaintColor(paint: Paint, nodeId: string): Paint {
   if (paint.type !== "solid") return paint;
   const theme = getEffectiveThemeForNode(nodeId);
-  const variables = useVariableStore.getState().variables;
-  const resolved = resolveColor(paint.color, paint.colorBinding, variables, theme);
+  const { variables, collections } = useVariableStore.getState();
+  const resolved = resolveColor(paint.color, paint.colorBinding, variables, theme, collections);
   const { colorBinding: _binding, ...rest } = paint;
   return { ...rest, color: resolved ?? paint.color };
 }
@@ -28,9 +28,9 @@ function freezePaintColor(paint: Paint, nodeId: string): Paint {
 function freezeEffectColor(effect: Effect, nodeId: string): Effect {
   if (effect.type !== "shadow" || !effect.colorBinding) return { ...effect };
   const theme = getEffectiveThemeForNode(nodeId);
-  const variables = useVariableStore.getState().variables;
+  const { variables, collections } = useVariableStore.getState();
   const shadow = effect as ShadowEffect;
-  const resolved = resolveColor(shadow.color, shadow.colorBinding, variables, theme);
+  const resolved = resolveColor(shadow.color, shadow.colorBinding, variables, theme, collections);
   const { colorBinding: _binding, ...rest } = shadow;
   return { ...rest, color: resolved ?? shadow.color };
 }

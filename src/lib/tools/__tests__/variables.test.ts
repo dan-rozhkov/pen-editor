@@ -205,3 +205,16 @@ describe("set_variables", () => {
     ]);
   });
 });
+
+describe("set_variables merge validation", () => {
+  it("skips a type change that would break an alias and reports it", async () => {
+    useVariableStore.getState().setVariables([
+      { id: "a", name: "--a", type: "color", value: "#111111" },
+      { id: "b", name: "--b", type: "color", value: "#222222" },
+    ]);
+    expect(useVariableStore.getState().setVariableModeValue("b", "light", { alias: "a" })).toBe(true);
+    const out = JSON.parse(await setVariables({ variables: [{ id: "a", name: "--a", type: "number" }] }));
+    expect(out.rejected).toEqual(["--a"]);
+    expect(useVariableStore.getState().variables.find((v) => v.id === "a")?.type).toBe("color");
+  });
+});

@@ -55,9 +55,9 @@ export async function exportSlidesToPptx(pixiRefs: PixiExportRefs): Promise<bool
       return resolveEffectStack(node, effectStyles);
     },
     resolveColor: (lookup, node) => {
-      const { variables } = useVariableStore.getState();
+      const { variables, collections } = useVariableStore.getState();
       const theme = getEffectiveThemeForNode(node.id);
-      return resolveColor(lookup.color, lookup.binding, variables, theme);
+      return resolveColor(lookup.color, lookup.binding, variables, theme, collections);
     },
     // `container` missing is a benign "node vanished from the canvas mid-export"
     // case — skip the shape. An `extractImageBytes` failure whose node is an

@@ -4,6 +4,7 @@ import { useTextStyleStore } from "@/store/textStyleStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
+import { makeThemeCollection } from "@/lib/variables";
 import { saveShareCredentials } from "@/lib/shareCanvas";
 import type { ToolHandler } from "../toolRegistry";
 
@@ -17,7 +18,8 @@ export const openDocument: ToolHandler = async (args) => {
   if (filePathOrTemplate === "new") {
     // Clear all state for a new document
     useSceneStore.getState().clearNodes();
-    useVariableStore.getState().setVariables([]);
+    // Collections too, or the previous document's leak into the new one.
+    useVariableStore.getState().replaceAll([], [makeThemeCollection()]);
     useTextStyleStore.getState().setTextStyles([]);
     useUIThemeStore.getState().setUITheme("light");
     useHistoryStore.getState().clear();

@@ -58,21 +58,36 @@ export function buildVariableIndex(
   return { byId, collections: colls };
 }
 
-const cache = new WeakMap<Variable[], { collections: VariableCollection[] | undefined; index: VariableIndex }>();
+interface IndexSlots {
+  /** Keyed by the identity of the `collections` array the caller passed. */
+  byCollections: WeakMap<VariableCollection[], VariableIndex>;
+  /** The slot for callers that pass no collections. */
+  withoutCollections?: VariableIndex;
+}
+
+const cache = new WeakMap<Variable[], IndexSlots>();
 
 /**
  * `buildVariableIndex`, cached by the identity of the `variables` array (the
  * store replaces the array on every change, so identity is a sound cache key)
- * and of `collections`. This is what makes a per-node-per-fill lookup in the
- * Pixi renderers O(1) instead of a linear `find`.
+ * and, per variables array, by the identity of `collections` (callers that pass
+ * a different `collections` — or none — never evict each other). This is what
+ * makes a per-node-per-fill lookup in the Pixi renderers O(1) instead of a
+ * linear `find`.
  */
 export function getVariableIndex(
   variables: Variable[],
   collections?: VariableCollection[],
 ): VariableIndex {
-  const hit = cache.get(variables);
-  if (hit && hit.collections === collections) return hit.index;
+  let slots = cache.get(variables);
+  if (!slots) {
+    slots = { byCollections: new WeakMap() };
+    cache.set(variables, slots);
+  }
+  const hit = collections ? slots.byCollections.get(collections) : slots.withoutCollections;
+  if (hit) return hit;
   const index = buildVariableIndex(variables, collections);
-  cache.set(variables, { collections, index });
+  if (collections) slots.byCollections.set(collections, index);
+  else slots.withoutCollections = index;
   return index;
 }

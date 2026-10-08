@@ -17,6 +17,42 @@ function isModeValue(x: unknown): x is VariableModeValue {
   return typeof x === "string" || (isRecord(x) && typeof x.alias === "string");
 }
 
+function isNonEmptyString(x: unknown): x is string {
+  return typeof x === "string" && x.length > 0;
+}
+
+/**
+ * Validate collections that come from outside (a file, a share link, an embed,
+ * an undo snapshot). Keeps only well-formed ones: string `id` and `name`, a
+ * non-empty `modes` array of `{ id, name }` strings. `defaultModeId` must be
+ * one of the modes, else the first mode. The first collection with a given id
+ * wins. Never throws; the Theme collection is NOT added here.
+ */
+export function sanitizeCollections(raw: unknown): VariableCollection[] {
+  if (!Array.isArray(raw)) return [];
+  const out: VariableCollection[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (!isRecord(item) || !isNonEmptyString(item.id) || typeof item.name !== "string") continue;
+    if (seen.has(item.id)) continue;
+    if (!Array.isArray(item.modes) || item.modes.length === 0) continue;
+    const modes = item.modes;
+    if (!modes.every((m) => isRecord(m) && isNonEmptyString(m.id) && typeof m.name === "string")) continue;
+    const typed = modes as { id: string; name: string }[];
+    if (new Set(typed.map((m) => m.id)).size !== typed.length) continue;
+    const defaultModeId = typed.some((m) => m.id === item.defaultModeId)
+      ? (item.defaultModeId as string)
+      : typed[0].id;
+    seen.add(item.id);
+    out.push(
+      defaultModeId === item.defaultModeId
+        ? (item as unknown as VariableCollection)
+        : { ...(item as unknown as VariableCollection), defaultModeId },
+    );
+  }
+  return out;
+}
+
 /**
  * Bring any variable shape (v1.0/1.1 `value` / `themeValues`, or v2) to v2.
  * Pure and idempotent; the result is already `finalizeVariables`-ed (mirrors
@@ -30,7 +66,7 @@ export function upgradeVariablesV2(
   raw: unknown[],
   collections?: VariableCollection[],
 ): { variables: Variable[]; collections: VariableCollection[] } {
-  const outCollections = ensureThemeCollection(collections ?? []);
+  const outCollections = ensureThemeCollection(sanitizeCollections(collections ?? []));
   const known = new Set(outCollections.map((c) => c.id));
   const variables: Variable[] = [];
 

@@ -15,7 +15,8 @@ import {
   makeThemeCollection,
   modeValuesOf,
   resolveVariable,
-  patchVariable,
+  applyVariablePatch,
+  remapToCollection,
   upgradeVariablesV2,
   wouldCreateCycle,
   ensureThemeCollection,
@@ -29,9 +30,18 @@ interface VariableState {
 
   // CRUD operations
   addVariable: (variable: Variable) => void
-  updateVariable: (id: string, updates: Partial<Variable>) => void
-  /** Legacy wrapper over `setVariableModeValue` for the Theme collection. */
-  updateVariableThemeValue: (id: string, theme: ThemeName, value: string) => void
+  /**
+   * Returns false (and changes nothing) for an unknown id, an alias cycle or
+   * type mismatch, a `type` change that breaks aliases, or an unknown collection.
+   * A `collectionId` change remaps modes like `moveVariableToCollection`.
+   */
+  updateVariable: (id: string, updates: Partial<Variable>) => boolean
+  /**
+   * Legacy light/dark wrapper over `setVariableModeValue`. For a variable in a
+   * non-Theme collection, `light` means the collection's default mode and `dark`
+   * its first non-default mode (the default if there is only one).
+   */
+  updateVariableThemeValue: (id: string, theme: ThemeName, value: string) => boolean
   /** Returns false (and changes nothing) for a cycle, a type mismatch or an unknown id/mode. */
   setVariableModeValue: (id: string, modeId: ModeId, value: VariableModeValue) => boolean
   deleteVariable: (id: string) => void
@@ -98,13 +108,12 @@ export const useVariableStore = create<VariableState>((set, get) => {
     },
 
     updateVariable: (id, updates) => {
-      saveVariableHistory()
       const { variables, collections } = get()
-      commit(
-        variables.map((v) =>
-          v.id === id ? patchVariable(v, updates, collections) : v,
-        ),
-      )
+      const next = applyVariablePatch(variables, collections, id, updates)
+      if (!next) return false
+      saveVariableHistory()
+      commit(variables.map((v) => (v.id === id ? next : v)))
+      return true
     },
 
     setVariableModeValue: (id, modeId, value) => {
@@ -129,7 +138,17 @@ export const useVariableStore = create<VariableState>((set, get) => {
     },
 
     updateVariableThemeValue: (id, theme, value) => {
-      get().setVariableModeValue(id, theme, value)
+      const { variables, collections } = get()
+      const target = variables.find((v) => v.id === id)
+      if (!target) return false
+      const cid = collectionIdOf(target)
+      const collection = collections.find((c) => c.id === cid)
+      if (cid === THEME_COLLECTION_ID || !collection) {
+        return get().setVariableModeValue(id, theme, value)
+      }
+      const nonDefault = collection.modes.find((m) => m.id !== collection.defaultModeId)
+      const modeId = theme === 'dark' ? (nonDefault?.id ?? collection.defaultModeId) : collection.defaultModeId
+      return get().setVariableModeValue(id, modeId, value)
     },
 
     deleteVariable: (id) => {
@@ -265,13 +284,7 @@ export const useVariableStore = create<VariableState>((set, get) => {
       if (!target || !variable) return false
       if (collectionIdOf(variable) === collectionId) return true
       saveVariableHistory()
-      const index = buildVariableIndex(variables, collections)
-      const resolved = resolveVariable(index, id, {})
-      const seed = resolved.ok ? resolved.value : variable.value
-      const valuesByMode: Record<ModeId, VariableModeValue> = {}
-      for (const m of target.modes) valuesByMode[m.id] = seed
-      const moved: Variable = { ...variable, collectionId, valuesByMode }
-      if (collectionId !== THEME_COLLECTION_ID) delete moved.themeValues
+      const moved = remapToCollection(variables, collections, variable, target)
       commit(variables.map((v) => (v.id === id ? moved : v)))
       return true
     },

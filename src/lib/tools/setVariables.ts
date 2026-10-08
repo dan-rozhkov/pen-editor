@@ -1,5 +1,5 @@
 import { useVariableStore } from "@/store/variableStore";
-import { patchVariable } from "@/lib/variables";
+import { applyVariablePatch } from "@/lib/variables";
 import { generateVariableId } from "@/types/variable";
 import type { Variable } from "@/types/variable";
 import type { ToolHandler } from "../toolRegistry";
@@ -128,6 +128,8 @@ export const setVariables: ToolHandler = async (args) => {
 
   const store = useVariableStore.getState();
 
+  const rejected: string[] = [];
+
   if (replace) {
     store.setVariables(parsed.map((p) => p.variable));
   } else {
@@ -149,13 +151,15 @@ export const setVariables: ToolHandler = async (args) => {
         // Update existing — patch only the fields the model actually sent
         // (tracked in `explicit`), so absent fields (e.g. themeValues, value)
         // aren't clobbered with normalizeVariable's synthesized defaults.
-        const idx = merged.indexOf(match);
+        const idx = merged.findIndex((m) => m.id === match.id);
         const patch: Partial<Variable> = {};
         for (const key of explicit) {
           if (key === "id") continue;
           (patch as Record<string, unknown>)[key] = v[key];
         }
-        merged[idx] = { ...patchVariable(match, patch, store.collections), id: match.id };
+        const patched = applyVariablePatch(merged, store.collections, match.id, patch);
+        if (patched) merged[idx] = { ...patched, id: match.id };
+        else rejected.push(match.name);
       } else {
         // New variable — use the fully normalized (defaulted) form.
         merged.push(v);
@@ -168,6 +172,7 @@ export const setVariables: ToolHandler = async (args) => {
   return JSON.stringify({
     success: true,
     variableCount: useVariableStore.getState().variables.length,
+    ...(rejected.length > 0 ? { rejected } : {}),
   });
 };
 

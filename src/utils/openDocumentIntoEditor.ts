@@ -60,12 +60,11 @@ export function applyOpenedDocument(
   });
 
   // Set up shared state
-  // Collections first, then variables: `setVariables` normalizes against the
-  // collections already in the store. Both calls upgrade legacy shapes, so a
-  // `DocumentData` built without going through `deserializeDocument` (tools,
-  // tests) is migrated here too — the migration is idempotent.
-  useVariableStore.getState().setCollections(data.variableCollections ?? []);
-  useVariableStore.getState().setVariables(data.variables);
+  // One update for both: variables are normalized against the NEW collections
+  // (never the previous document's) and subscribers fire once. `replaceAll`
+  // upgrades legacy shapes, so a `DocumentData` built without going through
+  // `deserializeDocument` (tools, tests) is migrated here too — idempotent.
+  useVariableStore.getState().replaceAll(data.variables, data.variableCollections ?? []);
   useTextStyleStore.getState().setTextStyles(data.textStyles ?? []);
   useStyleStore.getState().setFillStyles(data.fillStyles ?? []);
   useStyleStore.getState().setEffectStyles(data.effectStyles ?? []);
