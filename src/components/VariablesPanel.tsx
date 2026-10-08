@@ -1,8 +1,19 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import clsx from "clsx";
 import { useVariableStore } from "../store/variableStore";
-import { generateVariableId, getVariableValue } from "../types/variable";
-import type { Variable, VariableType, ThemeName } from "../types/variable";
+import { generateVariableId, THEME_COLLECTION_ID } from "../types/variable";
+import type {
+  Variable,
+  VariableCollection,
+  VariableMode,
+  VariableType,
+} from "../types/variable";
+import {
+  collectionIdOf,
+  getVariableIndex,
+  modeValuesOf,
+  resolveVariable,
+} from "../lib/variables";
 import { useLeftSidebarStore } from "../store/leftSidebarStore";
 import { CustomColorPicker } from "./ui/ColorPicker";
 import { EditableText } from "./ui/EditableText";
@@ -14,17 +25,31 @@ import {
   TableHead,
   TableCell,
 } from "./ui/table";
-import { PlusCircleIcon, PlusIcon, TrashIcon, ArrowLineLeftIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
+import {
+  PlusCircleIcon,
+  PlusIcon,
+  TrashIcon,
+  ArrowLineLeftIcon,
+  MagnifyingGlassIcon,
+  LinkSimpleIcon,
+  LinkBreakIcon,
+  CaretRightIcon,
+  DotsThreeIcon,
+} from "@phosphor-icons/react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from "./ui/dropdown-menu";
+import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
+import { Badge } from "./ui/badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
 import { IconButton } from "./ui/IconButton";
 import { Input } from "./ui/input";
 import { PanelEmptyState } from "./PanelEmptyState";
+import { AliasPicker } from "./AliasPicker";
+import { VariableDetails } from "./VariableDetails";
 
 // Type badge labels and colors
 const typeBadge: Record<VariableType, { label: string; className: string }> = {
@@ -46,6 +71,16 @@ const defaultNames: Record<VariableType, string> = {
   string: "String",
 };
 
+const NAME_COL_PX = 200;
+const MODE_COL_PX = 170;
+const ACTIONS_COL_PX = 72;
+
+const headClass =
+  "text-[11px] font-semibold text-text-muted uppercase tracking-wide px-3 py-2.5 h-auto border-l border-border-light";
+
+const iconButtonClass =
+  "p-1 rounded hover:bg-white/10 text-text-muted hover:text-text-primary transition-colors focus-visible:ring-1 focus-visible:ring-accent-light outline-none";
+
 // Color cell with swatch + hex value
 function ColorCell({
   value,
@@ -55,7 +90,7 @@ function ColorCell({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 min-w-0">
       <CustomColorPicker value={value} onChange={onChange} />
       <span className="text-xs text-text-secondary font-mono truncate">
         {value.replace("#", "").toUpperCase()}
@@ -64,101 +99,291 @@ function ColorCell({
   );
 }
 
-// Value cell dispatcher
+// Value cell for one (variable, mode): a literal editor + link button, or an alias chip
 function ValueCell({
   variable,
-  theme,
+  collection,
+  mode,
 }: {
   variable: Variable;
-  theme: ThemeName;
+  collection: VariableCollection;
+  mode: VariableMode;
 }) {
-  const updateVariableThemeValue = useVariableStore(
-    (s) => s.updateVariableThemeValue,
-  );
-  const value = getVariableValue(variable, theme);
+  const variables = useVariableStore((s) => s.variables);
+  const collections = useVariableStore((s) => s.collections);
+  const setVariableModeValue = useVariableStore((s) => s.setVariableModeValue);
+  const entry = modeValuesOf(variable)[mode.id];
 
-  if (variable.type === "color") {
+  if (entry !== undefined && typeof entry !== "string") {
+    const index = getVariableIndex(variables, collections);
+    const target = index.byId.get(entry.alias);
+    const resolved = resolveVariable(index, variable.id, {
+      [collection.id]: mode.id,
+    });
+    const resolvedValue = resolved.ok ? resolved.value : null;
+    const detach = () =>
+      setVariableModeValue(variable.id, mode.id, resolvedValue ?? variable.value);
     return (
-      <ColorCell
-        value={value}
-        onChange={(v) => updateVariableThemeValue(variable.id, theme, v)}
-      />
+      <div className="flex items-center gap-1 min-w-0">
+        <AliasPicker
+          variable={variable}
+          modeId={mode.id}
+          trigger={
+            <button
+              type="button"
+              aria-label={`Alias of ${variable.name} in ${mode.name}: ${target?.name ?? "missing variable"}. Change`}
+              className="flex min-w-0 flex-1 items-center gap-1.5 rounded bg-secondary px-1.5 py-1 text-xs text-text-primary outline-none focus-visible:ring-1 focus-visible:ring-accent-light"
+            >
+              <LinkSimpleIcon aria-hidden className="size-3 shrink-0 text-text-muted" />
+              {variable.type === "color" && resolvedValue && (
+                <span
+                  aria-hidden
+                  className="size-3 shrink-0 rounded-sm border border-border-light"
+                  style={{ background: resolvedValue }}
+                />
+              )}
+              <span className="truncate">{target?.name ?? "Missing variable"}</span>
+              {variable.type !== "color" && resolvedValue !== null && (
+                <span className="truncate text-text-muted">{resolvedValue}</span>
+              )}
+            </button>
+          }
+        />
+        <button
+          type="button"
+          className={iconButtonClass}
+          aria-label={`Detach alias of ${variable.name} in ${mode.name}`}
+          onClick={detach}
+        >
+          <LinkBreakIcon className="size-3.5" />
+        </button>
+      </div>
     );
   }
 
+  const value = entry ?? variable.value;
+  const commit = (v: string) => setVariableModeValue(variable.id, mode.id, v);
   return (
-    <div className="min-w-0 overflow-hidden">
-      <EditableText
-        value={value}
-        onCommit={(v) => updateVariableThemeValue(variable.id, theme, v)}
-        inputType={variable.type === "number" ? "number" : "text"}
-        allowEmpty
+    <div className="flex items-center gap-1 min-w-0">
+      <div className="min-w-0 flex-1 overflow-hidden">
+        {variable.type === "color" ? (
+          <ColorCell value={value} onChange={commit} />
+        ) : (
+          <EditableText
+            value={value}
+            onCommit={commit}
+            inputType={variable.type === "number" ? "number" : "text"}
+            allowEmpty
+          />
+        )}
+      </div>
+      <AliasPicker
+        variable={variable}
+        modeId={mode.id}
+        trigger={
+          <button
+            type="button"
+            className={iconButtonClass}
+            aria-label={`Link ${variable.name} in ${mode.name} to a variable`}
+          >
+            <LinkSimpleIcon className="size-3.5" />
+          </button>
+        }
       />
     </div>
   );
 }
 
-// Variable row in the table
-function VariableRow({ variable }: { variable: Variable }) {
+// Variable row in the table (+ optional details row)
+function VariableRow({
+  variable,
+  collection,
+}: {
+  variable: Variable;
+  collection: VariableCollection;
+}) {
   const updateVariable = useVariableStore((s) => s.updateVariable);
   const deleteVariable = useVariableStore((s) => s.deleteVariable);
-  const [hovered, setHovered] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const badge = typeBadge[variable.type];
 
   return (
-    <TableRow
-      className="border-border-light hover:bg-secondary/50"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      {/* Name */}
-      <TableCell className="py-2 px-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <span
-            className={clsx(
-              "w-5 h-5 rounded text-[9px] font-bold flex items-center justify-center shrink-0",
-              badge.className,
+    <Fragment>
+      <TableRow className="group border-border-light hover:bg-secondary/50">
+        {/* Name */}
+        <TableCell className="py-2 px-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <span
+              className={clsx(
+                "w-5 h-5 rounded text-[9px] font-bold flex items-center justify-center shrink-0",
+                badge.className,
+              )}
+            >
+              {badge.label}
+            </span>
+            <div className="min-w-0 flex-1">
+              <EditableText
+                value={variable.name}
+                onCommit={(name) => updateVariable(variable.id, { name })}
+                allowEmpty
+              />
+            </div>
+            {variable.deprecated && (
+              <Badge variant="outline" title={variable.deprecated.note}>
+                Deprecated
+              </Badge>
             )}
-          >
-            {badge.label}
-          </span>
-          <div className="min-w-0 flex-1">
-            <EditableText
-              value={variable.name}
-              onCommit={(name) => updateVariable(variable.id, { name })}
-              allowEmpty
-            />
           </div>
-        </div>
-      </TableCell>
-      {/* Light */}
-      <TableCell className="py-2 px-3 border-l border-border-light">
-        <ValueCell variable={variable} theme="light" />
-      </TableCell>
-      {/* Dark */}
-      <TableCell className="py-2 px-3 border-l border-border-light">
-        <ValueCell variable={variable} theme="dark" />
-      </TableCell>
-      {/* Actions */}
-      <TableCell className="py-2 px-3 border-l border-border-light">
-        {hovered && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors"
-                  onClick={() => deleteVariable(variable.id)}
-                  aria-label="Delete variable"
-                >
-                  <TrashIcon className="size-3.5" />
-                </button>
-              }
-            />
-            <TooltipContent>Delete variable</TooltipContent>
-          </Tooltip>
-        )}
-      </TableCell>
-    </TableRow>
+        </TableCell>
+        {/* One cell per mode */}
+        {collection.modes.map((mode) => (
+          <TableCell key={mode.id} className="py-2 px-3 border-l border-border-light">
+            <ValueCell variable={variable} collection={collection} mode={mode} />
+          </TableCell>
+        ))}
+        {/* Actions */}
+        <TableCell className="py-2 px-2 border-l border-border-light">
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              className={iconButtonClass}
+              aria-expanded={expanded}
+              aria-label={`Details of ${variable.name}`}
+              onClick={() => setExpanded((e) => !e)}
+            >
+              <CaretRightIcon
+                className={clsx("size-3.5 transition-transform", expanded && "rotate-90")}
+              />
+            </button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    className={clsx(
+                      iconButtonClass,
+                      "hover:text-red-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+                    )}
+                    onClick={() => deleteVariable(variable.id)}
+                    aria-label="Delete variable"
+                  >
+                    <TrashIcon className="size-3.5" />
+                  </button>
+                }
+              />
+              <TooltipContent>Delete variable</TooltipContent>
+            </Tooltip>
+          </div>
+        </TableCell>
+      </TableRow>
+      {expanded && (
+        <TableRow className="border-border-light hover:bg-transparent">
+          <TableCell colSpan={collection.modes.length + 2} className="p-0 whitespace-normal">
+            <VariableDetails variable={variable} />
+          </TableCell>
+        </TableRow>
+      )}
+    </Fragment>
+  );
+}
+
+// Inline text input used to rename a collection or a mode
+function RenameInput({
+  label,
+  initial,
+  onDone,
+}: {
+  label: string;
+  initial: string;
+  onDone: (name: string | null) => void;
+}) {
+  const [draft, setDraft] = useState(initial);
+  return (
+    <Input
+      aria-label={label}
+      autoFocus
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onFocus={(e) => e.currentTarget.select()}
+      onBlur={() => onDone(draft.trim() || null)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onDone(draft.trim() || null);
+        else if (e.key === "Escape") onDone(null);
+      }}
+      className="h-6 text-[11px]"
+    />
+  );
+}
+
+// Column header of one mode: name, default marker and the mode menu
+function ModeHeader({
+  collection,
+  mode,
+}: {
+  collection: VariableCollection;
+  mode: VariableMode;
+}) {
+  const renameMode = useVariableStore((s) => s.renameMode);
+  const deleteMode = useVariableStore((s) => s.deleteMode);
+  const setDefaultMode = useVariableStore((s) => s.setDefaultMode);
+  const [renaming, setRenaming] = useState(false);
+  const isDefault = collection.defaultModeId === mode.id;
+  // The Theme collection's Light/Dark are structural: the store refuses to change them.
+  const structural = collection.id === THEME_COLLECTION_ID;
+
+  if (renaming) {
+    return (
+      <RenameInput
+        label="Mode name"
+        initial={mode.name}
+        onDone={(name) => {
+          if (name && name !== mode.name) renameMode(collection.id, mode.id, name);
+          setRenaming(false);
+        }}
+      />
+    );
+  }
+  return (
+    <div className="flex items-center gap-1.5 min-w-0">
+      <span className="truncate">{mode.name}</span>
+      {isDefault && (
+        <Badge variant="secondary" aria-label="Default mode">
+          Default
+        </Badge>
+      )}
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label={`Mode menu: ${mode.name}`}
+          className={clsx(iconButtonClass, "ml-auto")}
+        >
+          <DotsThreeIcon className="size-3.5" weight="bold" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          className="min-w-[140px] bg-popover text-popover-foreground ring-foreground/10 rounded-lg shadow-md ring-1"
+        >
+          <DropdownMenuItem
+            className="text-xs cursor-pointer"
+            onClick={() => setRenaming(true)}
+          >
+            Rename mode
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-xs cursor-pointer"
+            disabled={isDefault || structural}
+            onClick={() => setDefaultMode(collection.id, mode.id)}
+          >
+            Set as default
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-xs cursor-pointer"
+            disabled={isDefault || structural || collection.modes.length <= 1}
+            onClick={() => deleteMode(collection.id, mode.id)}
+          >
+            Delete mode
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
 
@@ -209,33 +434,74 @@ function AddVariableDropdown({
  */
 export function VariablesPanelContent() {
   const variables = useVariableStore((s) => s.variables);
+  const collections = useVariableStore((s) => s.collections);
   const addVariable = useVariableStore((s) => s.addVariable);
+  const addCollection = useVariableStore((s) => s.addCollection);
+  const renameCollection = useVariableStore((s) => s.renameCollection);
+  const deleteCollection = useVariableStore((s) => s.deleteCollection);
+  const addMode = useVariableStore((s) => s.addMode);
   const isExpanded = useLeftSidebarStore((s) => s.isExpanded);
   const toggleExpanded = useLeftSidebarStore((s) => s.toggleExpanded);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedId, setSelectedId] = useState<string>(THEME_COLLECTION_ID);
+  const [renamingCollection, setRenamingCollection] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // The selected collection may have been deleted (or undone away): fall back to the first.
+  const active = collections.find((c) => c.id === selectedId) ?? collections[0];
+
+  const collectionVariables = useMemo(
+    () => (active ? variables.filter((v) => collectionIdOf(v) === active.id) : []),
+    [variables, active],
+  );
   const filteredVariables = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
-    if (!normalizedQuery) return variables;
+    if (!normalizedQuery) return collectionVariables;
 
-    return variables.filter((variable) =>
+    return collectionVariables.filter((variable) =>
       variable.name.toLocaleLowerCase().includes(normalizedQuery),
     );
-  }, [searchQuery, variables]);
+  }, [searchQuery, collectionVariables]);
 
   const handleAddVariable = (type: VariableType) => {
+    if (!active) return;
     const defaultVal = defaultValues[type];
     const count = variables.filter((v) => v.type === type).length;
+    const valuesByMode = Object.fromEntries(active.modes.map((m) => [m.id, defaultVal]));
     const newVar: Variable = {
       id: generateVariableId(),
       name: `${defaultNames[type]} ${count + 1}`,
       type,
+      collectionId: active.id,
+      valuesByMode,
       value: defaultVal,
-      themeValues: {
-        light: defaultVal,
-        dark: defaultVal,
-      },
+      ...(active.id === THEME_COLLECTION_ID
+        ? { themeValues: { light: defaultVal, dark: defaultVal } }
+        : {}),
     };
     addVariable(newVar);
+  };
+
+  const handleAddCollection = () => {
+    setNotice(null);
+    setSelectedId(addCollection(`Collection ${collections.length + 1}`));
+  };
+
+  const handleDeleteCollection = () => {
+    if (!active) return;
+    if (!deleteCollection(active.id)) {
+      setNotice(
+        active.id === THEME_COLLECTION_ID
+          ? "The Theme collection cannot be deleted."
+          : "Delete or move the variables out of this collection first.",
+      );
+      return;
+    }
+    setNotice(null);
+  };
+
+  const handleAddMode = () => {
+    if (active) addMode(active.id, `Mode ${active.modes.length + 1}`);
   };
 
   return (
@@ -273,6 +539,83 @@ export function VariablesPanelContent() {
         </IconButton>
       </div>
 
+      {/* Collections */}
+      {active && (
+        <div className="flex items-center gap-1 px-3 pt-2 shrink-0">
+          {renamingCollection ? (
+            <RenameInput
+              label="Collection name"
+              initial={active.name}
+              onDone={(name) => {
+                if (name && name !== active.name) renameCollection(active.id, name);
+                setRenamingCollection(false);
+              }}
+            />
+          ) : (
+            <>
+              <Tabs
+                value={active.id}
+                onValueChange={(id) => {
+                  setSelectedId(String(id));
+                  setNotice(null);
+                }}
+                className="min-w-0 gap-0"
+              >
+                <TabsList
+                  variant="line"
+                  aria-label="Collections"
+                  className="max-w-full justify-start overflow-x-auto"
+                >
+                  {collections.map((c) => (
+                    <TabsTrigger key={c.id} value={c.id} className="flex-none">
+                      {c.name}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+              <button
+                type="button"
+                className={iconButtonClass}
+                aria-label="Add collection"
+                onClick={handleAddCollection}
+              >
+                <PlusIcon className="size-3.5" />
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  aria-label={`Collection menu: ${active.name}`}
+                  className={iconButtonClass}
+                >
+                  <DotsThreeIcon className="size-3.5" weight="bold" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="min-w-[140px] bg-popover text-popover-foreground ring-foreground/10 rounded-lg shadow-md ring-1"
+                >
+                  <DropdownMenuItem
+                    className="text-xs cursor-pointer"
+                    onClick={() => setRenamingCollection(true)}
+                  >
+                    Rename collection
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="text-xs cursor-pointer"
+                    onClick={handleDeleteCollection}
+                  >
+                    Delete collection
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          )}
+        </div>
+      )}
+      {notice && (
+        <p role="status" className="px-4 pt-1 text-xs text-text-muted shrink-0">
+          {notice}
+        </p>
+      )}
+
       <div className="relative px-3 pt-3 pb-2">
         <MagnifyingGlassIcon
           aria-hidden
@@ -290,32 +633,58 @@ export function VariablesPanelContent() {
 
       {/* Table */}
       <div className="flex-1 overflow-y-auto">
-        {variables.length === 0 ? (
+        {variables.length === 0 && collections.length === 1 ? (
           <PanelEmptyState icon={<PlusCircleIcon size={28} weight="light" />}>
             No variables yet
           </PanelEmptyState>
-        ) : filteredVariables.length === 0 ? (
-          <PanelEmptyState icon={null}>No variables found.</PanelEmptyState>
         ) : (
-        <Table className="border-collapse select-none table-fixed">
+          <>
+        <Table
+          className="border-collapse select-none table-fixed"
+          style={{
+            minWidth: NAME_COL_PX + MODE_COL_PX * (active?.modes.length ?? 0) + ACTIONS_COL_PX,
+          }}
+        >
           <TableHeader>
             <TableRow className="border-border-light bg-surface-panel sticky top-0 hover:bg-surface-panel">
-              <TableHead className="w-[40%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto">
+              <TableHead
+                style={{ width: NAME_COL_PX }}
+                className={clsx(headClass, "border-l-0")}
+              >
                 Name
               </TableHead>
-              <TableHead className="w-[25%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
-                Light
+              {active?.modes.map((mode) => (
+                <TableHead key={mode.id} style={{ width: MODE_COL_PX }} className={headClass}>
+                  <ModeHeader collection={active} mode={mode} />
+                </TableHead>
+              ))}
+              <TableHead style={{ width: ACTIONS_COL_PX }} className={headClass}>
+                <button
+                  type="button"
+                  className={iconButtonClass}
+                  aria-label="Add mode"
+                  onClick={handleAddMode}
+                >
+                  <PlusIcon className="size-3.5" />
+                </button>
               </TableHead>
-              <TableHead className="w-[25%] text-[11px] font-semibold text-text-muted uppercase tracking-wide px-4 py-2.5 h-auto border-l border-border-light">
-                Dark
-              </TableHead>
-              <TableHead className="w-[10%] h-auto border-l border-border-light" />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredVariables.map((v) => <VariableRow key={v.id} variable={v} />)}
+            {active &&
+              filteredVariables.map((v) => (
+                <VariableRow key={v.id} variable={v} collection={active} />
+              ))}
           </TableBody>
         </Table>
+        {filteredVariables.length === 0 && (
+          <PanelEmptyState icon={null}>
+            {collectionVariables.length === 0
+              ? "No variables in this collection."
+              : "No variables found."}
+          </PanelEmptyState>
+        )}
+          </>
         )}
       </div>
     </div>
