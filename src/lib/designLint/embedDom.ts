@@ -135,7 +135,7 @@ export function isColorProperty(property: string): boolean {
 }
 
 /** `value` without any `var(...)` or `url(...)` call (balanced), so literals in fallbacks and fragment ids are not reported. */
-function stripVarCalls(value: string): string {
+export function stripVarCalls(value: string): string {
   return stripCalls(value, ["var(", "url("]);
 }
 

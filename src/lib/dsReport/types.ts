@@ -17,6 +17,9 @@ export const USAGE_MAX_UNUSED_LISTED = 50;
 export interface UsagePage {
   id: string;
   nodesById: Readonly<Record<string, FlatSceneNode>>;
+  /** The tree, so a hidden node hides its whole subtree. */
+  rootIds: readonly string[];
+  childrenById: Readonly<Record<string, readonly string[]>>;
 }
 
 /** Everything the report reads, as plain data. `buildUsageInput` is the only impure function. */
@@ -47,14 +50,19 @@ export interface UsageReport {
   tokens: {
     /** Properties of scene nodes that could carry a token. */
     bindable: number;
+    /** Includes `styled`. */
     bound: number;
     boundToLibrary: number;
+    /** Paints that use a paint style: counted as bindable and bound. */
+    styled: number;
     /** Bindable properties that still hold a literal. */
     literal: number;
     /** Token uses per library variable id (scene bindings plus `var()` in embeds). */
     use: Record<string, number>;
     /** Embed CSS: `var(--token)` references against hardcoded colors. */
-    embed: { varRefs: number; literals: number };
+    embed: { varRefs: number; unknownVarRefs: number; literals: number };
+    /** CSS names that two or more tokens share; the library token wins. */
+    cssNameCollisions: number;
   };
   components: {
     /** Regions of registered components placed in embeds. */

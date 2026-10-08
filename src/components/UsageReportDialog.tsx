@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
-import { buildUsageInput, computeUsageReport, type UsageReport } from "@/lib/dsReport";
+import { useEffect, useState } from "react";
+import { useVariableStore } from "@/store/variableStore";
+import { buildUsageReport, type LibraryUsage, type UsageReport } from "@/lib/dsReport";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 
@@ -23,6 +24,29 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+/** Names of the library's unused tokens and keys of its unused components, with a marker for what the list cut off. */
+function UnusedList({ lib }: { lib: LibraryUsage }) {
+  const variables = useVariableStore((st) => st.variables);
+  if (lib.unusedTokenIds.length + lib.unusedComponentKeys.length === 0) return null;
+  const nameOf = (id: string) => variables.find((v) => v.id === id)?.name ?? id;
+  const moreTokens = lib.tokens.unused - lib.unusedTokenIds.length;
+  const moreComponents = lib.components.unused - lib.unusedComponentKeys.length;
+  const group = (label: string, items: string[], more: number) =>
+    items.length === 0 ? null : (
+      <p className="mt-1 break-words">
+        {label}: {items.join(", ")}
+        {more > 0 ? ` and ${more} more` : ""}
+      </p>
+    );
+  return (
+    <details className="text-xs text-text-muted">
+      <summary className="cursor-pointer">Unused</summary>
+      {group("Components", lib.unusedComponentKeys, moreComponents)}
+      {group("Tokens", lib.unusedTokenIds.map(nameOf), moreTokens)}
+    </details>
+  );
+}
+
 export function UsageReportView({ report }: { report: UsageReport }) {
   const { tokens, components, lint, libraries } = report;
   const lintRules = lint ? Object.entries(lint).filter(([, n]) => n > 0) : [];
@@ -36,9 +60,12 @@ export function UsageReportView({ report }: { report: UsageReport }) {
       <Section title="Tokens">
         <Row label="Coverage (bound of bindable)" value={`${pct(tokens.bound, tokens.bindable)} (${tokens.bound} of ${tokens.bindable})`} />
         <Row label="Bound to a library token" value={tokens.boundToLibrary} />
+        <Row label="Using a paint style" value={tokens.styled} />
         <Row label="Hardcoded values left" value={tokens.literal} />
         <Row label="Embed CSS: var() references" value={tokens.embed.varRefs} />
+        <Row label="Embed CSS: var() to unknown names" value={tokens.embed.unknownVarRefs} />
         <Row label="Embed CSS: hardcoded colors" value={tokens.embed.literals} />
+        {tokens.cssNameCollisions > 0 && <Row label="Tokens sharing a CSS name" value={tokens.cssNameCollisions} />}
       </Section>
       <Section title="Components">
         <Row label="Instances" value={components.instances} />
@@ -67,15 +94,7 @@ export function UsageReportView({ report }: { report: UsageReport }) {
             <Row label="Tokens used" value={`${lib.tokens.used} of ${lib.tokens.total}`} />
             <Row label="Components used" value={`${lib.components.used} of ${lib.components.total}`} />
           </dl>
-          {lib.unusedTokenIds.length + lib.unusedComponentKeys.length > 0 && (
-            <details className="text-xs text-text-muted">
-              <summary className="cursor-pointer">Unused</summary>
-              <p className="mt-1 break-words">
-                {[...lib.unusedComponentKeys, ...lib.unusedTokenIds].join(", ")}
-                {lib.tokens.unused > lib.unusedTokenIds.length ? ", ..." : ""}
-              </p>
-            </details>
-          )}
+          <UnusedList lib={lib} />
         </section>
       ))}
     </div>
@@ -85,12 +104,16 @@ export function UsageReportView({ report }: { report: UsageReport }) {
 /** Variables panel: adoption numbers for this document. Computed on the device; nothing is sent. */
 export function UsageReportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [run, setRun] = useState(0);
-  const report = useMemo(
-    () => (open ? computeUsageReport(buildUsageInput()) : null),
-    // `run` re-computes on demand.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [open, run],
-  );
+  // Kept after close, so the dialog does not change height while it fades out.
+  const [report, setReport] = useState<UsageReport | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    // Off the render phase: the scan can take a moment on a large document.
+    const timer = setTimeout(() => setReport(buildUsageReport()), 0);
+    return () => clearTimeout(timer);
+  }, [open, run]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-md">
@@ -98,7 +121,13 @@ export function UsageReportDialog({ open, onOpenChange }: { open: boolean; onOpe
           <DialogTitle>Usage report</DialogTitle>
           <DialogDescription>Counts for this document, computed here. Nothing is sent.</DialogDescription>
         </DialogHeader>
-        {report && <UsageReportView report={report} />}
+        {report ? (
+          <UsageReportView report={report} />
+        ) : (
+          <p role="status" className="text-xs text-text-muted">
+            Calculating…
+          </p>
+        )}
         <DialogFooter>
           <Button variant="outline" size="sm" onClick={() => setRun((n) => n + 1)}>
             Refresh

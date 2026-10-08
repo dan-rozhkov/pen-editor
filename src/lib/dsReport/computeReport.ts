@@ -2,6 +2,8 @@ import type { EmbedNode, FlatSceneNode } from "@/types/scene";
 import { getVariableCssName } from "@/types/variable";
 import { LINT_RULE_IDS, runDesignLint, type LintRuleId } from "@/lib/designLint";
 import { parseColor } from "@/lib/designLint/colorMath";
+import { isColorProperty, parseDeclarations, stripVarCalls } from "@/lib/designLint/embedDom";
+import { parseCss, type CssNode } from "@/lib/embedComponents/css";
 import { paintTargets } from "@/lib/designLint/rules/tokenRules";
 import { strokeIsDrawn } from "@/lib/designLint/shared";
 import { countRegionsByKey } from "@/lib/embedComponents";
@@ -24,10 +26,33 @@ const bump = (map: Record<string, number>, key: string, by = 1) => {
 };
 
 const VAR_REF = /var\(\s*(--[\w-]+)/g;
-const STYLE_BLOCK = /<style\b[^>]*>([\s\S]*?)<\/style>/gi;
+const STYLE_BLOCK = /<style\b([^>]*)>([\s\S]*?)<\/style>/gi;
+const MANAGED_STYLE = /\sdata-(?:c|d)-style\b/i;
 const STYLE_ATTR = /\sstyle\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
-const COLOR_LITERAL = /#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})\b|\brgba?\(|\bhsla?\(/gi;
-const DETACHED_STYLE = /<style\b[^>]*\sdata-d-style=(["'])([^"']+)\1/gi;
+/** Elements that were detached from a component: one `data-d="<key>-<n>"` each, like the lint's drift rule. */
+const DETACHED = /<[a-z][^>]*?\sdata-d=(["'])([^"']+)\1/gi;
+const COLOR_LITERAL =
+  /#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix|color)\((?:[^()]|\([^()]*\))*\)/gi;
+/** Common named colors; `transparent`, `currentcolor` and `inherit` are not literals. */
+const NAMED_COLORS = new Set(
+  "white black red green blue gray grey yellow orange purple pink brown cyan magenta navy teal silver gold maroon olive lime aqua fuchsia indigo violet coral crimson tomato salmon khaki ivory beige lavender plum orchid tan turquoise".split(" "),
+);
+
+function walkDecls(nodes: CssNode[], visit: (property: string, value: string) => void): void {
+  for (const node of nodes) {
+    if (node.kind === "rule") for (const d of parseDeclarations(node.body)) visit(d.property, d.value);
+    else if (node.kind === "group") walkDecls(node.children, visit);
+  }
+}
+
+function countColorLiterals(property: string, value: string): number {
+  if (!isColorProperty(property)) return 0;
+  const bare = stripVarCalls(value);
+  let n = (bare.match(COLOR_LITERAL) ?? []).length;
+  const rest = bare.replace(COLOR_LITERAL, " ");
+  for (const word of rest.toLowerCase().split(/[^a-z]+/)) if (NAMED_COLORS.has(word)) n++;
+  return n;
+}
 
 /** The key of a detach scope `<key>-<n>`. */
 function detachedKey(scope: string): string {
@@ -38,7 +63,7 @@ function detachedKey(scope: string): string {
 function countNodeTokens(
   node: FlatSceneNode,
   isLibraryVariable: (id: string) => boolean,
-  out: { bindable: number; bound: number; boundToLibrary: number; use: Record<string, number> },
+  out: { bindable: number; bound: number; boundToLibrary: number; styled: number; use: Record<string, number> },
 ): void {
   const count = (variableId: string) => {
     out.bindable++;
@@ -51,8 +76,14 @@ function countNodeTokens(
   if (!node.isMask) {
     const drawsStroke = strokeIsDrawn(node);
     for (const { slot, paint } of paintTargets(node)) {
-      if (paint.type !== "solid" || paint.styleId) continue;
+      if (paint.type !== "solid") continue;
       if (slot === "stroke" && !drawsStroke) continue;
+      if (paint.styleId) {
+        out.bindable++;
+        out.bound++;
+        out.styled++;
+        continue;
+      }
       if (paint.colorBinding) {
         count(paint.colorBinding.variableId);
         continue;
@@ -95,10 +126,16 @@ export function computeUsageReport(input: UsageInput, opts: UsageOptions = {}): 
 
   const libraryOf = new Map<string, string>();
   const byCssName = new Map<string, string>();
+  const collided = new Set<string>();
   for (const v of input.variables) {
     if (v.libraryId) libraryOf.set(v.id, v.libraryId);
     const css = getVariableCssName(v);
-    if (!byCssName.has(css)) byCssName.set(css, v.id);
+    const prior = byCssName.get(css);
+    if (prior === undefined) byCssName.set(css, v.id);
+    else {
+      collided.add(css);
+      if (!libraryOf.has(prior) && v.libraryId) byCssName.set(css, v.id);
+    }
   }
   const isLibraryVariable = (id: string) => libraryOf.has(id);
 
@@ -107,8 +144,8 @@ export function computeUsageReport(input: UsageInput, opts: UsageOptions = {}): 
     if (master.meta.library) libraryKeys.set(key, master.meta.library.id);
   }
 
-  const tokens = { bindable: 0, bound: 0, boundToLibrary: 0, use: {} as Record<string, number> };
-  const embedCss = { varRefs: 0, literals: 0 };
+  const tokens = { bindable: 0, bound: 0, boundToLibrary: 0, styled: 0, use: {} as Record<string, number> };
+  const embedCss = { varRefs: 0, unknownVarRefs: 0, literals: 0 };
   const components = {
     instances: 0,
     libraryInstances: 0,
@@ -121,14 +158,19 @@ export function computeUsageReport(input: UsageInput, opts: UsageOptions = {}): 
   const embedNodes: EmbedNode[] = [];
 
   scan: for (const page of input.pages) {
-    for (const id in page.nodesById) {
+    const stack = [...page.rootIds].reverse();
+    while (stack.length > 0) {
+      const id = stack.pop() as string;
+      const node = page.nodesById[id];
+      // A hidden or disabled node hides its whole subtree.
+      if (!node || node.visible === false || node.enabled === false) continue;
       if (nodes >= maxNodes || ((nodes & 255) === 255 && now() > deadline)) {
         truncated = true;
         break scan;
       }
-      const node = page.nodesById[id];
-      if (node.visible === false || node.enabled === false) continue;
       nodes++;
+      const kids = page.childrenById[id];
+      if (kids) for (let i = kids.length - 1; i >= 0; i--) stack.push(kids[i]);
       if (node.type === "embed") embedNodes.push(node as unknown as EmbedNode);
       else countNodeTokens(node, isLibraryVariable, tokens);
     }
@@ -136,7 +178,7 @@ export function computeUsageReport(input: UsageInput, opts: UsageOptions = {}): 
 
   for (const embed of embedNodes) {
     const html = embed.htmlContent;
-    if (embed.component || !html) continue;
+    if (!html) continue;
     if (embedsSeen >= maxEmbeds || now() > deadline) {
       truncated = true;
       break;
@@ -145,19 +187,32 @@ export function computeUsageReport(input: UsageInput, opts: UsageOptions = {}): 
     const text = html.length > maxChars ? html.slice(0, maxChars) : html;
     if (text.length < html.length) truncated = true;
 
-    const css: string[] = [];
-    for (const m of text.matchAll(STYLE_BLOCK)) css.push(m[1]);
-    for (const m of text.matchAll(STYLE_ATTR)) css.push(m[1] ?? m[2] ?? "");
-    for (const block of css) {
-      for (const m of block.matchAll(VAR_REF)) {
+    // Own CSS only: managed copies of a master's CSS count once, on the master.
+    const declared = new Set<string>();
+    const decls: Array<[string, string]> = [];
+    const collect = (property: string, value: string) => {
+      if (property.startsWith("--")) declared.add(property);
+      decls.push([property, value]);
+    };
+    for (const m of text.matchAll(STYLE_BLOCK)) {
+      if (!MANAGED_STYLE.test(` ${m[1]}`)) walkDecls(parseCss(m[2]), collect);
+    }
+    for (const m of text.matchAll(STYLE_ATTR)) {
+      for (const d of parseDeclarations(m[1] ?? m[2] ?? "")) collect(d.property, d.value);
+    }
+    for (const [property, value] of decls) {
+      for (const m of value.matchAll(VAR_REF)) {
         const variableId = byCssName.get(m[1]);
-        if (!variableId) continue;
-        embedCss.varRefs++;
-        if (libraryOf.has(variableId)) bump(tokens.use, variableId);
+        if (variableId) {
+          embedCss.varRefs++;
+          if (libraryOf.has(variableId)) bump(tokens.use, variableId);
+        } else if (!declared.has(m[1])) embedCss.unknownVarRefs++;
       }
-      embedCss.literals += (block.replace(/var\([^)]*\)/g, "").match(COLOR_LITERAL) ?? []).length;
+      embedCss.literals += countColorLiterals(property, value);
     }
 
+    // A master is a definition: its instances and copies are not uses.
+    if (embed.component) continue;
     for (const [key, regions] of countRegionsByKey(text)) {
       if (!input.registry.has(key)) continue;
       components.instances += regions;
@@ -166,7 +221,7 @@ export function computeUsageReport(input: UsageInput, opts: UsageOptions = {}): 
         bump(components.use, key, regions);
       }
     }
-    for (const m of text.matchAll(DETACHED_STYLE)) {
+    for (const m of text.matchAll(DETACHED)) {
       components.detached++;
       const key = detachedKey(m[2]);
       if (libraryKeys.has(key)) bump(components.detachedByKey, key);
@@ -235,9 +290,11 @@ export function computeUsageReport(input: UsageInput, opts: UsageOptions = {}): 
       bindable: tokens.bindable,
       bound: tokens.bound,
       boundToLibrary: tokens.boundToLibrary,
+      styled: tokens.styled,
       literal: tokens.bindable - tokens.bound,
       use: tokens.use,
       embed: embedCss,
+      cssNameCollisions: collided.size,
     },
     components,
     lint,

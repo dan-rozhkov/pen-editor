@@ -7,7 +7,7 @@ const report: UsageReport = {
   schemaVersion: 1,
   nodes: 10,
   embeds: 1,
-  tokens: { bindable: 8, bound: 6, boundToLibrary: 4, literal: 2, use: {}, embed: { varRefs: 3, literals: 1 } },
+  tokens: { bindable: 8, bound: 6, boundToLibrary: 4, styled: 1, literal: 2, use: {}, embed: { varRefs: 3, unknownVarRefs: 0, literals: 1 }, cssNameCollisions: 0 },
   components: { instances: 5, libraryInstances: 4, detached: 1, use: {}, detachedByKey: {} },
   lint: { "hardcoded-value": 2, "off-scale-value": 0, contrast: 0, "deprecated-token": 0, "deprecated-component": 0, "embed-literal": 0, "component-drift": 0 },
   libraries: [
@@ -17,7 +17,7 @@ const report: UsageReport = {
       reportUsage: false,
       tokens: { total: 5, used: 3, unused: 2 },
       components: { total: 2, used: 1, unused: 1 },
-      unusedTokenIds: ["v-a", "v-b"],
+      unusedTokenIds: ["v-a"],
       unusedComponentKeys: ["card"],
     },
   ],
@@ -31,6 +31,8 @@ describe("UsageReportView", () => {
     expect(screen.getByText("hardcoded-value")).toBeTruthy();
     expect(screen.getByText("lib1 @ 1.0.0")).toBeTruthy();
     expect(screen.getByText("3 of 5")).toBeTruthy();
+    expect(screen.getByText(/Components: card/)).toBeTruthy();
+    expect(screen.getByText(/and 1 more/)).toBeTruthy();
     expect(screen.getByRole("status").textContent).toMatch(/some numbers may be low/);
   });
 });
