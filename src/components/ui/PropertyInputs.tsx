@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
-import type { Variable, ThemeName } from "../../types/variable";
-import { getVariableValue } from "../../types/variable";
+import type { Variable, ModeInput } from "../../types/variable";
+import { getVariableValueAt } from "../../lib/variables/resolve";
+import { getVariableIndex } from "../../lib/variables/variableIndex";
+import { useVariableStore } from "../../store/variableStore";
+import { useThemeStore } from "../../store/themeStore";
 import { Input } from "./input";
 import { Label } from "./label";
 import { SelectWithOptions } from "./select";
@@ -239,7 +242,7 @@ interface ColorInputProps {
   variableId?: string;
   onVariableChange?: (variableId: string | undefined) => void;
   availableVariables?: Variable[];
-  activeTheme?: ThemeName;
+  activeTheme?: ModeInput;
   isMixed?: boolean;
 }
 
@@ -249,19 +252,24 @@ export function ColorInput({
   variableId,
   onVariableChange,
   availableVariables = [],
-  activeTheme = "light",
+  activeTheme,
   isMixed = false,
 }: ColorInputProps) {
   const readOnly = useReadOnly();
 
   // Find bound variable
+  const storeVariables = useVariableStore((s) => s.variables);
+  const storeCollections = useVariableStore((s) => s.collections);
+  const docModes = useThemeStore((s) => s.modeContext);
+  const themeInput = activeTheme ?? docModes;
+  const variableValueIndex = getVariableIndex(storeVariables, storeCollections);
   const boundVariable = variableId
     ? availableVariables.find((v) => v.id === variableId)
     : undefined;
 
   // Get display color (from variable or direct value)
   const displayColor = boundVariable
-    ? getVariableValue(boundVariable, activeTheme)
+    ? getVariableValueAt(boundVariable, themeInput, variableValueIndex)
     : value || "#000000";
 
   const handleVariableSelect = (varId: string | undefined) => {
@@ -369,7 +377,7 @@ export function ColorInput({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" side="bottom">
             {availableVariables.map((variable) => {
-              const varColor = getVariableValue(variable, activeTheme);
+              const varColor = getVariableValueAt(variable, themeInput, variableValueIndex);
               return (
                 <DropdownMenuItem
                   key={variable.id}

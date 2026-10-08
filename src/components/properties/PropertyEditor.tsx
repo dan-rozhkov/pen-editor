@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo, type ReactNode } from "react";
 import type { SceneNode, FrameNode } from "@/types/scene";
-import type { ThemeName, Variable } from "@/types/variable";
+import type { ModeInput, Variable } from "@/types/variable";
 import type { FlatParentContext, ParentContext } from "@/utils/nodeUtils";
 import { useSceneStore } from "@/store/sceneStore";
 import { TypeSection } from "@/components/properties/TypeSection";
@@ -27,7 +27,7 @@ interface PropertyEditorProps {
   onUpdate: (updates: Partial<SceneNode>) => void;
   parentContext: ParentContext | FlatParentContext;
   variables: Variable[];
-  activeTheme: ThemeName;
+  activeTheme: ModeInput;
   beforeExport?: ReactNode;
 }
 

@@ -1,11 +1,11 @@
 import { Container } from "pixi.js";
 import type { FlatSceneNode, FlatFrameNode, FrameNode, SceneNode } from "@/types/scene";
 import { isFlatFrameNode } from "@/types/scene";
-import type { ThemeName } from "@/types/variable";
+import { getFrameModeOverrides, type ModeOverrides } from "@/lib/variables/modeContext";
 import type { createCullingIndex } from "./cullingIndex";
 import {
-  pushRenderTheme,
-  popRenderTheme,
+  pushRenderModes,
+  popRenderModes,
   resetRenderThemeStack,
   getRenderThemeStackDepth,
 } from "./renderers/colorHelpers";
@@ -61,18 +61,22 @@ function pushAncestorThemes(
   nodesById: Record<string, FlatSceneNode>,
 ): number {
   // Collect ancestor theme overrides from root to parent
-  const overrides: ThemeName[] = [];
+  const overrides: ModeOverrides[] = [];
   let cur = parentById[nodeId] ?? null;
   while (cur != null) {
     const n = nodesById[cur];
-    if (n && isFlatFrameNode(n) && n.themeOverride) {
-      overrides.push(n.themeOverride);
+    if (n && isFlatFrameNode(n)) {
+      const own = getFrameModeOverrides(n);
+      for (const _k in own) {
+        overrides.push(own);
+        break;
+      }
     }
     cur = parentById[cur] ?? null;
   }
   // Push from outermost ancestor to innermost (so innermost wins)
   for (let i = overrides.length - 1; i >= 0; i--) {
-    pushRenderTheme(overrides[i]);
+    pushRenderModes(overrides[i]);
   }
   return overrides.length;
 }
@@ -91,7 +95,7 @@ export function withAncestorThemes(
   try {
     fn();
   } finally {
-    for (let i = 0; i < pushed; i++) popRenderTheme();
+    for (let i = 0; i < pushed; i++) popRenderModes();
     // Keep stack invariant strict between operations.
     if (getRenderThemeStackDepth() !== 0) {
       resetRenderThemeStack();

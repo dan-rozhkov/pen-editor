@@ -71,9 +71,9 @@ function reveal(el: Element): void {
 }
 
 /** Same resolution as `EmbedHost` for a root node (no ancestors, so no
- * `themeOverride`): the global active theme. */
+ * mode overrides): the document-level mode context. */
 function previewVariableValues() {
-  return collectVariableValues(undefined, useThemeStore.getState().activeTheme);
+  return collectVariableValues(undefined, useThemeStore.getState().modeContext);
 }
 
 /** Build the screen's content off-DOM through the same pipeline as `EmbedHost`. */

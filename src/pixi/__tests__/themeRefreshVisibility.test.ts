@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Container } from "pixi.js";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
+import { useThemeStore } from "@/store/themeStore";
 import { resetStores } from "@/test/fixtures";
 import { createPixiSync } from "../pixiSync";
 import type { FlatFrameNode, TextNode } from "@/types/scene";
@@ -35,7 +36,8 @@ describe("pixiSync: theme refresh preserves text-editing visibility", () => {
     dispose?.();
   });
 
-  it("keeps a text-editing node's container hidden after its frame's themeOverride changes", async () => {
+  /** frame1 > text1 (variable-bound, explicit visible), then text-editing text1. Returns text1's container and frame1. */
+  async function startEditingBoundText(): Promise<{ textContainer: Container; frame: FlatFrameNode; text: TextNode }> {
     const frame: FlatFrameNode = {
       id: "frame1",
       type: "frame",
@@ -74,13 +76,17 @@ describe("pixiSync: theme refresh preserves text-editing visibility", () => {
     await flushFrame();
 
     // Enter text-editing on the text node — its container hides while the
-    // HTML inline editor overlays it.
+    // HTML inline editor overlays it. applyTextEditingVisibility runs off a
+    // selection-store subscription in pixiSync, no scene mutation needed.
     useSelectionStore.setState({ editingNodeId: "text1", editingMode: "text", selectedIds: ["text1"] });
-    // applyTextEditingVisibility runs off a selection-store subscription in
-    // pixiSync — no scene mutation needed for it to take effect.
     const textContainer = sceneRoot.getChildByLabel("text1", true)!;
     expect(textContainer).not.toBeNull();
     expect(textContainer.visible).toBe(false);
+    return { textContainer, frame, text };
+  }
+
+  it("keeps a text-editing node's container hidden after its frame's themeOverride changes", async () => {
+    const { textContainer, frame, text } = await startEditingBoundText();
 
     // Change the frame's themeOverride — triggers the targeted THEME_SENTINEL
     // recolor pass over the frame's variable-dependent descendants (text1).
@@ -90,6 +96,17 @@ describe("pixiSync: theme refresh preserves text-editing visibility", () => {
         text1: text,
       },
     });
+    await flushFrame();
+
+    expect(textContainer.visible).toBe(false);
+  });
+
+  it("keeps a text-editing node hidden after a DOCUMENT-level mode switch", async () => {
+    const { textContainer } = await startEditingBoundText();
+
+    // `incrementalThemeUpdate` (the doc-level path) recolors with the
+    // THEME_SENTINEL and must re-apply the editing visibility afterwards.
+    useThemeStore.getState().setModeContext({ theme: "dark" });
     await flushFrame();
 
     expect(textContainer.visible).toBe(false);

@@ -4,6 +4,7 @@ import { useSceneStore } from "./sceneStore";
 import { peekDirty } from "./sceneStore/dirtyTracking";
 import { useVariableStore } from "./variableStore";
 import { useThemeStore } from "./themeStore";
+import { getFrameModeOverrides, modeOverridesEqual } from "../lib/variables/modeContext";
 
 /**
  * Keeps the literal fields of number-bound nodes (`node.numberBindings`) equal to
@@ -17,7 +18,7 @@ import { useThemeStore } from "./themeStore";
  *
  * Cost model: a set of bound ids is maintained incrementally from the dirty
  * channel (`peekDirty`); an unmarked mutation falls back to one full scan, the
- * same way pixiSync does. A variable / theme change visits only the bound ids.
+ * same way pixiSync does. A variable / mode-context change (the document-level context or a frame's `modeOverrides`) visits only the bound ids.
  * Idempotent: a pass that finds nothing to change writes nothing, and the sync's
  * own write is ignored, so there is no subscribe loop.
  */
@@ -43,7 +44,7 @@ export function startNumberBindingSync(): () => void {
       ids,
       variables,
       collections,
-      useThemeStore.getState().activeTheme,
+      useThemeStore.getState().modeContext,
     );
     if (Object.keys(patches).length === 0) return;
     applying = true;
@@ -76,8 +77,14 @@ export function startNumberBindingSync(): () => void {
       } else {
         boundIds.delete(id);
       }
-      // A frame's themeOverride changes the mode of every descendant.
-      if (node?.type === "frame" && node.themeOverride !== (prev.nodesById[id] as typeof node | undefined)?.themeOverride) {
+      // A frame's mode picks change the mode of every descendant.
+      if (
+        node?.type === "frame" &&
+        !modeOverridesEqual(
+          getFrameModeOverrides(node),
+          getFrameModeOverrides(prev.nodesById[id]),
+        )
+      ) {
         themeScopeChanged = true;
       }
     }
@@ -91,7 +98,7 @@ export function startNumberBindingSync(): () => void {
   });
 
   const unsubTheme = useThemeStore.subscribe((state, prev) => {
-    if (state.activeTheme === prev.activeTheme) return;
+    if (state.modeContext === prev.modeContext) return;
     if (boundIds.size > 0) apply(boundIds);
   });
 

@@ -18,6 +18,7 @@ import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 // policy.
 import "pixi.js/unsafe-eval";
 import { Application, Container } from "pixi.js";
+import { useEffectiveModeContext } from "@/hooks/useEffectiveModeContext";
 import { useShallow } from "zustand/react/shallow";
 import { InlineNameEditor} from "@/components/InlineNameEditor";
 import { InlineTextEditor } from "@/components/InlineTextEditor";
@@ -55,7 +56,6 @@ import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import {
   findParentFrame,
   getNodeAbsolutePositionWithLayout,
-  getThemeFromAncestorFrames,
 } from "@/utils/nodeUtils";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
 import { saveShareCredentials } from "@/lib/shareCanvas";
@@ -129,14 +129,13 @@ export function usePixiCanvasState({
     }),
   );
 
-  // Theme lookup returns a primitive ('light' | 'dark'), so subscribing with
-  // a selector that reads the ancestor chain is safe without useShallow —
-  // zustand's default equality check (Object.is) bails out unless the
-  // resolved theme itself actually changes.
-  const editingTextTheme = useSceneStore((s) => {
-    if (!editingNodeId || editingMode !== "text") return null;
-    return getThemeFromAncestorFrames(s.parentById, s.nodesById, editingNodeId, 'light');
-  });
+  // The effective mode context of the edited text node. The hook selects a
+  // string key (`modeContextKey`) and derives the object with useMemo, so the
+  // canvas re-renders only when the resolved picks actually change.
+  const editingNodeModes = useEffectiveModeContext(
+    editingNodeId && editingMode === "text" ? editingNodeId : null,
+  );
+  const editingTextTheme = editingNodeId && editingMode === "text" ? editingNodeModes : null;
 
   // Already imperative (getState()) — recomputes only on
   // editingMode/editingNodeId changes, not on unrelated scene mutations.

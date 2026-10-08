@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, cleanup, act } from "@testing-library/react";
 import { EmbedLayer } from "../EmbedLayer";
 import { useSceneStore } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
+import { useThemeStore } from "@/store/themeStore";
 import { resetStores } from "@/test/fixtures";
 import type { FlatSceneNode } from "@/types/scene";
 import type { Variable } from "@/types/variable";
@@ -105,5 +106,79 @@ describe("<EmbedLayer /> live variable updates", () => {
 
     expect(root.style.getPropertyValue("--brand")).toBe("");
     expect(host.shadowRoot!.firstElementChild).toBe(root);
+  });
+});
+
+describe("<EmbedLayer /> live mode-context updates", () => {
+  beforeEach(() => { resetStores(); });
+  afterEach(() => cleanup());
+
+  const frame = (id: string, extra: Record<string, unknown> = {}) =>
+    ({ id, type: "frame", name: id, x: 0, y: 0, width: 400, height: 400, ...extra }) as unknown as FlatSceneNode;
+  const embed = (id: string) =>
+    ({ id, type: "embed", name: id, x: 0, y: 0, width: 100, height: 80, htmlContent: "<div>hi</div>" }) as unknown as FlatSceneNode;
+
+  function seedTwoEmbeds(): void {
+    useSceneStore.setState({
+      nodesById: { fa: frame("fa"), fb: frame("fb"), ea: embed("ea"), eb: embed("eb") },
+      parentById: { fa: null, fb: null, ea: "fa", eb: "fb" },
+      childrenById: { fa: ["ea"], fb: ["eb"] },
+      rootIds: ["fa", "fb"],
+      _cachedTree: null,
+    });
+  }
+
+  // Custom-property writes only: `position()` also sets `transform` on layout.
+  const customPropertyWrites = (spy: { mock: { calls: unknown[][] } }) =>
+    spy.mock.calls.filter((c) => String(c[0]).startsWith("--")).length;
+
+  const rootOf = (container: HTMLElement, id: string) =>
+    container.querySelector<HTMLElement>(`[data-embed-id="${id}"]`)!.shadowRoot!.firstElementChild as HTMLElement;
+
+  it("re-applies properties in place when the document-level mode changes", () => {
+    seedVariable(); // --brand light #00ff00, dark #003300
+    seedTwoEmbeds();
+    const { container } = render(<EmbedLayer />);
+    const root = rootOf(container, "ea");
+    expect(root.style.getPropertyValue("--brand")).toBe("#00ff00");
+
+    act(() => { useThemeStore.getState().setModeContext({ theme: "dark" }); });
+
+    expect(root.style.getPropertyValue("--brand")).toBe("#003300");
+    expect(rootOf(container, "ea")).toBe(root); // updated in place, not remounted
+    expect(rootOf(container, "eb").style.getPropertyValue("--brand")).toBe("#003300");
+  });
+
+  it("a frame override change re-applies for its own embed child only", () => {
+    seedVariable();
+    seedTwoEmbeds();
+    const { container } = render(<EmbedLayer />);
+    const rootA = rootOf(container, "ea");
+    const rootB = rootOf(container, "eb");
+    const setPropertyA = vi.spyOn(rootA.style, "setProperty");
+    const setPropertyB = vi.spyOn(rootB.style, "setProperty");
+
+    act(() => {
+      useSceneStore.setState((s) => ({
+        nodesById: { ...s.nodesById, fa: frame("fa", { modeOverrides: { theme: "dark" } }) },
+      }));
+    });
+
+    expect(rootA.style.getPropertyValue("--brand")).toBe("#003300");
+    expect(rootB.style.getPropertyValue("--brand")).toBe("#00ff00");
+    expect(customPropertyWrites(setPropertyA)).toBeGreaterThan(0);
+    expect(customPropertyWrites(setPropertyB)).toBe(0);
+  });
+
+  it("an unrelated scene edit leaves the embed untouched", () => {
+    seedVariable();
+    seedTwoEmbeds();
+    const { container } = render(<EmbedLayer />);
+    const rootA = rootOf(container, "ea");
+    const setPropertyA = vi.spyOn(rootA.style, "setProperty");
+    act(() => {
+      useSceneStore.setState((s) => ({ nodesById: { ...s.nodesById, fb: frame("fb", { fill: "#fff" }) } }));
+    });
+    expect(customPropertyWrites(setPropertyA)).toBe(0);
   });
 });

@@ -1,3 +1,4 @@
+import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
 import { getVariableCssName } from "@/types/variable";
 import type { ModeInput } from "@/types/variable";
@@ -12,12 +13,12 @@ import { getVariableIndex, getVariableValueAt } from "@/lib/variables";
  *
  * @param variableIds - If provided, only include variables with these IDs.
  *                      If omitted, include all variables.
- * @param theme - If provided, use this theme instead of the global active theme.
+ * @param theme - The mode input to resolve under; defaults to the document-level mode context.
  */
 export function collectVariableValues(variableIds?: Set<string>, theme?: ModeInput): Map<string, string> {
   const { variables, collections } = useVariableStore.getState();
   const index = getVariableIndex(variables, collections);
-  const activeTheme = theme ?? 'light';
+  const activeTheme = theme ?? useThemeStore.getState().modeContext;
   const values = new Map<string, string>();
   for (const v of variables) {
     if (variableIds && !variableIds.has(v.id)) continue;
@@ -34,7 +35,7 @@ export function collectVariableValues(variableIds?: Set<string>, theme?: ModeInp
  *
  * @param variableIds - If provided, only include variables with these IDs.
  *                      If omitted, include all variables.
- * @param theme - If provided, use this theme instead of the global active theme.
+ * @param theme - The mode input to resolve under; defaults to the document-level mode context.
  */
 export function buildVariableStyleBlock(variableIds?: Set<string>, theme?: ModeInput): string {
   const values = collectVariableValues(variableIds, theme);

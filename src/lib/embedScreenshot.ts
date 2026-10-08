@@ -1,7 +1,7 @@
 import type { EmbedNode } from "@/types/scene";
 import { renderHtmlToCanvas } from "@/pixi/renderers/htmlTexture/renderHtmlToTexture";
 import { buildVariableStyleBlock } from "@/utils/variableCssUtils";
-import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
+import { getEffectiveModeContextForNode } from "@/utils/nodeThemeUtils";
 
 /**
  * Render an embed node's live HTML content to a PNG data URL, for use as a
@@ -33,7 +33,7 @@ import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
  * throwaway PNG-encode/decode round trip.
  *
  * `nodeId`, when passed, resolves the node's effective theme
- * (`getEffectiveThemeForNode`) and appends a `buildVariableStyleBlock`
+ * (`getEffectiveModeContextForNode`) and appends a `buildVariableStyleBlock`
  * `<style>:root{...}</style>` block to the HTML STRING before rendering —
  * without it, `var(--color-...)` references in the embed's HTML have
  * nothing to resolve against off-canvas (a foreignObject SVG document
@@ -58,7 +58,7 @@ export async function captureEmbedCanvas(
   nodeId?: string,
 ): Promise<HTMLCanvasElement | null> {
   if (!node.htmlContent || !node.width || !node.height) return null;
-  const themeBlock = nodeId ? buildVariableStyleBlock(undefined, getEffectiveThemeForNode(nodeId)) : "";
+  const themeBlock = nodeId ? buildVariableStyleBlock(undefined, getEffectiveModeContextForNode(nodeId)) : "";
   const html = themeBlock ? node.htmlContent + themeBlock : node.htmlContent;
   return renderHtmlToCanvas(html, node.width, node.height, resolution);
 }

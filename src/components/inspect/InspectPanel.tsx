@@ -10,7 +10,7 @@ import { useDevModeStore } from "@/store/devModeStore";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { createOverlayHelpers } from "@/pixi/selectionOverlay/helpers";
 import { buildInspectData } from "@/lib/inspect/buildInspectData";
-import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
+import { useEffectiveModeContext } from "@/hooks/useEffectiveModeContext";
 import { formatShortcut } from "@/lib/commands/shortcutFormat";
 import type { FlatSceneNode } from "@/types/scene";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -99,10 +99,11 @@ export function InspectPanel() {
   const setUnits = useDevModeStore((s) => s.setUnits);
   const [mode, setMode] = useState<"list" | "code">("list");
 
+  const effectiveModes = useEffectiveModeContext(nodeId);
+
   const data = useMemo(() => {
     if (!nodeId || !node) return null;
     const rect = resolveRect(nodeId, node);
-    const effectiveTheme = getEffectiveThemeForNode(nodeId);
     const nodesById = useSceneStore.getState().nodesById;
     return buildInspectData({
       nodeId,
@@ -115,9 +116,9 @@ export function InspectPanel() {
       textStyles,
       units,
       remBase,
-      effectiveTheme,
+      effectiveTheme: effectiveModes,
     });
-  }, [nodeId, node, variables, collections, fillStyles, effectStyles, textStyles, units, remBase]);
+  }, [nodeId, node, effectiveModes, variables, collections, fillStyles, effectStyles, textStyles, units, remBase]);
 
   return (
     <div className="w-[300px] h-full flex flex-col bg-surface-panel border-l border-border-default overflow-hidden">

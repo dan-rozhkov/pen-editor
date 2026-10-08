@@ -123,14 +123,13 @@ export function getVariableValue(variable: Variable, theme: ThemeName): string {
  *   for the same variable and unique-ish across variables, and never empty
  *   or invalid.
  *
- * KNOWN LIMITATION: embed bindings (`EmbedElementProperties.tsx`) store the
- * result of THIS function — a name — directly into `htmlContent` as
- * `var(--name)`, unlike a native node's fill/stroke, which stores
- * `variableId` and resolves the name lazily. Renaming a variable changes
- * what this function returns for it, but nothing migrates the
- * `var(--old-name)` references already written into embed HTML — they just
- * stop resolving. That's inherent to plain CSS custom properties, not a bug
- * in this function.
+ * Embed bindings (`EmbedElementProperties.tsx`) store the result of THIS
+ * function — a name — directly into `htmlContent` as `var(--name)`, unlike a
+ * native node's fill/stroke, which stores `variableId` and resolves the name
+ * lazily. Renaming a variable therefore changes what this function returns, so
+ * `renameVariable` rewrites the `var(--old-name)` references in embed HTML to
+ * the new name (see `embedVarRefs.ts`). A reference written by hand in a
+ * place the store cannot see (outside the document) still stops resolving.
  */
 export function getVariableCssName(variable: Pick<Variable, "id" | "name">): string {
   const trimmed = variable.name.trim();

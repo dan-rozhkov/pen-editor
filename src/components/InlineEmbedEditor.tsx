@@ -6,7 +6,7 @@ import { useSelectionStore } from '../store/selectionStore'
 import { useViewportStore } from '../store/viewportStore'
 import { applyEditorVariableProperties, mountHtmlWithBodyStyles, type MountResult } from '../utils/embedHtmlUtils'
 import { collectVariableValues } from '../utils/variableCssUtils'
-import { getEffectiveThemeForNode } from '../utils/nodeThemeUtils'
+import { getEffectiveModeContextForNode } from '../utils/nodeThemeUtils'
 import { normalizeTinySvgDotPathsWithOptions, stripTinySvgDotPathNormalization } from '../utils/svgDotNormalization'
 import { isTextLeaf } from '../lib/embedTextLeaf'
 
@@ -163,7 +163,7 @@ export function InlineEmbedEditor({
     applyEditorVariableProperties(
       container,
       editableRoot,
-      collectVariableValues(undefined, getEffectiveThemeForNode(node.id)),
+      collectVariableValues(undefined, getEffectiveModeContextForNode(node.id)),
     )
     shadow.appendChild(container)
     normalizeTinySvgDotPathsWithOptions(editableRoot, { markTemporary: true })

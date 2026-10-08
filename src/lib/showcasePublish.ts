@@ -20,7 +20,7 @@ import { renderNodeToCanvas } from "@/utils/exportUtils";
 import { captureEmbedCanvas } from "@/lib/embedScreenshot";
 import { convertDesignNodesToHtml } from "@/lib/designToHtml";
 import { buildVariableStyleBlock } from "@/utils/variableCssUtils";
-import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
+import { getEffectiveModeContextForNode } from "@/utils/nodeThemeUtils";
 import { isOffline, apiFetch } from "@/lib/apiBase";
 import { getRequestUserId } from "@/lib/auth/authState";
 import type { EmbedNode } from "@/types/scene";
@@ -228,7 +228,7 @@ export async function publishScreensToShowcase(
     // last, for BOTH node types fixes this — a later `<style>:root>` block
     // wins over an earlier one at equal specificity — and keeps this the one
     // place either path can silently regress out of sync again.
-    const themeBlock = buildVariableStyleBlock(undefined, getEffectiveThemeForNode(screen.nodeId));
+    const themeBlock = buildVariableStyleBlock(undefined, getEffectiveModeContextForNode(screen.nodeId));
     if (themeBlock) {
       htmlContent += themeBlock;
     }

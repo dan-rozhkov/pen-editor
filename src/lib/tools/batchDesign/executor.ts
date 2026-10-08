@@ -1,13 +1,14 @@
 import type {
   FlatSceneNode,
   SceneNode,
-  FlatFrameNode,
   EmbedNode,
   ImageFill,
   Paint,
   ParagraphAttrs,
 } from "@/types/scene";
-import type { ThemeName } from "@/types/variable";
+import { THEME_COLLECTION_ID, type ModeContext, type ThemeName } from "@/types/variable";
+import { useThemeStore } from "@/store/themeStore";
+import { getEffectiveModeContext } from "@/lib/variables/modeContext";
 import {
   toFlatNode,
   isContainerNode,
@@ -42,28 +43,29 @@ import { serializeNodeToDepth } from "../serializeUtils";
 
 const DOCUMENT_BINDING = "__document__";
 
+/**
+ * The mode context new content under `parentId` inherits: the document-level
+ * context plus the overrides of `parentId` and every ancestor frame (inner
+ * wins). It starts from the global `modeContext`, not a hard-coded 'light'.
+ */
+function resolveInheritedModeContext(
+  parentId: string | null,
+  nodesById: Record<string, FlatSceneNode>,
+  parentById: Record<string, string | null>,
+): ModeContext {
+  const base = useThemeStore.getState().modeContext;
+  if (!parentId) return base;
+  return getEffectiveModeContext(parentById, nodesById, parentId, base, { includeSelf: true });
+}
+
+/** The Theme-collection pick of {@link resolveInheritedModeContext}, for the node mapper's `theme` option. */
 function resolveInheritedTheme(
   parentId: string | null,
   nodesById: Record<string, FlatSceneNode>,
   parentById: Record<string, string | null>,
 ): ThemeName {
-  let theme: ThemeName = 'light';
-  let current = parentId;
-
-  const chain: string[] = [];
-  while (current) {
-    chain.push(current);
-    current = parentById[current] ?? null;
-  }
-
-  for (let i = chain.length - 1; i >= 0; i--) {
-    const node = nodesById[chain[i]];
-    if (node?.type === "frame" && (node as FlatFrameNode).themeOverride) {
-      theme = (node as FlatFrameNode).themeOverride as ThemeName;
-    }
-  }
-
-  return theme;
+  const ctx = resolveInheritedModeContext(parentId, nodesById, parentById);
+  return (ctx[THEME_COLLECTION_ID] ?? "light") as ThemeName;
 }
 
 /**

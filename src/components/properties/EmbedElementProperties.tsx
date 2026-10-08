@@ -12,8 +12,8 @@ import { getFills } from "@/utils/fillUtils";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
-import { useThemeStore } from "@/store/themeStore";
-import { getThemeFromAncestorFrames, type FlatParentContext } from "@/utils/nodeUtils";
+import { useEffectiveModeContext } from "@/hooks/useEffectiveModeContext";
+import type { FlatParentContext } from "@/utils/nodeUtils";
 import { useReadOnly } from "@/hooks/useReadOnly";
 import { PropertySection, TextInput } from "@/components/ui/PropertyInputs";
 import { SizeSection } from "@/components/properties/SizeSection";
@@ -118,17 +118,14 @@ export function EmbedElementProperties() {
   const variables = useVariableStore((s) => s.variables);
   const colorVariables = useMemo(() => variables.filter((v) => v.type === "color"), [variables]);
   // `activeTheme` must resolve THE SAME WAY the embed itself is rendered:
-  // `EmbedLayer` mounts editor variables via the nearest ancestor frame's
-  // `themeOverride`, falling back to the global active theme — never the
-  // global theme unconditionally. Getting this wrong shows the wrong theme's
+  // `EmbedLayer` mounts editor variables via the effective mode context:
+  // the ancestor frames' `modeOverrides` over the document-level context —
+  // never the document context unconditionally. Getting this wrong shows the wrong theme's
   // resolved colour in the swatch, and makes unbinding a variable write the
   // wrong theme's literal into `htmlContent`, so the element visibly jumps.
-  // Composed from two selectors rather than a `getState()` helper so the
-  // panel re-renders when either the scene tree or the global theme changes.
-  const globalTheme = useThemeStore((s) => s.activeTheme);
-  const activeTheme = useSceneStore((s) =>
-    embedId ? getThemeFromAncestorFrames(s.parentById, s.nodesById, embedId, globalTheme) : globalTheme,
-  );
+  // The hook selects a string key, so the panel re-renders when either the
+  // scene tree's overrides or the document-level context actually change.
+  const activeTheme = useEffectiveModeContext(embedId);
 
   const [node, setNode] = useState<SyntheticNodeShape | null>(null);
   const [hasText, setHasText] = useState(false);

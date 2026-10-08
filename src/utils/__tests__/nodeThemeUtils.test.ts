@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
+import { getEffectiveThemeForNode, getEffectiveModeContextForNode } from "@/utils/nodeThemeUtils";
 import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
 import { resetStores } from "@/test/fixtures";
@@ -58,5 +58,27 @@ describe("getEffectiveThemeForNode with modeOverrides", () => {
       _cachedTree: null,
     });
     expect(getEffectiveThemeForNode("e1")).toBe(expected);
+  });
+});
+
+describe("getEffectiveModeContextForNode", () => {
+  beforeEach(() => resetStores());
+
+  it("merges the document context with ancestor modeOverrides (inner wins, self excluded)", () => {
+    useThemeStore.getState().setModeContext({ theme: "dark", brand: "zen" });
+    useSceneStore.setState({
+      nodesById: {
+        outer: { id: "outer", type: "frame", modeOverrides: { brand: "acme", theme: "light" }, x: 0, y: 0, width: 1, height: 1 } as unknown as FlatSceneNode,
+        inner: { id: "inner", type: "frame", themeOverride: "dark", x: 0, y: 0, width: 1, height: 1 } as unknown as FlatSceneNode,
+        e1: { id: "e1", type: "embed", htmlContent: "", x: 0, y: 0, width: 10, height: 10 } as unknown as FlatSceneNode,
+      },
+      parentById: { outer: null, inner: "outer", e1: "inner" },
+      childrenById: { outer: ["inner"], inner: ["e1"] },
+      rootIds: ["outer"],
+      _cachedTree: null,
+    });
+    expect(getEffectiveModeContextForNode("e1")).toEqual({ theme: "dark", brand: "acme" });
+    expect(getEffectiveModeContextForNode("inner")).toEqual({ theme: "light", brand: "acme" });
+    expect(getEffectiveModeContextForNode("outer")).toEqual({ theme: "dark", brand: "zen" });
   });
 });

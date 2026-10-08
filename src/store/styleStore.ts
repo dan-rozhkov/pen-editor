@@ -7,7 +7,7 @@ import { generateId } from "../types/scene";
 import { useHistoryStore } from "./historyStore";
 import { useSceneStore, createSnapshot } from "./sceneStore";
 import { useVariableStore } from "./variableStore";
-import { getEffectiveThemeForNode } from "../utils/nodeThemeUtils";
+import { getEffectiveModeContextForNode } from "../utils/nodeThemeUtils";
 
 /**
  * Detach must FREEZE the value the user currently sees, not leave a live
@@ -17,7 +17,7 @@ import { getEffectiveThemeForNode } from "../utils/nodeThemeUtils";
  */
 function freezePaintColor(paint: Paint, nodeId: string): Paint {
   if (paint.type !== "solid") return paint;
-  const theme = getEffectiveThemeForNode(nodeId);
+  const theme = getEffectiveModeContextForNode(nodeId);
   const { variables, collections } = useVariableStore.getState();
   const resolved = resolveColor(paint.color, paint.colorBinding, variables, theme, collections);
   const { colorBinding: _binding, ...rest } = paint;
@@ -27,7 +27,7 @@ function freezePaintColor(paint: Paint, nodeId: string): Paint {
 /** Same freeze, per shadow effect in a detached effect stack. */
 function freezeEffectColor(effect: Effect, nodeId: string): Effect {
   if (effect.type !== "shadow" || !effect.colorBinding) return { ...effect };
-  const theme = getEffectiveThemeForNode(nodeId);
+  const theme = getEffectiveModeContextForNode(nodeId);
   const { variables, collections } = useVariableStore.getState();
   const shadow = effect as ShadowEffect;
   const resolved = resolveColor(shadow.color, shadow.colorBinding, variables, theme, collections);

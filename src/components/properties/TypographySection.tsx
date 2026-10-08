@@ -32,7 +32,7 @@ import {
   IconContext,
 } from "@phosphor-icons/react";
 import type { SceneNode, TextNode } from "@/types/scene";
-import type { ThemeName, Variable } from "@/types/variable";
+import type { ModeInput, Variable } from "@/types/variable";
 import {
   ColorInput,
   NumberInput,
@@ -132,7 +132,7 @@ interface TypographySectionProps {
     variableId?: string;
     onVariableChange: (variableId: string | undefined) => void;
     colorVariables: Variable[];
-    activeTheme: ThemeName;
+    activeTheme: ModeInput;
   };
 }
 

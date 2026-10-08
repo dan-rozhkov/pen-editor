@@ -1,3 +1,4 @@
+import { useThemeStore } from "@/store/themeStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
 import { getVariableIndex, getVariableValueAt } from "@/lib/variables";
@@ -107,7 +108,7 @@ export const batchGet: ToolHandler = async (args) => {
     const { variables, collections } = useVariableStore.getState();
     const index = getVariableIndex(variables, collections);
     for (const v of variables) {
-      variableLookup[v.id] = getVariableValueAt(v, 'light', index);
+      variableLookup[v.id] = getVariableValueAt(v, useThemeStore.getState().modeContext, index);
     }
   }
 

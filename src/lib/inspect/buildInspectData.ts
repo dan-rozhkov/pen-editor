@@ -8,7 +8,7 @@ import type {
   NoiseEffect,
   PathStroke,
 } from "@/types/scene";
-import type { ThemeName, Variable, VariableCollection } from "@/types/variable";
+import type { ModeInput, Variable, VariableCollection } from "@/types/variable";
 import { getVariableIndex, getVariableValueAt } from "@/lib/variables";
 import type { FillStyle, EffectStyle } from "@/types/style";
 import type { TextStyle } from "@/types/textStyle";
@@ -88,12 +88,12 @@ export interface BuildInspectDataInput {
   units: InspectUnits;
   remBase: number;
   /**
-   * The node's effective theme (innermost ancestor `themeOverride`, or the
-   * global active theme) — used to resolve variable-bound color values to
+   * The node's effective theme mode context (document-level picks plus every
+   * ancestor frame's overrides) — used to resolve variable-bound color values to
    * the theme actually rendered for this node, instead of hardcoding
-   * "light". See `getEffectiveThemeForNode` (src/utils/nodeThemeUtils.ts).
+   * "light". See `getEffectiveModeContextForNode` (src/utils/nodeThemeUtils.ts).
    */
-  effectiveTheme: ThemeName;
+  effectiveTheme: ModeInput;
 }
 
 function fmt(px: number, units: InspectUnits, remBase: number): string {
@@ -281,7 +281,7 @@ function describePaint(
   paint: ReturnType<typeof getFills>[number],
   variables: Variable[],
   fillStyles: FillStyle[],
-  effectiveTheme: ThemeName,
+  effectiveTheme: ModeInput,
   label: string,
   collections?: VariableCollection[],
 ): InspectValue {
@@ -331,7 +331,7 @@ function buildFillsSection(
   node: FlatSceneNode,
   variables: Variable[],
   fillStyles: FillStyle[],
-  effectiveTheme: ThemeName,
+  effectiveTheme: ModeInput,
   collections?: VariableCollection[],
 ): InspectSection | undefined {
   const fills = getRenderableFills(node);
@@ -350,7 +350,7 @@ function buildStrokesSection(
   fillStyles: FillStyle[],
   units: InspectUnits,
   remBase: number,
-  effectiveTheme: ThemeName,
+  effectiveTheme: ModeInput,
   collections?: VariableCollection[],
 ): InspectSection | undefined {
   const pathStroke: PathStroke | undefined = node.type === "path" ? node.pathStroke : undefined;

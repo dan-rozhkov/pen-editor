@@ -4,6 +4,7 @@ import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { resetStores, seedScene, seedVariables } from "@/test/fixtures";
 import { useMeasurementsStore } from "@/store/measurementsStore";
+import { useThemeStore } from "@/store/themeStore";
 import type { Effect, FlatFrameNode, FlatSceneNode, Paint, ShadowEffect, TextNode, ConnectorNode } from "@/types/scene";
 
 function sceneState() {
@@ -1823,5 +1824,35 @@ describe("batch_design", () => {
       expect(created.text).toContain("<script>");
       expect(created.text).toContain("```");
     });
+  });
+});
+
+describe("batch_design inherits the document-level mode context", () => {
+  beforeEach(() => {
+    resetStores();
+    seedScene();
+    seedVariables(); // --primary: light #3366ff, dark #99bbff
+  });
+
+  async function insertBoundRect(parent: string): Promise<Record<string, unknown>> {
+    const result = JSON.parse(
+      await batchDesign({ operations: `r=I(${parent}, {"type":"rect","width":10,"height":10,"fill":"$--primary"})` }),
+    );
+    return sceneState().nodesById[result.createdNodes[0].id] as unknown as Record<string, unknown>;
+  }
+
+  it("resolves a $--var fill under the global dark context when no ancestor overrides it", async () => {
+    const light = await insertBoundRect("frame1");
+    useThemeStore.getState().setModeContext({ theme: "dark" });
+    const dark = await insertBoundRect("frame1");
+    expect(light.fill).not.toBe(dark.fill);
+    expect(dark.fill).toBe("#99bbff");
+  });
+
+  it("an ancestor frame's override still wins over the global context", async () => {
+    useThemeStore.getState().setModeContext({ theme: "dark" });
+    useSceneStore.getState().updateNode("frame1", { modeOverrides: { theme: "light" } } as never);
+    const node = await insertBoundRect("frame1");
+    expect(node.fill).toBe("#3366ff");
   });
 });

@@ -6,6 +6,8 @@ import { resetStores } from "@/test/fixtures";
 import { useSceneStore } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useThemeStore } from "@/store/themeStore";
+import { makeThemeCollection } from "@/lib/variables/collections";
+import type { Variable, VariableCollection } from "@/types/variable";
 import { consumeDirty } from "@/store/sceneStore/dirtyTracking";
 import { startNumberBindingSync } from "@/store/numberBindingSync";
 import type { FlatSceneNode } from "@/types/scene";
@@ -194,5 +196,118 @@ describe("numberBindingSync", () => {
     expect(writes).toBe(1);
     expect(n("n0").cornerRadius).toBe(33);
     expect(n("n4999").cornerRadius).toBe(33);
+  });
+});
+
+describe("numberBindingSync: non-Theme collection modes (Brand)", () => {
+  const brand: VariableCollection = {
+    id: "brand",
+    name: "Brand",
+    modes: [
+      { id: "soft", name: "Soft" },
+      { id: "sharp", name: "Sharp" },
+    ],
+    defaultModeId: "soft",
+  };
+  const cornerVar: Variable = {
+    id: "br",
+    name: "--brand-radius",
+    type: "number",
+    collectionId: "brand",
+    valuesByMode: { soft: "16", sharp: "2" },
+    value: "16",
+  };
+  const radiusBound = (id: string) =>
+    frame(id, { cornerRadius: 1, numberBindings: { cornerRadius: { variableId: "br" } } });
+
+  beforeEach(() => {
+    useVariableStore.getState().replaceAll([cornerVar], [makeThemeCollection(), brand]);
+    consumeDirty();
+  });
+
+  it("starts in the default Brand mode", () => {
+    seed([radiusBound("a")]);
+    stop = startNumberBindingSync();
+    expect(n("a").cornerRadius).toBe(16);
+  });
+
+  it("re-materializes when the document modeContext switches Brand mode", () => {
+    seed([radiusBound("a"), frame("plain", { cornerRadius: 7 })]);
+    stop = startNumberBindingSync();
+    useThemeStore.getState().setCollectionMode("brand", "sharp");
+    expect(n("a").cornerRadius).toBe(2);
+    expect(n("plain").cornerRadius).toBe(7);
+    useThemeStore.getState().setModeContext({ theme: "light" });
+    expect(n("a").cornerRadius).toBe(16);
+  });
+
+  it("re-materializes descendants when a frame's modeOverrides switch Brand mode", () => {
+    const f = frame("f");
+    const c = radiusBound("c");
+    const other = radiusBound("o");
+    useSceneStore.setState({
+      nodesById: { f, c, o: other },
+      parentById: { f: null, c: "f", o: null },
+      childrenById: { f: ["c"] },
+      rootIds: ["f", "o"],
+      _cachedTree: null,
+    });
+    stop = startNumberBindingSync();
+    expect(n("c").cornerRadius).toBe(16);
+    scene().updateNode("f", { modeOverrides: { brand: "sharp" } } as never);
+    expect(n("c").cornerRadius).toBe(2);
+    expect(n("o").cornerRadius).toBe(16); // not a descendant
+    scene().updateNode("f", { modeOverrides: undefined } as never);
+    expect(n("c").cornerRadius).toBe(16);
+  });
+
+  it("an override wins over the document context, and a nested override over its parent's", () => {
+    const f = frame("f", { modeOverrides: { brand: "sharp" } });
+    const g = frame("g", { modeOverrides: { brand: "soft" } });
+    const c = radiusBound("c");
+    useSceneStore.setState({
+      nodesById: { f, g, c },
+      parentById: { f: null, g: "f", c: "g" },
+      childrenById: { f: ["g"], g: ["c"] },
+      rootIds: ["f"],
+      _cachedTree: null,
+    });
+    useThemeStore.getState().setCollectionMode("brand", "sharp");
+    stop = startNumberBindingSync();
+    expect(n("c").cornerRadius).toBe(16); // g (soft) beats f (sharp) beats doc
+  });
+
+  it("a legacy themeOverride change on a frame is still picked up", () => {
+    const f = frame("f");
+    const c = frame("c", {
+      cornerRadius: 1,
+      numberBindings: { cornerRadius: { variableId: "r" } },
+    });
+    useVariableStore.getState().replaceAll(
+      [
+        ...useVariableStore.getState().variables,
+        { id: "r", name: "--r", type: "number", collectionId: "theme", valuesByMode: { light: "4", dark: "8" }, value: "4" },
+      ],
+      [makeThemeCollection(), brand],
+    );
+    useSceneStore.setState({
+      nodesById: { f, c },
+      parentById: { f: null, c: "f" },
+      childrenById: { f: ["c"] },
+      rootIds: ["f"],
+      _cachedTree: null,
+    });
+    stop = startNumberBindingSync();
+    expect(n("c").cornerRadius).toBe(4);
+    scene().updateNode("f", { themeOverride: "dark" } as never);
+    expect(n("c").cornerRadius).toBe(8);
+  });
+
+  it("writes nothing when the new mode context resolves to the same numbers (no loop)", () => {
+    seed([radiusBound("a")]);
+    stop = startNumberBindingSync();
+    const before = scene().nodesById;
+    useThemeStore.getState().setCollectionMode("theme", "dark"); // Brand var is unaffected
+    expect(scene().nodesById).toBe(before);
   });
 });

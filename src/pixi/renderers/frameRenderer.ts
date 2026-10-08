@@ -16,7 +16,8 @@ import {
 } from "./fillStrokeHelpers";
 import { applyImageFills } from "./imageFillHelpers";
 import { applyVideoFills } from "./videoFillHelpers";
-import { pushRenderTheme, popRenderTheme } from "./colorHelpers";
+import { pushRenderModes, popRenderModes } from "./colorHelpers";
+import { getFrameModeOverrides } from "@/lib/variables/modeContext";
 import { createNodeContainer } from "./index";
 import { drawLayoutGrids } from "./layoutGridRenderer";
 import { applySiblingMasks } from "./maskHelpers";
@@ -158,8 +159,10 @@ export function createFrameContainer(
   }
 
   // If this frame overrides the theme, push it for children
-  if (node.themeOverride) {
-    pushRenderTheme(node.themeOverride);
+  const ownModes = getFrameModeOverrides(node);
+  const pushesModes = Object.keys(ownModes).length > 0;
+  if (pushesModes) {
+    pushRenderModes(ownModes);
   }
   const childIds = childrenById[node.id] ?? [];
   try {
@@ -176,8 +179,8 @@ export function createFrameContainer(
       }
     }
   } finally {
-    if (node.themeOverride) {
-      popRenderTheme();
+    if (pushesModes) {
+      popRenderModes();
     }
   }
 

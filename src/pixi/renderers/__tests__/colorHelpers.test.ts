@@ -1,12 +1,17 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { FlatSceneNode } from "@/types/scene";
 import { useVariableStore } from "@/store/variableStore";
+import { useThemeStore } from "@/store/themeStore";
+import { makeThemeCollection } from "@/lib/variables/collections";
+import type { Variable } from "@/types/variable";
 import { resetStores, seedVariables, seedVariablesV2 } from "@/test/fixtures";
 import {
   parseColor,
   parseAlpha,
   escapeXmlAttr,
   pushRenderTheme,
+  pushRenderModes,
+  getEffectiveModeContext,
   popRenderTheme,
   resetRenderThemeStack,
   getRenderThemeStackDepth,
@@ -113,6 +118,67 @@ describe("render theme stack", () => {
     expect(getResolvedFill(node)).toBe("#ffffff");
     pushRenderTheme("dark");
     expect(getResolvedFill(node)).toBe("#101010");
+    popRenderTheme();
+  });
+});
+
+describe("render mode context stack", () => {
+  beforeEach(() => {
+    resetStores();
+    resetRenderThemeStack();
+  });
+
+  const node = { id: "n1", type: "rect", fillBinding: { variableId: "var-primary" } } as unknown as FlatSceneNode;
+
+  it("falls back to the document-level mode context, not 'light', with an empty stack", () => {
+    seedVariables();
+    useThemeStore.getState().setModeContext({ theme: "dark" });
+    expect(getEffectiveModeContext()).toEqual({ theme: "dark" });
+    expect(getResolvedFill(node)).toBe("#99bbff");
+  });
+
+  it("a pushed override merges over the document context (other collections untouched)", () => {
+    useThemeStore.getState().setModeContext({ theme: "dark", brand: "zen" });
+    pushRenderModes({ brand: "acme" });
+    expect(getEffectiveModeContext()).toEqual({ theme: "dark", brand: "acme" });
+    pushRenderModes({ theme: "light" });
+    expect(getEffectiveModeContext()).toEqual({ theme: "light", brand: "acme" });
+    popRenderTheme();
+    popRenderTheme();
+    expect(getEffectiveModeContext()).toEqual({ theme: "dark", brand: "zen" });
+  });
+
+  it("pushRenderTheme is a Theme-collection pick over a dark document", () => {
+    seedVariables();
+    useThemeStore.getState().setModeContext({ theme: "dark" });
+    pushRenderTheme("light");
+    expect(getResolvedFill(node)).toBe("#3366ff");
+    popRenderTheme();
+    expect(getResolvedFill(node)).toBe("#99bbff");
+  });
+
+  it("resolves a variable of another collection under that collection's mode", () => {
+    const brand = {
+      id: "brand",
+      name: "Brand",
+      modes: [
+        { id: "acme", name: "Acme" },
+        { id: "zen", name: "Zen" },
+      ],
+      defaultModeId: "acme",
+    };
+    const v: Variable = {
+      id: "var-primary",
+      name: "--primary",
+      type: "color",
+      collectionId: "brand",
+      valuesByMode: { acme: "#ff0000", zen: "#00ff00" },
+      value: "#ff0000",
+    };
+    useVariableStore.getState().replaceAll([v], [makeThemeCollection(), brand]);
+    expect(getResolvedFill(node)).toBe("#ff0000");
+    pushRenderModes({ brand: "zen" });
+    expect(getResolvedFill(node)).toBe("#00ff00");
     popRenderTheme();
   });
 });

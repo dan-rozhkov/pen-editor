@@ -13,7 +13,9 @@ import {
 } from "@/utils/embedHtmlUtils";
 import { collectVariableValues } from "@/utils/variableCssUtils";
 import { useVariableStore } from "@/store/variableStore";
-import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
+import { getEffectiveModeContextForNode } from "@/utils/nodeThemeUtils";
+import { modeContextKey } from "@/lib/variables/modeContext";
+import { useThemeStore } from "@/store/themeStore";
 import { findHiddenSelfOrAncestor } from "@/utils/nodeUtils";
 import type { EmbedNode } from "@/types/scene";
 import { topLevelAncestorId } from "@/utils/topLevelAncestor";
@@ -458,7 +460,7 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
     applyEditorVariableProperties(
       content,
       mountResult.root,
-      collectVariableValues(undefined, getEffectiveThemeForNode(nodeId)),
+      collectVariableValues(undefined, getEffectiveModeContextForNode(nodeId)),
     );
 
     // Position now that content exists (applies the current scale transform).
@@ -480,10 +482,13 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
   // decide for itself when to touch the DOM (mirrors `pixiSync.ts`'s own
   // `useVariableStore.subscribe` idiom for scene-wide theme updates).
   //
-  // Theme changes (a frame's `themeOverride`, or the global active theme)
-  // are NOT wired up here — this mirrors the existing mount effect, whose
-  // deps also don't include theme, so an embed already doesn't live-update
-  // on a theme change today. That gap is out of scope for this change.
+  // Mode changes DO live-update (the document-level mode switcher makes them
+  // user-visible): a document-level context change (`themeStore.modeContext`)
+  // and a change to this embed's effective context (an ancestor frame's
+  // `modeOverrides`) both re-apply the properties in place. The scene
+  // subscription compares `modeContextKey` strings and bails on every scene
+  // change that leaves this embed's key alone, so an unrelated edit or a
+  // sibling frame's override change touches nothing here.
   useEffect(() => {
     const applyVariables = () => {
       const container = contentRef.current;
@@ -492,10 +497,28 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
       applyEditorVariableProperties(
         container,
         root,
-        collectVariableValues(undefined, getEffectiveThemeForNode(nodeId)),
+        collectVariableValues(undefined, getEffectiveModeContextForNode(nodeId)),
       );
     };
-    return useVariableStore.subscribe(applyVariables);
+    let lastKey = modeContextKey(getEffectiveModeContextForNode(nodeId));
+    const applyIfModesChanged = () => {
+      const key = modeContextKey(getEffectiveModeContextForNode(nodeId));
+      if (key === lastKey) return;
+      lastKey = key;
+      applyVariables();
+    };
+    const unsubVariables = useVariableStore.subscribe(applyVariables);
+    const unsubDocModes = useThemeStore.subscribe((state, prev) => {
+      if (state.modeContext !== prev.modeContext) applyIfModesChanged();
+    });
+    const unsubScene = useSceneStore.subscribe((state, prev) => {
+      if (state.nodesById !== prev.nodesById || state.parentById !== prev.parentById) applyIfModesChanged();
+    });
+    return () => {
+      unsubVariables();
+      unsubDocModes();
+      unsubScene();
+    };
   }, [nodeId]);
 
   // Element-picking mode: hover highlights, click selects, and a drag past

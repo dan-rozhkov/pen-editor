@@ -6,7 +6,7 @@ import {
   mountHtmlWithBodyStyles,
 } from "@/utils/embedHtmlUtils";
 import { collectVariableValues } from "@/utils/variableCssUtils";
-import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
+import { getEffectiveModeContextForNode } from "@/utils/nodeThemeUtils";
 
 /** Live, inert HTML preview for a root embed shown in the Slides panel. */
 export function EmbedSlideThumbnail({ node }: { node: EmbedNode }) {
@@ -35,7 +35,7 @@ export function EmbedSlideThumbnail({ node }: { node: EmbedNode }) {
     applyEditorVariableProperties(
       content,
       mountResult.root,
-      collectVariableValues(undefined, getEffectiveThemeForNode(node.id)),
+      collectVariableValues(undefined, getEffectiveModeContextForNode(node.id)),
     );
     shadow.appendChild(content);
 

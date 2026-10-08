@@ -5,10 +5,11 @@ import type {
   NumberBindingKey,
   NumberBindings,
 } from "../../types/scene";
-import type { ModeInput, Variable, VariableCollection, VariableScope } from "../../types/variable";
+import { THEME_COLLECTION_ID } from "../../types/variable";
+import type { ModeContext, ModeInput, Variable, VariableCollection, VariableScope } from "../../types/variable";
 import { getVariableIndex, type VariableIndex } from "./variableIndex";
 import { getVariableValueAt } from "./resolve";
-import { getThemeFromAncestorFrames } from "../../utils/nodeUtils";
+import { getEffectiveModeContext } from "./modeContext";
 
 /**
  * Number bindings on nodes (tokens v2, T1.5).
@@ -100,7 +101,8 @@ export function resolveNumberBinding(
 
 /**
  * Pure: the literal patches needed to bring bound fields in line with their
- * variables. `ids` limits the scan (the sync passes the bound-id set). Returns
+ * variables, each node resolved under its effective mode context (`baseModes`
+ * plus ancestor frames' mode overrides). `ids` limits the scan (the sync passes the bound-id set). Returns
  * a patch only where the resolved number differs from the current literal, so
  * a second run over the result is empty (idempotent => no subscribe loop).
  * A binding to a missing / non-number variable is left alone (literal kept).
@@ -111,30 +113,31 @@ export function computeBoundNumberPatches(
   ids: Iterable<string>,
   variables: readonly Variable[],
   collections: readonly VariableCollection[],
-  globalTheme: ModeInput,
+  baseModes: ModeInput,
 ): Record<string, Partial<FlatSceneNode>> {
   const index = getVariableIndex(variables as Variable[], collections as VariableCollection[]);
   const patches: Record<string, Partial<FlatSceneNode>> = {};
+  // A bare string is a Theme-collection mode id (the legacy meaning of `ModeInput`).
+  const base: ModeContext = typeof baseModes === "string" ? { [THEME_COLLECTION_ID]: baseModes } : baseModes;
   for (const id of ids) {
     const node = nodesById[id];
     const bindings = node?.numberBindings;
     if (!node || !bindings) continue;
-    let theme: ModeInput | undefined;
+    let modes: ModeContext | undefined;
     let top: AnyNode | undefined;
     let layout: LayoutProperties | undefined;
     for (const key of Object.keys(bindings) as NumberBindingKey[]) {
       const binding = bindings[key];
       if (!binding || !isNumberBindingKey(key) || !isKeyActive(node, key)) continue;
-      theme ??=
-        typeof globalTheme === "string"
-          ? getThemeFromAncestorFrames(
-              parentById as Record<string, string | null>,
-              nodesById as Record<string, { type: string; themeOverride?: "light" | "dark" }>,
-              id,
-              globalTheme,
-            )
-          : globalTheme;
-      const resolved = resolveNumberBinding(index.byId.get(binding.variableId), index, theme);
+      // The node's effective context: the base plus every ancestor frame's
+      // overrides (a frame's own picks affect its descendants, not itself).
+      modes ??= getEffectiveModeContext(
+        parentById as Record<string, string | null>,
+        nodesById as Record<string, { type?: string; modeOverrides?: Record<string, string>; themeOverride?: "light" | "dark" }>,
+        id,
+        base,
+      );
+      const resolved = resolveNumberBinding(index.byId.get(binding.variableId), index, modes);
       if (resolved === null) continue;
       const next = clampForKey(key, resolved);
       if (readNumberField(node, key) === next) continue;

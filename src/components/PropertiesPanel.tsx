@@ -1,3 +1,4 @@
+import { useEffectiveModeContext } from "@/hooks/useEffectiveModeContext";
 import { useCallback, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useSceneStore } from "@/store/sceneStore";
@@ -20,7 +21,6 @@ import { EMPTY_EMBED_HTML } from "@/lib/embedDefaults";
 import {
   getAbsolutePositionFlat,
   getParentContextFlat,
-  getThemeFromAncestorFrames,
   type FlatParentContext,
 } from "@/utils/nodeUtils";
 import { getCanvasViewportMetrics } from "@/utils/canvasViewport";
@@ -247,11 +247,7 @@ export function PropertiesPanel() {
   );
   // The ancestor walk runs on each store change, but re-renders the panel only
   // when the resulting theme name (a string) actually changes.
-  const effectiveTheme = useSceneStore((s) =>
-    singleSelectedId
-      ? getThemeFromAncestorFrames(s.parentById, s.nodesById, singleSelectedId, "light")
-      : ("light" as const),
-  );
+  const effectiveTheme = useEffectiveModeContext(singleSelectedId);
   const parentContext: FlatParentContext = useMemo(
     () => ({
       parent: parentNode,

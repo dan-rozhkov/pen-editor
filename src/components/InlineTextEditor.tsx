@@ -7,7 +7,8 @@ import { useSelectionStore } from '../store/selectionStore'
 import { useViewportStore } from '../store/viewportStore'
 import { useVariableStore } from '../store/variableStore'
 import { resolveColor } from '../utils/colorUtils'
-import type { ThemeName } from '../types/variable'
+import type { ModeInput } from '../types/variable'
+import { useThemeStore } from '../store/themeStore'
 import {
   LIST_INDENT_WIDTH,
   LIST_MARKER_GAP,
@@ -26,7 +27,7 @@ interface InlineTextEditorProps {
   node: TextNode
   absoluteX: number
   absoluteY: number
-  effectiveTheme?: ThemeName
+  effectiveTheme?: ModeInput
   onUpdateText?: (text: string, paragraphs?: ParagraphAttrs[]) => void
   isInsideAutoLayoutParent?: boolean
 }
@@ -347,7 +348,7 @@ export function InlineTextEditor({
     node.fill,
     node.fillBinding,
     variables,
-    effectiveTheme ?? 'light',
+    effectiveTheme ?? useThemeStore.getState().modeContext,
     collections,
   )
   const fillColor = resolvedFill ?? (node.link ? TEXT_LINK_COLOR : '#000000')
