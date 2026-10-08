@@ -73,6 +73,8 @@ describe("<OrganizationsSection />", () => {
     );
 
     fireEvent.change(screen.getByLabelText("Role for bob@example.com"), { target: { value: "editor" } });
+    expect(org.updateMemberRole).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm role editor for bob@example.com" }));
     await waitFor(() =>
       expect(org.updateMemberRole).toHaveBeenCalledWith({ memberId: "m2", role: "editor", organizationId: "o1" }),
     );
@@ -83,6 +85,53 @@ describe("<OrganizationsSection />", () => {
     await waitFor(() =>
       expect(org.removeMember).toHaveBeenCalledWith({ memberIdOrEmail: "m2", organizationId: "o1" }),
     );
+  });
+
+  it("rolls a failed role change back", async () => {
+    org.updateMemberRole.mockResolvedValue(fail("YOU_ARE_NOT_ALLOWED_TO_UPDATE_THIS_MEMBER", 403));
+    open();
+    await screen.findByText("bob@example.com");
+    fireEvent.change(screen.getByLabelText("Role for bob@example.com"), { target: { value: "owner" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm role owner for bob@example.com" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/Only owners can change roles/);
+    expect((screen.getByLabelText("Role for bob@example.com") as HTMLSelectElement).value).toBe("viewer");
+  });
+
+  it("marks expired invitations and resends them", async () => {
+    org.getFullOrganization.mockResolvedValue(
+      ok({
+        members: [{ id: "m1", userId: USER.id, role: "owner", user: { email: USER.email } }],
+        invitations: [{ id: "i1", email: "eve@example.com", role: "editor", status: "pending", expiresAt: "2020-01-01T00:00:00Z" }],
+      }),
+    );
+    open();
+    expect(await screen.findByText(/Expired/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Resend invitation to eve@example.com" }));
+    await waitFor(() =>
+      expect(org.inviteMember).toHaveBeenCalledWith({ email: "eve@example.com", role: "editor", organizationId: "o1" }),
+    );
+  });
+
+  it("retries once on a slug collision", async () => {
+    org.list.mockResolvedValue(ok([]));
+    org.create
+      .mockResolvedValueOnce(fail("ORGANIZATION_SLUG_ALREADY_TAKEN"))
+      .mockResolvedValueOnce(ok({}));
+    open();
+    fireEvent.change(await screen.findByLabelText("Organization name"), { target: { value: "Acme" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create organization" }));
+    await waitFor(() => expect(org.create).toHaveBeenCalledTimes(2));
+    expect(org.create.mock.calls[0][0].slug).not.toBe(org.create.mock.calls[1][0].slug);
+  });
+
+  it("keeps the list and offers Retry when reloading fails", async () => {
+    open();
+    await screen.findByText("bob@example.com");
+    org.getFullOrganization.mockResolvedValue(fail("X", 500));
+    fireEvent.click(screen.getByRole("button", { name: "Remove bob@example.com" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm remove bob@example.com" }));
+    expect(await screen.findByRole("button", { name: "Retry" })).toBeTruthy();
+    expect(screen.getByText("bob@example.com")).toBeTruthy();
   });
 
   it("gives a non-owner no management controls but lets them leave", async () => {

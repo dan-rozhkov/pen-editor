@@ -1,3 +1,5 @@
+import { ORGANIZATION_LIMIT } from "@/lib/auth/orgAccess";
+
 interface AuthErrorLike {
   code?: string;
   message?: string;
@@ -8,9 +10,9 @@ interface AuthErrorLike {
 // sentence so raw server wording never reaches the page.
 const BY_CODE: Record<string, string> = {
   YOU_HAVE_REACHED_THE_MAXIMUM_NUMBER_OF_ORGANIZATIONS:
-    "You have reached the limit of 5 organizations. Leave or delete one first.",
-  ORGANIZATION_ALREADY_EXISTS: "An organization with this name already exists. Choose another name.",
-  ORGANIZATION_SLUG_ALREADY_TAKEN: "An organization with this name already exists. Choose another name.",
+    `You have reached the limit of ${ORGANIZATION_LIMIT} organizations. Leave or delete one first.`,
+  ORGANIZATION_ALREADY_EXISTS: "Could not create the organization. Try again.",
+  ORGANIZATION_SLUG_ALREADY_TAKEN: "Could not create the organization. Try again.",
   USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION: "This person is already a member.",
   USER_IS_ALREADY_INVITED_TO_THIS_ORGANIZATION: "This person already has a pending invitation.",
   INVITATION_LIMIT_REACHED: "This organization has too many pending invitations. Cancel some first.",

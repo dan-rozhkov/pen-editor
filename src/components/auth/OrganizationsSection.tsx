@@ -9,6 +9,7 @@ import {
   type OrgRole,
 } from "@/lib/auth/orgAccess";
 import { orgErrorMessage } from "@/lib/auth/orgErrors";
+import { slugify } from "@/lib/variables/shared";
 
 import { AuthButton, FormMessage, LinkButton, TextField } from "./authUi";
 
@@ -27,6 +28,7 @@ interface InvitationRow {
   email: string;
   role: string;
   status: string;
+  expiresAt?: string | Date;
 }
 interface Detail {
   members: MemberRow[];
@@ -36,16 +38,13 @@ interface Detail {
 const SELECT =
   "h-10 rounded-md border border-border-default bg-surface-panel px-2 text-base text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary";
 
-function slugify(name: string): string {
-  const base = name
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
+function orgSlug(name: string): string {
   // Slugs are globally unique; a suffix keeps two "Design team"s apart.
-  return `${base || "org"}-${Math.random().toString(36).slice(2, 7)}`;
+  return `${slugify(name, "org").slice(0, 40)}-${Math.random().toString(36).slice(2, 7)}`;
 }
+
+const isExpired = (inv: InvitationRow): boolean =>
+  inv.expiresAt !== undefined && new Date(inv.expiresAt).getTime() < Date.now();
 
 function RoleSelect({
   label,
@@ -90,36 +89,37 @@ function OrganizationDetail({
   const [tick, setTick] = useState(0);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<string | null>(null);
+  const [pendingRole, setPendingRole] = useState<{ memberId: string; role: OrgRole } | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [email, setEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<OrgRole>("viewer");
   const reload = useCallback(() => setTick((t) => t + 1), []);
 
   useEffect(() => {
     let live = true;
+    const fail = () => {
+      if (!live) return;
+      // Keep the previous list on screen; offer a retry instead.
+      setLoadFailed(true);
+      setDetail((d) => d ?? { members: [], invitations: [] });
+    };
     void authClient.organization
       .getFullOrganization({ query: { organizationId: org.id } })
       .then((res) => {
         if (!live) return;
-        if (res.error || !res.data) {
-          onMessage({ error: orgErrorMessage(res.error, "Could not load the members.") });
-          setDetail({ members: [], invitations: [] });
-          return;
-        }
+        if (res.error || !res.data) return fail();
         const data = res.data as unknown as Partial<Detail>;
+        setLoadFailed(false);
         setDetail({
           members: data.members ?? [],
           invitations: (data.invitations ?? []).filter((i) => i.status === "pending"),
         });
       })
-      .catch(() => {
-        if (!live) return;
-        onMessage({ error: "Could not load the members." });
-        setDetail({ members: [], invitations: [] });
-      });
+      .catch(fail);
     return () => {
       live = false;
     };
-  }, [org.id, tick, onMessage]);
+  }, [org.id, tick]);
 
   const me = detail?.members.find((m) => m.userId === userId);
   const isOwner = me?.role === "owner";
@@ -129,22 +129,46 @@ function OrganizationDetail({
     fallback: string,
     success: string,
     after: () => void = reload,
+    rollback?: () => void,
   ) {
     setBusy(true);
     setConfirm(null);
     onMessage({});
     try {
       const res = await action();
-      if (res.error) onMessage({ error: orgErrorMessage(res.error, fallback) });
-      else {
+      if (res.error) {
+        rollback?.();
+        onMessage({ error: orgErrorMessage(res.error, fallback) });
+      } else {
         onMessage({ notice: success });
         after();
       }
     } catch {
+      rollback?.();
       onMessage({ error: fallback });
     } finally {
       setBusy(false);
     }
+  }
+
+  function cancelConfirm() {
+    setConfirm(null);
+    setPendingRole(null);
+  }
+
+  function changeRole(m: MemberRow, role: OrgRole, who: string) {
+    const previous = m.role;
+    const apply = (r: string) =>
+      setDetail((d) => d && { ...d, members: d.members.map((x) => (x.id === m.id ? { ...x, role: r } : x)) });
+    apply(role);
+    setPendingRole(null);
+    void run(
+      () => authClient.organization.updateMemberRole({ memberId: m.id, role, organizationId: org.id }),
+      "Could not change the role.",
+      `Role for ${who} is now ${ROLE_LABELS[role].toLowerCase()}.`,
+      reload,
+      () => apply(previous),
+    );
   }
 
   function invite(e: FormEvent) {
@@ -172,6 +196,12 @@ function OrganizationDetail({
         {me && <span className="text-xs text-text-muted">Your role: {ROLE_LABELS[asOrgRole(me.role)]}</span>}
       </div>
 
+      {loadFailed && (
+        <div className="flex items-center gap-2">
+          <FormMessage kind="error">Could not load the members.</FormMessage>
+          <LinkButton onClick={reload}>Retry</LinkButton>
+        </div>
+      )}
       {detail === null ? (
         <p role="status" className="text-sm text-text-muted">
           Loading…
@@ -193,17 +223,26 @@ function OrganizationDetail({
                       <>
                         <RoleSelect
                           label={`Role for ${who}`}
-                          value={asOrgRole(m.role)}
+                          value={pendingRole?.memberId === m.id ? pendingRole.role : asOrgRole(m.role)}
                           disabled={busy}
-                          onChange={(role) =>
-                            void run(
-                              () => authClient.organization.updateMemberRole({ memberId: m.id, role, organizationId: org.id }),
-                              "Could not change the role.",
-                              `Role for ${who} is now ${ROLE_LABELS[role].toLowerCase()}.`,
-                            )
-                          }
+                          onChange={(role) => {
+                            setConfirm(`role-${m.id}`);
+                            setPendingRole({ memberId: m.id, role });
+                          }}
                         />
-                        {confirm === `rm-${m.id}` ? (
+                        {confirm === `role-${m.id}` && pendingRole?.memberId === m.id && (
+                          <>
+                            <AuthButton
+                              disabled={busy}
+                              aria-label={`Confirm role ${ROLE_LABELS[pendingRole.role].toLowerCase()} for ${who}`}
+                              onClick={() => changeRole(m, pendingRole.role, who)}
+                            >
+                              Confirm role
+                            </AuthButton>
+                            <LinkButton onClick={cancelConfirm}>Cancel</LinkButton>
+                          </>
+                        )}
+                        {confirm !== `role-${m.id}` && (confirm === `rm-${m.id}` ? (
                           <AuthButton
                             variant="danger"
                             disabled={busy}
@@ -227,7 +266,7 @@ function OrganizationDetail({
                           >
                             Remove
                           </AuthButton>
-                        )}
+                        ))}
                       </>
                     ) : (
                       <span className="text-text-muted">{ROLE_LABELS[asOrgRole(m.role)]}</span>
@@ -243,8 +282,29 @@ function OrganizationDetail({
               {detail.invitations.map((inv) => (
                 <li key={inv.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                   <span className="min-w-0 truncate text-text-muted">
-                    {inv.email} · {ROLE_LABELS[asOrgRole(inv.role)]} · invited
+                    {inv.email} · {ROLE_LABELS[asOrgRole(inv.role)]} · {isExpired(inv) ? "Expired" : "Invited"}
                   </span>
+                  {isExpired(inv) && (
+                    <AuthButton
+                      variant="secondary"
+                      disabled={busy}
+                      aria-label={`Resend invitation to ${inv.email}`}
+                      onClick={() =>
+                        void run(
+                          () =>
+                            authClient.organization.inviteMember({
+                              email: inv.email,
+                              role: asOrgRole(inv.role),
+                              organizationId: org.id,
+                            }),
+                          "Could not resend the invitation.",
+                          `Invitation sent to ${inv.email}.`,
+                        )
+                      }
+                    >
+                      Resend invitation
+                    </AuthButton>
+                  )}
                   <AuthButton
                     variant="secondary"
                     disabled={busy}
@@ -324,7 +384,7 @@ function OrganizationDetail({
                   Delete organization
                 </AuthButton>
               ))}
-            {confirm && <LinkButton onClick={() => setConfirm(null)}>Cancel</LinkButton>}
+            {confirm && !confirm.startsWith("role-") && <LinkButton onClick={cancelConfirm}>Cancel</LinkButton>}
           </div>
         </>
       )}
@@ -368,7 +428,11 @@ export function OrganizationsSection({ userId }: { userId: string }) {
     setCreating(true);
     setMsg({});
     try {
-      const res = await authClient.organization.create({ name: trimmed, slug: slugify(trimmed) });
+      const attempt = () => authClient.organization.create({ name: trimmed, slug: orgSlug(trimmed) });
+      let res = await attempt();
+      const code = (res.error as { code?: string } | null)?.code;
+      // Slugs are random-suffixed; a collision is one-in-millions. Retry once.
+      if (code === "ORGANIZATION_SLUG_ALREADY_TAKEN") res = await attempt();
       if (res.error) setMsg({ error: orgErrorMessage(res.error, "Could not create the organization.") });
       else {
         setName("");

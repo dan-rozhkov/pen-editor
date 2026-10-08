@@ -65,6 +65,8 @@ export const authClientMock = {
     updateMemberRole: vi.fn(),
     removeMember: vi.fn(),
     acceptInvitation: vi.fn(),
+    rejectInvitation: vi.fn(),
+    getInvitation: vi.fn(),
   },
 };
 
@@ -92,9 +94,12 @@ export function resetAuthMocks(): void {
   apiKey.create.mockReset().mockResolvedValue(ok({ key: "sf_secret" }));
   apiKey.list.mockReset().mockResolvedValue(ok({ apiKeys: [] }));
   const org = authClientMock.organization;
-  for (const fn of [org.create, org.delete, org.leave, org.inviteMember, org.cancelInvitation, org.updateMemberRole, org.removeMember, org.acceptInvitation]) {
+  for (const fn of [org.create, org.delete, org.leave, org.inviteMember, org.cancelInvitation, org.updateMemberRole, org.removeMember, org.acceptInvitation, org.rejectInvitation]) {
     fn.mockReset().mockResolvedValue(ok());
   }
+  org.getInvitation.mockReset().mockResolvedValue(
+    ok({ id: "inv-1", organizationId: "o1", organizationName: "Acme", inviterEmail: "boss@example.com", role: "editor", status: "pending" }),
+  );
   org.list.mockReset().mockResolvedValue(ok([]));
   org.getFullOrganization.mockReset().mockResolvedValue(ok({ members: [], invitations: [] }));
   setMockSession(null);
