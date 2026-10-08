@@ -12,6 +12,7 @@ import { useStyleStore } from "@/store/styleStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { usePageStore } from "@/store/pageStore";
 import type { PageData } from "@/store/pageStore";
+import { catchUpStaleRegions } from "@/store/componentSync";
 import { flattenRefNodesAcrossPages } from "@/store/migrations/flattenRefNodes";
 
 interface ApplyOpenedDocumentOptions {
@@ -84,6 +85,11 @@ export function applyOpenedDocument(
   usePageStore
     .getState()
     .initFromDocument(pageDataList);
+
+  // Embed HTML components: a document saved by an older build (or edited
+  // elsewhere) may hold regions whose master has since changed. Catch every
+  // page up now, in the loaded state, rather than on first visit.
+  catchUpStaleRegions();
 
   // Fit viewport to first page content
   const firstPageNodes = data.pages[0]?.nodes ?? [];

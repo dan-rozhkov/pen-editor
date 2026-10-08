@@ -636,6 +636,11 @@ function pointsToPath(points: number[], close: boolean): string | undefined {
   return commands.join(" ");
 }
 
+/** Component masters are library entries (embed HTML), not part of any exported design. */
+function isComponentMaster(node: SceneNode): boolean {
+  return node.type === "embed" && (node as { component?: unknown }).component !== undefined;
+}
+
 function exportFrameNode(
   node: FrameNode | GroupNode,
   context: ExportContext,
@@ -663,7 +668,9 @@ function exportFrameNode(
   return {
     ...exportNodeBase(node, context, parentUsesLayout),
     type: "frame",
-    children: node.children.map((child) => exportNode(child, context, usesLayout)),
+    children: node.children
+      .filter((child) => !isComponentMaster(child))
+      .map((child) => exportNode(child, context, usesLayout)),
     ...(usesLayout
       ? {
           layout: node.layout?.flexDirection === "column" ? "vertical" : "horizontal",
@@ -766,7 +773,9 @@ export function serializePublicPenDocumentWithWarnings(
     version: PUBLIC_PEN_VERSION,
     ...(exportedVariables ? { themes: { [THEME_AXIS]: ["light", "dark"] } } : {}),
     ...(exportedVariables ? { variables: exportedVariables } : {}),
-    children: nodes.map((node) => exportNode(node, context, false)),
+    children: nodes
+      .filter((node) => !isComponentMaster(node))
+      .map((node) => exportNode(node, context, false)),
   };
 
   return { json: JSON.stringify(document, null, 2), warnings: context.warnings };

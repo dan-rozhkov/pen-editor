@@ -5,7 +5,9 @@ export type SlideNode = FlatFrameNode | EmbedNode;
 export function isSlideNode(
   node: FlatSceneNode | undefined,
 ): node is SlideNode {
-  return node?.type === "frame" || node?.type === "embed";
+  // Component masters (embeds with `component`) are library entries on the
+  // "Components" page, never slides.
+  return node?.type === "frame" || (node?.type === "embed" && !node.component);
 }
 
 /**

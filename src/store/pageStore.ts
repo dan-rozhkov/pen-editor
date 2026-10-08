@@ -43,6 +43,11 @@ interface PageStoreState {
   activePageId: string;
 
   addPage: (name?: string) => string;
+  /**
+   * Append an empty page WITHOUT switching to it (the active page, selection
+   * and viewport stay put). Used for tool-created pages such as "Components".
+   */
+  addBackgroundPage: (name: string) => string;
   deletePage: (pageId: string) => void;
   renamePage: (pageId: string, name: string) => void;
   duplicatePage: (pageId: string) => string;
@@ -89,6 +94,15 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
 
     // Switch to the new page
     get().switchToPage(newPage.id);
+    return newPage.id;
+  },
+
+  addBackgroundPage: (name: string) => {
+    // The active page's live state is held in sceneStore, not in `pages`;
+    // persist it first so a later reader of `pages` sees current data.
+    get().saveCurrentPageState();
+    const newPage = createEmptyPage(name);
+    set({ pages: [...get().pages, newPage] });
     return newPage.id;
   },
 

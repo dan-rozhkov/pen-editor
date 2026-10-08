@@ -205,6 +205,14 @@ export async function publishScreensToShowcase(
     const effectiveSize = getNodeEffectiveSize(allNodes, screen.nodeId, calculateLayoutForFrame);
     const size = effectiveSize ?? { width: node.width, height: node.height };
 
+    // A component master is a library entry, not a screen.
+    if (node.type === "embed" && (node as EmbedNode).component) {
+      return {
+        ok: false,
+        error: `"${screen.title}" (${screen.nodeId}) is a component master and cannot be published as a screen`,
+      };
+    }
+
     let htmlContent: string;
     if (node.type === "embed") {
       htmlContent = (node as EmbedNode).htmlContent;
