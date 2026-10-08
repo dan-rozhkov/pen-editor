@@ -187,19 +187,19 @@ export function listRegionKeys(html: string): string[] {
 // ---------------------------------------------------------------------------
 
 /**
- * A region's managed zone as text: slot contents blanked, rev ignored, and
- * variant values (`data-v-*`) ignored — they are instance data, so a
- * variant-only change must compare equal to the zone it started from, even
- * when that zone is stale (older than the current master).
+ * A region's managed zone as text: slot contents (and with them any region
+ * inside a slot, which the instance owns) blanked, revs ignored, and the
+ * region's OWN variant values (`data-v-*`) ignored — they are instance data,
+ * so a variant-only change must compare equal to the zone it started from,
+ * even when that zone is stale. Nested regions in the managed zone keep their
+ * variants: those come from the master and are part of its look.
  */
 function managedSignature(region: Element): string {
   const clone = region.cloneNode(true) as Element;
   for (const slot of ownSlots(clone)) slot.innerHTML = "";
-  for (const el of [clone, ...Array.from(clone.querySelectorAll("*"))]) {
-    el.removeAttribute("data-c-rev");
-    for (const attr of Array.from(el.attributes)) {
-      if (attr.name.startsWith("data-v-")) el.removeAttribute(attr.name);
-    }
+  for (const el of [clone, ...Array.from(clone.querySelectorAll("*"))]) el.removeAttribute("data-c-rev");
+  for (const attr of Array.from(clone.attributes)) {
+    if (attr.name.startsWith("data-v-")) clone.removeAttribute(attr.name);
   }
   return clone.outerHTML;
 }
@@ -299,6 +299,7 @@ function detachElement(region: Element, scope: string | null): void {
   for (const slot of ownSlots(region)) slot.removeAttribute("data-c-slot");
   region.removeAttribute("data-c");
   region.removeAttribute("data-c-rev");
+  region.removeAttribute("data-c-ms");
   if (scope) region.setAttribute("data-d", scope);
 }
 

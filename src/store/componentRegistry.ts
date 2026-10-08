@@ -119,15 +119,15 @@ export function duplicateKeyWarnings(key?: string): string[] {
   return out;
 }
 
-/** The winning master node for `key` and the page it lives on (same winner as the registry). */
+/** The winning master node for `key` and the page it lives on: read from the registry, so there is one winner rule. */
 export function findWinningMaster(
   key: string,
 ): { page: PageNodes; node: EmbedNode; master: ComponentMaster } | undefined {
-  for (const page of allPageNodes()) {
-    const hit = mastersIn(page.nodesById).find((m) => m.master.key === key);
-    if (hit) return { page, ...hit };
-  }
-  return undefined;
+  const master = buildRegistry().registry.get(key);
+  if (!master?.pageId || !master.nodeId) return undefined;
+  const page = allPageNodes().find((p) => p.pageId === master.pageId);
+  const node = page?.nodesById[master.nodeId] as unknown as EmbedNode | undefined;
+  return page && node ? { page, node, master } : undefined;
 }
 
 /** The "Components" page, if one exists. */

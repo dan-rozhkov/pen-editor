@@ -115,6 +115,7 @@ export function validateMaster(
   root.setAttribute("data-c", key);
   root.removeAttribute("id");
   root.removeAttribute("data-c-rev");
+  root.removeAttribute("data-c-ms");
   // The root's inline style stays ON the root (inline precedence); a rendered
   // instance merges its own style after it (see render.ts).
   const rootStyle = (root.getAttribute("style") ?? "").trim();

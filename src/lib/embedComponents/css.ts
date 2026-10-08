@@ -192,11 +192,27 @@ function attachToFirstCompound(sel: string, attr: string): string {
   return sel.slice(0, at) + attr + sel.slice(at);
 }
 
+/** `text` without anything inside parentheses (`:not(...)`, `:is(...)`, `:has(...)`). */
+function outsideParens(text: string): string {
+  let depth = 0;
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "\\") i++;
+    else if (ch === "(") depth++;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+    else if (depth === 0) out += ch;
+  }
+  return out;
+}
+
 function scopeSelector(selector: string, key: string): string[] {
   const prefix = rootSelector(key);
   const sel = selector.trim();
-  // Already scoped (root form, descendant form, or a tag-led root form).
-  if (sel.includes(prefix)) return [sel];
+  // Already scoped: the first compound carries the prefix (root form, tag-led
+  // root form, or the leading ancestor of the descendant form). A prefix deeper
+  // in, or inside `:not()` / `:has()` / `:is()`, scopes nothing.
+  if (outsideParens(sel.slice(0, firstCompoundEnd(sel))).includes(prefix)) return [sel];
   if (sel === ":root" || sel === ":host") return [prefix];
   if (sel.startsWith(":root") || sel.startsWith(":host")) {
     return [prefix + sel.replace(/^:(root|host)/, "")];

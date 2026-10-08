@@ -152,16 +152,32 @@ export function removeMasterNode(key: string): boolean {
         rootIds: p.rootIds,
         slideOrder: p.slideOrder,
       });
+      // The node and every descendant go; the parent forgets the node.
+      const doomed = new Set<string>();
+      const collect = (id: string) => {
+        doomed.add(id);
+        for (const child of p.childrenById[id] ?? []) collect(child);
+      };
+      collect(found.node.id);
+      const parentId = p.parentById[found.node.id];
       const nodesById = { ...p.nodesById };
       const parentById = { ...p.parentById };
-      delete nodesById[found.node.id];
-      delete parentById[found.node.id];
+      const childrenById = { ...p.childrenById };
+      for (const id of doomed) {
+        delete nodesById[id];
+        delete parentById[id];
+        delete childrenById[id];
+      }
+      if (parentId && childrenById[parentId]) {
+        childrenById[parentId] = childrenById[parentId].filter((id) => id !== found.node.id);
+      }
       return {
         ...p,
         nodesById,
         parentById,
-        rootIds: p.rootIds.filter((id) => id !== found.node.id),
-        slideOrder: p.slideOrder.filter((id) => id !== found.node.id),
+        childrenById,
+        rootIds: p.rootIds.filter((id) => !doomed.has(id)),
+        slideOrder: p.slideOrder.filter((id) => !doomed.has(id)),
         history: { past: [...p.history.past, snapshot].slice(-MAX_HISTORY), future: [] },
       };
     }),

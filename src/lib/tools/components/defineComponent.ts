@@ -2,6 +2,8 @@ import type { EmbedComponentMeta } from "@/types/scene";
 import {
   effectiveVariants,
   expandMasterHtml,
+  dependencyKeys,
+  describeUnknownTags,
   findDependencyCycle,
   parseMaster,
   validateMaster,
@@ -55,7 +57,7 @@ export const defineComponent: ToolHandler = async (args) => {
   if (expandedMaster.error) return toolError(`Invalid component "${key}": ${expandedMaster.error}`);
   const validated = validateMaster(expandedMaster.html, key, effectiveMetaVariants);
   if (!validated.ok) return toolError(`Invalid component "${key}": ${validated.errors.join("; ")}`);
-  const cycle = findDependencyCycle(registry, key, validated.master.nested);
+  const cycle = findDependencyCycle(registry, key, dependencyKeys(validated.master));
   if (cycle) return toolError(`Component "${key}" would create a dependency cycle: ${cycle.join(" -> ")}`);
 
   const meta: EmbedComponentMeta = {
@@ -76,8 +78,10 @@ export const defineComponent: ToolHandler = async (args) => {
   const stored = selectComponentRegistry().get(key);
   const parsed = stored ? parseMaster(stored) : null;
   const unknownNested = validated.master.nested.filter((k) => !registry.has(k));
+  const unknownNote = describeUnknownTags(expandedMaster.unknownTags);
   const warnings = [
     ...expandedMaster.warnings,
+    ...(unknownNote ? [unknownNote] : []),
     ...(unknownNested.length > 0 ? [`Nested component(s) not defined yet: ${unknownNested.join(", ")}`] : []),
     ...duplicateKeyWarnings(key),
   ];

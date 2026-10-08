@@ -1,5 +1,5 @@
 import type { EmbedComponentMeta } from "@/types/scene";
-import { findDependencyCycle } from "./cycles";
+import { dependencyKeys, findDependencyCycle } from "./cycles";
 import { expandComponentTags } from "./expand";
 import { validateMaster } from "./master";
 import { findManagedZoneViolation, mayContainComponents, reconcileHtml } from "./reconcile";
@@ -20,6 +20,8 @@ export type FinalizeResult =
 export interface ExpandedMaster {
   html: string;
   warnings: string[];
+  /** `<c-name>` tags with no registered master; left as written. */
+  unknownTags: string[];
   /** Set when the master's HTML cannot be accepted (it contains its own tag). */
   error?: string;
 }
@@ -31,15 +33,20 @@ export interface ExpandedMaster {
  * dropped again by `validateMaster` (the consuming embed owns them).
  */
 export function expandMasterHtml(html: string, key: string, registry: ComponentRegistry): ExpandedMaster {
-  if (typeof html !== "string" || !html.includes("<c-")) return { html, warnings: [] };
+  if (typeof html !== "string" || !html.includes("<c-")) return { html, warnings: [], unknownTags: [] };
   const others = new Map(registry);
   others.delete(key);
   const expanded = expandComponentTags(html, others);
   const selfTag = new RegExp(`<c-${key}(?=[\\s/>])`, "i");
   if (selfTag.test(expanded.html)) {
-    return { html: expanded.html, warnings: expanded.warnings, error: `component "${key}" cannot contain itself` };
+    return {
+      html: expanded.html,
+      warnings: expanded.warnings,
+      unknownTags: expanded.unknownTags,
+      error: `component "${key}" cannot contain itself`,
+    };
   }
-  return { html: expanded.html, warnings: expanded.warnings };
+  return { html: expanded.html, warnings: expanded.warnings, unknownTags: expanded.unknownTags };
 }
 
 /**
@@ -62,14 +69,19 @@ export function finalizeEmbedHtml(html: string, options: FinalizeOptions): Final
     if (!result.ok) {
       return { ok: false, error: `Component "${masterMeta.key}": ${result.errors.join("; ")}` };
     }
-    const cycle = findDependencyCycle(registry, masterMeta.key, result.master.nested);
+    const cycle = findDependencyCycle(registry, masterMeta.key, dependencyKeys(result.master));
     if (cycle) {
       return {
         ok: false,
         error: `Component "${masterMeta.key}" would create a dependency cycle: ${cycle.join(" -> ")}`,
       };
     }
-    return { ok: true, html: result.master.html, unknownTags: [], warnings: expandedMaster.warnings };
+    return {
+      ok: true,
+      html: result.master.html,
+      unknownTags: expandedMaster.unknownTags,
+      warnings: expandedMaster.warnings,
+    };
   }
 
   if (registry.size === 0 && !html.includes("<c-")) {

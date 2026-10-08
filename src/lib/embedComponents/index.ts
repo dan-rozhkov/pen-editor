@@ -9,7 +9,7 @@ export {
   type ValidateMasterResult,
 } from "./master";
 export { renderInstance, renderRegionElement, readRegionSpec } from "./render";
-export { expandComponentTags, type ExpandResult } from "./expand";
+export { expandComponentTags, mentionsRegisteredTag, type ExpandResult } from "./expand";
 export {
   reconcileHtml,
   hasStaleRegions,
@@ -20,7 +20,7 @@ export {
   type ManagedZoneViolation,
   type DetachResult,
 } from "./reconcile";
-export { findDependencyCycle } from "./cycles";
+export { findDependencyCycle, dependencyKeys } from "./cycles";
 export { expandMasterHtml, finalizeEmbedHtml, describeUnknownTags, type FinalizeResult } from "./pipeline";
 export {
   extractMasterDraft,

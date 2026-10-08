@@ -184,6 +184,19 @@ function liftOrphanSlots(nodes: TagNode[]): TagNode[] {
 }
 
 /**
+ * Cheap text test: does `html` hold a raw `<c-key>` tag for a key that is
+ * registered NOW (e.g. written before the component was defined)? May say yes
+ * for a tag inside a script or comment; the caller then pays one parse.
+ */
+export function mentionsRegisteredTag(html: string, registry: ComponentRegistry): boolean {
+  if (!html || !html.includes("<c-")) return false;
+  const re = /<c-([a-z][a-z0-9-]*)(?=[\s/>])/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) if (m[1] !== "slot" && registry.has(m[1])) return true;
+  return false;
+}
+
+/**
  * Expand `<c-key ...>` tags of REGISTERED keys into stored component
  * regions, then reconcile (managed `<style>`, nested components, rev).
  *

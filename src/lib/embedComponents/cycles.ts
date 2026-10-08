@@ -1,5 +1,17 @@
 import { parseMaster } from "./master";
-import type { ComponentRegistry } from "./types";
+import type { ComponentRegistry, ParsedMaster } from "./types";
+
+const RAW_TAG = /<c-([a-z][a-z0-9-]*)(?=[\s/>])/g;
+
+/**
+ * Keys a master depends on: nested regions plus raw `<c-KEY>` tags (registered
+ * or not yet: defining that key later expands the tag into a nested region).
+ */
+export function dependencyKeys(parsed: Pick<ParsedMaster, "nested" | "html">): string[] {
+  const keys = new Set(parsed.nested);
+  for (const m of parsed.html.matchAll(RAW_TAG)) if (m[1] !== "slot") keys.add(m[1]);
+  return [...keys];
+}
 
 /**
  * Would defining `key` with the given `nested` component keys create a
@@ -23,7 +35,7 @@ export function findDependencyCycle(
       const parsed = master ? parseMaster(master) : null;
       if (!parsed) continue;
       visiting.push(dep);
-      const cycle = visit(parsed.nested);
+      const cycle = visit(dependencyKeys(parsed));
       visiting.pop();
       if (cycle) return cycle;
       done.add(dep);

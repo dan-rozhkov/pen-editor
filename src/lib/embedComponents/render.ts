@@ -2,6 +2,8 @@ import { ownSlots, parseMaster } from "./master";
 import type { ComponentMaster, InstanceSpec, ParsedMaster } from "./types";
 
 const VARIANT_ATTR_PREFIX = "data-v-";
+/** Master root style a region was rendered with; stored HTML only, ignored by consumers. */
+export const MASTER_STYLE_ATTR = "data-c-ms";
 
 /** `a:b` -> `a:b;` so another declaration list can follow. */
 function terminated(style: string): string {
@@ -15,7 +17,11 @@ function mergeRootStyle(masterStyle: string, instanceStyle: string | undefined):
   return own ? `${terminated(masterStyle)} ${own}` : masterStyle;
 }
 
-/** Inverse of `mergeRootStyle`: the part of a region's style that is the instance's. */
+/**
+ * Inverse of `mergeRootStyle`: the part of a region's style that is the
+ * instance's. `masterStyle` is the master style the region was RENDERED with
+ * (recorded in `data-c-ms`), not necessarily the current one.
+ */
 function instanceStyleOf(regionStyle: string, masterStyle: string): string {
   if (!masterStyle) return regionStyle;
   if (regionStyle === masterStyle) return "";
@@ -44,6 +50,9 @@ export function renderRegionElement(
   if (spec.attrs?.id) root.setAttribute("id", spec.attrs.id);
   const style = mergeRootStyle(parsed.rootStyle, spec.attrs?.style);
   if (style) root.setAttribute("style", style);
+  // Remember which master style was merged in, so a later master style change
+  // still finds the instance's own declarations (see `readRegionSpec`).
+  if (parsed.rootStyle) root.setAttribute(MASTER_STYLE_ATTR, parsed.rootStyle);
 
   const provided = spec.slots ?? {};
   for (const slot of ownSlots(root)) {
@@ -68,7 +77,10 @@ export function readRegionSpec(region: Element, parsed: ParsedMaster): InstanceS
     if (name && !(name in slots)) slots[name] = slot.innerHTML;
   }
   const attrs: { style?: string; id?: string } = {};
-  const style = instanceStyleOf(region.getAttribute("style") ?? "", parsed.rootStyle);
+  const style = instanceStyleOf(
+    region.getAttribute("style") ?? "",
+    region.getAttribute(MASTER_STYLE_ATTR) ?? parsed.rootStyle,
+  );
   const id = region.getAttribute("id");
   if (style) attrs.style = style;
   if (id) attrs.id = id;

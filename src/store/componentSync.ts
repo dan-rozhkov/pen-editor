@@ -1,6 +1,14 @@
 import type { EmbedNode, FlatSceneNode } from "@/types/scene";
 import type { ComponentRegistry } from "@/lib/embedComponents";
-import { hasStaleRegions, mayContainComponents, reconcileHtml, validateMaster } from "@/lib/embedComponents";
+import {
+  expandComponentTags,
+  expandMasterHtml,
+  hasStaleRegions,
+  mayContainComponents,
+  mentionsRegisteredTag,
+  reconcileHtml,
+  validateMaster,
+} from "@/lib/embedComponents";
 import { useSceneStore } from "./sceneStore";
 import { markNodesDirty } from "./sceneStore/dirtyTracking";
 import { usePageStore } from "./pageStore";
@@ -21,8 +29,11 @@ export interface ReconcileOptions {
   registry?: ComponentRegistry;
 }
 
+/** Text test: a region of one of `keys`, or a raw `<c-key>` tag written before the key existed. */
 function mentionsKey(html: string, keys: string[]): boolean {
-  return keys.some((k) => html.includes(`data-c="${k}"`) || html.includes(`data-c='${k}'`));
+  return keys.some(
+    (k) => html.includes(`data-c="${k}"`) || html.includes(`data-c='${k}'`) || html.includes(`<c-${k}`),
+  );
 }
 
 /** Compute `{id -> new html}` for the consumer embeds in one node map. */
@@ -41,25 +52,32 @@ function planChanges(
     const embed = n as unknown as EmbedNode;
     if (embed.component) continue; // masters are never consumers
     const html = embed.htmlContent;
-    if (!html || !mayContainComponents(html)) continue;
+    if (!html || !(mayContainComponents(html) || html.includes("<c-"))) continue;
     if (keys && !mentionsKey(html, keys)) continue;
-    if (onlyStale && !hasStaleRegions(html, registry)) continue;
-    const next = reconcileHtml(html, registry);
+    if (onlyStale && !hasStaleRegions(html, registry) && !mentionsRegisteredTag(html, registry)) continue;
+    // Raw `<c-key>` tags of keys registered since the embed was written expand now.
+    const next = reconcileHtml(html.includes("<c-") ? expandComponentTags(html, registry).html : html, registry);
     if (next !== html) changes[id] = { from: html, to: next };
   }
   return changes;
 }
+
+type MasterFilter = { keys: string[] } | { stale: true };
 
 /**
  * Masters are consumers of the keys they contain: a master's stored HTML holds
  * nested regions that go stale when the inner master changes. Re-render those
  * regions (reconcile resolves the whole chain through the registry, so one
  * pass is dependency-complete) and re-normalize through `validateMaster`.
+ *
+ * A master is reconciled against the registry WITHOUT its own key: its own
+ * root is never re-rendered (a shadowed duplicate would be overwritten with
+ * the winner's content), only the regions and raw `<c-key>` tags inside it.
  */
 function planMasterChanges(
   nodesById: NodeMap,
   registry: ComponentRegistry,
-  keys: string[],
+  filter: MasterFilter,
 ): Record<string, { from: string; to: string }> {
   const changes: Record<string, { from: string; to: string }> = {};
   for (const id in nodesById) {
@@ -68,10 +86,15 @@ function planMasterChanges(
     const embed = n as unknown as EmbedNode;
     const meta = embed.component;
     const html = embed.htmlContent;
-    if (!meta || !html || !mayContainComponents(html)) continue;
+    if (!meta || !html || !(mayContainComponents(html) || html.includes("<c-"))) continue;
     // Its own key is always in its text; only OTHER keys make it a consumer.
-    if (!mentionsKey(html, keys.filter((k) => k !== meta.key))) continue;
-    const validated = validateMaster(reconcileHtml(html, registry), meta.key, meta.variants);
+    if ("keys" in filter && !mentionsKey(html, filter.keys.filter((k) => k !== meta.key))) continue;
+    const others = new Map(registry);
+    others.delete(meta.key);
+    if ("stale" in filter && !hasStaleRegions(html, others) && !mentionsRegisteredTag(html, others)) continue;
+    const expanded = expandMasterHtml(html, meta.key, registry);
+    if (expanded.error) continue;
+    const validated = validateMaster(reconcileHtml(expanded.html, others), meta.key, meta.variants);
     if (validated.ok && validated.master.html !== html) {
       changes[id] = { from: html, to: validated.master.html };
     }
@@ -112,9 +135,11 @@ const MAX_MASTER_PASSES = 12;
 
 /**
  * Reconcile consumer embeds on every page against the live registry and write
- * the results. When `keys` is given, masters that contain those keys are
- * refreshed FIRST (inner before outer, to a fixed point), so the consumers
- * are reconciled against up-to-date masters. The active page is written
+ * the results. When `keys` is given (or `onlyStale`, the catch-up), masters
+ * that contain those keys (or hold stale regions) are refreshed FIRST (inner
+ * before outer, to a fixed point: each pass re-plans only the masters that
+ * mention a key rewritten in the PREVIOUS pass), so the consumers are
+ * reconciled against up-to-date masters. The active page is written
  * through `sceneStore.setState` WITHOUT a history snapshot, so the update
  * rides along with whatever step caused it (the master edit that triggered
  * it, or the undo/redo that restored it); inactive pages are patched in their
@@ -129,24 +154,32 @@ export function reconcileConsumers(options: ReconcileOptions = {}): number {
   const wasApplying = applying;
   applying = true;
   try {
-    if (keys && !options.registry && !options.nodeIds) {
-      const touched = new Set(keys);
+    if ((keys || onlyStale) && !options.registry && !options.nodeIds) {
+      let filter: MasterFilter = keys ? { keys } : { stale: true };
+      const changedKeys = new Set<string>();
       for (let pass = 0; pass < MAX_MASTER_PASSES; pass++) {
         const registry = selectComponentRegistry();
-        const before = new Set<string>();
+        const passKeys = new Set<string>();
         const count = planAndWrite(options.pageIds, (nodes) => {
-          const changes = planMasterChanges(nodes, registry, [...touched]);
+          const changes = planMasterChanges(nodes, registry, filter);
           for (const id in changes) {
             const key = (nodes[id] as unknown as EmbedNode).component?.key;
-            if (key) before.add(key);
+            if (key) passKeys.add(key);
           }
           return changes;
         });
         if (count === 0) break;
         rewritten += count;
-        for (const k of before) touched.add(k);
+        for (const k of passKeys) changedKeys.add(k);
+        if (pass === MAX_MASTER_PASSES - 1) {
+          console.warn(
+            `Component dependency chain is deeper than ${MAX_MASTER_PASSES} levels; ` +
+              `outer components may be out of date until the next edit.`,
+          );
+        }
+        filter = { keys: [...passKeys] };
       }
-      for (const k of touched) if (!keys.includes(k)) keys.push(k);
+      if (keys) for (const k of changedKeys) if (!keys.includes(k)) keys.push(k);
     }
     const registry = options.registry ?? selectComponentRegistry();
     rewritten += planAndWrite(options.pageIds, (nodes) =>

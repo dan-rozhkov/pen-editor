@@ -56,8 +56,8 @@ interface EmbedNode { /* … */ component?: EmbedComponentMeta }
   - Slots are elements with `data-c-slot="<name>"`. Their content in the master is the default.
   - Variants are `data-v-<axis>="<value>"` attributes on the root.
   - One `<style>` block whose selectors all start with `[data-c="<key>"]`. The validator scopes bare selectors automatically: a selector gets both the root form (`button[data-c="k"]`, `.x[data-c="k"]`) and the descendant form (`[data-c="k"] button`). `@import` and `@charset` are hoisted to the top of the block.
-  - The root's inline `style` stays inline. A rendered instance gets `masterStyle; instanceStyle`, so instance declarations win.
-  - `<c-KEY>` tags inside master HTML are expanded at define time. A master that contains its own tag is refused.
+  - The root's inline `style` stays inline. A rendered instance gets `masterStyle; instanceStyle`, so instance declarations win. The rendered region records the master style it merged in as `data-c-ms="<masterStyle>"` (stored HTML only, ignored by consumers, absent when the master has no root style). Reading an instance strips that recorded prefix, not the current master style, so a later master style change never leaves old master declarations behind as instance style. Regions without the attribute fall back to the current master style.
+  - `<c-KEY>` tags inside master HTML are expanded at define time. A master that contains its own tag is refused. A tag with no registered key is left as written and reported as an unknown tag; defining that key later expands it in every master and consumer embed that still holds the raw tag.
   - Colors, radii and spacing use `var(--token)`.
 
 ```html
@@ -97,6 +97,8 @@ Triggers:
 - Lazy catch-up: a region whose `data-c-rev` differs from the master `rev` is reconciled on document open, on page activation, and before export or publish. This repairs every missed trigger, pasted regions and inactive pages.
 - Reconcile is idempotent.
 - Nested components reconcile in dependency order. A dependency cycle is refused when the master is defined. A master counts as a consumer of the keys it contains: editing `btn` first rewrites the stored `btn` region inside the `card` master, which changes `card`'s rev and then re-renders every `card` instance, all in the same undo step.
+- The master refresh runs to a fixed point: each pass re-plans only the masters that mention a key rewritten in the previous pass, up to 12 passes (a deeper chain logs a warning). The lazy catch-up refreshes stale masters the same way. A master is reconciled without its own key, so its own root is never re-rendered from the registry (a shadowed duplicate master keeps its own content).
+- The write guard compares a region's managed zone with its own `data-v-*` ignored; `data-v-*` on nested regions inside the managed zone count, because the master sets them.
 - A region whose key has no master stays as static HTML. Nothing is erased.
 
 ### Authoring by the agent

@@ -13,9 +13,9 @@ function describeComponents() {
   const registry = selectComponentRegistry();
   if (registry.size === 0) return [];
   const usage = countUsage(registry);
-  const duplicates = (key: string) => duplicateKeyWarnings(key);
   return [...registry.values()].map((master) => {
     const parsed = parseMaster(master);
+    const warnings = duplicateKeyWarnings(master.key);
     return {
       key: master.key,
       name: master.meta.name,
@@ -23,7 +23,7 @@ function describeComponents() {
       variants: parsed ? effectiveVariants(master, parsed) : (master.meta.variants ?? {}),
       slots: parsed?.slots ?? [],
       usedBy: usage.get(master.key) ?? 0,
-      ...(duplicates(master.key).length > 0 ? { warnings: duplicates(master.key) } : {}),
+      ...(warnings.length > 0 ? { warnings } : {}),
     };
   });
 }
