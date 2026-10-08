@@ -56,6 +56,7 @@ import { PanelEmptyState } from "./PanelEmptyState";
 import { AliasPicker } from "./AliasPicker";
 import { VariableDetails } from "./VariableDetails";
 import { ImportFromRepoDialog } from "./ImportFromRepoDialog";
+import { UsageReportDialog } from "./UsageReportDialog";
 
 // Type badge labels and colors
 const typeBadge: Record<VariableType, { label: string; className: string }> = {
@@ -557,6 +558,7 @@ export function VariablesPanelContent() {
   const [renamingCollection, setRenamingCollection] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [usageOpen, setUsageOpen] = useState(false);
 
   // The selected collection may have been deleted (or undone away): fall back to the first.
   const active = collections.find((c) => c.id === selectedId) ?? collections[0];
@@ -652,9 +654,13 @@ export function VariablesPanelContent() {
             <DropdownMenuItem className="text-xs cursor-pointer" onClick={() => setImportOpen(true)}>
               Import from repo…
             </DropdownMenuItem>
+            <DropdownMenuItem className="text-xs cursor-pointer" onClick={() => setUsageOpen(true)}>
+              Usage report…
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <ImportFromRepoDialog open={importOpen} onOpenChange={setImportOpen} />
+        <UsageReportDialog open={usageOpen} onOpenChange={setUsageOpen} />
         <AddVariableDropdown onAdd={handleAddVariable}>
           <Tooltip>
             <TooltipTrigger
