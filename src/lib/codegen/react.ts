@@ -12,6 +12,7 @@ import {
   videoFillWarning,
   hasVideoFill,
 } from "./tailwind";
+import { MIXED_MODES_SUBTREE_WARNING, subtreeHasMixedModes } from "@/lib/designToCss/buildCss";
 
 export interface BuildReactCodeResult {
   code: string;
@@ -257,7 +258,8 @@ export function buildReactCode(
   const element = buildJsxElement(nodeId, nodesById, childrenById, undefined, true, 2, options, warnings) ?? "";
   const componentCode = `export function ${componentName}() {\n  return (\n${element}\n  );\n}\n`;
 
-  const tokensBlock = tokensBlockForIds(collectSubtreeVariableIds(nodeId, nodesById, childrenById));
+  const tokensBlock = tokensBlockForIds(collectSubtreeVariableIds(nodeId, nodesById, childrenById), nodeId, nodesById);
+  if (tokensBlock && subtreeHasMixedModes(nodeId, nodesById, childrenById)) warnings.push(MIXED_MODES_SUBTREE_WARNING);
   const code = tokensBlock ? `/* Requires CSS variables:\n${tokensBlock}\n*/\n${componentCode}` : componentCode;
   return { code, warnings };
 }

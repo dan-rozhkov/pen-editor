@@ -3,9 +3,10 @@ import { FLEX_FILL } from "@/lib/designToHtml/layoutStyleGeneration";
 import { getRenderableFills } from "@/utils/fillUtils";
 import { type CodegenOptions, convertPxToRem } from "./css";
 import { nodeDeclarations } from "./declarations";
-import { collectBoundVariableIds, buildTokensBlock } from "@/lib/designToCss/buildCss";
+import { collectBoundVariableIds, buildTokensBlock, codegenModeContext } from "@/lib/designToCss/buildCss";
 import { useVariableStore } from "@/store/variableStore";
 import { useThemeStore } from "@/store/themeStore";
+import { useSceneStore } from "@/store/sceneStore";
 
 export function hasVideoFill(node: FlatSceneNode): boolean {
   return getRenderableFills(node).some((paint) => paint.type === "video");
@@ -33,12 +34,22 @@ export function collectSubtreeVariableIds(
   return ids;
 }
 
-/** `:root {...}` CSS text for `variableIds` using the current variable store + active theme (empty string if none resolve). */
-export function tokensBlockForIds(variableIds: Set<string>): string {
+/**
+ * `:root {...}` CSS text for `variableIds` using the current variable store
+ * (empty string if none resolve). Values resolve in `rootNodeId`'s mode
+ * context (document context plus its ancestors' and its own overrides); with
+ * no `rootNodeId` they resolve in the document context. `nodesById` defaults
+ * to the scene store (pass the map being generated from when it differs).
+ */
+export function tokensBlockForIds(
+  variableIds: Set<string>,
+  rootNodeId?: string,
+  nodesById: Record<string, FlatSceneNode> = useSceneStore.getState().nodesById as Record<string, FlatSceneNode>,
+): string {
   if (variableIds.size === 0) return "";
   const { variables, collections } = useVariableStore.getState();
-  const { activeTheme } = useThemeStore.getState();
-  return buildTokensBlock(variableIds, variables, activeTheme, collections);
+  const ctx = rootNodeId ? codegenModeContext(rootNodeId, nodesById) : useThemeStore.getState().modeContext;
+  return buildTokensBlock(variableIds, variables, ctx, collections);
 }
 
 /** Variable *names* (e.g. `--primary`) for `variableIds`, in the current variable store — used for the leaf-output warning listing needed tokens. */

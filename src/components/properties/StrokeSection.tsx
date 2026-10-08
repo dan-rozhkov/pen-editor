@@ -1,5 +1,5 @@
 import { generateId, type GradientFill, type LineCapShape, type LineNode, type Paint, type PathStroke, type PerSideStroke, type SceneNode } from "@/types/scene";
-import type { ThemeName, Variable } from "@/types/variable";
+import type { ModeInput, Variable } from "@/types/variable";
 import {
   ColorInput,
   NumberInput,
@@ -451,7 +451,7 @@ function StrokePaintStack({
   strokes: Paint[];
   commit: (next: Paint[]) => void;
   colorVariables: Variable[];
-  activeTheme: ThemeName;
+  activeTheme: ModeInput;
   canUseGradient: boolean;
 }) {
   const drag = useDragReorder(strokes.length, (from, delta) => commit(moveItem(strokes, from, delta)));

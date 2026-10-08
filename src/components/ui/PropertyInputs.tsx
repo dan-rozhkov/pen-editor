@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import type { Variable, ThemeName } from "../../types/variable";
-import { getVariableValue } from "../../types/variable";
+import type { Variable, ModeInput } from "../../types/variable";
+import { getVariableIndex, getVariableValueAt } from "@/lib/variables";
+import { useVariableStore } from "@/store/variableStore";
 import { Input } from "./input";
 import { Label } from "./label";
 import { SelectWithOptions } from "./select";
@@ -239,7 +240,7 @@ interface ColorInputProps {
   variableId?: string;
   onVariableChange?: (variableId: string | undefined) => void;
   availableVariables?: Variable[];
-  activeTheme?: ThemeName;
+  activeTheme?: ModeInput;
   isMixed?: boolean;
 }
 
@@ -253,6 +254,9 @@ export function ColorInput({
   isMixed = false,
 }: ColorInputProps) {
   const readOnly = useReadOnly();
+  const collections = useVariableStore((s) => s.collections);
+  const variableColor = (variable: Variable) =>
+    getVariableValueAt(variable, activeTheme, getVariableIndex(availableVariables, collections));
 
   // Find bound variable
   const boundVariable = variableId
@@ -261,7 +265,7 @@ export function ColorInput({
 
   // Get display color (from variable or direct value)
   const displayColor = boundVariable
-    ? getVariableValue(boundVariable, activeTheme)
+    ? variableColor(boundVariable)
     : value || "#000000";
 
   const handleVariableSelect = (varId: string | undefined) => {
@@ -369,7 +373,7 @@ export function ColorInput({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" side="bottom">
             {availableVariables.map((variable) => {
-              const varColor = getVariableValue(variable, activeTheme);
+              const varColor = variableColor(variable);
               return (
                 <DropdownMenuItem
                   key={variable.id}
@@ -427,6 +431,8 @@ interface SelectInputProps {
   labelOutside?: boolean;
   labelClassName?: string;
   isMixed?: boolean;
+  /** Accessible name for the trigger; defaults to nothing, so pass it when there is no visible `label`. */
+  ariaLabel?: string;
 }
 
 export function SelectInput({
@@ -438,6 +444,7 @@ export function SelectInput({
   labelOutside = false,
   labelClassName,
   isMixed = false,
+  ariaLabel,
 }: SelectInputProps) {
   const readOnly = useReadOnly();
   const handleChange = (val: string | null) => {
@@ -462,6 +469,7 @@ export function SelectInput({
           options={selectOptions}
           triggerPrefix={prefix}
           size="sm"
+          ariaLabel={ariaLabel}
           className="w-full"
         />
       </div>
@@ -478,6 +486,7 @@ export function SelectInput({
           options={selectOptions}
           triggerPrefix={prefix}
           size="sm"
+          ariaLabel={ariaLabel}
           className="w-full"
         />
       </div>
@@ -492,6 +501,7 @@ export function SelectInput({
         options={selectOptions}
         triggerPrefix={prefix}
         size="sm"
+          ariaLabel={ariaLabel}
         className="w-full"
       />
     </div>

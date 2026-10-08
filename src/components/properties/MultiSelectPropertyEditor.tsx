@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import type { FrameNode, SceneNode } from "@/types/scene";
-import type { ThemeName, Variable } from "@/types/variable";
+import type { ModeInput, Variable } from "@/types/variable";
 import { useSceneStore } from "@/store/sceneStore";
 import { getParentContextFlat } from "@/utils/nodeUtils";
 import {
@@ -20,7 +20,7 @@ import { SelectionColorsSection } from "@/components/properties/SelectionColorsS
 interface MultiSelectPropertyEditorProps {
   selectedNodes: SceneNode[];
   variables: Variable[];
-  activeTheme: ThemeName;
+  activeTheme: ModeInput;
 }
 
 // Types that support cornerRadius

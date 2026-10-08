@@ -4,7 +4,7 @@ import type {
   Paint,
   SceneNode,
 } from "@/types/scene";
-import type { ThemeName, Variable } from "@/types/variable";
+import type { ModeInput, Variable } from "@/types/variable";
 import {
   createDefaultVideoPlayback,
   createGradientPaint,
@@ -23,7 +23,7 @@ export interface PaintSectionProps {
   node: SceneNode;
   onUpdate: (updates: Partial<SceneNode>) => void;
   colorVariables: Variable[];
-  activeTheme: ThemeName;
+  activeTheme: ModeInput;
   mixedKeys?: Set<string>;
 }
 
