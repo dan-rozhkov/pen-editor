@@ -45,6 +45,7 @@ export function collectDocumentData(): DocumentData {
       comments: page.comments,
     })),
     variables: useVariableStore.getState().variables,
+    variableCollections: useVariableStore.getState().collections,
     textStyles: useTextStyleStore.getState().textStyles,
     fillStyles: useStyleStore.getState().fillStyles,
     effectStyles: useStyleStore.getState().effectStyles,
@@ -53,7 +54,7 @@ export function collectDocumentData(): DocumentData {
 }
 
 export function exportAsJson(): void {
-  const { pages, variables, textStyles, fillStyles, effectStyles, activeTheme } =
+  const { pages, variables, variableCollections, textStyles, fillStyles, effectStyles, activeTheme } =
     collectDocumentData();
   const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
   downloadDocument(
@@ -64,6 +65,7 @@ export function exportAsJson(): void {
     textStyles,
     fillStyles,
     effectStyles,
+    variableCollections,
   );
 }
 
@@ -75,6 +77,7 @@ export function exportAsPen(): void {
     useVariableStore.getState().variables,
     useThemeStore.getState().activeTheme,
     `${name}.pen`,
+    useVariableStore.getState().collections,
   );
 }
 

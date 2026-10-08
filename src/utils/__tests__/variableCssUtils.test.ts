@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { buildVariableStyleBlock, collectVariableValues } from "../variableCssUtils";
 import { useVariableStore } from "@/store/variableStore";
 import type { Variable } from "@/types/variable";
+import { resetStores, seedVariablesV2 } from "@/test/fixtures";
 
 // EmbedLayer.tsx's mount effect (buildVariableStyleBlock, the one-time
 // <style> block) and its live-update effect (collectVariableValues, feeding
@@ -85,5 +86,21 @@ describe("buildVariableStyleBlock", () => {
   it("keys the style block on the canonical CSS name for a free-form variable name", () => {
     seedVariable({ name: "Color 1", value: "#112233", themeValues: { light: "#112233", dark: "#112233" } });
     expect(buildVariableStyleBlock()).toBe("<style>:root { --color-1: #112233; }</style>");
+  });
+});
+
+describe("collectVariableValues with aliases", () => {
+  beforeEach(() => {
+    resetStores();
+    seedVariablesV2();
+  });
+
+  it("returns the resolved literal for an alias variable, per theme", () => {
+    expect(collectVariableValues().get("--card")).toBe("#ffffff");
+    expect(collectVariableValues(undefined, "dark").get("--card")).toBe("#101010");
+  });
+
+  it("accepts a ModeContext", () => {
+    expect(collectVariableValues(undefined, { theme: "dark" }).get("--card")).toBe("#101010");
   });
 });

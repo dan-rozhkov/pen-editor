@@ -6,11 +6,78 @@ export interface ThemeValues {
   dark: string
 }
 
+export type VariableId = string
+export type CollectionId = string
+export type ModeId = string
+
+export interface VariableMode {
+  id: ModeId
+  name: string
+}
+
+/** A set of variables that share one list of modes (Figma-style "collection"). */
+export interface VariableCollection {
+  id: CollectionId
+  name: string
+  /** At least one mode. */
+  modes: VariableMode[]
+  defaultModeId: ModeId
+}
+
+/** A mode value that points at another variable of the same `type`. */
+export interface VariableAlias {
+  alias: VariableId
+}
+
+/** Literals stay strings, as before ("8", "#fff"); an alias is `{ alias }`. */
+export type VariableModeValue = string | VariableAlias
+
+export type VariableScope =
+  | 'fill' | 'stroke' | 'text' | 'radius' | 'spacing' | 'gap' | 'size'
+  | 'fontSize' | 'fontFamily' | 'fontWeight' | 'opacity' | 'strokeWidth'
+
+export interface VariableDeprecation {
+  since?: string
+  replacedBy?: VariableId
+  note?: string
+}
+
+/** The id of the built-in collection whose modes are `light` and `dark`. */
+export const THEME_COLLECTION_ID: CollectionId = 'theme'
+
+/** Which mode each collection is currently showing. Missing key = the collection default. */
+export type ModeContext = Record<CollectionId, ModeId>
+
+/**
+ * A bare string means "a mode id of the Theme collection" (the legacy
+ * meaning of a theme name); an object picks a mode per collection.
+ */
+export type ModeInput = ThemeName | ModeContext
+
 export interface Variable {
-  id: string
+  id: VariableId
   name: string
   type: VariableType
-  value: string // hex color "#RRGGBB" - kept for backward compat
+  /**
+   * v2 fields. Optional in the TYPE because a legacy-shaped variable can still
+   * be written to the store with a raw `setState` (tests, older call sites);
+   * `variableStore.setVariables` and `deserializeDocument` always upgrade them
+   * (`upgradeVariablesV2`) and the resolver treats an absent field as the
+   * legacy shape (Theme collection, light/dark from `themeValues`/`value`).
+   */
+  collectionId?: CollectionId
+  valuesByMode?: Record<ModeId, VariableModeValue>
+  description?: string
+  scopes?: VariableScope[]
+  deprecated?: VariableDeprecation
+  /**
+   * Compat mirror: the RESOLVED value in the collection's default mode.
+   * Maintained by the store (`finalizeVariables`); also what an older editor
+   * build reads from a document written by this one. Hex color "#RRGGBB" for
+   * colors.
+   */
+  value: string
+  /** Compat mirror: only for variables in the Theme collection; RESOLVED light/dark. */
   themeValues?: ThemeValues
 }
 

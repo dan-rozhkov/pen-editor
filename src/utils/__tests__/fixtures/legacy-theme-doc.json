@@ -1,0 +1,20 @@
+{
+  "version": "1.1",
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Page 1",
+      "nodes": [
+        { "id": "r1", "type": "rect", "x": 0, "y": 0, "width": 40, "height": 40, "fill": "#3366ff", "fillBinding": { "variableId": "var-primary" } }
+      ]
+    }
+  ],
+  "variables": [
+    { "id": "var-primary", "name": "--primary", "type": "color", "value": "#99bbff", "themeValues": { "light": "#3366ff", "dark": "#99bbff" } },
+    { "id": "var-radius", "name": "--radius-m", "type": "number", "value": "8" }
+  ],
+  "textStyles": [],
+  "fillStyles": [],
+  "effectStyles": [],
+  "activeTheme": "dark"
+}

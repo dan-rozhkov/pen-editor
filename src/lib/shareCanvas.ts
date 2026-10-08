@@ -219,6 +219,8 @@ export async function shareCurrentCanvas(): Promise<ShareResult> {
     doc.textStyles,
     doc.fillStyles,
     doc.effectStyles,
+    doc.variableCollections,
+    doc.modeContext,
   );
 
   const existing = loadShareCredentials();

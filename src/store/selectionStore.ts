@@ -77,6 +77,7 @@ function saveSelectionHistoryIfChanged(
     useStyleStore.getState().effectStyles,
     scene.slideOrder,
     useMeasurementsStore.getState().measurements,
+    useVariableStore.getState().collections,
   )
   useHistoryStore.getState().saveHistory(snapshot)
 }

@@ -1,5 +1,5 @@
-import type { Variable, ThemeName } from '../types/variable'
-import { getVariableValue } from '../types/variable'
+import type { ModeInput, Variable, VariableCollection } from '../types/variable'
+import { getVariableIndex, getVariableValueAt } from '../lib/variables'
 
 function normalizeVariableRefName(name: string): string {
   return name.trim().replace(/^\$/, '')
@@ -21,12 +21,16 @@ export function resolveVariableValue(
   directValue: string | undefined,
   binding: { variableId: string } | undefined,
   variables: Variable[],
-  currentTheme: ThemeName
+  currentTheme: ModeInput,
+  collections?: VariableCollection[]
 ): string | undefined {
+  // Cached by array identity: the binding lookup is O(1) per node per fill,
+  // and an alias chain resolves through the same index.
+  const index = getVariableIndex(variables, collections)
   if (binding) {
-    const variable = variables.find((v) => v.id === binding.variableId)
+    const variable = index.byId.get(binding.variableId)
     if (variable) {
-      return getVariableValue(variable, currentTheme)
+      return getVariableValueAt(variable, currentTheme, index)
     }
   }
 
@@ -50,7 +54,7 @@ export function resolveVariableValue(
       )
     })
     if (variable) {
-      return getVariableValue(variable, currentTheme)
+      return getVariableValueAt(variable, currentTheme, index)
     }
   }
 
@@ -64,9 +68,10 @@ export function resolveColor(
   color: string | undefined,
   binding: { variableId: string } | undefined,
   variables: Variable[],
-  currentTheme: ThemeName
+  currentTheme: ModeInput,
+  collections?: VariableCollection[]
 ): string | undefined {
-  return resolveVariableValue(color, binding, variables, currentTheme)
+  return resolveVariableValue(color, binding, variables, currentTheme, collections)
 }
 
 /**
@@ -126,12 +131,14 @@ export function resolveNumberVariable(
   directValue: number | undefined,
   binding: { variableId: string } | undefined,
   variables: Variable[],
-  currentTheme: ThemeName
+  currentTheme: ModeInput,
+  collections?: VariableCollection[]
 ): number | undefined {
   if (binding) {
-    const variable = variables.find((v) => v.id === binding.variableId)
+    const index = getVariableIndex(variables, collections)
+    const variable = index.byId.get(binding.variableId)
     if (variable) {
-      const val = parseFloat(getVariableValue(variable, currentTheme))
+      const val = parseFloat(getVariableValueAt(variable, currentTheme, index))
       if (!isNaN(val)) return val
     }
   }

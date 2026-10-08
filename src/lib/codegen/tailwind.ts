@@ -36,9 +36,9 @@ export function collectSubtreeVariableIds(
 /** `:root {...}` CSS text for `variableIds` using the current variable store + active theme (empty string if none resolve). */
 export function tokensBlockForIds(variableIds: Set<string>): string {
   if (variableIds.size === 0) return "";
-  const { variables } = useVariableStore.getState();
+  const { variables, collections } = useVariableStore.getState();
   const { activeTheme } = useThemeStore.getState();
-  return buildTokensBlock(variableIds, variables, activeTheme);
+  return buildTokensBlock(variableIds, variables, activeTheme, collections);
 }
 
 /** Variable *names* (e.g. `--primary`) for `variableIds`, in the current variable store — used for the leaf-output warning listing needed tokens. */

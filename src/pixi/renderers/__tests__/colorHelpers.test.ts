@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { FlatSceneNode } from "@/types/scene";
 import { useVariableStore } from "@/store/variableStore";
-import { resetStores, seedVariables } from "@/test/fixtures";
+import { resetStores, seedVariables, seedVariablesV2 } from "@/test/fixtures";
 import {
   parseColor,
   parseAlpha,
@@ -104,5 +104,15 @@ describe("render theme stack", () => {
     expect(useVariableStore.getState().variables).toEqual([]);
     const node = { fill: "#123456" } as unknown as FlatSceneNode;
     expect(getResolvedFill(node)).toBe("#123456");
+  });
+
+  it("follows an alias chain per theme (var-card -> var-surface)", () => {
+    seedVariablesV2();
+    const node = { id: "n2", type: "rect", fillBinding: { variableId: "var-card" } } as unknown as FlatSceneNode;
+
+    expect(getResolvedFill(node)).toBe("#ffffff");
+    pushRenderTheme("dark");
+    expect(getResolvedFill(node)).toBe("#101010");
+    popRenderTheme();
   });
 });

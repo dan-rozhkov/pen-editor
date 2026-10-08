@@ -1,0 +1,78 @@
+{
+  "version": "2.6",
+  "themes": {
+    "mode": [
+      "light",
+      "dark"
+    ]
+  },
+  "variables": {
+    "same": {
+      "type": "color",
+      "value": "#112233"
+    },
+    "themed": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#ffffff",
+          "theme": {
+            "mode": "light"
+          }
+        },
+        {
+          "value": "#101010",
+          "theme": {
+            "mode": "dark"
+          }
+        }
+      ]
+    },
+    "radius-m": {
+      "type": "number",
+      "value": [
+        {
+          "value": 12,
+          "theme": {
+            "mode": "light"
+          }
+        },
+        {
+          "value": 16,
+          "theme": {
+            "mode": "dark"
+          }
+        }
+      ]
+    },
+    "Label": {
+      "type": "string",
+      "value": "Hello"
+    }
+  },
+  "children": [
+    {
+      "id": "f1",
+      "x": 0,
+      "y": 0,
+      "width": 200,
+      "height": 100,
+      "theme": {
+        "mode": "dark"
+      },
+      "type": "frame",
+      "children": [
+        {
+          "id": "r1",
+          "x": 0,
+          "y": 0,
+          "width": 50,
+          "height": 50,
+          "fill": "$themed",
+          "type": "rectangle"
+        }
+      ],
+      "layout": "none"
+    }
+  ]
+}

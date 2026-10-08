@@ -76,3 +76,13 @@ describe("buildHistorySnapshot", () => {
     expect(snap.measurements).toEqual(measurements);
   });
 });
+
+describe("buildHistorySnapshot collections", () => {
+  it("clones the variable collections and omits the key when none are given", () => {
+    const collections = [{ id: "theme", name: "Theme", modes: [{ id: "light", name: "Light" }], defaultModeId: "light" }];
+    const snap = buildHistorySnapshot(scene, [], selection, [], [], [], [], [], [], collections);
+    expect(snap.collections).not.toBe(collections);
+    expect(snap.collections).toEqual(collections);
+    expect("collections" in buildHistorySnapshot(scene, [], selection, [], [], [], [])).toBe(false);
+  });
+});

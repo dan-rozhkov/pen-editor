@@ -1,6 +1,7 @@
 import { useVariableStore } from "@/store/variableStore";
-import { getVariableCssName, getVariableValue } from "@/types/variable";
-import type { ThemeName } from "@/types/variable";
+import { getVariableCssName } from "@/types/variable";
+import type { ModeInput } from "@/types/variable";
+import { getVariableIndex, getVariableValueAt } from "@/lib/variables";
 
 /**
  * Resolve current variable values to a `name -> CSS value` map, for the
@@ -13,8 +14,9 @@ import type { ThemeName } from "@/types/variable";
  *                      If omitted, include all variables.
  * @param theme - If provided, use this theme instead of the global active theme.
  */
-export function collectVariableValues(variableIds?: Set<string>, theme?: ThemeName): Map<string, string> {
-  const { variables } = useVariableStore.getState();
+export function collectVariableValues(variableIds?: Set<string>, theme?: ModeInput): Map<string, string> {
+  const { variables, collections } = useVariableStore.getState();
+  const index = getVariableIndex(variables, collections);
   const activeTheme = theme ?? 'light';
   const values = new Map<string, string>();
   for (const v of variables) {
@@ -22,7 +24,7 @@ export function collectVariableValues(variableIds?: Set<string>, theme?: ThemeNa
     // Keyed by the CANONICAL CSS name, not `v.name` — `v.name` is a
     // free-form label ("Color 1") and setting it directly on `root.style`
     // would be a silent no-op. See `getVariableCssName`'s doc comment.
-    values.set(getVariableCssName(v), getVariableValue(v, activeTheme));
+    values.set(getVariableCssName(v), getVariableValueAt(v, activeTheme, index));
   }
   return values;
 }
@@ -34,7 +36,7 @@ export function collectVariableValues(variableIds?: Set<string>, theme?: ThemeNa
  *                      If omitted, include all variables.
  * @param theme - If provided, use this theme instead of the global active theme.
  */
-export function buildVariableStyleBlock(variableIds?: Set<string>, theme?: ThemeName): string {
+export function buildVariableStyleBlock(variableIds?: Set<string>, theme?: ModeInput): string {
   const values = collectVariableValues(variableIds, theme);
   if (values.size === 0) return "";
 

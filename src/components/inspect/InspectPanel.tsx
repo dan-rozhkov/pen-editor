@@ -90,6 +90,7 @@ export function InspectPanel() {
   // memo below rather than subscribed to here.
   const node = useSceneStore((s) => (nodeId ? s.nodesById[nodeId] : undefined));
   const variables = useVariableStore((s) => s.variables);
+  const collections = useVariableStore((s) => s.collections);
   const fillStyles = useStyleStore((s) => s.fillStyles);
   const effectStyles = useStyleStore((s) => s.effectStyles);
   const textStyles = useTextStyleStore((s) => s.textStyles);
@@ -108,6 +109,7 @@ export function InspectPanel() {
       nodesById,
       rect,
       variables,
+      collections,
       fillStyles,
       effectStyles,
       textStyles,
@@ -115,7 +117,7 @@ export function InspectPanel() {
       remBase,
       effectiveTheme,
     });
-  }, [nodeId, node, variables, fillStyles, effectStyles, textStyles, units, remBase]);
+  }, [nodeId, node, variables, collections, fillStyles, effectStyles, textStyles, units, remBase]);
 
   return (
     <div className="w-[300px] h-full flex flex-col bg-surface-panel border-l border-border-default overflow-hidden">

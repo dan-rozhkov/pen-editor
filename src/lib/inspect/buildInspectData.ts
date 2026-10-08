@@ -8,7 +8,8 @@ import type {
   NoiseEffect,
   PathStroke,
 } from "@/types/scene";
-import type { Variable, ThemeName } from "@/types/variable";
+import type { ThemeName, Variable, VariableCollection } from "@/types/variable";
+import { getVariableIndex, getVariableValueAt } from "@/lib/variables";
 import type { FillStyle, EffectStyle } from "@/types/style";
 import type { TextStyle } from "@/types/textStyle";
 import type { InspectUnits } from "@/store/devModeStore";
@@ -27,7 +28,14 @@ export interface InspectValue {
   label: string;
   value: string;
   copyValue?: string;
-  token?: { name: string; light: string; dark: string };
+  token?: {
+    name: string;
+    /** Every mode of the variable's collection, resolved (aliases followed). */
+    modes?: { name: string; value: string }[];
+    /** Legacy Theme-collection mirrors; same as the "Light"/"Dark" entries of `modes`. */
+    light: string;
+    dark: string;
+  };
   /** CSS background used for a compact color or gradient preview. */
   swatchBackground?: string;
 }
@@ -72,6 +80,8 @@ export interface BuildInspectDataInput {
   nodesById: Record<string, FlatSceneNode>;
   rect: { x: number; y: number; width: number; height: number };
   variables: Variable[];
+  /** Variable collections; absent = Theme only. */
+  collections?: VariableCollection[];
   fillStyles: FillStyle[];
   effectStyles: EffectStyle[];
   textStyles: TextStyle[];
@@ -232,10 +242,21 @@ function buildTypographySection(
   return { title: "Typography", rows };
 }
 
-/** Build the light/dark token summary shown on an expandable variable-bound row. */
-function buildToken(variable: Variable): { name: string; light: string; dark: string } {
+/** Build the per-mode token summary shown on an expandable variable-bound row. */
+function buildToken(
+  variable: Variable,
+  variables: Variable[],
+  collections: VariableCollection[] | undefined,
+): NonNullable<InspectValue["token"]> {
+  const index = getVariableIndex(variables, collections);
+  const collection = index.collections.get(variable.collectionId ?? "theme");
+  const modes = (collection?.modes ?? []).map((mode) => ({
+    name: mode.name,
+    value: getVariableValueAt(variable, { [collection?.id ?? "theme"]: mode.id }, index),
+  }));
   return {
     name: variable.name,
+    modes,
     light: variable.themeValues?.light ?? variable.value,
     dark: variable.themeValues?.dark ?? variable.value,
   };
@@ -262,6 +283,7 @@ function describePaint(
   fillStyles: FillStyle[],
   effectiveTheme: ThemeName,
   label: string,
+  collections?: VariableCollection[],
 ): InspectValue {
   if (paint.styleId) {
     const style = fillStyles.find((s) => s.id === paint.styleId);
@@ -278,14 +300,14 @@ function describePaint(
   }
 
   if (paint.type === "solid") {
-    const displayValue = resolveVariableValue(paint.color, paint.colorBinding, variables, effectiveTheme) ?? paint.color;
+    const displayValue = resolveVariableValue(paint.color, paint.colorBinding, variables, effectiveTheme, collections) ?? paint.color;
     if (paint.colorBinding) {
       const variable = variables.find((v) => v.id === paint.colorBinding!.variableId);
       if (variable) {
         return {
           label,
           value: displayValue,
-          token: buildToken(variable),
+          token: buildToken(variable, variables, collections),
           swatchBackground: displayValue,
         };
       }
@@ -310,11 +332,12 @@ function buildFillsSection(
   variables: Variable[],
   fillStyles: FillStyle[],
   effectiveTheme: ThemeName,
+  collections?: VariableCollection[],
 ): InspectSection | undefined {
   const fills = getRenderableFills(node);
   if (!fills.length) return undefined;
   const rows = fills.map((paint, i) => {
-    const row = describePaint(paint, variables, fillStyles, effectiveTheme, "Fill");
+    const row = describePaint(paint, variables, fillStyles, effectiveTheme, "Fill", collections);
     if (fills.length > 1) row.label = `Fill ${i + 1}`;
     return row;
   });
@@ -328,6 +351,7 @@ function buildStrokesSection(
   units: InspectUnits,
   remBase: number,
   effectiveTheme: ThemeName,
+  collections?: VariableCollection[],
 ): InspectSection | undefined {
   const pathStroke: PathStroke | undefined = node.type === "path" ? node.pathStroke : undefined;
   const strokes = getRenderableStrokes(node);
@@ -340,7 +364,7 @@ function buildStrokesSection(
   const rows: InspectValue[] = [];
 
   const colorRows = strokes.map((paint, i) => {
-    const row = describePaint(paint, variables, fillStyles, effectiveTheme, "Color");
+    const row = describePaint(paint, variables, fillStyles, effectiveTheme, "Color", collections);
     if (strokes.length > 1) row.label = `Color ${i + 1}`;
     return row;
   });
@@ -414,7 +438,7 @@ function buildRadiusSection(node: FlatSceneNode, units: InspectUnits, remBase: n
 }
 
 export function buildInspectData(input: BuildInspectDataInput): InspectData | null {
-  const { nodeId, nodesById, rect, variables, fillStyles, effectStyles, textStyles, units, remBase, effectiveTheme } = input;
+  const { nodeId, nodesById, rect, variables, collections, fillStyles, effectStyles, textStyles, units, remBase, effectiveTheme } = input;
   const node = nodesById[nodeId];
   if (!node) return null;
 
@@ -434,10 +458,10 @@ export function buildInspectData(input: BuildInspectDataInput): InspectData | nu
   const typographySection = buildTypographySection(node, textStyles, units, remBase);
   if (typographySection) sections.push(typographySection);
 
-  const fillsSection = buildFillsSection(node, variables, fillStyles, effectiveTheme);
+  const fillsSection = buildFillsSection(node, variables, fillStyles, effectiveTheme, collections);
   if (fillsSection) sections.push(fillsSection);
 
-  const strokesSection = buildStrokesSection(node, variables, fillStyles, units, remBase, effectiveTheme);
+  const strokesSection = buildStrokesSection(node, variables, fillStyles, units, remBase, effectiveTheme, collections);
   if (strokesSection) sections.push(strokesSection);
 
   const effectsSection = buildEffectsSection(node, effectStyles, units, remBase);

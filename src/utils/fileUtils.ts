@@ -1,6 +1,6 @@
 import type { SceneNode } from '../types/scene'
-import type { Variable, ThemeName } from '../types/variable'
-import { ensureThemeValues } from '../types/variable'
+import type { Variable, ThemeName, VariableCollection, ModeContext } from '../types/variable'
+import { upgradeVariablesV2 } from '../lib/variables'
 import type { TextStyle } from '../types/textStyle'
 import type { FillStyle, EffectStyle } from '../types/style'
 import { generateId } from '../types/scene'
@@ -30,10 +30,14 @@ export interface PenDocument {
   // Multi-page format
   pages?: PenPage[]
   variables?: Variable[]
+  /** v1.2+: variable collections and their modes. Absent in older files (read as just Theme). */
+  variableCollections?: VariableCollection[]
   textStyles?: TextStyle[]
   fillStyles?: FillStyle[]
   effectStyles?: EffectStyle[]
   activeTheme?: ThemeName
+  /** v1.2+: the mode each collection was showing. Not applied to the canvas yet. */
+  modeContext?: ModeContext
 }
 
 export interface DocumentPageData {
@@ -50,13 +54,16 @@ export interface DocumentPageData {
 export interface DocumentData {
   pages: DocumentPageData[]
   variables: Variable[]
+  /** Optional so hand-built `DocumentData` (tests, tools) stays valid; absent = Theme only. */
+  variableCollections?: VariableCollection[]
   textStyles: TextStyle[]
   fillStyles: FillStyle[]
   effectStyles: EffectStyle[]
   activeTheme: ThemeName
+  modeContext?: ModeContext
 }
 
-const CURRENT_VERSION = '1.1'
+const CURRENT_VERSION = '1.2'
 
 type PenPageInput = { id: string; name: string; nodes: SceneNode[]; pageBackground: string; guides?: Guide[]; slideOrder?: string[]; measurements?: PersistedMeasurement[]; comments?: CommentThread[] }
 
@@ -67,6 +74,8 @@ export function serializeDocument(
   textStyles: TextStyle[] = [],
   fillStyles: FillStyle[] = [],
   effectStyles: EffectStyle[] = [],
+  collections?: VariableCollection[],
+  modeContext?: ModeContext,
 ): string {
   const doc: PenDocument = {
     version: CURRENT_VERSION,
@@ -80,18 +89,22 @@ export function serializeDocument(
       ...(p.measurements && p.measurements.length > 0 ? { measurements: p.measurements } : {}),
       ...(p.comments && p.comments.length > 0 ? { comments: p.comments } : {}),
     })),
-    variables,
+    // Dual-write: each variable carries both the v2 fields and the legacy
+    // `value`/`themeValues` mirrors, so an older build can still open the file.
+    variables: collections ? upgradeVariablesV2(variables, collections).variables : variables,
+    ...(collections ? { variableCollections: upgradeVariablesV2(variables, collections).collections } : {}),
     textStyles,
     fillStyles,
     effectStyles,
     activeTheme,
+    ...(modeContext && Object.keys(modeContext).length > 0 ? { modeContext } : {}),
   }
   return JSON.stringify(doc, null, 2)
 }
 
 export function deserializeDocument(json: string): DocumentData {
   const doc: PenDocument = JSON.parse(json)
-  const migratedVariables = (doc.variables ?? []).map(ensureThemeValues)
+  const migrated = upgradeVariablesV2(doc.variables ?? [], doc.variableCollections)
 
   let pages: DocumentPageData[]
   if (doc.pages && doc.pages.length > 0) {
@@ -122,11 +135,13 @@ export function deserializeDocument(json: string): DocumentData {
 
   return {
     pages,
-    variables: migratedVariables,
+    variables: migrated.variables,
+    variableCollections: migrated.collections,
     textStyles: doc.textStyles ?? [],
     fillStyles: doc.fillStyles ?? [],
     effectStyles: doc.effectStyles ?? [],
     activeTheme: doc.activeTheme ?? 'light',
+    ...(doc.modeContext ? { modeContext: doc.modeContext } : {}),
   }
 }
 
@@ -138,6 +153,8 @@ export function downloadDocument(
   textStyles: TextStyle[] = [],
   fillStyles: FillStyle[] = [],
   effectStyles: EffectStyle[] = [],
+  collections?: VariableCollection[],
+  modeContext?: ModeContext,
 ) {
   const json = serializeDocument(
     pages,
@@ -146,6 +163,8 @@ export function downloadDocument(
     textStyles,
     fillStyles,
     effectStyles,
+    collections,
+    modeContext,
   )
   downloadTextFile(json, filename)
 }
@@ -154,9 +173,10 @@ export function downloadPublicPen(
   nodes: SceneNode[],
   variables: Variable[],
   activeTheme: ThemeName,
-  filename = "document.pen"
+  filename = "document.pen",
+  collections?: VariableCollection[],
 ) {
-  const json = serializePublicPenDocument(nodes, variables, activeTheme)
+  const json = serializePublicPenDocument(nodes, variables, activeTheme, collections)
   downloadTextFile(json, filename)
 }
 

@@ -175,7 +175,12 @@ describe("buildInspectData", () => {
     expect(fills).toBeDefined();
     const row = fills!.rows[0];
     expect(row.value).toBe("#ff0000");
-    expect(row.token).toEqual({ name: "Brand/Red", light: "#ff0000", dark: "#cc0000" });
+    expect(row.token).toEqual({
+      name: "Brand/Red",
+      modes: [{ name: "Light", value: "#ff0000" }, { name: "Dark", value: "#cc0000" }],
+      light: "#ff0000",
+      dark: "#cc0000",
+    });
     expect(row.swatchBackground).toBe("#ff0000");
   });
 
@@ -530,7 +535,12 @@ describe("buildInspectData", () => {
     const fills = data.sections.find((s) => s.title === "Fills");
     const row = fills!.rows[0];
     expect(row.value).toBe("#cc0000");
-    expect(row.token).toEqual({ name: "Brand/Red", light: "#ff0000", dark: "#cc0000" });
+    expect(row.token).toEqual({
+      name: "Brand/Red",
+      modes: [{ name: "Light", value: "#ff0000" }, { name: "Dark", value: "#cc0000" }],
+      light: "#ff0000",
+      dark: "#cc0000",
+    });
   });
 
   it("uses a 2-value padding shorthand when top===bottom and right===left but not all equal", () => {
@@ -558,5 +568,24 @@ describe("buildInspectData", () => {
     const layoutSection = data.sections.find((s) => s.title === "Layout");
     const padding = layoutSection!.rows.find((r) => r.label === "Padding");
     expect(padding?.value).toBe("8px 16px");
+  });
+});
+
+describe("buildInspectData token modes", () => {
+  it("lists every mode of the variable's collection, aliases resolved", () => {
+    const rect = { id: "r3", type: "rect", x: 0, y: 0, width: 10, height: 10, fill: "#abcdef", fillBinding: { variableId: "card" } } as unknown as FlatSceneNode;
+    const nodesById = { r3: rect };
+    const data = buildOrThrow({
+      ...baseArgs(nodesById, "r3"),
+      collections: [
+        { id: "theme", name: "Theme", modes: [{ id: "light", name: "Light" }, { id: "dark", name: "Dark" }], defaultModeId: "light" },
+      ],
+      variables: [
+        { id: "base", name: "Base", type: "color", value: "#fff", collectionId: "theme", valuesByMode: { light: "#ffffff", dark: "#101010" } },
+        { id: "card", name: "Card", type: "color", value: "#fff", collectionId: "theme", valuesByMode: { light: { alias: "base" }, dark: { alias: "base" } } },
+      ],
+    });
+    const row = data.sections.find((s) => s.title === "Fills")!.rows[0];
+    expect(row.token?.modes).toEqual([{ name: "Light", value: "#ffffff" }, { name: "Dark", value: "#101010" }]);
   });
 });

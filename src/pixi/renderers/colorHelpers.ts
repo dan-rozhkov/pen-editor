@@ -39,9 +39,9 @@ function getEffectiveTheme(): ThemeName {
 }
 
 export function getResolvedFill(node: FlatSceneNode): string | undefined {
-  const variables = useVariableStore.getState().variables;
+  const { variables, collections } = useVariableStore.getState();
   const theme = getEffectiveTheme();
-  const raw = resolveColor(node.fill, node.fillBinding, variables, theme);
+  const raw = resolveColor(node.fill, node.fillBinding, variables, theme, collections);
   return raw ? applyOpacity(raw, node.fillOpacity) : raw;
 }
 
@@ -52,9 +52,9 @@ export function getResolvedFill(node: FlatSceneNode): string | undefined {
  * for the multi-fill paint stack.
  */
 export function getResolvedSolidPaint(paint: SolidPaint): string | undefined {
-  const variables = useVariableStore.getState().variables;
+  const { variables, collections } = useVariableStore.getState();
   const theme = getEffectiveTheme();
-  const raw = resolveColor(paint.color, paint.colorBinding, variables, theme);
+  const raw = resolveColor(paint.color, paint.colorBinding, variables, theme, collections);
   return raw ? applyOpacity(raw, paint.opacity) : raw;
 }
 
@@ -79,20 +79,20 @@ export function getResolvedRenderableFills(node: FlatSceneNode): Paint[] {
  */
 export function getResolvedRenderableEffects(node: FlatSceneNode): Effect[] {
   const { effectStyles } = useStyleStore.getState();
-  const { variables } = useVariableStore.getState();
+  const { variables, collections } = useVariableStore.getState();
   const theme = getEffectiveTheme();
   return resolveEffectStack(node, effectStyles).map((effect) => {
     if (effect.type !== "shadow" || !(effect as ShadowEffect).colorBinding) return effect;
     const shadow = effect as ShadowEffect;
-    const resolved = resolveColor(shadow.color, shadow.colorBinding, variables, theme);
+    const resolved = resolveColor(shadow.color, shadow.colorBinding, variables, theme, collections);
     return resolved ? { ...shadow, color: resolved } : shadow;
   });
 }
 
 export function getResolvedStroke(node: FlatSceneNode): string | undefined {
-  const variables = useVariableStore.getState().variables;
+  const { variables, collections } = useVariableStore.getState();
   const theme = getEffectiveTheme();
-  const raw = resolveColor(node.stroke, node.strokeBinding, variables, theme);
+  const raw = resolveColor(node.stroke, node.strokeBinding, variables, theme, collections);
   return raw ? applyOpacity(raw, node.strokeOpacity) : raw;
 }
 

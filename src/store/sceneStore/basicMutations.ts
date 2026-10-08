@@ -370,7 +370,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
       // snapshots do), so undo/redo of variable edits round-trips. Snapshots that
       // omit variables (unknown sources) leave the variable store untouched.
       if (snapshot.variables) {
-        useVariableStore.setState({ variables: snapshot.variables });
+        useVariableStore.getState().replaceAll(snapshot.variables, snapshot.collections);
       }
       // Restore persistent ruler guides when the snapshot carries them (all
       // createSnapshot-based snapshots do), mirroring the variables restore

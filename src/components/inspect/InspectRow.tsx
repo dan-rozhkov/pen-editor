@@ -42,7 +42,7 @@ function ValueSwatch({ label, background }: { label: string; background: string 
 /**
  * A single label/value row in the inspect panel. Whole row is clickable to
  * copy `copyValue ?? value`. Token rows (variable-backed values) expand
- * in-place to show the light/dark values, each independently copyable.
+ * in-place to show the value in every mode, each independently copyable.
  */
 export function InspectRow({ row }: { row: InspectValue }) {
   const [expanded, setExpanded] = useState(false);
@@ -70,6 +70,10 @@ export function InspectRow({ row }: { row: InspectValue }) {
   }
 
   const token = row.token;
+  const tokenModes = token.modes ?? [
+    { name: "Light", value: token.light },
+    { name: "Dark", value: token.dark },
+  ];
 
   return (
     <div>
@@ -93,46 +97,29 @@ export function InspectRow({ row }: { row: InspectValue }) {
       </div>
       {expanded && (
         <div className="pl-5 pr-3 pb-1.5 flex flex-col gap-1">
-          <div
-            data-testid="inspect-row"
-            role="button"
-            tabIndex={0}
-            className="flex items-center justify-between gap-2 py-1 cursor-pointer hover:bg-secondary"
-            onClick={(e) => {
-              e.stopPropagation();
-              void copy(`${row.label} (light)`, token.light);
-            }}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              handleActivationKeyDown(() => void copy(`${row.label} (light)`, token.light))(e);
-            }}
-          >
-            <span className="text-text-muted text-xs">Light</span>
-            <span className="flex min-w-0 items-center gap-1.5">
-              {isHexColor(token.light) && <ValueSwatch label="Light" background={token.light} />}
-              <span className="text-xs text-text-primary truncate">{formatColorDisplay(token.light)}</span>
-            </span>
-          </div>
-          <div
-            data-testid="inspect-row"
-            role="button"
-            tabIndex={0}
-            className="flex items-center justify-between gap-2 py-1 cursor-pointer hover:bg-secondary"
-            onClick={(e) => {
-              e.stopPropagation();
-              void copy(`${row.label} (dark)`, token.dark);
-            }}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              handleActivationKeyDown(() => void copy(`${row.label} (dark)`, token.dark))(e);
-            }}
-          >
-            <span className="text-text-muted text-xs">Dark</span>
-            <span className="flex min-w-0 items-center gap-1.5">
-              {isHexColor(token.dark) && <ValueSwatch label="Dark" background={token.dark} />}
-              <span className="text-xs text-text-primary truncate">{formatColorDisplay(token.dark)}</span>
-            </span>
-          </div>
+          {tokenModes.map((mode) => (
+            <div
+              key={mode.name}
+              data-testid="inspect-row"
+              role="button"
+              tabIndex={0}
+              className="flex items-center justify-between gap-2 py-1 cursor-pointer hover:bg-secondary"
+              onClick={(e) => {
+                e.stopPropagation();
+                void copy(`${row.label} (${mode.name.toLowerCase()})`, mode.value);
+              }}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                handleActivationKeyDown(() => void copy(`${row.label} (${mode.name.toLowerCase()})`, mode.value))(e);
+              }}
+            >
+              <span className="text-text-muted text-xs">{mode.name}</span>
+              <span className="flex min-w-0 items-center gap-1.5">
+                {isHexColor(mode.value) && <ValueSwatch label={mode.name} background={mode.value} />}
+                <span className="text-xs text-text-primary truncate">{formatColorDisplay(mode.value)}</span>
+              </span>
+            </div>
+          ))}
         </div>
       )}
     </div>

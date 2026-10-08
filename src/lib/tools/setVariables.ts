@@ -1,4 +1,5 @@
 import { useVariableStore } from "@/store/variableStore";
+import { patchVariable } from "@/lib/variables";
 import { generateVariableId } from "@/types/variable";
 import type { Variable } from "@/types/variable";
 import type { ToolHandler } from "../toolRegistry";
@@ -154,7 +155,7 @@ export const setVariables: ToolHandler = async (args) => {
           if (key === "id") continue;
           (patch as Record<string, unknown>)[key] = v[key];
         }
-        merged[idx] = { ...match, ...patch, id: match.id };
+        merged[idx] = { ...patchVariable(match, patch, store.collections), id: match.id };
       } else {
         // New variable — use the fully normalized (defaulted) form.
         merged.push(v);

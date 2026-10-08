@@ -4,7 +4,8 @@ import { generateLayoutStyles } from "@/lib/designToHtml/layoutStyleGeneration";
 import { getRenderableFills } from "@/utils/fillUtils";
 import { useVariableStore } from "@/store/variableStore";
 import { useThemeStore } from "@/store/themeStore";
-import { getVariableValue, type Variable } from "@/types/variable";
+import type { ModeInput, Variable, VariableCollection } from "@/types/variable";
+import { getVariableIndex, getVariableValueAt } from "@/lib/variables";
 
 export interface BuildCssResult {
   /** Full CSS text: an optional `:root` tokens block followed by one rule block per node. */
@@ -78,11 +79,12 @@ function formatDeclarations(styles: Record<string, string>): string {
 }
 
 /** Build a raw `:root { --token: value; ... }` CSS text for the given variable ids (empty string if none resolve). Exported for reuse by codegen generators (`tailwind.ts`, `react.ts`) that emit `var(--token)` references without a definitions block of their own. */
-export function buildTokensBlock(variableIds: Set<string>, variables: Variable[], theme: "light" | "dark"): string {
+export function buildTokensBlock(variableIds: Set<string>, variables: Variable[], theme: ModeInput, collections?: VariableCollection[]): string {
   if (variableIds.size === 0) return "";
+  const index = getVariableIndex(variables, collections);
   const lines = variables
     .filter((v) => variableIds.has(v.id))
-    .map((v) => `  ${v.name}: ${getVariableValue(v, theme)};`);
+    .map((v) => `  ${v.name}: ${getVariableValueAt(v, theme, index)};`);
   if (lines.length === 0) return "";
   return `:root {\n${lines.join("\n")}\n}`;
 }
@@ -126,9 +128,9 @@ export function buildCssForNodes(nodeIds: string[], nodesById: Record<string, Fl
     blocks.push(`/* ${label} */\n.${className} {\n${formatDeclarations(styles)}\n}`);
   }
 
-  const { variables } = useVariableStore.getState();
+  const { variables, collections } = useVariableStore.getState();
   const { activeTheme } = useThemeStore.getState();
-  const tokensBlock = buildTokensBlock(boundVariableIds, variables, activeTheme);
+  const tokensBlock = buildTokensBlock(boundVariableIds, variables, activeTheme, collections);
 
   const css = [tokensBlock, ...blocks].filter(Boolean).join("\n\n");
   return { css, warnings };

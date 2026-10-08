@@ -1,4 +1,4 @@
-import type { ThemeName, Variable } from './variable'
+import type { ThemeName, Variable, VariableCollection } from './variable'
 import type { Guide } from '../store/guidesStore'
 import type { PersistedMeasurement } from '../store/measurementsStore'
 import type { TextStyle } from './textStyle'
@@ -1055,6 +1055,8 @@ export interface FlatSnapshot {
   childrenById: Record<string, string[]>
   rootIds: string[]
   variables?: Variable[]
+  /** Variable collections (modes) at the time of the snapshot; absent in older snapshots. */
+  collections?: VariableCollection[]
   /** Persistent ruler guides for the current page, at the time of the snapshot. */
   guides?: Guide[]
   /** Named reusable text styles, at the time of the snapshot. */

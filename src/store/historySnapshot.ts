@@ -28,7 +28,9 @@ export interface SnapshotSceneSlice {
  * slide presentation order) is likewise always carried so `reorderSlide`
  * round-trips through undo/redo. measurements (persistent pinned distance
  * measurements) are carried the same way so measurement add/delete
- * round-trips through undo/redo too.
+ * round-trips through undo/redo too. collections (variable collections and
+ * their modes) are carried with variables, since a mode edit and the values
+ * keyed by it must undo together; omitted when the caller has none.
  */
 export function buildHistorySnapshot(
   scene: SnapshotSceneSlice,
@@ -40,6 +42,7 @@ export function buildHistorySnapshot(
   effectStyles: HistorySnapshot["effectStyles"],
   slideOrder: string[] = [],
   measurements: PersistedMeasurement[] = [],
+  collections: HistorySnapshot["collections"] = undefined,
 ): HistorySnapshot {
   return {
     nodesById: { ...scene.nodesById },
@@ -47,6 +50,7 @@ export function buildHistorySnapshot(
     childrenById: { ...scene.childrenById },
     rootIds: [...scene.rootIds],
     variables: [...(variables ?? [])],
+    ...(collections ? { collections: [...collections] } : {}),
     guides: [...(guides ?? [])],
     textStyles: [...(textStyles ?? [])],
     fillStyles: [...(fillStyles ?? [])],

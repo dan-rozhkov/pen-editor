@@ -3,6 +3,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { useVariableStore } from "@/store/variableStore";
+import { makeThemeCollection, makeThemeVariable } from "@/lib/variables";
 import { useTextStyleStore } from "@/store/textStyleStore";
 import { useStyleStore } from "@/store/styleStore";
 import { useThemeStore } from "@/store/themeStore";
@@ -36,7 +37,7 @@ export function resetStores(): void {
     lastSelectedId: null,
   });
   useHistoryStore.setState({ past: [], future: [], batchMode: false, batchDepth: 0 });
-  useVariableStore.setState({ variables: [] });
+  useVariableStore.setState({ variables: [], collections: [makeThemeCollection()] });
   useTextStyleStore.setState({ textStyles: [] });
   useStyleStore.setState({ fillStyles: [], effectStyles: [] });
   useThemeStore.setState({ activeTheme: "light" });
@@ -142,6 +143,20 @@ export function seedVariables(): void {
       },
     ],
   });
+}
+
+/** v2 variables: one Theme variable and one alias to it, plus a Brand collection variable. */
+export function seedVariablesV2(): void {
+  const base = { ...makeThemeVariable("--surface", "#ffffff", "#101010"), id: "var-surface" };
+  const alias = {
+    id: "var-card",
+    name: "--card",
+    type: "color" as const,
+    collectionId: "theme",
+    valuesByMode: { light: { alias: "var-surface" }, dark: { alias: "var-surface" } },
+    value: "",
+  };
+  useVariableStore.getState().replaceAll([base, alias]);
 }
 
 export function seedFillStyles(): void {

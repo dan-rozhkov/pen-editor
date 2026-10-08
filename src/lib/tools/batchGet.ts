@@ -1,6 +1,6 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
-import { getVariableValue } from "@/types/variable";
+import { getVariableIndex, getVariableValueAt } from "@/lib/variables";
 import type { FlatSceneNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
 import { serializeNodeToDepth } from "./serializeUtils";
@@ -104,9 +104,10 @@ export const batchGet: ToolHandler = async (args) => {
   // Build variable lookup if resolving
   const variableLookup: Record<string, string> = {};
   if (resolveVariables) {
-    const { variables } = useVariableStore.getState();
+    const { variables, collections } = useVariableStore.getState();
+    const index = getVariableIndex(variables, collections);
     for (const v of variables) {
-      variableLookup[v.id] = getVariableValue(v, 'light');
+      variableLookup[v.id] = getVariableValueAt(v, 'light', index);
     }
   }
 
