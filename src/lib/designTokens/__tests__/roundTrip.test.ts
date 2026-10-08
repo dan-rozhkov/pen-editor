@@ -2,6 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { toDtcg, type ExportInput } from "@/lib/designTokens/toDtcg";
 import { fromDtcg } from "@/lib/designTokens/fromDtcg";
+import { upgradeVariablesV2 } from "@/lib/variables";
 
 const input: ExportInput = {
   variables: [
@@ -36,7 +37,7 @@ describe("round-trip", () => {
     const { document } = toDtcg(input);
     const { result } = fromDtcg(document);
 
-    expect(result.variables).toEqual(input.variables);
+    expect(result.variables).toEqual(upgradeVariablesV2(input.variables).variables);
     // Paint id is regenerated on import; compare structurally minus paint.id.
     expect(result.fillStyles.map((s) => ({ ...s, paint: { ...s.paint, id: "X" } })))
       .toEqual(input.fillStyles.map((s) => ({ ...s, paint: { ...s.paint, id: "X" } })));

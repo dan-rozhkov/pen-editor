@@ -11,7 +11,8 @@ import { downloadDocument, downloadPublicPen, openFilePicker } from "@/utils/fil
 import type { DocumentData } from "@/utils/fileUtils";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
 import { getCanvasViewportMetrics } from "@/utils/canvasViewport";
-import { toDtcg, fromDtcg, type ImportResult } from "@/lib/designTokens";
+import { toDtcg, fromDtcg, toCss, toTailwindTheme, type ImportResult } from "@/lib/designTokens";
+import { THEME_COLLECTION_ID } from "@/types/variable";
 import type { DtcgDocument } from "@/lib/designTokens";
 import { useHistoryStore } from "@/store/historyStore";
 import { saveShareCredentials } from "@/lib/shareCanvas";
@@ -81,29 +82,58 @@ export function exportAsPen(): void {
   );
 }
 
-export function exportDesignTokens(): void {
-  const { document: tokensDoc, warnings } = toDtcg({
-    variables: useVariableStore.getState().variables,
-    fillStyles: useStyleStore.getState().fillStyles,
-    effectStyles: useStyleStore.getState().effectStyles,
-    textStyles: useTextStyleStore.getState().textStyles,
-  });
-  const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
-  const blob = new Blob([JSON.stringify(tokensDoc, null, 2)], { type: "application/json" });
+function documentBaseName(): string {
+  return useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
+}
+
+function downloadText(text: string, mime: string, fileName: string): void {
+  const blob = new Blob([text], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${name}.tokens.json`;
+  a.download = fileName;
   a.style.display = "none";
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export function exportDesignTokens(): void {
+  const { document: tokensDoc, warnings } = toDtcg({
+    variables: useVariableStore.getState().variables,
+    collections: useVariableStore.getState().collections,
+    fillStyles: useStyleStore.getState().fillStyles,
+    effectStyles: useStyleStore.getState().effectStyles,
+    textStyles: useTextStyleStore.getState().textStyles,
+  });
+  downloadText(JSON.stringify(tokensDoc, null, 2), "application/json", `${documentBaseName()}.tokens.json`);
   toast(
     warnings.length
       ? `Exported design tokens. ${warnings.length} item(s) skipped or downgraded.`
       : "Exported design tokens.",
   );
+}
+
+function exportCssTokens(
+  build: typeof toCss,
+  suffix: string,
+  label: string,
+): void {
+  const { css, warnings } = build({
+    variables: useVariableStore.getState().variables,
+    collections: useVariableStore.getState().collections,
+  });
+  downloadText(css, "text/css", `${documentBaseName()}${suffix}`);
+  toast(warnings.length ? `Exported ${label}. ${warnings.length} item(s) renamed or downgraded.` : `Exported ${label}.`);
+}
+
+export function exportTokensCss(): void {
+  exportCssTokens(toCss, ".tokens.css", "tokens.css");
+}
+
+export function exportTailwindTheme(): void {
+  exportCssTokens(toTailwindTheme, ".tailwind.css", "Tailwind theme");
 }
 
 // Known limitation: foreign tokens (no com.peneditor extension) get a fresh generated id on
@@ -122,7 +152,14 @@ function applyImport(result: ImportResult): void {
   const varStore = useVariableStore.getState();
   const styleStore = useStyleStore.getState();
   const textStore = useTextStyleStore.getState();
-  varStore.setVariables(mergeById(varStore.variables, result.variables));
+  // The existing Theme collection wins over an imported one: it may carry modes the file does not know.
+  const incoming = result.collections.filter(
+    (c) => c.id !== THEME_COLLECTION_ID || !varStore.collections.some((e) => e.id === THEME_COLLECTION_ID),
+  );
+  varStore.replaceAll(
+    mergeById(varStore.variables, result.variables),
+    mergeById(varStore.collections, incoming),
+  );
   styleStore.setFillStyles(mergeById(styleStore.fillStyles, result.fillStyles));
   styleStore.setEffectStyles(mergeById(styleStore.effectStyles, result.effectStyles));
   textStore.setTextStyles(mergeById(textStore.textStyles, result.textStyles));
@@ -193,5 +230,7 @@ export function getFileCommands(): PaletteCommand[] {
     { id: "file-export-pen", label: "Export as .pen", group: "File", keywords: ["save", "download"], run: exportAsPen },
     { id: "file-export-tokens", label: "Export tokens as .tokens.json", group: "File", keywords: ["dtcg", "tokens", "download", "export"], run: exportDesignTokens },
     { id: "file-import-tokens", label: "Import design tokens", group: "File", keywords: ["dtcg", "tokens", "upload", "import"], run: () => void importDesignTokens() },
+    { id: "file-export-tokens-css", label: "Export tokens as tokens.css", group: "File", keywords: ["css", "custom properties", "tokens", "download", "export"], run: exportTokensCss },
+    { id: "file-export-tailwind-theme", label: "Export tokens as Tailwind theme", group: "File", keywords: ["tailwind", "theme", "css", "tokens", "download", "export"], run: exportTailwindTheme },
   ];
 }

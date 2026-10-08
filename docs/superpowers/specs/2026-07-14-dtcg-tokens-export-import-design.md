@@ -224,3 +224,10 @@ Modified:
 Feature → minor bump of `pen-editor` only (backend untouched). Run
 `npm version minor` in `pen-editor/` after implementation, per the repo's
 SemVer convention.
+
+## v2 addendum (2026-10-08): collections, modes, aliases
+
+- `$extensions["com.peneditor"]` gains `collection` (id, name, modes, defaultModeId; omitted for the standard Theme collection), `modes` (every mode's value, literal or `"{path}"` alias; emitted for collections with more than one mode, and for the standard Theme only when it carries an alias or a differing non-color value), `name` (only when the path was prefixed with the collection name after a cross-collection collision), `scopes`, and `deprecated` (`replacedBy` as `"{path}"`). `$description` carries `description`.
+- `$value` is the default mode's value (literal or `"{path}"`). `themes.dark` is still written for color Theme variables and still read.
+- Import: a pen token without `collection` joins the Theme collection; a foreign token joins a "Tokens" collection (id `tokens`, one mode "Default"). `{path}` values become `{alias: id}`; an unknown path, a type mismatch or a cycle falls back to the type default and adds a warning. Bound fill styles get the default-mode resolved color. Foreign `number` tokens are now imported as number variables.
+- `toCss` / `toTailwindTheme` (`file-export-tokens-css`, `file-export-tailwind-theme`) write the same data as CSS; `__tests__/exitCriteria.test.ts` checks that DTCG, CSS and Tailwind resolve every token in every mode to `resolveVariable`.
