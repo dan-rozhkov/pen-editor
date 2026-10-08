@@ -8,6 +8,8 @@
  * Pure and total: any string in, a string out, never throws.
  */
 
+import { findTagEnd, maskDeadRanges, type ComponentRegistry } from "@/lib/embedComponents";
+
 const INCOMPLETE_TAG_RE = /<(?:[a-zA-Z/!?][^<>]*)?$/;
 const INCOMPLETE_ENTITY_RE = /&#?[a-zA-Z0-9]{0,32}$/;
 
@@ -22,30 +24,25 @@ function hasOpenStyle(html: string): boolean {
   return open !== -1 && lower.indexOf("</style", open) === -1;
 }
 
-/** Index of a trailing `<c-…` tag that is still open (quote-aware), else -1. */
-function openComponentTagStart(html: string): number {
-  const start = html.lastIndexOf("<c-");
-  if (start === -1) return -1;
-  let quote: string | null = null;
-  for (let i = start; i < html.length; i++) {
-    const ch = html[i];
-    if (quote) {
-      if (ch === quote) quote = null;
-    } else if (ch === '"' || ch === "'") {
-      quote = ch;
-    } else if (ch === ">") {
-      return -1;
-    }
-  }
-  return start;
+/**
+ * Cut a trailing `<c-…` tag that is still open. Only REGISTERED keys count
+ * (and `<c-slot>`), `<script>`/`<style>`/comment text is ignored, and quotes
+ * are respected (`title="a>b`), the same scan the expander uses.
+ */
+export function dropOpenComponentTag(html: string, registry: ComponentRegistry | undefined): string {
+  if (!registry || registry.size === 0 || !html.includes("<c-")) return html;
+  const masked = maskDeadRanges(html);
+  const re = /<c-([a-z][a-z0-9-]*)(?=[\s/>]|$)/g;
+  let start = -1;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(masked))) if (m[1] === "slot" || registry.has(m[1])) start = m.index;
+  if (start === -1) return html;
+  return findTagEnd(masked, start + 1) === -1 ? html.slice(0, start) : html;
 }
 
-export function repairPartialHtml(html: string): string {
+export function repairPartialHtml(html: string, registry?: ComponentRegistry): string {
   if (hasOpenComment(html)) return `${html}-->`;
-  // A cut-off component tag (`<c-btn kind="pri`, or `title="a>b` inside a
-  // quote) goes first: the generic rule below stops at the first `>`.
-  const cut = openComponentTagStart(html);
-  if (cut !== -1) html = html.slice(0, cut);
+  html = dropOpenComponentTag(html, registry);
   let out = html.replace(INCOMPLETE_TAG_RE, "");
   out = out.replace(INCOMPLETE_ENTITY_RE, "");
   if (hasOpenStyle(out)) out += "</style>";

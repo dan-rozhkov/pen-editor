@@ -23,6 +23,9 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { applyAnchorEdits, type AnchorEdit } from "@/lib/embedHtmlEdit/applyAnchorEdits";
 import { parseAnchorEditsInput } from "@/lib/embedHtmlEdit/parseEdits";
+import { embedTextForView } from "@/lib/embedHtmlEdit/embedTextForView";
+import { expandStreamedText } from "@/lib/streamingTools/partialComponents";
+import { selectComponentRegistry } from "@/store/componentRegistry";
 import { isStreamingMutationsEnabled } from "@/lib/streamingTools/types";
 import type { EmbedNode, FlatSceneNode } from "@/types/scene";
 
@@ -69,6 +72,10 @@ function keyOf(sessionId: string, toolCallId: string): string {
  */
 function coerceEdits(raw: unknown): AnchorEdit[] | null {
   return parseAnchorEditsInput(raw, { lenient: true });
+}
+
+function embedComponentOf(node: FlatSceneNode | undefined): EmbedNode["component"] {
+  return node ? (node as unknown as EmbedNode).component : undefined;
 }
 
 function isEmbedNode(node: FlatSceneNode | undefined): node is FlatSceneNode & EmbedNode {
@@ -126,7 +133,19 @@ export function applyStreamingEmbedHtmlEdits({
     const node = live.nodesById[session.nodeId];
     if (!isEmbedNode(node)) return;
 
-    const result = applyAnchorEdits(session.originalHtmlContent, editsInput, { lenient: true });
+    // Same text the final handler matches anchors against (compact by default),
+    // and never a raw `<c-…>` tag in the stored text: whatever the edit wrote
+    // is expanded (open tags closed at the end) before it reaches the store.
+    const registry = selectComponentRegistry();
+    const original = session.originalHtmlContent;
+    const base = embedTextForView({ htmlContent: original, component: embedComponentOf(live.nodesById[session.nodeId]) }, input.view, registry);
+    let result = applyAnchorEdits(base.text, editsInput, { lenient: true });
+    if (result.html === base.text && base.text !== original) {
+      result = applyAnchorEdits(original, editsInput, { lenient: true });
+    } else if (base.view === "compact") {
+      result = { ...result, html: registry.size > 0 && result.html.includes("<c-") ? expandStreamedText(result.html, registry) : result.html };
+    }
+    if (result.html === base.text) result = { ...result, html: original };
 
     if (result.html === node.htmlContent) {
       // Common on the leading edge of a stream: a still-truncated `edits`

@@ -4,7 +4,7 @@ import { applyAnchorEdits } from "@/lib/embedHtmlEdit/applyAnchorEdits";
 import { parseAnchorEditsInput } from "@/lib/embedHtmlEdit/parseEdits";
 import { inspectEmbedHtml } from "@/lib/embedHtmlLint/inspectEmbedHtml";
 import { describeUnknownTags, finalizeEmbedHtml } from "@/lib/embedComponents/pipeline";
-import { collapseComponentRegions } from "@/lib/embedComponents";
+import { embedTextForView } from "@/lib/embedHtmlEdit/embedTextForView";
 import { selectComponentRegistry } from "@/store/componentRegistry";
 import {
   takeProgressiveEmbedHtmlSession,
@@ -62,8 +62,7 @@ export const editEmbedHtml: ToolHandler = async (args, context) => {
   // default. A master is always edited as stored. A compact miss retries on
   // the expanded text, which is what older anchors were copied from.
   const registry = selectComponentRegistry();
-  const wantsCompact = args.view !== "expanded" && !embed.component;
-  const compactSource = wantsCompact ? collapseComponentRegions(source, registry) : source;
+  const compactSource = embedTextForView(embed, args.view, registry).text;
 
   let edited;
   let viewNote: string | null = null;

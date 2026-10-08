@@ -7,6 +7,7 @@ import { selectComponentRegistry } from "@/store/componentRegistry";
 import type { SceneNode } from "@/types/scene";
 import { editEmbedHtml } from "../editEmbedHtml";
 import { readEmbedHtml } from "../readEmbedHtml";
+import { applyStreamingEmbedHtmlEdits } from "../editEmbedHtmlProgressive";
 
 function seed(id: string, htmlContent: string, extra: Record<string, unknown> = {}) {
   useSceneStore.getState().addNode({
@@ -89,5 +90,37 @@ describe("compact view", () => {
     const res = JSON.parse(await editEmbedHtml({ nodeId: "s1", edits: [{ oldString: "<h1>Title</h1>", newString: "<h1>New</h1>" }] }));
     expect(res.error).toBeUndefined();
     expect(stored("s1")).toBe(before.replace("<h1>Title</h1>", "<h1>New</h1>"));
+  });
+});
+
+describe("compact view labels and streaming", () => {
+  beforeEach(() => resetStores());
+
+  it("reports view expanded when the compact view cannot be built", async () => {
+    seedScreen();
+    seed("p1", "<p>plain</p>");
+    const res = JSON.parse(await readEmbedHtml({ nodeId: "p1", mode: "full" }));
+    expect(res.view).toBe("expanded");
+  });
+
+  it("progressive edit matches compact anchors and never stores raw tags", async () => {
+    seedScreen();
+    const original = stored("s1");
+    applyStreamingEmbedHtmlEdits({
+      sessionId: "c",
+      toolCallId: "t",
+      input: { nodeId: "s1", edits: [{ oldString: '<c-btn kind="secondary">Cancel</c-btn>', newString: '<c-btn kind="primary">Sa' }] },
+    });
+    expect(stored("s1")).not.toContain("<c-");
+    expect(stored("s1")).toContain(">Sa<");
+    expect(stored("s1")).not.toBe(original);
+    applyStreamingEmbedHtmlEdits({
+      sessionId: "c",
+      toolCallId: "t",
+      input: { nodeId: "s1", edits: [{ oldString: '<c-btn kind="secondary">Cancel</c-btn>', newString: '<c-btn kind="primary">Save</c-btn><c-btn kind="secondary">Ca' }] },
+    });
+    expect(stored("s1")).not.toContain("<c-");
+    expect(stored("s1")).toContain(">Save<");
+    expect(stored("s1")).toContain(">Ca<");
   });
 });

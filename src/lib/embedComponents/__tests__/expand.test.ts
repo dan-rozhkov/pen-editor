@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { expandComponentTags } from "../expand";
+import { expandComponentTags, stableExpansionEnd } from "../expand";
 import { reconcileHtml } from "../reconcile";
 import { findDependencyCycle } from "../cycles";
 import { parseMaster } from "../master";
@@ -158,5 +158,30 @@ describe("findDependencyCycle", () => {
     // Redefining "a" without b removes the a -> b edge.
     expect(findDependencyCycle(reg, "a", ["c"])).toBeNull();
     expect(parseMaster(reg.get("a")!)?.nested).toEqual(["b"]);
+  });
+});
+
+describe("expandComponentTags streaming input", () => {
+  it("keeps completed children of a never-closed tag in normal mode", () => {
+    const cards = cardBtnRegistry();
+    const { html, warnings } = expandComponentTags(`<c-card><c-btn>Buy</c-btn>`, cards);
+    expect(html).toContain("<c-card>");
+    expect(html).toContain('data-c="btn"');
+    expect(warnings.join()).toContain("never closed");
+  });
+
+  it("closes open tags at the end in partial mode, and can skip reconcile", () => {
+    const cards = cardBtnRegistry();
+    const { html } = expandComponentTags(`<c-card>Body text`, cards, { partial: true, reconcile: false });
+    expect(html).toContain('data-c="card"');
+    expect(html).not.toContain("data-c-style");
+    expect(html).not.toContain("<c-card");
+  });
+
+  it("stableExpansionEnd stops before a node that is still open", () => {
+    const cards = cardBtnRegistry();
+    const done = `<c-btn>A</c-btn>`;
+    expect(stableExpansionEnd(done + `<c-card><c-btn>B</c-btn>`, cards)).toBe(done.length);
+    expect(stableExpansionEnd(done + done, cards)).toBe(done.length * 2);
   });
 });

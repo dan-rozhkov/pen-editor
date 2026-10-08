@@ -10,13 +10,22 @@ export {
 } from "./master";
 export { renderInstance, renderRegionElement, readRegionSpec } from "./render";
 export { collapseComponentRegions } from "./collapse";
-export { expandComponentTags, mentionsRegisteredTag, type ExpandResult } from "./expand";
+export {
+  expandComponentTags,
+  mentionsRegisteredTag,
+  stableExpansionEnd,
+  maskDeadRanges,
+  findTagEnd,
+  type ExpandResult,
+  type ExpandOptions,
+} from "./expand";
 export {
   reconcileHtml,
   hasStaleRegions,
   countRegionsByKey,
   listRegionKeys,
   mayContainComponents,
+  topLevelRegions,
   findManagedZoneViolation,
   detachRegions,
   type ManagedZoneViolation,

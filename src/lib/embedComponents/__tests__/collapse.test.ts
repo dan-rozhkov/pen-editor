@@ -38,6 +38,18 @@ describe("collapseComponentRegions", () => {
     expect(compact).not.toContain("data-c=");
   });
 
+  it("writes slot text even when it equals the master default", () => {
+    const registry = btnRegistry();
+    const h = expandComponentTags(`<c-btn kind="primary" />`, registry).html;
+    expect(collapseComponentRegions(h, registry)).toBe("<c-btn>Save</c-btn>");
+  });
+
+  it("expands raw tags of keys registered later before collapsing", () => {
+    const registry = btnRegistry();
+    const compact = collapseComponentRegions(`<p><c-btn kind="secondary">Go</c-btn></p>`, registry);
+    expect(compact).toBe(`<p><c-btn kind="secondary">Go</c-btn></p>`);
+  });
+
   it("omits default variants and uses <c-slot> for named slots", () => {
     const registry = cardBtnRegistry();
     const h = expandComponentTags(

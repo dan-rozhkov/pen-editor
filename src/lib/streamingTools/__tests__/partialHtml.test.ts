@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { repairPartialHtml } from "../partialHtml";
+import { btnRegistry } from "@/lib/embedComponents/__tests__/fixtures";
 
 describe("repairPartialHtml", () => {
   it.each([
@@ -18,11 +19,17 @@ describe("repairPartialHtml", () => {
     ["closed style untouched", "<style>.a{}</style><p>x", "<style>.a{}</style><p>x"],
     ["half-typed style close tag", "<style>.a{}</sty", "<style>.a{}</style>"],
     ["cut-off component tag", '<div><c-btn kind="pri', "<div>"],
-    ["component tag cut inside a quote holding >", '<div><c-btn title="a>b', "<div>"],
     ["complete component tag kept", '<c-btn kind="primary">Hi', '<c-btn kind="primary">Hi'],
     ["empty", "", ""],
   ])("%s", (_name, input, expected) => {
     expect(repairPartialHtml(input)).toBe(expected);
+  });
+
+  it("drops a registered tag cut inside a quote holding >, and only registered ones", () => {
+    const registry = btnRegistry();
+    expect(repairPartialHtml('<div><c-btn title="a>b', registry)).toBe("<div>");
+    expect(repairPartialHtml('<div><c-zzz title="a>b', registry)).toBe('<div><c-zzz title="a>b');
+    expect(repairPartialHtml('<script>x<c-btn title="a>b', registry)).toBe('<script>x<c-btn title="a>b');
   });
 
   it("never throws across every truncation point", () => {

@@ -635,6 +635,12 @@ export const WEBMCP_TOOL_SPECS: readonly WebMcpToolSpec[] = [
       type: "object",
       properties: {
         nodeId: { type: "string", description: "Id of the embed node to edit." },
+        view: {
+          type: "string",
+          enum: ["compact", "expanded"],
+          description:
+            "Which text your anchors match. compact (default) is the read_embed_html compact view. expanded is the full managed markup.",
+        },
         // `edits` is published as a plain array on purpose, even though the
         // backend's zod shape wraps it in a `z.preprocess` that also accepts
         // a JSON-encoded string (for models that emit the array as text).

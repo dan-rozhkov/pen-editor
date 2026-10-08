@@ -19,7 +19,7 @@ export function mayContainComponents(html: string): boolean {
 }
 
 /** Region elements whose nearest enclosing region is none (top level). */
-function topLevelRegions(container: Element): Element[] {
+export function topLevelRegions(container: Element): Element[] {
   return Array.from(container.querySelectorAll("[data-c]")).filter(
     (el) => closestRegion(el.parentElement) === null,
   );

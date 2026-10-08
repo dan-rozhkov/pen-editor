@@ -1,6 +1,6 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { buildOutline, grepHtml } from "@/lib/embedHtmlEdit/readViews";
-import { collapseComponentRegions } from "@/lib/embedComponents";
+import { embedTextForView } from "@/lib/embedHtmlEdit/embedTextForView";
 import { selectComponentRegistry } from "@/store/componentRegistry";
 import type { EmbedNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
@@ -27,12 +27,7 @@ export const readEmbedHtml: ToolHandler = async (args) => {
 
   const embed = node as unknown as EmbedNode;
   // Compact (default) shows each canonical component region as a `<c-key>` tag.
-  // A master is its own source text, so it is always read as stored.
-  const view = args.view === "expanded" || embed.component ? "expanded" : "compact";
-  const html =
-    view === "compact"
-      ? collapseComponentRegions(embed.htmlContent, selectComponentRegistry())
-      : embed.htmlContent;
+  const { text: html, view } = embedTextForView(embed, args.view, selectComponentRegistry());
 
   const mode = args.mode === "grep" || args.mode === "full" ? args.mode : "outline";
 
