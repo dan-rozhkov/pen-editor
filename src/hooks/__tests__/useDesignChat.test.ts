@@ -1,3 +1,4 @@
+import { useVariableStore } from "@/store/variableStore";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
 
@@ -346,6 +347,21 @@ describe("buildCanvasContext", () => {
       },
       { name: "--radius-m", type: "number", value: "8", cssName: "--radius-m" },
     ]);
+  });
+
+  it("omits collections and modeContext for a legacy document, appends them last otherwise", () => {
+    const legacy = JSON.parse((buildCanvasContext() as { canvasContext: string }).canvasContext);
+    expect(legacy).not.toHaveProperty("collections");
+    expect(legacy).not.toHaveProperty("modeContext");
+
+    const brandId = useVariableStore.getState().addCollection("Brand", ["acme", "globex"]);
+    const withBrand = JSON.parse((buildCanvasContext() as { canvasContext: string }).canvasContext);
+    expect(Object.keys(withBrand).slice(-2)).toEqual(["collections", "modeContext"]);
+    expect(withBrand.collections.map((c: { name: string }) => c.name)).toEqual(["Theme", "Brand"]);
+    expect(withBrand.modeContext.theme).toBe("light");
+    expect(withBrand.modeContext[brandId]).toBe(
+      useVariableStore.getState().collections.find((c) => c.id === brandId)!.defaultModeId
+    );
   });
 
   it("falls back to bare ids for unknown selected nodes", () => {

@@ -212,8 +212,30 @@ export const WEBMCP_TOOL_SPECS: readonly WebMcpToolSpec[] = [
   },
   {
     name: "get_variables",
-    description: "Read all design variables (tokens) and themes defined in the .pen file.",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    description:
+      "Read the design variables (tokens) in the .pen file. Variables are colors, numbers, or strings. " +
+      "Each variable has one value per mode. A collection groups variables and defines their modes. The Theme collection has the modes light and dark. " +
+      "Each variable returns its `name` (use it as `$--name` in native nodes), its `cssName` (use it as `var(--name)` in embed HTML), its raw and resolved value per mode, and optional `description`, `scopes`, and `deprecated`. " +
+      "A raw value that starts with `$` is an alias to another variable. " +
+      "Call it with no arguments to read everything. " +
+      "Pass `names` or `collection` to read a slice. " +
+      "A filter that matches nothing returns an empty list and a hint, not an error.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        collection: {
+          type: "string",
+          description: "Collection name or id. Returns only the variables of that collection.",
+        },
+        names: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            'Variable names to read. Each name may have a leading "--" or "$". Returns only these variables.',
+        },
+      },
+      additionalProperties: false,
+    },
     annotations: readOnly,
     mutating: false,
   },
@@ -257,14 +279,31 @@ export const WEBMCP_TOOL_SPECS: readonly WebMcpToolSpec[] = [
   {
     name: "set_variables",
     description:
-      "Add or update design variables and themes in the open document. Merges by default; replace=true overwrites all.",
+      "Add or update design variables, collections, and modes. " +
+      "Use `collections` to define a collection and its modes. Use `collection` to set the default collection for the call. " +
+      "In `variables`, give one value per mode with `valuesByMode`, for example {light: \"#fff\", dark: \"$--ink\"}. " +
+      "A value that starts with `$` is an alias to another variable. Alias order inside one call does not matter. " +
+      "Add `description`, `scopes`, and `deprecated` {since, replacedBy, note} when they help. " +
+      "Create primitive variables first, then create semantic variables that alias them. " +
+      "The call is atomic. If any collection, mode, alias target, or type is wrong, the call returns an error and changes nothing. " +
+      "By default the call merges with existing variables (matched by id or name). Set replace=true to overwrite all.",
     inputSchema: {
       type: "object",
       properties: {
         variables: {
           type: "object",
           description:
-            'Variable definitions, as an object keyed by variable name. Simplest form — a plain hex string per name: {"--brand-primary": "#3b82f6"}. Full form — an object per name with `type` ("color" | "number" | "string", default "color") and `value`. Per-theme values use `themeValues`. Names may be given with or without a leading `--`/`$`.',
+            'Variable definitions, as an object keyed by variable name. Every old form stays valid. Simplest form: a plain hex string per name: {"--brand-primary": "#3b82f6"}. Full form: an object per name with `type` ("color" | "number" | "string", default "color") and `value`. Per-theme values use `themeValues`. Names may be given with or without a leading `--`/`$`. New fields per variable: `valuesByMode` maps a mode name to a value; a string value that starts with `$` is an alias to another variable; `collection` is the collection name; `description`; `scopes`; `deprecated` {since?, replacedBy?, note?}.',
+        },
+        collections: {
+          type: "object",
+          description:
+            'Collections to create or update, keyed by collection name. Each collection lists its mode names: {"Brand": {"modes": ["acme", "globex"], "defaultMode": "acme"}}. Define a collection here before a variable uses its modes.',
+        },
+        collection: {
+          type: "string",
+          description:
+            "Default collection name for the variables in this call. The collection is created if it does not exist. A `collection` field on one variable overrides it.",
         },
         replace: {
           type: "boolean",

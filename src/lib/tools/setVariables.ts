@@ -1,8 +1,14 @@
 import { useVariableStore } from "@/store/variableStore";
-import { applyVariablePatch } from "@/lib/variables";
-import { generateVariableId } from "@/types/variable";
-import type { Variable } from "@/types/variable";
+import type { VariableScope, VariableType } from "@/types/variable";
 import type { ToolHandler } from "../toolRegistry";
+import {
+  planVariableChanges,
+  type CollectionSpec,
+  type VariableEntry,
+} from "./variablesPlan";
+import { VARIABLE_SCOPES } from "./variableToolUtils";
+
+const TYPES: readonly string[] = ["color", "number", "string"];
 
 function normalizeVariableName(name: unknown): string {
   if (typeof name !== "string") return "Untitled";
@@ -19,202 +25,209 @@ function isVariableDefinition(obj: Record<string, unknown>): boolean {
     "color" in obj ||
     "$color" in obj ||
     "themeValues" in obj ||
-    "$themeValues" in obj
+    "$themeValues" in obj ||
+    "valuesByMode" in obj ||
+    "$valuesByMode" in obj
   );
 }
 
 // Infer a variable type from a bare string value so the intuitive shorthand
 // `{ "--brand": "#3b82f6" }` / `{ "--radius": "16" }` works without the caller
-// having to spell out `{type, value}`.
-function inferTypeFromValue(value: string): Variable["type"] {
+// having to spell out `{type, value}`. An alias (`$--x`) has no type of its
+// own: it takes its target's.
+function inferTypeFromValue(value: string): VariableType | undefined {
   const v = value.trim();
-  if (/^(#|rgb|hsl|\$)/i.test(v)) return "color";
+  if (v.startsWith("$")) return undefined;
+  if (/^(#|rgb|hsl)/i.test(v)) return "color";
   if (v !== "" && !Number.isNaN(Number(v))) return "number";
   return "string";
 }
 
-// A normalized variable plus the set of top-level fields the caller actually
-// sent (as opposed to fields normalizeVariable synthesized a default for).
-// The merge branch needs this distinction so a partial update — e.g. just a
-// `name` change — doesn't clobber an existing variable's `value`/`themeValues`
-// with defaults.
-interface NormalizedVariable {
-  variable: Variable;
-  explicit: Set<keyof Variable>;
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === "object" && x !== null && !Array.isArray(x);
 }
 
-function extractVariablesFromObject(
+function textValue(x: unknown): string | undefined {
+  if (typeof x === "string") return x;
+  if (typeof x === "number" && Number.isFinite(x)) return String(x);
+  return undefined;
+}
+
+function parseModeMap(label: string, key: string, x: unknown, errors: string[]): Record<string, string> | undefined {
+  if (x === undefined) return undefined;
+  if (!isRecord(x)) {
+    errors.push(`variable "${label}": \`${key}\` must be an object keyed by mode name.`);
+    return undefined;
+  }
+  const out: Record<string, string> = {};
+  for (const [mode, value] of Object.entries(x)) {
+    const text = textValue(value);
+    if (text === undefined) errors.push(`variable "${label}": \`${key}.${mode}\` must be a string.`);
+    else out[mode] = text;
+  }
+  return out;
+}
+
+function parseEntry(obj: Record<string, unknown>, leafName: string | undefined, errors: string[]): VariableEntry {
+  const entry: VariableEntry = {};
+  if (typeof obj.id === "string" && obj.id) entry.id = obj.id;
+  const rawName = obj.name ?? leafName;
+  if (rawName !== undefined) entry.name = normalizeVariableName(rawName);
+  const label = entry.name ?? entry.id ?? "Untitled";
+
+  const rawType = obj.type ?? obj.$type;
+  if (rawType !== undefined) {
+    if (typeof rawType === "string" && TYPES.includes(rawType)) entry.type = rawType as VariableType;
+    else errors.push(`variable "${label}": \`type\` must be "color", "number" or "string".`);
+  }
+
+  const rawValue = obj.value ?? obj.$value ?? obj.color ?? obj.$color;
+  if (rawValue !== undefined) {
+    entry.value = textValue(rawValue);
+    if (entry.value === undefined) errors.push(`variable "${label}": \`value\` must be a string.`);
+  }
+
+  const themeValues = parseModeMap(label, "themeValues", obj.themeValues ?? obj.$themeValues, errors);
+  const byMode = parseModeMap(label, "valuesByMode", obj.valuesByMode ?? obj.$valuesByMode, errors);
+  if (themeValues || byMode) entry.modeValues = { ...themeValues, ...byMode };
+
+  if (obj.collection !== undefined) {
+    if (typeof obj.collection === "string" && obj.collection.trim()) entry.collection = obj.collection.trim();
+    else errors.push(`variable "${label}": \`collection\` must be a collection name.`);
+  }
+  if (obj.description !== undefined) {
+    if (typeof obj.description === "string") entry.description = obj.description;
+    else errors.push(`variable "${label}": \`description\` must be a string.`);
+  }
+  if (obj.scopes !== undefined) {
+    const scopes = obj.scopes;
+    const bad = Array.isArray(scopes)
+      ? scopes.filter((s) => !VARIABLE_SCOPES.includes(s as VariableScope))
+      : [scopes];
+    if (!Array.isArray(scopes) || bad.length > 0) {
+      errors.push(`variable "${label}": \`scopes\` must be an array of ${VARIABLE_SCOPES.join(", ")}.`);
+    } else entry.scopes = scopes as VariableScope[];
+  }
+  if (obj.deprecated !== undefined) {
+    const d = obj.deprecated;
+    if (!isRecord(d)) errors.push(`variable "${label}": \`deprecated\` must be an object {since?, replacedBy?, note?}.`);
+    else {
+      entry.deprecated = {};
+      if (typeof d.since === "string") entry.deprecated.since = d.since;
+      if (typeof d.replacedBy === "string") entry.deprecated.replacedBy = d.replacedBy;
+      if (typeof d.note === "string") entry.deprecated.note = d.note;
+    }
+  }
+  return entry;
+}
+
+function extractEntries(
   obj: Record<string, unknown>,
-  parentKeys: string[] = []
-): NormalizedVariable[] {
-  const extracted: NormalizedVariable[] = [];
+  errors: string[],
+): VariableEntry[] {
+  const extracted: VariableEntry[] = [];
 
   for (const [key, val] of Object.entries(obj)) {
-    const path = [...parentKeys, key];
-    const leafName = path[path.length - 1];
-
     // Shorthand: a bare string maps a name straight to a value, e.g.
     // `{ "--brand-primary": "#3b82f6", "--radius-lg": "16" }`.
     if (typeof val === "string") {
-      extracted.push(
-        normalizeVariable({
-          name: leafName,
-          type: inferTypeFromValue(val),
-          value: val,
-        })
-      );
+      const entry: VariableEntry = { name: normalizeVariableName(key), value: val };
+      const inferred = inferTypeFromValue(val);
+      if (inferred) entry.type = inferred;
+      extracted.push(entry);
       continue;
     }
+    if (!isRecord(val)) continue;
 
-    if (!val || typeof val !== "object" || Array.isArray(val)) continue;
-
-    const entry = val as Record<string, unknown>;
-
-    if (isVariableDefinition(entry)) {
-      extracted.push(
-        normalizeVariable({
-          name: entry.name ?? leafName,
-          ...entry,
-        })
-      );
+    if (isVariableDefinition(val)) {
+      extracted.push(parseEntry(val, key, errors));
       continue;
     }
-
-    extracted.push(...extractVariablesFromObject(entry, path));
+    // Nested token groups, e.g. { colors: { "background-primary": { "$type": "color", "$value": "#fff" } } }
+    extracted.push(...extractEntries(val, errors));
   }
-
   return extracted;
 }
 
+function parseCollectionSpecs(
+  x: unknown,
+  errors: string[],
+): Record<string, CollectionSpec> | undefined {
+  if (x === undefined) return undefined;
+  if (!isRecord(x)) {
+    errors.push("`collections` must be an object keyed by collection name.");
+    return undefined;
+  }
+  const out: Record<string, CollectionSpec> = {};
+  for (const [name, spec] of Object.entries(x)) {
+    const modes = isRecord(spec) ? spec.modes : undefined;
+    if (!Array.isArray(modes) || modes.length === 0 || !modes.every((m) => typeof m === "string" && m.trim())) {
+      errors.push(`collections.${name}: \`modes\` must be a non-empty array of mode names.`);
+      continue;
+    }
+    const defaultMode = (spec as Record<string, unknown>).defaultMode;
+    out[name] = {
+      modes: modes as string[],
+      ...(typeof defaultMode === "string" ? { defaultMode } : {}),
+    };
+  }
+  return out;
+}
+
 export const setVariables: ToolHandler = async (args) => {
-  const incoming = args.variables as Record<string, unknown> | undefined;
+  const incoming = args.variables as Record<string, unknown> | unknown[] | undefined;
   const replace = (args.replace as boolean) ?? false;
 
   if (!incoming) {
     return JSON.stringify({ error: "No variables provided" });
   }
 
-  // Parse incoming variables — accept either an array or an object with variable entries
-  const parsed: NormalizedVariable[] = [];
+  const errors: string[] = [];
+  const entries: VariableEntry[] = [];
 
+  // Accept either an array or an object with variable entries (optionally
+  // wrapped in `{ variables: {...} }`).
   const normalizedIncoming =
-    typeof incoming === "object" &&
-    incoming &&
-    !Array.isArray(incoming) &&
-    typeof incoming.variables === "object" &&
-    incoming.variables !== null &&
-    !Array.isArray(incoming.variables)
-      ? (incoming.variables as Record<string, unknown>)
-      : incoming;
+    isRecord(incoming) && isRecord(incoming.variables) ? incoming.variables : incoming;
 
   if (Array.isArray(normalizedIncoming)) {
     for (const v of normalizedIncoming) {
-      parsed.push(normalizeVariable(v as Record<string, unknown>));
+      if (isRecord(v)) entries.push(parseEntry(v, undefined, errors));
     }
-  } else if (
-    typeof normalizedIncoming === "object" &&
-    normalizedIncoming !== null &&
-    !Array.isArray(normalizedIncoming)
-  ) {
-    // Supports:
-    // 1) { varName: { type/value/... } }
-    // 2) nested token groups, e.g. { colors: { "background-primary": { "$type": "color", "$value": "#fff" } } }
-    parsed.push(...extractVariablesFromObject(normalizedIncoming));
+  } else if (isRecord(normalizedIncoming)) {
+    entries.push(...extractEntries(normalizedIncoming, errors));
   }
 
-  if (parsed.length === 0) {
+  const collectionSpecs = parseCollectionSpecs(args.collections, errors);
+  if (args.collection !== undefined && (typeof args.collection !== "string" || !args.collection.trim())) {
+    errors.push("`collection` must be a collection name.");
+  }
+
+  if (errors.length > 0) {
+    return JSON.stringify({ error: `set_variables changed nothing. ${errors.join(" ")}` });
+  }
+  if (entries.length === 0) {
     return JSON.stringify({ error: "No valid variables found in input" });
   }
 
   const store = useVariableStore.getState();
+  const plan = planVariableChanges({
+    entries,
+    collectionSpecs,
+    defaultCollection: typeof args.collection === "string" ? args.collection : undefined,
+    replace,
+    variables: store.variables,
+    collections: store.collections,
+  });
+  if ("error" in plan) return JSON.stringify({ error: plan.error });
 
-  const rejected: string[] = [];
-
-  if (replace) {
-    store.setVariables(parsed.map((p) => p.variable));
-  } else {
-    // Merge: match by id or name, update matched, append new
-    const existing = [...store.variables];
-    const existingByName = new Map(
-      existing.map((v) => [normalizeVariableName(v.name), v])
-    );
-    const existingById = new Map(existing.map((v) => [v.id, v]));
-
-    const merged: Variable[] = [...existing];
-
-    for (const { variable: v, explicit } of parsed) {
-      const matchById = existingById.get(v.id);
-      const matchByName = existingByName.get(normalizeVariableName(v.name));
-      const match = matchById ?? matchByName;
-
-      if (match) {
-        // Update existing — patch only the fields the model actually sent
-        // (tracked in `explicit`), so absent fields (e.g. themeValues, value)
-        // aren't clobbered with normalizeVariable's synthesized defaults.
-        const idx = merged.findIndex((m) => m.id === match.id);
-        const patch: Partial<Variable> = {};
-        for (const key of explicit) {
-          if (key === "id") continue;
-          (patch as Record<string, unknown>)[key] = v[key];
-        }
-        const patched = applyVariablePatch(merged, store.collections, match.id, patch);
-        if (patched) merged[idx] = { ...patched, id: match.id };
-        else rejected.push(match.name);
-      } else {
-        // New variable — use the fully normalized (defaulted) form.
-        merged.push(v);
-      }
-    }
-
-    store.setVariables(merged);
-  }
+  store.replaceAll(plan.variables, plan.collections);
 
   return JSON.stringify({
     success: true,
     variableCount: useVariableStore.getState().variables.length,
-    ...(rejected.length > 0 ? { rejected } : {}),
+    created: plan.created,
+    updated: plan.updated,
+    warnings: plan.warnings,
   });
 };
-
-function normalizeVariable(obj: Record<string, unknown>): NormalizedVariable {
-  const explicit = new Set<keyof Variable>();
-
-  if (obj.id !== undefined) explicit.add("id");
-  if (obj.name !== undefined) explicit.add("name");
-
-  const rawType = obj.type ?? obj.$type;
-  const type = (rawType as Variable["type"]) || "color";
-  if (rawType !== undefined) explicit.add("type");
-
-  const rawValue = obj.value ?? obj.$value ?? obj.color ?? obj.$color;
-  const value =
-    typeof rawValue === "string"
-      ? rawValue
-      : type === "number"
-      ? "0"
-      : type === "string"
-      ? ""
-      : "#000000";
-  if (rawValue !== undefined) explicit.add("value");
-
-  const rawThemeValues = (obj.themeValues ?? obj.$themeValues) as
-    | Variable["themeValues"]
-    | undefined;
-
-  const themeValues =
-    rawThemeValues && typeof rawThemeValues === "object"
-      ? rawThemeValues
-      : undefined;
-  if (rawThemeValues !== undefined) explicit.add("themeValues");
-
-  return {
-    variable: {
-      id: (obj.id as string) || generateVariableId(),
-      name: normalizeVariableName(obj.name),
-      type,
-      value,
-      themeValues,
-    },
-    explicit,
-  };
-}
