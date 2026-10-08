@@ -49,7 +49,7 @@ export function bindSolidPaint(paint: SolidPaint, color: string, binding: { vari
   return { ...paint, color, colorBinding: binding };
 }
 
-function isColorEqual(a: unknown, b: unknown): boolean {
+export function isColorEqual(a: unknown, b: unknown): boolean {
   if (typeof a !== "string" || typeof b !== "string") return a === b;
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }

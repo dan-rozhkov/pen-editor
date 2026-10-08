@@ -74,6 +74,31 @@ describe("<LintPanelContent />", () => {
     expect(useLintStore.getState().mode).toBe("all");
   });
 
+  it("counts only the active page and hides Fix all when nothing is fixable", () => {
+    render(<LintPanelContent />);
+    const { findings, summary } = useLintStore.getState();
+    expect(summary?.errors).toBe(findings.filter((f) => f.severity === "error").length);
+    act(() => useLintStore.setState({ fixable: {} }));
+    expect(screen.queryByRole("button", { name: /^Fix all \d+ findings? that have a fix/ })).toBeNull();
+  });
+
+  it("re-runs instead of showing stale findings when the mode cannot resolve", () => {
+    render(<LintPanelContent />);
+    act(() => useLintStore.setState({ mode: "gone", hasRun: false, findings: [] }));
+    act(() => useLintStore.getState().run());
+    expect(useLintStore.getState().mode).toBe("current");
+    expect(useLintStore.getState().hasRun).toBe(true);
+    expect(useLintStore.getState().findings.length).toBeGreaterThan(0);
+  });
+
+  it("re-runs when a row belongs to a page that is no longer active", () => {
+    render(<LintPanelContent />);
+    const [f] = useLintStore.getState().findings;
+    act(() => useLintStore.setState({ pageId: "old" }));
+    act(() => useLintStore.getState().select(f));
+    expect(useLintStore.getState().pageId).not.toBe("old");
+  });
+
   it("notes findings on other pages instead of listing them", () => {
     render(<LintPanelContent />);
     act(() => useLintStore.setState({ otherPages: 2 }));

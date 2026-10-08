@@ -12,7 +12,7 @@ import { isLibraryComponent } from "@/lib/designSystem/ownership";
 import { parseEmbedHtml, serializeEmbedDoc } from "@/lib/embedHtmlDocument";
 import { hasStaleRegions, reconcileHtml } from "@/lib/embedComponents";
 import type { ComponentRegistry } from "@/lib/embedComponents";
-import { bindSolidPaint } from "@/lib/tools/replaceAllMatchingProperties";
+import { bindSolidPaint, isColorEqual } from "@/lib/tools/replaceAllMatchingProperties";
 import {
   NUMBER_BINDING_SPECS,
   buildVariableIndex,
@@ -71,18 +71,13 @@ const RULE_PRIORITY: Partial<Record<LintRuleId, number>> = {
 
 type Patch = Record<string, unknown>;
 
-const sameColor = (a: unknown, b: unknown): boolean =>
-  typeof a === "string" && typeof b === "string" && a.trim().toLowerCase() === b.trim().toLowerCase();
-
 const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** Replace `from` with `to` inside the value of every `property` declaration in `text`. Null when nothing matched. */
+/** Replace every occurrence of `from` with `to` inside the value of every `property` declaration in `text`. Null when nothing matched. */
 function replaceDeclarationValue(text: string, property: string, from: string, to: string): string | null {
-  const re = new RegExp(
-    `((?:^|[;{\\s])${escapeRe(property)}\\s*:[^;{}]*?)(?<![\\w.-])${escapeRe(from)}(?![\\w-])`,
-    "gi",
-  );
-  const next = text.replace(re, (_m, head: string) => `${head}${to}`);
+  const declaration = new RegExp(`((?:^|[;{\\s])${escapeRe(property)}\\s*:)([^;{}]*)`, "gi");
+  const literal = new RegExp(`(?<![\\w.-])${escapeRe(from)}(?![\\w-])`, "gi");
+  const next = text.replace(declaration, (_m, head: string, value: string) => `${head}${value.replace(literal, () => to)}`);
   return next === text ? null : next;
 }
 
@@ -123,6 +118,8 @@ class FixSession {
   readonly nodes = new Map<string, FlatSceneNode>();
   readonly html = new Map<string, string>();
   private readonly applied = new Set<string>();
+  /** Binding targets written this run (`node|slot|paint` -> variable id), so a repeat is "done", not "stale". */
+  private readonly bound = new Map<string, string>();
   private readonly index: VariableIndex;
   private readonly base: ModeContext;
   private readonly state = useSceneStore.getState();
@@ -207,14 +204,25 @@ class FixSession {
     return true;
   }
 
+  /** `done` when this run already bound the target to `variableId`; `conflict` when to another one. */
+  private claim(key: string, variableId: string): "new" | "done" | "conflict" {
+    const prior = this.bound.get(key);
+    if (prior === undefined) return "new";
+    return prior === variableId ? "done" : "conflict";
+  }
+
   private bindColor(node: FlatSceneNode, fix: Extract<LintFix, { kind: "bind-color" }>): FixSkipReason | null {
+    const key = `${node.id}|${fix.slot}|${fix.paintId ?? ""}`;
+    const claimed = this.claim(key, fix.variableId);
+    if (claimed !== "new") return claimed === "done" ? null : "stale";
     const value = this.resolved(fix.variableId, node.id, "color");
     if (value === undefined) return "stale";
     const done = this.editPaint(node, fix.slot, fix.paintId, (paint) =>
-      paint.colorBinding || paint.styleId || !sameColor(paint.color, fix.from)
+      paint.colorBinding || paint.styleId || !isColorEqual(paint.color, fix.from)
         ? null
         : bindSolidPaint(paint, value, { variableId: fix.variableId }),
     );
+    if (done) this.bound.set(key, fix.variableId);
     return done ? null : "stale";
   }
 
@@ -235,15 +243,22 @@ class FixSession {
   }
 
   private bindNumber(node: FlatSceneNode, fix: Extract<LintFix, { kind: "bind-number" }>): FixSkipReason | null {
+    const key = `${node.id}|${fix.key}`;
+    const claimed = this.claim(key, fix.variableId);
+    if (claimed !== "new") return claimed === "done" ? null : "stale";
     if (!isNumberBindingKey(fix.key) || node.numberBindings?.[fix.key] || !isKeyActive(node, fix.key)) return "stale";
     if (readNumberField(node, fix.key) !== fix.from) return "stale";
     const value = this.numberValue(node, fix.variableId);
     if (value === undefined) return "stale";
     this.setNumberBinding(node, fix.key, fix.variableId, clampForKey(fix.key, value));
+    this.bound.set(key, fix.variableId);
     return null;
   }
 
   private rebind(node: FlatSceneNode, fix: Extract<LintFix, { kind: "rebind" }>): FixSkipReason | null {
+    const key = `${node.id}|${fix.target}|${fix.paintId ?? ""}`;
+    const claimed = this.claim(key, fix.toVariableId);
+    if (claimed !== "new") return claimed === "done" ? null : "stale";
     if (fix.target === "fill" || fix.target === "stroke") {
       const value = this.resolved(fix.toVariableId, node.id, "color");
       if (value === undefined) return "stale";
@@ -252,13 +267,15 @@ class FixSession {
           ? bindSolidPaint(paint, value, { variableId: fix.toVariableId })
           : null,
       );
+      if (done) this.bound.set(key, fix.toVariableId);
       return done ? null : "stale";
     }
-    const key = fix.target;
-    if (!isNumberBindingKey(key) || node.numberBindings?.[key]?.variableId !== fix.fromVariableId) return "stale";
+    const target = fix.target;
+    if (!isNumberBindingKey(target) || node.numberBindings?.[target]?.variableId !== fix.fromVariableId) return "stale";
     const value = this.numberValue(node, fix.toVariableId);
     if (value === undefined) return "stale";
-    this.setNumberBinding(node, key, fix.toVariableId, clampForKey(key, value));
+    this.setNumberBinding(node, target, fix.toVariableId, clampForKey(target, value));
+    this.bound.set(key, fix.toVariableId);
     return null;
   }
 

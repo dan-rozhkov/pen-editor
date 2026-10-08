@@ -232,6 +232,11 @@ function foregroundOf(
   return layer.kind === "solid" ? { colors: [layer.color], gradient: false, paint, stacked: !!node.fills } : null;
 }
 
+function cachedFix(cache: Map<string, LintFix | undefined>, id: string, compute: () => LintFix | undefined): LintFix | undefined {
+  if (!cache.has(id)) cache.set(id, compute());
+  return cache.get(id);
+}
+
 /**
  * A `bind-color` fix for failing text: the color token nearest (OKLab) to the
  * current color that passes `need` against the backdrop in EVERY evaluated
@@ -282,6 +287,8 @@ function contrastFix(
 /** Native contrast: text against its backdrop (WCAG AA), optionally strokes against 3:1. */
 export function runContrastRule(lc: LintContext): void {
   const seenUnresolved = new Set<string>();
+  /** The fix depends on every mode context, not the one being walked, so it is computed once per node. */
+  const fixes = new Map<string, LintFix | undefined>();
   const found: Finding[] = [];
   let evaluated = 0;
   for (const base of lc.contexts) {
@@ -294,7 +301,7 @@ export function runContrastRule(lc: LintContext): void {
       const rect = lc.input.rects[id];
       if (!node || !rect) continue;
       if (node.type === "text" && (node as TextNode).text?.trim()) {
-        textContrast(lc, node as TextNode, rect, base, mode, found, seenUnresolved);
+        textContrast(lc, node as TextNode, rect, base, mode, found, seenUnresolved, fixes);
       } else if (lc.opts.uiContrast && (node.type === "rect" || node.type === "ellipse" || node.type === "frame")) {
         strokeContrast(lc, node, rect, base, mode, found);
       }
@@ -311,6 +318,7 @@ function textContrast(
   mode: string,
   found: Finding[],
   seenUnresolved: Set<string>,
+  fixes: Map<string, LintFix | undefined>,
 ): void {
   const ctx = lc.effectiveModes(node.id, base);
   const fg = foregroundOf(lc, node, ctx);
@@ -342,7 +350,7 @@ function textContrast(
     message: `Text ${nodeLabel(node)} has contrast ${formatRatio(worst.ratio, need)}:1 (${toHex(worst.fg)} on ${toHex(worst.bg)}); ${large ? "large text" : "text"} needs ${need}:1.`,
     detail: soft ? "Worst gradient stop." : undefined,
     mode: mode || undefined,
-    fix: soft ? undefined : contrastFix(lc, node, rect, fg, need),
+    fix: soft ? undefined : cachedFix(fixes, node.id, () => contrastFix(lc, node, rect, fg, need)),
   });
 }
 

@@ -4,7 +4,7 @@ import { useVariableStore } from "@/store/variableStore";
 import { useThemeStore } from "@/store/themeStore";
 import { usePageStore } from "@/store/pageStore";
 import { useDragStore } from "@/store/dragStore";
-import { useLintStore } from "@/store/lintStore";
+import { isApplyingLintFix, useLintStore } from "@/store/lintStore";
 
 /** Wait this long after the last change before checking again. */
 export const LINT_IDLE_MS = 1500;
@@ -25,7 +25,7 @@ export function useLintAutoRun(): void {
         schedule();
         return;
       }
-      useLintStore.getState().run();
+      useLintStore.getState().run({ auto: true });
     };
     const schedule = () => {
       if (timer !== undefined) clearTimeout(timer);
@@ -42,6 +42,7 @@ export function useLintAutoRun(): void {
     window.addEventListener("pointercancel", up, true);
     const unsubs = [
       useSceneStore.subscribe((s, prev) => {
+        if (isApplyingLintFix()) return;
         if (s.nodesById !== prev.nodesById || s.pageBackground !== prev.pageBackground) schedule();
       }),
       useVariableStore.subscribe(schedule),
@@ -52,7 +53,7 @@ export function useLintAutoRun(): void {
         if (s.activePageId !== prev.activePageId || s.pages !== prev.pages) schedule();
       }),
     ];
-    useLintStore.getState().run();
+    useLintStore.getState().run({ auto: true });
     return () => {
       if (timer !== undefined) clearTimeout(timer);
       window.removeEventListener("pointerdown", down, true);

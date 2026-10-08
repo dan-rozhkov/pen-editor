@@ -1,15 +1,13 @@
 import { useId, useMemo, type ReactNode } from "react";
 import { ArrowClockwiseIcon, CheckCircleIcon } from "@phosphor-icons/react";
-import { useSceneStore } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useLintStore, type LintModeChoice } from "@/store/lintStore";
-import { LINT_RULE_CATALOG, LINT_RULE_IDS, isFixable, type Finding, type LintRuleId, type Severity } from "@/lib/designLint";
-import { isLibraryComponent } from "@/lib/designSystem/ownership";
+import { LINT_RULE_CATALOG, LINT_RULE_IDS, type Finding, type LintRuleId, type Severity } from "@/lib/designLint";
 import { THEME_COLLECTION_ID } from "@/types/variable";
-import type { EmbedNode } from "@/types/scene";
 import { Button } from "@/components/ui/button";
 import { PanelEmptyState } from "@/components/PanelEmptyState";
 import { cn } from "@/lib/utils";
+import { plural } from "@/lib/designLint/plural";
 import { useLintAutoRun } from "@/hooks/useLintAutoRun";
 
 const RULE_LABELS: Record<LintRuleId, string> = {
@@ -29,7 +27,6 @@ const SEVERITY_CLASS: Record<Severity, string> = {
   info: "bg-secondary text-text-muted",
 };
 
-const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 function ModePicker() {
   const mode = useLintStore((s) => s.mode);
@@ -65,6 +62,7 @@ function Summary() {
   const otherPages = useLintStore((s) => s.otherPages);
   const truncated = useLintStore((s) => s.truncated);
   const scanTruncated = useLintStore((s) => s.scanTruncated);
+  const partial = useLintStore((s) => s.partial);
   if (!summary) return null;
   return (
     <div className="flex flex-col gap-1 text-xs text-text-muted">
@@ -72,14 +70,15 @@ function Summary() {
         {plural(summary.errors, "error")}, {plural(summary.warnings, "warning")}, {summary.info} info
       </p>
       <p>
-        Checked {plural(summary.scanned.nodes, "layer")} and {plural(summary.scanned.embeds, "embed")} on this page.
+        Checked {plural(summary.nodes, "layer")} and {plural(summary.embeds, "embed")} on this page.
       </p>
       {otherPages > 0 && (
         <p data-testid="lint-other-pages">
           {plural(otherPages, "more finding")} in embeds on other pages. Open that page to fix {otherPages === 1 ? "it" : "them"}.
         </p>
       )}
-      {scanTruncated && <p>The check stopped at a size limit, so part of the design was not checked.</p>}
+      {partial && <p>The quick check stopped early to keep the editor responsive. Select Check again for a full check.</p>}
+      {scanTruncated && !partial && <p>The check stopped at a size limit, so part of the design was not checked.</p>}
       {truncated && !scanTruncated && <p>Showing the first findings only.</p>}
     </div>
   );
@@ -116,9 +115,8 @@ function RuleFilters({ counts }: { counts: Partial<Record<LintRuleId, number>> }
 function FindingRow({ finding }: { finding: Finding }) {
   const select = useLintStore((s) => s.select);
   const fix = useLintStore((s) => s.fix);
-  const node = useSceneStore((s) => s.nodesById[finding.nodeId]);
-  const inLibrary = node?.type === "embed" && isLibraryComponent((node as unknown as EmbedNode).component);
-  const fixable = isFixable(finding) && !inLibrary;
+  const fixable = useLintStore((s) => !!s.fixable[finding.id]);
+  const inLibrary = useLintStore((s) => !!s.library[finding.id]);
   const changesValue = finding.fix?.kind === "bind-number" && finding.fix.changesValue;
   return (
     <li data-testid="lint-finding" data-finding-id={finding.id} className="flex flex-col gap-1.5 border-b border-border-light px-3 py-2">
@@ -158,7 +156,8 @@ function FindingRow({ finding }: { finding: Finding }) {
 function RuleGroup({ rule, findings }: { rule: LintRuleId; findings: Finding[] }) {
   const fixAll = useLintStore((s) => s.fixAll);
   const headingId = useId();
-  const fixable = findings.filter(isFixable).length;
+  const fixableIds = useLintStore((s) => s.fixable);
+  const fixable = findings.filter((f) => fixableIds[f.id]).length;
   const info = LINT_RULE_CATALOG.find((r) => r.id === rule);
   return (
     <section aria-labelledby={headingId} data-testid={`lint-group-${rule}`}>
@@ -220,7 +219,8 @@ export function LintPanelContent() {
         .filter((g) => g.items.length > 0),
     [findings, ruleFilter],
   );
-  const fixableTotal = findings.filter(isFixable).length;
+  const fixableIds = useLintStore((s) => s.fixable);
+  const fixableTotal = findings.filter((f) => fixableIds[f.id]).length;
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="lint-panel">
@@ -230,7 +230,7 @@ export function LintPanelContent() {
             Fix all
           </Button>
         )}
-        <Button size="xs" variant="outline" onClick={run} aria-label="Check again">
+        <Button size="xs" variant="outline" onClick={() => run()} aria-label="Check again">
           <ArrowClockwiseIcon aria-hidden />
           Check again
         </Button>

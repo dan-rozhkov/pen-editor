@@ -40,11 +40,12 @@ describe("applyLintFixes", () => {
     expect(node("hardcodedColor").fillBinding).toBeUndefined();
   });
 
-  it("re-validates against earlier fixes of the same run", () => {
+  it("skips a second fix that wants a different token for a target bound earlier in the run", () => {
     const [finding] = forNode("hardcodedColor", "hardcoded-value");
-    const result = applyLintFixes([finding, finding]);
-    expect(result.applied).toHaveLength(1);
-    expect(result.skipped.map((s) => s.reason)).toEqual(["stale"]);
+    const rival = { ...finding, id: "rival", fix: { ...finding.fix!, variableId: "v-brand" } } as Finding;
+    const result = applyLintFixes([finding, rival]);
+    expect(result.applied).toEqual([finding.id]);
+    expect(result.skipped).toEqual([{ id: "rival", reason: "stale" }]);
   });
 
   it("never touches a library component or a finding on another page", () => {
@@ -78,5 +79,19 @@ describe("applyLintFixes", () => {
     expect(html("literalEmbed")).toContain("color:var(--accent)");
     expect(html("literalEmbed")).toContain("padding:var(--space-m)");
     expect(forNode("staleEmbed", "component-drift")).toEqual([]);
+  });
+
+  it("treats a target already bound to the same token this run as done, and replaces every occurrence", () => {
+    const [a] = forNode("hardcodedColor", "hardcoded-value");
+    const twin = { ...a, id: "twin" };
+    const result = applyLintFixes([a, twin]);
+    expect(result.applied).toEqual([a.id, "twin"]);
+    expect(result.skipped).toEqual([]);
+
+    useSceneStore.getState().updateNode("literalEmbed", { htmlContent: `<div style="box-shadow:#3366ff 0 0 1px, #3366ff 0 0 2px">x</div>` } as Partial<FlatSceneNode>);
+    const fix = { kind: "embed-replace" as const, nodeId: "literalEmbed", property: "box-shadow", from: "#3366ff", to: "var(--brand)" };
+    const pageId = buildLintInput().pageId;
+    applyLintFixes([{ id: "x", rule: "embed-literal", severity: "warning", nodeId: "literalEmbed", pageId, message: "", fix }]);
+    expect(html("literalEmbed")).toBe(`<div style="box-shadow:var(--brand) 0 0 1px, var(--brand) 0 0 2px">x</div>`);
   });
 });
