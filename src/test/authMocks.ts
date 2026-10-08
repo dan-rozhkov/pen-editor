@@ -54,6 +54,18 @@ export const authClientMock = {
     continue: vi.fn(),
   },
   apiKey: { create: vi.fn(), list: vi.fn(), delete: vi.fn() },
+  organization: {
+    list: vi.fn(),
+    create: vi.fn(),
+    delete: vi.fn(),
+    leave: vi.fn(),
+    getFullOrganization: vi.fn(),
+    inviteMember: vi.fn(),
+    cancelInvitation: vi.fn(),
+    updateMemberRole: vi.fn(),
+    removeMember: vi.fn(),
+    acceptInvitation: vi.fn(),
+  },
 };
 
 /** Fresh call history + happy-path defaults; call from beforeEach. */
@@ -79,6 +91,12 @@ export function resetAuthMocks(): void {
   oauth2.getConsents.mockReset().mockResolvedValue(ok([]));
   apiKey.create.mockReset().mockResolvedValue(ok({ key: "sf_secret" }));
   apiKey.list.mockReset().mockResolvedValue(ok({ apiKeys: [] }));
+  const org = authClientMock.organization;
+  for (const fn of [org.create, org.delete, org.leave, org.inviteMember, org.cancelInvitation, org.updateMemberRole, org.removeMember, org.acceptInvitation]) {
+    fn.mockReset().mockResolvedValue(ok());
+  }
+  org.list.mockReset().mockResolvedValue(ok([]));
+  org.getFullOrganization.mockReset().mockResolvedValue(ok({ members: [], invitations: [] }));
   setMockSession(null);
   resetAuthConfigCache();
   useAuthStore.setState({ status: "unknown", userId: null });
