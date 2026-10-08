@@ -122,7 +122,14 @@ export interface DesignSystemResult {
   collections: DesignSystemCollection[];
   tokens?: DesignSystemToken[];
   components?: DesignSystemComponent[];
-  lint?: { rules: LintRuleInfo[]; available: boolean };
+  lint?: {
+    rules: LintRuleInfo[];
+    available: boolean;
+    /** Findings per rule id under the resolved mode context. Present only when the caller added it. */
+    counts?: Record<string, number>;
+    /** True when the count scan stopped at its budget, so `counts` may be low. */
+    countsTruncated?: boolean;
+  };
   truncated: boolean;
   hint?: string;
 }

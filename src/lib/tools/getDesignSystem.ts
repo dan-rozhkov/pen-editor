@@ -6,9 +6,15 @@ import { countUsage } from "@/store/componentOps";
 import { buildDesignSystem } from "@/lib/designSystem";
 import type { ComponentInput, DesignSystemArgs, DesignSystemSection } from "@/lib/designSystem";
 import type { VariableScope } from "@/types/variable";
+import { LINT_RULE_CATALOG, buildLintInput, runDesignLint } from "@/lib/designLint";
 import type { ToolHandler } from "../toolRegistry";
 
 const SECTIONS: readonly DesignSystemSection[] = ["tokens", "components", "lint"];
+// The counts scan is a side dish of get_design_system, so its budget is far
+// smaller than lint_design's own (LINT_BUDGET_MS).
+const LINT_COUNT_BUDGET_MS = 2_000;
+const LINT_COUNT_MAX_NODES = 20_000;
+const LINT_COUNT_MAX_EMBEDS = 50;
 const STATUSES = ["draft", "stable", "deprecated"] as const;
 
 function stringList(x: unknown): string[] | undefined {
@@ -61,6 +67,7 @@ export const getDesignSystem: ToolHandler = async (args) => {
     warnings: duplicateKeyWarnings(master.key),
   }));
 
+  const parsed = readArgs(args ?? {});
   const result = buildDesignSystem(
     {
       variables,
@@ -68,10 +75,27 @@ export const getDesignSystem: ToolHandler = async (args) => {
       modeContext: useThemeStore.getState().modeContext,
       components,
       savedScopes: useDesignSystemScopeStore.getState().scopes,
-      // The lint rule catalog arrives with the lint engine; none is registered yet.
-      lintRules: [],
+      lintRules: LINT_RULE_CATALOG.map((r) => ({
+        id: r.id,
+        severity: r.defaultSeverity,
+        description: r.description,
+        autoFix: r.autoFix,
+      })),
     },
-    readArgs(args ?? {}),
+    parsed,
   );
+  // Counting runs the whole lint engine, so it happens only when the caller
+  // asked for the lint section by name (the default sections never pay for it).
+  if (result.lint && parsed.include?.includes("lint")) {
+    const lint = runDesignLint(buildLintInput(), {
+      modes: [result.modeContext],
+      limit: 1,
+      maxNodes: LINT_COUNT_MAX_NODES,
+      maxEmbeds: LINT_COUNT_MAX_EMBEDS,
+      budgetMs: LINT_COUNT_BUDGET_MS,
+    });
+    result.lint.counts = lint.summary.byRule;
+    if (lint.scanTruncated) result.lint.countsTruncated = true;
+  }
   return JSON.stringify(result);
 };

@@ -88,6 +88,19 @@ const NODE_TYPES = [
   "connector",
 ] as const;
 
+// Must equal LINT_RULE_IDS (src/lib/designLint/types.ts). Not imported: this
+// file is also loaded by the Vite manifest plugin, outside the `@/` alias.
+// webmcpContract.test.ts pins the two lists together.
+const LINT_RULE_IDS = [
+  "hardcoded-value",
+  "off-scale-value",
+  "contrast",
+  "deprecated-token",
+  "deprecated-component",
+  "embed-literal",
+  "component-drift",
+] as const;
+
 const readOnly: ToolAnnotationHints = {
   readOnlyHint: true,
   // Everything these tools return is authored inside the user's document —
@@ -316,6 +329,54 @@ export const WEBMCP_TOOL_SPECS: readonly WebMcpToolSpec[] = [
     // each component uses, their descriptions). sharedViewRedaction.ts cannot
     // walk that shape, so a shared canvas gets no design-system tool at all —
     // the same reasoning as read_embed_html.
+    withheldOnSharedView: true,
+  },
+  {
+    name: "lint_design",
+    description:
+      "Check the design against its design system and report findings: raw colors and numbers that should be tokens, values near a token, text contrast below WCAG AA, deprecated tokens and components, raw values in embed HTML, and component instances that are out of date. " +
+      "Read-only: it changes nothing. Each finding names the node, the rule, the severity, and a fix hint. Call it with no arguments to check the active page in the current mode. " +
+      "Pass `nodeIds` to check part of the page, `rules` or `severity` to narrow the check, and `limit` to cap the findings. " +
+      "Pass `mode` to check one Theme mode (for example \"dark\") or \"all\" to check every mode context of the document.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        nodeIds: {
+          type: "array",
+          items: { type: "string" },
+          description: "Node ids to check, with their descendants. Omit it to check the active page.",
+        },
+        rules: {
+          type: "array",
+          items: { type: "string", enum: [...LINT_RULE_IDS] },
+          description: "Rule ids to run. Omit it to run all rules.",
+        },
+        // The backend also accepts an object that maps collection names to
+        // mode names. The validator subset has no union type, so this surface
+        // publishes the string form alone ("all" or a Theme mode name).
+        mode: {
+          type: "string",
+          description:
+            'The string "all" checks every mode context of the document (at most 8). Any other string is a mode name of the Theme collection, for example "dark". Omit it to check only the current mode context of the document.',
+        },
+        severity: {
+          type: "string",
+          enum: ["error", "warning", "info"],
+          description: "Minimum severity to return. Omit it to return all findings.",
+        },
+        limit: {
+          type: "integer",
+          minimum: 1,
+          maximum: 1000,
+          description: "Maximum number of findings to return. Default 100. The result sets `truncated` when it cuts findings.",
+        },
+      },
+      additionalProperties: false,
+    },
+    annotations: readOnly,
+    mutating: false,
+    // Findings quote node text and embed HTML values. sharedViewRedaction.ts
+    // cannot walk that shape, so a shared canvas gets no lint tool at all.
     withheldOnSharedView: true,
   },
   {

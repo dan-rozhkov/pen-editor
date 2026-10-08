@@ -119,3 +119,37 @@ describe("get_design_system and get_variables resolve identically", () => {
     expect(values(ds.tokens ?? [])).toEqual(values(gv.variables));
   });
 });
+
+describe("get_design_system lint section", () => {
+  beforeEach(() => {
+    resetWorld();
+    useVariableStore.setState({
+      collections: [makeThemeCollection()],
+      variables: [makeThemeVariable("--ink", "#111111", "#eeeeee")],
+    });
+  });
+
+  type LintResult = { lint?: { rules: { id: string; severity: string; description: string; autoFix: boolean }[]; available: boolean; counts?: Record<string, number>; countsTruncated?: boolean } };
+  const runLint = async (args: Record<string, unknown>) => JSON.parse(await getDesignSystem(args)) as LintResult;
+
+  it("omits the lint section by default", async () => {
+    expect((await runLint({})).lint).toBeUndefined();
+  });
+
+  it("returns the rule catalog without counts when lint is included", async () => {
+    const { lint } = await runLint({ include: ["lint"] });
+    expect(lint?.available).toBe(true);
+    expect(lint?.rules.map((r) => r.id)).toContain("hardcoded-value");
+    expect(lint?.rules.every((r) => ["error", "warning", "info"].includes(r.severity) && r.description.length > 0)).toBe(true);
+    expect(lint?.counts).toBeDefined();
+    expect(lint?.countsTruncated).toBeUndefined();
+  });
+
+  it("counts findings by rule only when lint is explicitly included", async () => {
+    seedEmbed("e1", '<div style="color:#111111">Hi</div>');
+    const withLint = await runLint({ include: ["tokens", "lint"] });
+    expect(withLint.lint?.counts?.["embed-literal"]).toBeGreaterThan(0);
+    const without = await runLint({ include: ["tokens"] });
+    expect(without.lint).toBeUndefined();
+  });
+});

@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
 import { WEBMCP_ALLOWED_NAMES, WEBMCP_TOOL_SPECS } from "@/lib/webmcp/schemas";
+import { LINT_RULE_IDS } from "@/lib/designLint";
 import { toolHandlers } from "@/lib/toolRegistry";
 
 /**
@@ -75,6 +76,11 @@ describe("WebMCP tool specs", () => {
   // publish_to_showcase publishes a design to a public gallery: irreversible
   // from the agent's side and consequential by any reading. It is not in the
   // MCP subset and must not drift into this one.
+  it("publishes lint_design's rule enum in step with the lint engine", () => {
+    const spec = WEBMCP_TOOL_SPECS.find((s) => s.name === "lint_design")!;
+    expect(spec.inputSchema.properties!.rules.items?.enum).toEqual([...LINT_RULE_IDS]);
+  });
+
   it("publishes nothing consequential", () => {
     const names = WEBMCP_TOOL_SPECS.map((spec) => spec.name);
     for (const forbidden of ["publish_to_showcase", "create_plugin", "ask_user"]) {
@@ -103,6 +109,7 @@ describe.runIf(backendExists)("WebMCP schemas against the backend zod shapes", (
       snapshot_layout: mod.snapshotLayoutInputShape as Record<string, ZodLike>,
       get_variables: mod.getVariablesInputShape as Record<string, ZodLike>,
       get_design_system: mod.getDesignSystemInputShape as Record<string, ZodLike>,
+      lint_design: mod.lintDesignInputShape as Record<string, ZodLike>,
       set_variables: mod.setVariablesInputShape as Record<string, ZodLike>,
       batch_design: mod.batchDesignInputShape as Record<string, ZodLike>,
       read_comments: mod.readCommentsInputShape as Record<string, ZodLike>,

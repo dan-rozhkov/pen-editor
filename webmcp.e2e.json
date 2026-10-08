@@ -35,6 +35,13 @@
       "$comment": "Withheld on a /c/:shareId shared canvas (withheldOnSharedView): the result carries data read out of component master HTML."
     },
     {
+      "name": "lint_design",
+      "risk": "read-only",
+      "expectedAnnotations": { "readOnly": true, "untrustedContent": true },
+      "input": { "limit": 10 },
+      "$comment": "Withheld on a /c/:shareId shared canvas (withheldOnSharedView): findings quote node text."
+    },
+    {
       "name": "get_styles",
       "risk": "read-only",
       "expectedAnnotations": { "readOnly": true, "untrustedContent": true },

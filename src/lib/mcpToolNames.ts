@@ -16,11 +16,8 @@
 // find_empty_space_on_canvas, get_design_system, the 7 style tools
 // (get_styles, get_text_styles, set_styles, set_text_styles, apply_fill_style,
 // apply_text_style, apply_effect_style) and the 4 component tools
-// (define_component, extract_component, detach_instance, delete_component).
-// TODO(lint_design): the backend list also has `lint_design` (28 names in
-// all); it lands from another branch together with its frontend handler and
-// is added here then. Until then the backend-sync test in toolContract.test.ts
-// reports exactly that one gap.
+// (define_component, extract_component, detach_instance, delete_component)
+// and lint_design (28 names in all).
 // This one still has to be hand-copied across the repo boundary —
 // pen-editor-backend/test/mcp-tools-contract.test.ts pins the same list on
 // the backend side — but every consumer *inside this repo* must import this
@@ -53,6 +50,7 @@ export const BRIDGED_MCP_TOOL_NAMES = [
   "extract_component",
   "detach_instance",
   "delete_component",
+  "lint_design",
 ] as const;
 
 // The 3 client-side static guideline tools (src/lib/tools/staticTools.ts).

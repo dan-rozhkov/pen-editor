@@ -259,13 +259,13 @@ of its entry bundle, and this module statically imports all of it.
   already exists and `getModelContext()` finds it — and the two names must
   stay the *same* object, or a caller that registers through one and executes
   through the other gets "Unknown tool".
-- **21 tools**, a curated subset of the desktop bridge's
+- **23 tools**, a curated subset of the desktop bridge's
   (`DESKTOP_MCP_TOOL_NAMES`), of which eight write: `batch_design`,
   `set_variables`, `edit_embed_html`, `rename_layers`, the three comment writers
   and `attach_local_repo` (session state). The design-system readers
-  (`get_design_system`, `get_styles`, `get_text_styles`) are read-only; the
+  (`get_design_system`, `get_styles`, `get_text_styles`) and `lint_design` are read-only; the
   style writers and the component tools are on `/mcp` and the desktop bridge
-  only, never here. `get_design_system` is `withheldOnSharedView`. Nothing consequential is exposed —
+  only, never here. `get_design_system` and `lint_design` are `withheldOnSharedView`. Nothing consequential is exposed —
   `publish_to_showcase` in particular is not, and `webmcpContract.test.ts`
   fails if it drifts in.
 - **Schemas live in `schemas.ts`** because they must ship in the bundle, which
