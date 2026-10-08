@@ -1,5 +1,7 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { buildOutline, grepHtml } from "@/lib/embedHtmlEdit/readViews";
+import { embedTextForView } from "@/lib/embedHtmlEdit/embedTextForView";
+import { selectComponentRegistry } from "@/store/componentRegistry";
 import type { EmbedNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
 
@@ -24,7 +26,8 @@ export const readEmbedHtml: ToolHandler = async (args) => {
   }
 
   const embed = node as unknown as EmbedNode;
-  const html = embed.htmlContent;
+  // Compact (default) shows each canonical component region as a `<c-key>` tag.
+  const { text: html, view } = embedTextForView(embed, args.view, selectComponentRegistry());
 
   const mode = args.mode === "grep" || args.mode === "full" ? args.mode : "outline";
 
@@ -34,13 +37,14 @@ export const readEmbedHtml: ToolHandler = async (args) => {
       return JSON.stringify({ error: "pattern is required when mode is 'grep'" });
     }
     const grep = grepHtml(html, pattern, intArg(args.contextLines, 2, 0, 20));
-    return JSON.stringify({ nodeId, mode, ...grep });
+    return JSON.stringify({ nodeId, mode, view, ...grep });
   }
 
   if (mode === "full") {
     return JSON.stringify({
       nodeId,
       mode,
+      view,
       html,
       ...(html.length > FULL_WARN_THRESHOLD
         ? {
@@ -55,6 +59,7 @@ export const readEmbedHtml: ToolHandler = async (args) => {
   return JSON.stringify({
     nodeId,
     mode,
+    view,
     outline: buildOutline(html, intArg(args.maxDepth, 4, 1, 12)),
   });
 };

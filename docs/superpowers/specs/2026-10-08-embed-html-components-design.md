@@ -153,7 +153,7 @@ The backend runner has no scene graph. V1 stubs the four component tools there l
 ## Rollout
 
 1. Master meta, `expandComponentTags`, `reconcileComponent`, triggers, write guard, the four tools, `get_editor_state.components`.
-2. Compact read view in `read_embed_html`/`edit_embed_html`, prompt rule, `build-design-system` skill.
+2. Compact read view in `read_embed_html`/`edit_embed_html`, streaming preview expansion, prompt rule, `build-design-system` skill. **Frontend half done:** `collapseComponentRegions` (`src/lib/embedComponents/collapse.ts`), `view` on both tools (compact by default; a compact-view miss retries on the expanded text and says so; a master is always read and edited as stored), and `repairAndExpandPartialHtml` in the streaming preview. Backend schema, prompt rule and skill are separate.
 3. Components panel (list, usage count, go to master), picker "Edit main component" / "Detach".
 
 ## Risks

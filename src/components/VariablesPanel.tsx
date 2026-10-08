@@ -55,6 +55,7 @@ import { Input } from "./ui/input";
 import { PanelEmptyState } from "./PanelEmptyState";
 import { AliasPicker } from "./AliasPicker";
 import { VariableDetails } from "./VariableDetails";
+import { ImportFromRepoDialog } from "./ImportFromRepoDialog";
 
 // Type badge labels and colors
 const typeBadge: Record<VariableType, { label: string; className: string }> = {
@@ -555,6 +556,7 @@ export function VariablesPanelContent() {
   const [selectedId, setSelectedId] = useState<string>(THEME_COLLECTION_ID);
   const [renamingCollection, setRenamingCollection] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   // The selected collection may have been deleted (or undone away): fall back to the first.
   const active = collections.find((c) => c.id === selectedId) ?? collections[0];
@@ -636,6 +638,23 @@ export function VariablesPanelContent() {
           Variables
         </span>
         <ScopesMenu activeCollection={active} searchQuery={searchQuery} />
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="Variables menu"
+            className="p-1 rounded hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
+          >
+            <DotsThreeIcon className="size-4" weight="bold" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="min-w-[160px] bg-popover text-popover-foreground ring-foreground/10 rounded-lg shadow-md ring-1"
+          >
+            <DropdownMenuItem className="text-xs cursor-pointer" onClick={() => setImportOpen(true)}>
+              Import from repo…
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <ImportFromRepoDialog open={importOpen} onOpenChange={setImportOpen} />
         <AddVariableDropdown onAdd={handleAddVariable}>
           <Tooltip>
             <TooltipTrigger

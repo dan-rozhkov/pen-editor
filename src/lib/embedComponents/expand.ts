@@ -48,12 +48,12 @@ function decodeAttr(value: string): string {
 }
 
 /** Same-length copy of `html` with scripts, styles and comments blanked. */
-function maskDeadRanges(html: string): string {
+export function maskDeadRanges(html: string): string {
   return html.replace(DEAD_RANGES, (m) => " ".repeat(m.length));
 }
 
 /** End index (exclusive) of the tag opened at `from`, quote-aware; -1 if cut off. */
-function findTagEnd(html: string, from: number): number {
+export function findTagEnd(html: string, from: number): number {
   let quote: string | null = null;
   for (let i = from; i < html.length; i++) {
     const ch = html[i];
@@ -118,11 +118,24 @@ function tokenize(
   return tokens;
 }
 
-function buildTree(tokens: TagToken[], warnings: string[]): TagNode[] {
+function buildTree(
+  tokens: TagToken[],
+  warnings: string[],
+  partialEnd: number | null,
+  openStarts?: number[],
+): TagNode[] {
   const roots: TagNode[] = [];
   const stack: TagNode[] = [];
   const attach = (node: TagNode) => {
     (stack.length > 0 ? stack[stack.length - 1].children : roots).push(node);
+  };
+  /** Never-closed nodes stay as written; the nodes that DID close inside them are kept. */
+  const abandon = (dropped: TagNode[], into: TagNode[]) => {
+    for (const d of dropped) {
+      warnings.push(`<c-${d.name}> was never closed and was left as written`);
+      openStarts?.push(d.start);
+      into.push(...d.children);
+    }
   };
   for (const t of tokens) {
     if (t.type === "self") {
@@ -138,18 +151,23 @@ function buildTree(tokens: TagToken[], warnings: string[]): TagNode[] {
     } else {
       const idx = stack.map((n) => n.name).lastIndexOf(t.name);
       if (idx === -1) continue; // stray closing tag
-      // Anything opened after the match and never closed is abandoned.
-      for (const dropped of stack.splice(idx + 1)) {
-        warnings.push(`<c-${dropped.name}> was never closed and was left as written`);
-      }
+      abandon(stack.splice(idx + 1), stack[idx].children);
       const node = stack.pop() as TagNode;
       node.end = t.end;
       node.innerEnd = t.start;
       attach(node);
     }
   }
-  for (const dropped of stack) {
-    warnings.push(`<c-${dropped.name}> was never closed and was left as written`);
+  if (partialEnd !== null) {
+    // A stream cut the input: open nodes are closed at the end of the text.
+    while (stack.length > 0) {
+      const node = stack.pop() as TagNode;
+      node.end = partialEnd;
+      node.innerEnd = partialEnd;
+      attach(node);
+    }
+  } else {
+    abandon(stack.splice(0), roots);
   }
   return roots;
 }
@@ -196,6 +214,31 @@ export function mentionsRegisteredTag(html: string, registry: ComponentRegistry)
   return false;
 }
 
+export interface ExpandOptions {
+  /** Input is a stream prefix: tags still open are closed at the end of the text. */
+  partial?: boolean;
+  /** Skip the reconcile pass (no managed `<style>`, no rev check). Default true. */
+  reconcile?: boolean;
+}
+
+/**
+ * End index of the last component node that is complete, so the text before
+ * it expands the same whatever follows (0 when there is none). Streaming
+ * previews cache the expansion of that prefix.
+ */
+export function stableExpansionEnd(html: string, registry: ComponentRegistry): number {
+  if (!html.includes("<c-")) return 0;
+  const masked = maskDeadRanges(html);
+  const tokens = tokenize(html, masked, [], (n) => registry.has(n));
+  const openStarts: number[] = [];
+  const roots = liftOrphanSlots(buildTree(tokens, [], null, openStarts));
+  // A node closed INSIDE a never-closed one is not stable: the open tag
+  // before it may still become a component.
+  const limit = openStarts.length > 0 ? Math.min(...openStarts) : Infinity;
+  const stable = roots.filter((r) => r.end <= limit);
+  return stable.length > 0 ? stable[stable.length - 1].end : 0;
+}
+
 /**
  * Expand `<c-key ...>` tags of REGISTERED keys into stored component
  * regions, then reconcile (managed `<style>`, nested components, rev).
@@ -209,7 +252,11 @@ export function mentionsRegisteredTag(html: string, registry: ComponentRegistry)
  * - Attributes that name a declared variant axis become `data-v-*`; `style`
  *   and `id` stay on the instance; anything else is dropped with a warning.
  */
-export function expandComponentTags(html: string, registry: ComponentRegistry): ExpandResult {
+export function expandComponentTags(
+  html: string,
+  registry: ComponentRegistry,
+  options: ExpandOptions = {},
+): ExpandResult {
   const result: ExpandResult = { html, unknownTags: [], warnings: [] };
   if (!html || !html.includes("<c-")) return result;
 
@@ -221,7 +268,7 @@ export function expandComponentTags(html: string, registry: ComponentRegistry): 
 
   const masked = maskDeadRanges(html);
   const tokens = tokenize(html, masked, result.unknownTags, (n) => masters.has(n));
-  const roots = liftOrphanSlots(buildTree(tokens, result.warnings));
+  const roots = liftOrphanSlots(buildTree(tokens, result.warnings, options.partial ? html.length : null));
   if (roots.length === 0) return result;
 
   const renderComponent = (node: TagNode): string => {
@@ -271,6 +318,6 @@ export function expandComponentTags(html: string, registry: ComponentRegistry): 
   };
 
   const expanded = renderNodes(html, roots, 0, html.length, renderComponent, false);
-  result.html = reconcileHtml(expanded, registry);
+  result.html = options.reconcile === false ? expanded : reconcileHtml(expanded, registry);
   return result;
 }
