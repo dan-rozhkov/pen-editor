@@ -1,6 +1,19 @@
 // src/lib/designTokens/fromDtcg.ts
-import type { Variable, VariableType } from "@/types/variable";
-import { generateVariableId } from "@/types/variable";
+import type {
+  ModeId,
+  Variable,
+  VariableCollection,
+  VariableModeValue,
+  VariableType,
+} from "@/types/variable";
+import { generateVariableId, THEME_COLLECTION_ID } from "@/types/variable";
+import {
+  buildVariableIndex,
+  finalizeVariables,
+  makeThemeCollection,
+  resolveVariable,
+  wouldCreateCycle,
+} from "@/lib/variables";
 import type { FillStyle, EffectStyle } from "@/types/style";
 import { generateFillStyleId, generateEffectStyleId } from "@/types/style";
 import type { TextStyle } from "@/types/textStyle";
@@ -20,6 +33,8 @@ import { walkTokens } from "./tokenPath";
 
 export interface ImportResult {
   variables: Variable[];
+  /** Collections the imported variables live in (Theme, "Tokens" for foreign files, or the file's own). */
+  collections: VariableCollection[];
   fillStyles: FillStyle[];
   effectStyles: EffectStyle[];
   textStyles: TextStyle[];
@@ -61,7 +76,8 @@ function classify(token: DtcgToken, segments: string[]): { source: PenTokenSourc
     return { source: "fillStyle", id: undefined };
   }
   switch (token.$type) {
-    case "color": return { source: "variable", id: undefined };
+    case "color":
+    case "number": return { source: "variable", id: undefined };
     case "gradient": return { source: "fillStyle", id: undefined };
     case "shadow": return { source: "effectStyle", id: undefined };
     case "typography": return { source: "textStyle", id: undefined };
@@ -82,26 +98,124 @@ export function fromDtcg(doc: DtcgDocument): { result: ImportResult; warnings: s
     collected.push({ token, segments, source: c.source, id: c.id });
   });
 
-  const result: ImportResult = { variables: [], fillStyles: [], effectStyles: [], textStyles: [] };
-  const pathToVar = new Map<string, { id: string; value: string }>(); // "brand.500" → variable (for alias resolution)
+  const result: ImportResult = { variables: [], collections: [], fillStyles: [], effectStyles: [], textStyles: [] };
+  const pathToVar = new Map<string, Variable>(); // "brand.500" → variable (for alias resolution)
+  const collectionsById = new Map<string, VariableCollection>();
+  const collectionsByName = new Map<string, VariableCollection>();
+  const registerCollection = (c: VariableCollection): VariableCollection => {
+    const hit = collectionsById.get(c.id) ?? collectionsByName.get(c.name);
+    if (hit) return hit;
+    collectionsById.set(c.id, c);
+    collectionsByName.set(c.name, c);
+    result.collections.push(c);
+    return c;
+  };
 
-  // Pass 1: variables (so fills can resolve aliases).
+  // Pass 1: variables and their collections; alias values stay raw until every path is known.
+  const rawByVar = new Map<string, Record<ModeId, string | number>>();
   for (const c of collected) {
     if (c.source !== "variable") continue;
     const ext = readPenExt(c.token);
     const type: VariableType = c.token.$type === "number" ? "number" : c.token.$type === "color" ? "color" : "string";
-    const value = String(c.token.$value);
+
+    // Which collection: the file's own, else Theme for any pen token (legacy files), else "Tokens".
+    let collection: VariableCollection;
+    if (ext?.collection) {
+      collection = registerCollection({
+        id: ext.collection.id,
+        name: ext.collection.name,
+        modes: ext.collection.modes,
+        defaultModeId: ext.collection.defaultModeId,
+      });
+    } else if (ext) {
+      collection = registerCollection(makeThemeCollection());
+    } else {
+      collection = registerCollection({
+        id: "tokens",
+        name: "Tokens",
+        modes: [{ id: "default", name: "Default" }],
+        defaultModeId: "default",
+      });
+    }
+
+    const base = c.token.$value as string | number;
+    let raw: Record<ModeId, string | number>;
+    if (ext?.modes) {
+      raw = {};
+      for (const [modeId, value] of Object.entries(ext.modes)) {
+        if (collection.modes.some((m) => m.id === modeId)) raw[modeId] = value;
+        else warnings.push(`Token "${c.segments.join("/")}" has a value for unknown mode "${modeId}"; skipped.`);
+      }
+      if (raw[collection.defaultModeId] === undefined) raw[collection.defaultModeId] = base;
+    } else if (collection.id === THEME_COLLECTION_ID && ext?.themes) {
+      raw = { light: base, dark: ext.themes.dark };
+    } else if (collection.id === THEME_COLLECTION_ID) {
+      raw = { light: base, dark: base };
+    } else {
+      raw = { [collection.defaultModeId]: base };
+    }
+
     const variable: Variable = {
       id: c.id ?? generateVariableId(),
-      name: nameFromSegments(c.segments, "variable"),
+      name: ext?.name ?? nameFromSegments(c.segments, "variable"),
       type,
-      value,
+      collectionId: collection.id,
+      valuesByMode: {},
+      value: "",
     };
-    if (type === "color" && ext?.themes) {
-      variable.themeValues = { light: value, dark: ext.themes.dark };
-    }
+    const description = c.token.$description;
+    if (description) variable.description = description;
+    if (ext?.scopes) variable.scopes = ext.scopes;
     result.variables.push(variable);
-    pathToVar.set(c.segments.join("."), { id: variable.id, value: variable.value });
+    rawByVar.set(variable.id, raw);
+    pathToVar.set(c.segments.join("."), variable);
+  }
+
+  // Pass 2: literals first, then aliases one by one (cycle and type checked against what is already linked).
+  const aliasPath = (value: unknown): string | undefined =>
+    typeof value === "string" ? ALIAS_RE.exec(value)?.[1] : undefined;
+  const typeDefault = (t: VariableType): string => (t === "color" ? "#000000" : t === "number" ? "0" : "");
+  for (const variable of result.variables) {
+    for (const [modeId, value] of Object.entries(rawByVar.get(variable.id) ?? {})) {
+      if (aliasPath(value) === undefined) variable.valuesByMode![modeId] = String(value);
+    }
+  }
+  const index = buildVariableIndex(result.variables, result.collections);
+  for (const variable of result.variables) {
+    for (const [modeId, value] of Object.entries(rawByVar.get(variable.id) ?? {})) {
+      const path = aliasPath(value);
+      if (path === undefined) continue;
+      const target = pathToVar.get(path);
+      let entry: VariableModeValue = typeDefault(variable.type);
+      if (!target) {
+        warnings.push(`Variable "${variable.name}" references unknown alias ${value}; used a default value.`);
+      } else if (target.type !== variable.type) {
+        warnings.push(`Variable "${variable.name}" aliases ${value} of a different type; used a default value.`);
+      } else if (wouldCreateCycle(index, variable.id, target.id)) {
+        warnings.push(`Variable "${variable.name}" aliasing ${value} would form a cycle; used a default value.`);
+      } else {
+        entry = { alias: target.id };
+      }
+      variable.valuesByMode![modeId] = entry;
+    }
+  }
+  // Pass 2b: deprecation (replacedBy is a "{path}"), mirrors.
+  for (const c of collected) {
+    const ext = readPenExt(c.token);
+    if (c.source !== "variable" || !ext?.deprecated) continue;
+    const variable = pathToVar.get(c.segments.join("."));
+    if (!variable) continue;
+    const { replacedBy, ...rest } = ext.deprecated;
+    variable.deprecated = { ...rest };
+    const target = replacedBy === undefined ? undefined : pathToVar.get(aliasPath(replacedBy) ?? "");
+    if (target) variable.deprecated.replacedBy = target.id;
+    else if (replacedBy !== undefined) warnings.push(`Variable "${variable.name}" is replaced by unknown ${replacedBy}.`);
+  }
+  result.variables = finalizeVariables(result.variables, result.collections);
+  const finalIndex = buildVariableIndex(result.variables, result.collections);
+  for (const [path, v] of pathToVar) {
+    const fresh = finalIndex.byId.get(v.id);
+    if (fresh) pathToVar.set(path, fresh);
   }
 
   // Pass 2: styles.
@@ -134,9 +248,10 @@ export function fromDtcg(doc: DtcgDocument): { result: ImportResult; warnings: s
         const paint: SolidPaint = { id: generateId(), type: "solid", color: "#000000" };
         if (m) {
           const resolved = pathToVar.get(m[1]);
-          if (resolved) {
+          const color = resolved ? resolveVariable(finalIndex, resolved.id, {}) : undefined;
+          if (resolved && color?.ok) {
             paint.colorBinding = { variableId: resolved.id };
-            paint.color = resolved.value;
+            paint.color = color.value;
           } else {
             warnings.push(`Fill style "${name}" references unknown alias ${raw}; left unbound.`);
           }

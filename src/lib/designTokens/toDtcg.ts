@@ -1,5 +1,7 @@
 // src/lib/designTokens/toDtcg.ts
-import type { Variable } from "@/types/variable";
+import type { Variable, VariableCollection, VariableModeValue } from "@/types/variable";
+import { THEME_COLLECTION_ID } from "@/types/variable";
+import { buildVariableIndex, collectionIdOf, modeValuesOf, resolveVariable } from "@/lib/variables";
 import type { FillStyle, EffectStyle } from "@/types/style";
 import type { TextStyle } from "@/types/textStyle";
 import type { ShadowEffect, SolidPaint, GradientPaint } from "@/types/scene";
@@ -8,6 +10,8 @@ import { nameToSegments, segmentsToAlias, setTokenAtPath } from "./tokenPath";
 
 export interface ExportInput {
   variables: Variable[];
+  /** Omit for a legacy document: only the Theme collection (light/dark) exists then. */
+  collections?: VariableCollection[];
   fillStyles: FillStyle[];
   effectStyles: EffectStyle[];
   textStyles: TextStyle[];
@@ -22,35 +26,122 @@ function buildPaintExt(paint: SolidPaint | GradientPaint): PenTokenExtension["pa
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+/** The built-in Theme collection exactly as `makeThemeCollection` creates it (or an equal one). */
+function isStandardTheme(c: VariableCollection): boolean {
+  return (
+    c.id === THEME_COLLECTION_ID &&
+    c.defaultModeId === "light" &&
+    c.modes.length === 2 &&
+    c.modes[0].id === "light" &&
+    c.modes[1].id === "dark" &&
+    c.name === "Theme"
+  );
+}
+
 export function toDtcg(input: ExportInput): { document: DtcgDocument; warnings: string[] } {
   const document: DtcgDocument = {};
   const warnings: string[] = [];
 
-  // variableId → its root path, for alias resolution of bound fills.
+  const index = buildVariableIndex(input.variables, input.collections);
+
+  // variableId → its root path (alias targets, bound fills). A name used by
+  // variables of two collections gets the later collection's name prefixed.
   const varPath = new Map<string, string[]>();
-  for (const v of input.variables) varPath.set(v.id, nameToSegments(v.name));
+  const prefixed = new Set<string>();
+  const nameOwner = new Map<string, string>();
+  for (const v of input.variables) {
+    let segs = nameToSegments(v.name);
+    const key = segs.join(".");
+    const cid = collectionIdOf(v);
+    const owner = nameOwner.get(key);
+    if (owner === undefined) nameOwner.set(key, cid);
+    else if (owner !== cid) {
+      const cname = index.collections.get(cid)?.name ?? cid;
+      segs = [...nameToSegments(cname), ...segs];
+      prefixed.add(v.id);
+      warnings.push(`Variable "${v.name}" exists in several collections; exported as "${segs.join("/")}".`);
+    }
+    varPath.set(v.id, segs);
+  }
+
+  const pathOf = (id: string): string | undefined => {
+    const segs = varPath.get(id);
+    return segs ? segmentsToAlias(segs) : undefined;
+  };
 
   // --- Variables (root) ---
   for (const v of input.variables) {
+    const cid = collectionIdOf(v);
+    const coll = index.collections.get(cid);
+    const values = modeValuesOf(v);
+    const defaultId = coll?.defaultModeId ?? Object.keys(values)[0];
+    const standardTheme = coll !== undefined && isStandardTheme(coll);
+
     const ext: PenTokenExtension = { id: v.id, source: "variable" };
+    const literal = (raw: string): string | number => {
+      if (v.type !== "number") return raw;
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : raw;
+    };
+    const emit = (entry: VariableModeValue): string | number => {
+      if (typeof entry === "string") return literal(entry);
+      const alias = pathOf(entry.alias);
+      if (alias) return alias;
+      warnings.push(`Variable "${v.name}" aliases a deleted variable; wrote its resolved value.`);
+      return literal(v.value);
+    };
+    const defaultEntry = values[defaultId] ?? Object.values(values)[0] ?? v.value;
+    const $value = emit(defaultEntry);
+
+    if (coll && !standardTheme) {
+      ext.collection = { id: coll.id, name: coll.name, modes: coll.modes, defaultModeId: coll.defaultModeId };
+    }
+    if (prefixed.has(v.id)) ext.name = v.name;
+
+    const entries = Object.entries(values);
+    if (standardTheme) {
+      // Dual-write: older importers read `themes.dark`; `modes` only carries what it cannot (aliases, non-color).
+      const dark = values.dark;
+      const darkResolved = resolveVariable(index, v.id, "dark");
+      const lightResolved = resolveVariable(index, v.id, "light");
+      const hasAlias = entries.some(([, e]) => typeof e !== "string");
+      const differs = typeof dark === "string" && dark !== values.light;
+      if (v.type === "color" && darkResolved.ok && lightResolved.ok && darkResolved.value !== lightResolved.value) {
+        ext.themes = { dark: darkResolved.value };
+      }
+      if (hasAlias || (v.type !== "color" && differs)) {
+        ext.modes = Object.fromEntries(entries.map(([m, e]) => [m, emit(e)]));
+      }
+    } else if (coll && coll.modes.length > 1) {
+      ext.modes = Object.fromEntries(entries.map(([m, e]) => [m, emit(e)]));
+    }
+    if (v.scopes?.length) ext.scopes = v.scopes;
+    if (v.deprecated) {
+      const { replacedBy, ...rest } = v.deprecated;
+      ext.deprecated = { ...rest };
+      if (replacedBy !== undefined) {
+        const alias = pathOf(replacedBy);
+        if (alias) ext.deprecated.replacedBy = alias;
+      }
+    }
+
+    const extensions = { "com.peneditor": ext };
     let token: DtcgToken;
     if (v.type === "color") {
-      const light = v.themeValues?.light ?? v.value;
-      if (v.themeValues) ext.themes = { dark: v.themeValues.dark };
-      token = { $type: "color", $value: light, $extensions: { "com.peneditor": ext } };
+      token = { $type: "color", $value, $extensions: extensions };
     } else if (v.type === "number") {
-      const n = Number(v.value);
-      if (Number.isFinite(n)) {
-        token = { $type: "number", $value: n, $extensions: { "com.peneditor": ext } };
+      if (typeof $value === "number" || (typeof $value === "string" && $value.startsWith("{"))) {
+        token = { $type: "number", $value, $extensions: extensions };
       } else {
         warnings.push(`Variable "${v.name}" has a non-numeric value "${v.value}"; emitted as a string.`);
-        token = { $value: v.value, $extensions: { "com.peneditor": ext } };
+        token = { $value, $extensions: extensions };
       }
     } else {
       warnings.push(`Variable "${v.name}" is a string — DTCG has no string type; emitted without $type.`);
-      token = { $value: v.value, $extensions: { "com.peneditor": ext } };
+      token = { $value, $extensions: extensions };
     }
-    if (!setTokenAtPath(document, nameToSegments(v.name), token)) {
+    if (v.description) token.$description = v.description;
+    if (!setTokenAtPath(document, varPath.get(v.id) as string[], token)) {
       warnings.push(`Token name "${v.name}" collides with another token; previous value was overwritten.`);
     }
   }
