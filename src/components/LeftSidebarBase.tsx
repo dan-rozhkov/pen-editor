@@ -10,6 +10,7 @@ import { PagesPanel } from "./PagesPanel";
 import { VariablesPanelContent } from "./VariablesPanel";
 import { TextStylesPanelContent } from "./TextStylesPanel";
 import { StylesPanelContent } from "./StylesPanel";
+import { ComponentsPanel } from "./ComponentsPanel";
 import { CommentsPanelContent } from "./CommentsPanel";
 import { LeftSidebarResizer } from "./LeftSidebarResizer";
 import { useSceneStore } from "@/store/sceneStore";
@@ -147,6 +148,13 @@ export function LeftSidebarBase({ hiddenSections, renderHeader, renderAgents }: 
         {!isMobileClosed && activeSection === "toolbox" && (
           <div className="absolute inset-0 flex flex-col overflow-hidden">
             <PluginsPanel />
+          </div>
+        )}
+
+        {/* Components (embed component registry) */}
+        {!isMobileClosed && activeSection === "components" && (
+          <div className="absolute inset-0 flex flex-col overflow-hidden">
+            <ComponentsPanel />
           </div>
         )}
 

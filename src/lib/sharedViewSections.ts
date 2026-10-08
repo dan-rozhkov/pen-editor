@@ -5,10 +5,10 @@ import type { LeftSection } from "@/store/leftSidebarStore";
 // handlers (src/lib/tools/) mutate the scene stores directly, *below*
 // `canEditScene` — read-only `view` mode never gates them — so removing the
 // way to open the chat (and therefore invoke a tool) is the actual
-// enforcement of "view only" here, not a UI nicety. "toolbox" (plugins) and
-// "comments" (a discussion surface tied to an editable document) are hidden
+// enforcement of "view only" here, not a UI nicety. "toolbox" (plugins), "components"
+// (insert/edit actions) and "comments" (a discussion surface tied to an editable document) are hidden
 // for the same "this isn't your document" reason.
-export const HIDDEN_IN_SHARED_VIEW = new Set<LeftSection>(["agents", "toolbox", "comments"]);
+export const HIDDEN_IN_SHARED_VIEW = new Set<LeftSection>(["agents", "toolbox", "components", "comments"]);
 
 /**
  * The section to actually render, given the persisted user preference and

@@ -22,6 +22,7 @@ import { AppearanceSection } from "@/components/properties/AppearanceSection";
 import { FillSection } from "@/components/properties/FillSection";
 import { StrokeSection } from "@/components/properties/StrokeSection";
 import { EffectsSection } from "@/components/properties/EffectsSection";
+import { EmbedComponentRegionActions } from "@/components/properties/EmbedComponentRegionActions";
 import { TypographySection } from "@/components/properties/TypographySection";
 import type { Effect, SceneNode, TextNode } from "@/types/scene";
 import type { FillKind } from "@/components/properties/fillSectionUtils";
@@ -346,6 +347,10 @@ export function EmbedElementProperties() {
       <div data-testid="embed-element-inspector-header">
         <PropertySection title={layerName}>{null}</PropertySection>
       </div>
+
+      {embedId && path && htmlContent != null && (
+        <EmbedComponentRegionActions embedId={embedId} path={path} htmlContent={htmlContent} />
+      )}
 
       {!resolved ? null : !node ? (
         <div className="px-4 py-3 text-[11px] text-text-muted">

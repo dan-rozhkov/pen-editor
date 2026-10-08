@@ -13,6 +13,7 @@ export type LeftSection =
   | "slides"
   | "agents"
   | "toolbox"
+  | "components"
   | "variables"
   | "textStyles"
   | "styles"
@@ -23,6 +24,7 @@ const LEFT_SECTIONS: LeftSection[] = [
   "slides",
   "agents",
   "toolbox",
+  "components",
   "variables",
   "textStyles",
   "styles",

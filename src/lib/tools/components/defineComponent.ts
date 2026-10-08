@@ -30,6 +30,19 @@ function readVariants(raw: unknown): Record<string, string[]> | null | undefined
   return out;
 }
 
+/** `undefined`: not given. `null`: clear. An object: set. `false`: malformed. */
+function readDeprecated(raw: unknown): EmbedComponentMeta["deprecated"] | null | undefined | false {
+  if (raw === undefined || raw === null) return raw;
+  if (typeof raw !== "object" || Array.isArray(raw)) return false;
+  const { replacedBy, note } = raw as Record<string, unknown>;
+  if (replacedBy !== undefined && typeof replacedBy !== "string") return false;
+  if (note !== undefined && typeof note !== "string") return false;
+  const out: NonNullable<EmbedComponentMeta["deprecated"]> = {};
+  if (replacedBy?.trim()) out.replacedBy = replacedBy.trim();
+  if (note?.trim()) out.note = note.trim();
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 /**
  * define_component: create or update a component master (an embed with
  * `component` on the "Components" page) and re-render every instance.
@@ -43,12 +56,16 @@ export const defineComponent: ToolHandler = async (args) => {
   if (variants === null) {
     return toolError("variants must be an object of axis -> non-empty array of value strings");
   }
-  if (args.status !== undefined && !STATUSES.includes(args.status as (typeof STATUSES)[number])) {
+  if (args.status !== undefined && args.status !== null && !STATUSES.includes(args.status as (typeof STATUSES)[number])) {
     return toolError(`status must be one of ${STATUSES.join(", ")}`);
   }
   if (args.description !== undefined && typeof args.description !== "string") {
     return toolError("description must be a string");
   }
+  // Panel-only argument (the backend schema does not carry it): replacement and
+  // note of a deprecated component; `null` clears it.
+  const deprecated = readDeprecated(args.deprecated);
+  if (deprecated === false) return toolError("deprecated must be null or { replacedBy?: string, note?: string }");
 
   const registry = selectComponentRegistry();
   const existing = registry.get(key);
@@ -63,13 +80,24 @@ export const defineComponent: ToolHandler = async (args) => {
   const cycle = findDependencyCycle(registry, key, dependencyKeys(validated.master));
   if (cycle) return toolError(`Component "${key}" would create a dependency cycle: ${cycle.join(" -> ")}`);
 
+  const { description: oldDescription, status: oldStatus, deprecated: oldDeprecated, ...kept } =
+    existing?.meta ?? ({} as Partial<EmbedComponentMeta>);
+  const description = typeof args.description === "string" ? args.description.trim() : oldDescription;
+  const status = args.status === null ? undefined : ((args.status as EmbedComponentMeta["status"]) ?? oldStatus);
+  const nextDeprecated =
+    deprecated === undefined
+      ? oldDeprecated
+      : deprecated
+        ? { ...(oldDeprecated?.since ? { since: oldDeprecated.since } : {}), ...deprecated }
+        : undefined;
   const meta: EmbedComponentMeta = {
-    ...(existing?.meta ?? {}),
+    ...kept,
     key,
     name: args.name.trim(),
     ...(effectiveMetaVariants ? { variants: effectiveMetaVariants } : {}),
-    ...(typeof args.description === "string" ? { description: args.description } : {}),
-    ...(args.status ? { status: args.status as EmbedComponentMeta["status"] } : {}),
+    ...(description ? { description } : {}),
+    ...(status ? { status } : {}),
+    ...(nextDeprecated ? { deprecated: nextDeprecated } : {}),
   };
 
   // One history entry (the master write). Consumers are re-rendered right

@@ -39,3 +39,4 @@ export {
   structuralSignature,
   type Extraction,
 } from "./extract";
+export { findPickedComponentRegion, insertInstanceTag, type PickedRegion } from "./pickerContext";

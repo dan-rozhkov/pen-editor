@@ -35,6 +35,9 @@ vi.mock("../VariablesPanel", () => ({
 vi.mock("../TextStylesPanel", () => ({
   TextStylesPanelContent: () => <div data-testid="text-styles-shim" />,
 }));
+vi.mock("../ComponentsPanel", () => ({
+  ComponentsPanel: () => <div data-testid="components-shim" />,
+}));
 vi.mock("../StylesPanel", () => ({
   StylesPanelContent: () => <div data-testid="styles-shim" />,
 }));
@@ -226,6 +229,17 @@ describe("<LeftSidebar />", () => {
     expect(chatWrapper?.className).toContain("hidden");
     // Pages/layers renders instead.
     expect(screen.getByTestId("layers-shim")).toBeTruthy();
+  });
+
+  it("mounts the Components panel for its section, but not in a shared view", () => {
+    useLeftSidebarStore.setState({ activeSection: "components" });
+    useSharedViewStore.setState({ isSharedView: false });
+    const { unmount } = render(<LeftSidebar />);
+    expect(screen.getByTestId("components-shim")).toBeTruthy();
+    unmount();
+    useSharedViewStore.setState({ isSharedView: true });
+    render(<LeftSidebar />);
+    expect(screen.queryByTestId("components-shim")).toBeNull();
   });
 
   it("still mounts the Agents chat as the active panel outside a shared view", () => {
