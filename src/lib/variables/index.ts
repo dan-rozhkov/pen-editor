@@ -7,3 +7,4 @@ export * from "./patch";
 export * from "./shared";
 export * from "./rewriteCssVarRefs";
 export * from "./numberBindings";
+export * from "./modeContext";

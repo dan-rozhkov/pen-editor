@@ -40,7 +40,7 @@ export function resetStores(): void {
   useVariableStore.setState({ variables: [], collections: [makeThemeCollection()] });
   useTextStyleStore.setState({ textStyles: [] });
   useStyleStore.setState({ fillStyles: [], effectStyles: [] });
-  useThemeStore.setState({ activeTheme: "light" });
+  useThemeStore.setState({ activeTheme: "light", modeContext: { theme: "light" } });
   useViewportStore.setState({ scale: 1, x: 0, y: 0 });
   useGuidesStore.setState({ guides: [] });
   useMeasurementsStore.setState({ measurements: [], selectedMeasurementId: null });

@@ -37,3 +37,26 @@ describe("getEffectiveThemeForNode", () => {
     expect(getEffectiveThemeForNode("e1")).toBe("dark");
   });
 });
+
+describe("getEffectiveThemeForNode with modeOverrides", () => {
+  beforeEach(() => resetStores());
+
+  it.each([
+    ["reads the Theme pick of an ancestor's modeOverrides", { theme: "dark", brand: "x" }, "light", "dark"],
+    ["ignores overrides that pick no Theme mode", { brand: "x" }, "dark", "dark"],
+  ])("%s", (_name, modeOverrides, globalTheme, expected) => {
+    useThemeStore.getState().setActiveTheme(globalTheme as "light" | "dark");
+    const box = { x: 0, y: 0, width: 10, height: 10 };
+    useSceneStore.setState({
+      nodesById: {
+        f1: { id: "f1", type: "frame", modeOverrides, ...box } as unknown as FlatSceneNode,
+        e1: { id: "e1", type: "embed", htmlContent: "", ...box } as unknown as FlatSceneNode,
+      },
+      parentById: { f1: null, e1: "f1" },
+      childrenById: { f1: ["e1"] },
+      rootIds: ["f1"],
+      _cachedTree: null,
+    });
+    expect(getEffectiveThemeForNode("e1")).toBe(expected);
+  });
+});

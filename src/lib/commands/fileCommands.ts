@@ -51,11 +51,12 @@ export function collectDocumentData(): DocumentData {
     fillStyles: useStyleStore.getState().fillStyles,
     effectStyles: useStyleStore.getState().effectStyles,
     activeTheme: useThemeStore.getState().activeTheme,
+    modeContext: { ...useThemeStore.getState().modeContext },
   };
 }
 
 export function exportAsJson(): void {
-  const { pages, variables, variableCollections, textStyles, fillStyles, effectStyles, activeTheme } =
+  const { pages, variables, variableCollections, textStyles, fillStyles, effectStyles, activeTheme, modeContext } =
     collectDocumentData();
   const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
   downloadDocument(
@@ -67,6 +68,7 @@ export function exportAsJson(): void {
     fillStyles,
     effectStyles,
     variableCollections,
+    modeContext,
   );
 }
 

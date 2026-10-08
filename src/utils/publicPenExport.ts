@@ -14,6 +14,7 @@ import { THEME_COLLECTION_ID, type ThemeName, type Variable, type VariableCollec
 import {
   buildVariableIndex,
   collectionIdOf,
+  getFrameModeOverrides,
   getVariableValueAt,
   modeValuesOf,
 } from "@/lib/variables";
@@ -226,6 +227,13 @@ interface ExportContext {
    * `serializePublicPenDocumentWithWarnings` — never silently dropped.
    */
   warnings: string[];
+  /**
+   * How a frame's mode picks are written: the axis (a key of the file's
+   * `themes`) of each collection and the label of each of its modes. Built
+   * from the same rules as the variable values so a frame's `theme:` always
+   * names an axis and mode the file declares.
+   */
+  frameAxes: { axisByCollection: Map<string, string>; collections: Map<string, VariableCollection> };
 }
 
 const THEME_AXIS = "mode";
@@ -298,6 +306,28 @@ function buildAxisNames(collections: VariableCollection[]): Map<string, string> 
     axes.set(c.id, name);
   }
   return axes;
+}
+
+/**
+ * A frame's `theme: { axis: modeLabel }`. Legacy `themeOverride` frames come
+ * out exactly as before (`{ mode: "dark" }`); other collections write their
+ * mode name. Picks naming an unknown collection or mode are skipped.
+ */
+function exportFrameTheme(node: SceneNode, context: ExportContext): { theme?: Record<string, string> } {
+  const picks = Object.entries(getFrameModeOverrides(node));
+  const theme: Record<string, string> = {};
+  for (const [collectionId, modeId] of picks) {
+    if (modeId === undefined) continue;
+    const axis = context.frameAxes.axisByCollection.get(collectionId) ?? (collectionId === THEME_COLLECTION_ID ? THEME_AXIS : undefined);
+    if (axis === undefined) continue;
+    if (collectionId === THEME_COLLECTION_ID) {
+      theme[axis] = modeId;
+      continue;
+    }
+    const mode = context.frameAxes.collections.get(collectionId)?.modes.find((m) => m.id === modeId);
+    if (mode) theme[axis] = mode.name;
+  }
+  return Object.keys(theme).length > 0 ? { theme } : {};
 }
 
 function exportVariables(
@@ -620,9 +650,7 @@ function exportNodeBase(node: SceneNode, context: ExportContext, parentUsesLayou
     ...(node.rotation != null && node.rotation !== 0 ? { rotation: node.rotation } : {}),
     ...(node.flipX ? { flipX: true } : {}),
     ...(node.flipY ? { flipY: true } : {}),
-    ...(node.type === "frame" && node.themeOverride
-      ? { theme: { [THEME_AXIS]: node.themeOverride } }
-      : {}),
+    ...exportFrameTheme(node, context),
     ...(node.shader ? { shader: node.shader } : {}),
     ...(node.isMask ? { isMask: true } : {}),
     ...(node.sizing?.minWidth != null ? { minWidth: node.sizing.minWidth } : {}),
@@ -814,7 +842,13 @@ export function serializePublicPenDocumentWithWarnings(
   const variableNamesById = buildVariableNameMap(variables);
   const warnings: string[] = [];
   const exportedVariables = exportVariables(variables, variableNamesById, collections, warnings);
-  const context: ExportContext = { variableNamesById, warnings };
+  const index = buildVariableIndex(variables, collections);
+  const frameCollections = [...index.collections.values()];
+  const context: ExportContext = {
+    variableNamesById,
+    warnings,
+    frameAxes: { axisByCollection: buildAxisNames(frameCollections), collections: index.collections },
+  };
 
   const document: PenDocument = {
     version: PUBLIC_PEN_VERSION,

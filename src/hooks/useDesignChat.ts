@@ -17,7 +17,8 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
-import { THEME_COLLECTION_ID, getVariableCssName } from "@/types/variable";
+import { getVariableCssName } from "@/types/variable";
+import { completeModeContext } from "@/lib/variables/modeContext";
 import { useRepoContextStore } from "@/store/repoContextStore";
 import { useChatStore, NO_QUEUED_MESSAGES } from "@/store/chatStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
@@ -98,7 +99,7 @@ export function resolveSessionModel(sessionId?: string): string {
 export function buildCanvasContext(sessionId?: string): object {
   const { selectedIds } = useSelectionStore.getState();
   const { rootIds, nodesById } = useSceneStore.getState();
-  const { activeTheme } = useThemeStore.getState();
+  const { activeTheme, modeContext } = useThemeStore.getState();
   const { variables, collections } = useVariableStore.getState();
 
   const roots = rootIds.map((id) => {
@@ -221,12 +222,7 @@ export function buildCanvasContext(sessionId?: string): object {
               modes: c.modes.map((m) => ({ id: m.id, name: m.name })),
               defaultModeId: c.defaultModeId,
             })),
-            modeContext: Object.fromEntries(
-              collections.map((c) => [
-                c.id,
-                c.id === THEME_COLLECTION_ID ? activeTheme : c.defaultModeId,
-              ]),
-            ),
+            modeContext: completeModeContext(collections, modeContext),
           }
         : {}),
     }),

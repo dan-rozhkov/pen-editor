@@ -1,4 +1,4 @@
-import type { ThemeName, Variable, VariableCollection } from './variable'
+import type { ThemeName, ModeOverrides, Variable, VariableCollection } from './variable'
 import type { Guide } from '../store/guidesStore'
 import type { PersistedMeasurement } from '../store/measurementsStore'
 import type { TextStyle } from './textStyle'
@@ -630,6 +630,10 @@ export interface FrameNode extends BaseNode {
   layout?: LayoutProperties
   // Theme override (light/dark) - if set, overrides global theme for this frame
   themeOverride?: ThemeName
+  // Per-collection mode overrides for this frame's descendants (Tokens v2).
+  // Supersedes `themeOverride`, which is migrated into `{ theme: x }` on open
+  // and still dual-written on save. Read through `getFrameModeOverrides`.
+  modeOverrides?: ModeOverrides
   // Layout grid overlays (visual design aid, not part of exported design)
   layoutGrids?: LayoutGridConfig[]
   /**

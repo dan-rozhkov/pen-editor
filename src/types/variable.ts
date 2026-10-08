@@ -48,6 +48,9 @@ export const THEME_COLLECTION_ID: CollectionId = 'theme'
 /** Which mode each collection is currently showing. Missing key = the collection default. */
 export type ModeContext = Record<CollectionId, ModeId>
 
+/** Per-collection mode picks a frame applies to its descendants (absent collection = inherit). */
+export type ModeOverrides = Partial<ModeContext>
+
 /**
  * A bare string means "a mode id of the Theme collection" (the legacy
  * meaning of a theme name); an object picks a mode per collection.
