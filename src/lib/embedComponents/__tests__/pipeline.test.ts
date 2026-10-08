@@ -77,8 +77,8 @@ describe("structuralSignature", () => {
     return structuralSignature(el);
   };
 
-  it("ignores text of leaves, id and data-* attributes", () => {
-    expect(sig(`<button class="a" id="x" data-q="1">One</button>`)).toBe(sig(`<button class="a">Two</button>`));
+  it("ignores text of leaves, id and component markers", () => {
+    expect(sig(`<button class="a" id="x" data-c-rev="1" data-v-k="2">One</button>`)).toBe(sig(`<button class="a">Two</button>`));
   });
 
   it("differs on class, structure and non-leaf text", () => {

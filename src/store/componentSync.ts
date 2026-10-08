@@ -1,6 +1,6 @@
 import type { EmbedNode, FlatSceneNode } from "@/types/scene";
 import type { ComponentRegistry } from "@/lib/embedComponents";
-import { hasStaleRegions, mayContainComponents, reconcileHtml } from "@/lib/embedComponents";
+import { hasStaleRegions, mayContainComponents, reconcileHtml, validateMaster } from "@/lib/embedComponents";
 import { useSceneStore } from "./sceneStore";
 import { markNodesDirty } from "./sceneStore/dirtyTracking";
 import { usePageStore } from "./pageStore";
@@ -50,6 +50,35 @@ function planChanges(
   return changes;
 }
 
+/**
+ * Masters are consumers of the keys they contain: a master's stored HTML holds
+ * nested regions that go stale when the inner master changes. Re-render those
+ * regions (reconcile resolves the whole chain through the registry, so one
+ * pass is dependency-complete) and re-normalize through `validateMaster`.
+ */
+function planMasterChanges(
+  nodesById: NodeMap,
+  registry: ComponentRegistry,
+  keys: string[],
+): Record<string, { from: string; to: string }> {
+  const changes: Record<string, { from: string; to: string }> = {};
+  for (const id in nodesById) {
+    const n = nodesById[id];
+    if (n.type !== "embed") continue;
+    const embed = n as unknown as EmbedNode;
+    const meta = embed.component;
+    const html = embed.htmlContent;
+    if (!meta || !html || !mayContainComponents(html)) continue;
+    // Its own key is always in its text; only OTHER keys make it a consumer.
+    if (!mentionsKey(html, keys.filter((k) => k !== meta.key))) continue;
+    const validated = validateMaster(reconcileHtml(html, registry), meta.key, meta.variants);
+    if (validated.ok && validated.master.html !== html) {
+      changes[id] = { from: html, to: validated.master.html };
+    }
+  }
+  return changes;
+}
+
 let applying = false;
 
 /** True while this module is writing; the scene subscriber ignores its own writes. */
@@ -57,37 +86,72 @@ export function isApplyingComponentSync(): boolean {
   return applying;
 }
 
+type Changes = Record<string, { from: string; to: string }>;
+
+/** Plan per page with `plan` and write the results; returns the number of embeds rewritten. */
+function planAndWrite(
+  pageIds: ReadonlySet<string> | undefined,
+  plan: (nodesById: NodeMap) => Changes,
+): number {
+  const { activePageId } = usePageStore.getState();
+  let rewritten = 0;
+  const pagePatches = new Map<string, Changes>();
+  for (const page of allPageNodes()) {
+    if (pageIds && !pageIds.has(page.pageId)) continue;
+    const changes = plan(page.nodesById);
+    if (Object.keys(changes).length === 0) continue;
+    if (page.pageId === activePageId) rewritten += applyToScene(changes);
+    else pagePatches.set(page.pageId, changes);
+  }
+  if (pagePatches.size > 0) rewritten += applyToPages(pagePatches);
+  return rewritten;
+}
+
+/** Nested-chain depth cap for the master refresh loop (cycles are refused at define time). */
+const MAX_MASTER_PASSES = 12;
+
 /**
  * Reconcile consumer embeds on every page against the live registry and write
- * the results. The active page is written through `sceneStore.setState`
- * WITHOUT a history snapshot, so the update rides along with whatever step
- * caused it (the master edit that triggered it, or the undo/redo that
- * restored it); inactive pages are patched in their `pageStore` snapshot.
- * Dirty ids are marked inside the setState updater (rendering-performance
- * convention). Returns the number of embeds rewritten.
+ * the results. When `keys` is given, masters that contain those keys are
+ * refreshed FIRST (inner before outer, to a fixed point), so the consumers
+ * are reconciled against up-to-date masters. The active page is written
+ * through `sceneStore.setState` WITHOUT a history snapshot, so the update
+ * rides along with whatever step caused it (the master edit that triggered
+ * it, or the undo/redo that restored it); inactive pages are patched in their
+ * `pageStore` snapshot. Dirty ids are marked inside the setState updater
+ * (rendering-performance convention). Returns the number of embeds rewritten.
  */
 export function reconcileConsumers(options: ReconcileOptions = {}): number {
-  const registry = options.registry ?? selectComponentRegistry();
   const keys = options.keys ? [...options.keys] : null;
   const onlyStale = options.onlyStale ?? false;
-  const { activePageId } = usePageStore.getState();
 
   let rewritten = 0;
   const wasApplying = applying;
   applying = true;
   try {
-    const pagePatches = new Map<string, Record<string, { from: string; to: string }>>();
-    for (const page of allPageNodes()) {
-      if (options.pageIds && !options.pageIds.has(page.pageId)) continue;
-      const changes = planChanges(page.nodesById, registry, keys, onlyStale, options.nodeIds);
-      if (Object.keys(changes).length === 0) continue;
-      if (page.pageId === activePageId) {
-        rewritten += applyToScene(changes);
-      } else {
-        pagePatches.set(page.pageId, changes);
+    if (keys && !options.registry && !options.nodeIds) {
+      const touched = new Set(keys);
+      for (let pass = 0; pass < MAX_MASTER_PASSES; pass++) {
+        const registry = selectComponentRegistry();
+        const before = new Set<string>();
+        const count = planAndWrite(options.pageIds, (nodes) => {
+          const changes = planMasterChanges(nodes, registry, [...touched]);
+          for (const id in changes) {
+            const key = (nodes[id] as unknown as EmbedNode).component?.key;
+            if (key) before.add(key);
+          }
+          return changes;
+        });
+        if (count === 0) break;
+        rewritten += count;
+        for (const k of before) touched.add(k);
       }
+      for (const k of touched) if (!keys.includes(k)) keys.push(k);
     }
-    if (pagePatches.size > 0) rewritten += applyToPages(pagePatches);
+    const registry = options.registry ?? selectComponentRegistry();
+    rewritten += planAndWrite(options.pageIds, (nodes) =>
+      planChanges(nodes, registry, keys, onlyStale, options.nodeIds),
+    );
   } finally {
     applying = wasApplying;
   }
@@ -177,26 +241,44 @@ export function installComponentSync(): () => void {
     queueMicrotask(flush);
   };
 
+  // Ids of the embed nodes, so a geometry-only change (drag, resize: same
+  // `htmlContent`) is judged by looking at those nodes alone. The set is
+  // rebuilt by a full scan only when the node set itself changed (`parentById`
+  // / `rootIds` are replaced by every add, delete, move and restore, and by
+  // no property update).
+  let embedIds: Set<string> | null = null;
+
+  const inspect = (id: string, next: FlatSceneNode, prevNode: FlatSceneNode | undefined) => {
+    if (next === prevNode) return;
+    const embed = next as unknown as EmbedNode;
+    const before = prevNode as unknown as EmbedNode | undefined;
+    const sameHtml = before !== undefined && before.htmlContent === embed.htmlContent;
+    if (embed.component || before?.component) {
+      if (sameHtml && before.component === embed.component) return;
+      if (embed.component) pendingKeys.add(embed.component.key);
+      if (before?.component) pendingKeys.add(before.component.key);
+    } else if (!sameHtml && embed.htmlContent && embed.htmlContent.includes("data-c=")) {
+      pendingIds.add(id);
+    }
+  };
+
   const unsubScene = useSceneStore.subscribe((state, prev) => {
     if (applying || state.nodesById === prev.nodesById) return;
-    for (const id in state.nodesById) {
-      const n = state.nodesById[id];
-      if (n.type !== "embed") continue;
-      const before = prev.nodesById[id];
-      if (before === n) continue;
-      const embed = n as unknown as EmbedNode;
-      const beforeEmbed = before as unknown as EmbedNode | undefined;
-      if (embed.component || beforeEmbed?.component) {
-        const sameMaster =
-          beforeEmbed &&
-          beforeEmbed.htmlContent === embed.htmlContent &&
-          beforeEmbed.component === embed.component;
-        if (!sameMaster) {
-          if (embed.component) pendingKeys.add(embed.component.key);
-          if (beforeEmbed?.component) pendingKeys.add(beforeEmbed.component.key);
-        }
-      } else if (embed.htmlContent && embed.htmlContent.includes("data-c=")) {
-        pendingIds.add(id);
+    const nodes = state.nodesById;
+    const structural =
+      embedIds === null || state.parentById !== prev.parentById || state.rootIds !== prev.rootIds;
+    if (structural) {
+      embedIds = new Set();
+      for (const id in nodes) {
+        if (nodes[id].type !== "embed") continue;
+        embedIds.add(id);
+        inspect(id, nodes[id], prev.nodesById[id]);
+      }
+    } else {
+      for (const id of embedIds as Set<string>) {
+        const n = nodes[id];
+        if (!n || n.type !== "embed") continue;
+        inspect(id, n, prev.nodesById[id]);
       }
     }
     if (pendingKeys.size > 0 || pendingIds.size > 0) schedule();

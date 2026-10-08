@@ -40,6 +40,8 @@ export interface ParsedMaster {
   /** Root element outerHTML, incl. `data-c` and default `data-v-*`. */
   rootHtml: string;
   rootTag: string;
+  /** The master root's own inline `style` ("" when none). */
+  rootStyle: string;
   /** axis -> default value, in attribute order. */
   axes: Record<string, string>;
   /** Slot names in document order. */

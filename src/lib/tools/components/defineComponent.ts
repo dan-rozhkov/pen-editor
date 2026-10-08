@@ -1,11 +1,12 @@
 import type { EmbedComponentMeta } from "@/types/scene";
 import {
   effectiveVariants,
+  expandMasterHtml,
   findDependencyCycle,
   parseMaster,
   validateMaster,
 } from "@/lib/embedComponents";
-import { selectComponentRegistry } from "@/store/componentRegistry";
+import { duplicateKeyWarnings, selectComponentRegistry } from "@/store/componentRegistry";
 import { reconcileConsumers } from "@/store/componentSync";
 import { upsertMasterNode } from "@/store/componentOps";
 import type { ToolHandler } from "../../toolRegistry";
@@ -50,7 +51,9 @@ export const defineComponent: ToolHandler = async (args) => {
   const existing = registry.get(key);
   const effectiveMetaVariants = variants ?? existing?.meta.variants;
 
-  const validated = validateMaster(args.html, key, effectiveMetaVariants);
+  const expandedMaster = expandMasterHtml(args.html, key, registry);
+  if (expandedMaster.error) return toolError(`Invalid component "${key}": ${expandedMaster.error}`);
+  const validated = validateMaster(expandedMaster.html, key, effectiveMetaVariants);
   if (!validated.ok) return toolError(`Invalid component "${key}": ${validated.errors.join("; ")}`);
   const cycle = findDependencyCycle(registry, key, validated.master.nested);
   if (cycle) return toolError(`Component "${key}" would create a dependency cycle: ${cycle.join(" -> ")}`);
@@ -73,6 +76,11 @@ export const defineComponent: ToolHandler = async (args) => {
   const stored = selectComponentRegistry().get(key);
   const parsed = stored ? parseMaster(stored) : null;
   const unknownNested = validated.master.nested.filter((k) => !registry.has(k));
+  const warnings = [
+    ...expandedMaster.warnings,
+    ...(unknownNested.length > 0 ? [`Nested component(s) not defined yet: ${unknownNested.join(", ")}`] : []),
+    ...duplicateKeyWarnings(key),
+  ];
   return JSON.stringify({
     key,
     created: written.created,
@@ -82,8 +90,6 @@ export const defineComponent: ToolHandler = async (args) => {
     slots: validated.master.slots,
     variants: stored && parsed ? effectiveVariants(stored, parsed) : {},
     updatedEmbeds,
-    ...(unknownNested.length > 0
-      ? { warnings: [`Nested component(s) not defined yet: ${unknownNested.join(", ")}`] }
-      : {}),
+    ...(warnings.length > 0 ? { warnings } : {}),
   });
 };

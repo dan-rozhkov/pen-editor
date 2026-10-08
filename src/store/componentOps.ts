@@ -8,7 +8,7 @@ import {
   COMPONENTS_PAGE_NAME,
   allPageNodes,
   findComponentsPage,
-  mastersIn,
+  findWinningMaster,
 } from "./componentRegistry";
 
 const MASTER_WIDTH = 400;
@@ -53,9 +53,7 @@ export interface UpsertMasterResult {
 export function upsertMasterNode(input: UpsertMasterInput): UpsertMasterResult {
   const { meta, html } = input;
   const pages = usePageStore.getState();
-  const existing = allPageNodes()
-    .flatMap((p) => mastersIn(p.nodesById).map((m) => ({ page: p, ...m })))
-    .find((m) => m.master.key === meta.key);
+  const existing = findWinningMaster(meta.key);
 
   const pageId = existing?.page.pageId ?? ensureComponentsPage();
   const isActive = pageId === pages.activePageId;
@@ -136,9 +134,7 @@ export function upsertMasterNode(input: UpsertMasterInput): UpsertMasterResult {
 
 /** Delete the master node for `key`. Returns false when there was none. */
 export function removeMasterNode(key: string): boolean {
-  const found = allPageNodes()
-    .flatMap((p) => mastersIn(p.nodesById).map((m) => ({ page: p, ...m })))
-    .find((m) => m.master.key === key);
+  const found = findWinningMaster(key);
   if (!found) return false;
   const { activePageId } = usePageStore.getState();
   if (found.page.pageId === activePageId) {
@@ -148,6 +144,14 @@ export function removeMasterNode(key: string): boolean {
   usePageStore.setState((state) => ({
     pages: state.pages.map((p) => {
       if (p.id !== found.page.pageId) return p;
+      // Same as upsertMasterNode: record the step on THAT page's stacks so undo works there.
+      const snapshot = createSnapshot({
+        nodesById: p.nodesById,
+        parentById: p.parentById,
+        childrenById: p.childrenById,
+        rootIds: p.rootIds,
+        slideOrder: p.slideOrder,
+      });
       const nodesById = { ...p.nodesById };
       const parentById = { ...p.parentById };
       delete nodesById[found.node.id];
@@ -158,6 +162,7 @@ export function removeMasterNode(key: string): boolean {
         parentById,
         rootIds: p.rootIds.filter((id) => id !== found.node.id),
         slideOrder: p.slideOrder.filter((id) => id !== found.node.id),
+        history: { past: [...p.history.past, snapshot].slice(-MAX_HISTORY), future: [] },
       };
     }),
   }));

@@ -104,13 +104,16 @@ export function parseCss(source: string): CssNode[] {
   const nodes: CssNode[] = [];
   let i = 0;
   let preludeStart = 0;
+  let parenDepth = 0;
   while (i < css.length) {
     const ch = css[i];
     if (ch === '"' || ch === "'") {
       i = skipString(css, i);
       continue;
     }
-    if (ch === ";") {
+    if (ch === "(") parenDepth++;
+    else if (ch === ")") parenDepth = Math.max(0, parenDepth - 1);
+    if (ch === ";" && parenDepth === 0) {
       // Statement at-rule (`@import ...;`, `@charset ...;`).
       const text = css.slice(preludeStart, i + 1).trim();
       if (text) nodes.push({ kind: "raw", text });
@@ -120,6 +123,7 @@ export function parseCss(source: string): CssNode[] {
     }
     if (ch === "{") {
       const close = matchingBrace(css, i);
+      parenDepth = 0;
       const prelude = css.slice(preludeStart, i).trim();
       const inner = css.slice(i + 1, close);
       if (prelude.startsWith("@")) {
@@ -157,10 +161,42 @@ export function rootSelector(key: string): string {
   return `[data-c="${key}"]`;
 }
 
+/** End index of the first compound selector of `sel` (up to a top-level combinator). */
+function firstCompoundEnd(sel: string): number {
+  let depth = 0;
+  for (let i = 0; i < sel.length; i++) {
+    const ch = sel[i];
+    if (ch === "\\") i++;
+    else if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
+    else if (depth === 0 && (/\s/.test(ch) || ch === ">" || ch === "+" || ch === "~")) return i;
+  }
+  return sel.length;
+}
+
+/** `sel` with `attr` appended to its first compound, before any pseudo-class/element. */
+function attachToFirstCompound(sel: string, attr: string): string {
+  const compound = sel.slice(0, firstCompoundEnd(sel));
+  let depth = 0;
+  let at = compound.length;
+  for (let i = 0; i < compound.length; i++) {
+    const ch = compound[i];
+    if (ch === "\\") i++;
+    else if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
+    else if (ch === ":" && depth === 0) {
+      at = i;
+      break;
+    }
+  }
+  return sel.slice(0, at) + attr + sel.slice(at);
+}
+
 function scopeSelector(selector: string, key: string): string[] {
   const prefix = rootSelector(key);
   const sel = selector.trim();
-  if (sel.startsWith(prefix)) return [sel];
+  // Already scoped (root form, descendant form, or a tag-led root form).
+  if (sel.includes(prefix)) return [sel];
   if (sel === ":root" || sel === ":host") return [prefix];
   if (sel.startsWith(":root") || sel.startsWith(":host")) {
     return [prefix + sel.replace(/^:(root|host)/, "")];
@@ -169,7 +205,22 @@ function scopeSelector(selector: string, key: string): string[] {
   if (sel.startsWith(":")) return [prefix + sel];
   // `.x` / `#x` / `[x]` may be the root itself or a descendant: emit both.
   if (/^[.#[]/.test(sel)) return [prefix + sel, `${prefix} ${sel}`];
+  // Tag-led (`button`, `a.cta`, `li:hover`, `*`): the root may be that tag.
+  if (/^[a-zA-Z*]/.test(sel)) return [attachToFirstCompound(sel, prefix), `${prefix} ${sel}`];
   return [`${prefix} ${sel}`];
+}
+
+/** Move `@charset` / `@import` statements ahead of every other node (the only place CSS accepts them). */
+function hoistImports(nodes: CssNode[]): CssNode[] {
+  const isHead = (n: CssNode) => n.kind === "raw" && /^@(import|charset)\b/i.test(n.text);
+  const seen = new Set<string>();
+  const head = nodes.filter(isHead).filter((n) => {
+    const text = (n as { text: string }).text;
+    if (seen.has(text)) return false;
+    seen.add(text);
+    return true;
+  });
+  return [...head, ...nodes.filter((n) => !isHead(n))];
 }
 
 /**
@@ -195,13 +246,14 @@ export function scopeCss(css: string, key: string): string {
       }
       return node;
     });
-  return printCss(walk(parseCss(css)));
+  return printCss(hoistImports(walk(parseCss(css))));
 }
 
 /**
  * Keep only the rules for which at least one selector satisfies `keep`
- * (groups survive when any child does; raw at-rules are dropped, except
- * `@keyframes` whose name a kept rule mentions).
+ * (groups survive when any child does). `@import` and `@font-face` always
+ * survive, and so does a `@keyframes` whose name a kept rule mentions; other
+ * raw at-rules are dropped.
  */
 export function filterCssRules(css: string, keep: (selector: string) => boolean): string {
   const walk = (nodes: CssNode[]): CssNode[] => {
@@ -212,6 +264,8 @@ export function filterCssRules(css: string, keep: (selector: string) => boolean)
       } else if (node.kind === "group") {
         const children = walk(node.children);
         if (children.length > 0) out.push({ ...node, children });
+      } else if (/^@(import|charset|font-face)\b/i.test(node.text)) {
+        out.push(node);
       }
     }
     return out;
@@ -224,7 +278,7 @@ export function filterCssRules(css: string, keep: (selector: string) => boolean)
     const name = /^@(?:-webkit-)?keyframes\s+([^\s{]+)/i.exec(node.text)?.[1];
     if (name && printedKept.includes(name)) kept.push(node);
   }
-  return printCss(kept);
+  return printCss(hoistImports(kept));
 }
 
 /** Replace every `[data-c="key"]` in `css` with `[data-d="scope"]`. */

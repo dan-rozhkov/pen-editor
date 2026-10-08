@@ -13,7 +13,7 @@ describe("splitSelectors", () => {
 
 describe("scopeCss", () => {
   it("prefixes bare descendant selectors", () => {
-    expect(scopeCss("span { color: red }", "btn")).toBe('[data-c="btn"] span{color: red}');
+    expect(scopeCss("span { color: red }", "btn")).toBe('span[data-c="btn"], [data-c="btn"] span{color: red}');
   });
 
   it("emits both root and descendant forms for class/id/attribute selectors", () => {
@@ -38,13 +38,13 @@ describe("scopeCss", () => {
 
   it("recurses into @media and keeps @keyframes raw", () => {
     const out = scopeCss("@media (min-width: 1px) { p { a: b } } @keyframes spin { to { r: 1 } }", "k");
-    expect(out).toContain('@media (min-width: 1px){\n[data-c="k"] p{a: b}\n}');
+    expect(out).toContain('@media (min-width: 1px){\np[data-c="k"], [data-c="k"] p{a: b}\n}');
     expect(out).toContain("@keyframes spin{to { r: 1 }}");
   });
 
   it("drops comments and survives braces inside strings", () => {
     const out = scopeCss('/* hi */ p::after { content: "}"; }', "k");
-    expect(out).toBe('[data-c="k"] p::after{content: "}";}');
+    expect(out).toBe('p[data-c="k"]::after, [data-c="k"] p::after{content: "}";}');
   });
 });
 

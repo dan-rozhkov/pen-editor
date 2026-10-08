@@ -63,9 +63,9 @@ export function childRegions(region: Element): Element[] {
  *   it names another key);
  * - every `<style>` is merged into one block whose selectors all start with
  *   `[data-c="<key>"]` (bare selectors are prefixed);
- * - the root's own `style` attr moves into that block, its `id` and
- *   `data-c-rev` are dropped, so an instance's `style`/`id` are purely the
- *   instance's;
+ * - the root's own `style` attr stays on the root (inline precedence; an
+ *   instance's `style` is merged after it and wins), its `id` and
+ *   `data-c-rev` are dropped, so an instance's `id` is purely the instance's;
  * - slots (`data-c-slot`) and variant axes (`data-v-*` on the root, plus
  *   `variants` from the meta) are collected.
  */
@@ -84,6 +84,9 @@ export function validateMaster(
   const doc = typeof html === "string" ? parseEmbedHtml(html) : null;
   if (!doc) return { ok: false, errors: ["html could not be parsed"] };
 
+  // Managed blocks of NESTED components (written by expansion) belong to the
+  // consuming embed, never to this master: drop them unread.
+  for (const managed of Array.from(doc.querySelectorAll("style[data-c-style]"))) managed.remove();
   const styleEls = Array.from(doc.querySelectorAll("style"));
   const cssParts = styleEls.map((s) => s.textContent ?? "");
   for (const s of styleEls) s.remove();
@@ -112,9 +115,11 @@ export function validateMaster(
   root.setAttribute("data-c", key);
   root.removeAttribute("id");
   root.removeAttribute("data-c-rev");
-  const rootStyle = root.getAttribute("style");
-  root.removeAttribute("style");
-  if (rootStyle && rootStyle.trim()) cssParts.unshift(`:root{${rootStyle.trim()}}`);
+  // The root's inline style stays ON the root (inline precedence); a rendered
+  // instance merges its own style after it (see render.ts).
+  const rootStyle = (root.getAttribute("style") ?? "").trim();
+  if (rootStyle) root.setAttribute("style", rootStyle);
+  else root.removeAttribute("style");
 
   // Slots
   const slots: string[] = [];
@@ -173,6 +178,7 @@ export function validateMaster(
       css,
       rootHtml,
       rootTag: root.tagName.toLowerCase(),
+      rootStyle,
       axes,
       slots,
       nested,

@@ -3,6 +3,26 @@ import type { ComponentMaster, InstanceSpec, ParsedMaster } from "./types";
 
 const VARIANT_ATTR_PREFIX = "data-v-";
 
+/** `a:b` -> `a:b;` so another declaration list can follow. */
+function terminated(style: string): string {
+  return style.replace(/;?\s*$/, ";");
+}
+
+/** Master root style first, instance style after it, so instance declarations win. */
+function mergeRootStyle(masterStyle: string, instanceStyle: string | undefined): string {
+  const own = (instanceStyle ?? "").trim();
+  if (!masterStyle) return own;
+  return own ? `${terminated(masterStyle)} ${own}` : masterStyle;
+}
+
+/** Inverse of `mergeRootStyle`: the part of a region's style that is the instance's. */
+function instanceStyleOf(regionStyle: string, masterStyle: string): string {
+  if (!masterStyle) return regionStyle;
+  if (regionStyle === masterStyle) return "";
+  const prefix = `${terminated(masterStyle)} `;
+  return regionStyle.startsWith(prefix) ? regionStyle.slice(prefix.length).trim() : regionStyle;
+}
+
 /**
  * Build the region element for one instance: a clone of the master root with
  * the instance's variants, `style`/`id`, slot contents and the revision
@@ -22,7 +42,8 @@ export function renderRegionElement(
     if (axis in parsed.axes) root.setAttribute(VARIANT_ATTR_PREFIX + axis, value);
   }
   if (spec.attrs?.id) root.setAttribute("id", spec.attrs.id);
-  if (spec.attrs?.style) root.setAttribute("style", spec.attrs.style);
+  const style = mergeRootStyle(parsed.rootStyle, spec.attrs?.style);
+  if (style) root.setAttribute("style", style);
 
   const provided = spec.slots ?? {};
   for (const slot of ownSlots(root)) {
@@ -47,7 +68,7 @@ export function readRegionSpec(region: Element, parsed: ParsedMaster): InstanceS
     if (name && !(name in slots)) slots[name] = slot.innerHTML;
   }
   const attrs: { style?: string; id?: string } = {};
-  const style = region.getAttribute("style");
+  const style = instanceStyleOf(region.getAttribute("style") ?? "", parsed.rootStyle);
   const id = region.getAttribute("id");
   if (style) attrs.style = style;
   if (id) attrs.id = id;

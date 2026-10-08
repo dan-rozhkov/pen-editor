@@ -56,33 +56,78 @@ export function allPageNodes(): PageNodes[] {
   }));
 }
 
-let memo: {
+interface RegistryMemo {
   scene: NodeMap;
   pages: PageData[];
   activePageId: string;
   registry: ComponentRegistry;
-} | null = null;
+  /** key -> node ids of the masters that LOST to the winner (copied master nodes). */
+  shadowed: ReadonlyMap<string, string[]>;
+}
+
+let memo: RegistryMemo | null = null;
+
+function buildRegistry(): RegistryMemo {
+  const { pages, activePageId } = usePageStore.getState();
+  const scene = useSceneStore.getState().nodesById;
+  if (memo && memo.scene === scene && memo.pages === pages && memo.activePageId === activePageId) {
+    return memo;
+  }
+  const registry = new Map<string, ComponentMaster>();
+  const shadowed = new Map<string, string[]>();
+  for (const page of allPageNodes()) {
+    for (const { master } of mastersIn(page.nodesById)) {
+      if (!registry.has(master.key)) {
+        registry.set(master.key, { ...master, pageId: page.pageId });
+      } else {
+        const list = shadowed.get(master.key) ?? [];
+        list.push(master.nodeId ?? "");
+        shadowed.set(master.key, list);
+      }
+    }
+  }
+  memo = { scene, pages, activePageId, registry, shadowed };
+  return memo;
+}
 
 /**
  * `key -> master` over every embed with `component`, on the active scene AND
  * on the other pages' snapshots. Derived, never stored: there is no
  * document-level component table. If two masters share a key (a copied
- * master node), the first in page order wins.
+ * master node), the first in page order, then node insertion order, wins —
+ * deterministically; `selectDuplicateMasters` lists the losers.
  */
 export function selectComponentRegistry(): ComponentRegistry {
-  const { pages, activePageId } = usePageStore.getState();
-  const scene = useSceneStore.getState().nodesById;
-  if (memo && memo.scene === scene && memo.pages === pages && memo.activePageId === activePageId) {
-    return memo.registry;
+  return buildRegistry().registry;
+}
+
+/** key -> node ids of shadowed (losing) masters. Empty when every key has one master. */
+export function selectDuplicateMasters(): ReadonlyMap<string, string[]> {
+  return buildRegistry().shadowed;
+}
+
+/** Human-readable warnings for shadowed masters (one key, or all when omitted). */
+export function duplicateKeyWarnings(key?: string): string[] {
+  const out: string[] = [];
+  for (const [k, ids] of selectDuplicateMasters()) {
+    if (key !== undefined && k !== key) continue;
+    out.push(
+      `Component "${k}" has ${ids.length} duplicate master node(s) (${ids.join(", ")}); ` +
+        `only the first master is used. Delete the extra copies.`,
+    );
   }
-  const registry = new Map<string, ComponentMaster>();
+  return out;
+}
+
+/** The winning master node for `key` and the page it lives on (same winner as the registry). */
+export function findWinningMaster(
+  key: string,
+): { page: PageNodes; node: EmbedNode; master: ComponentMaster } | undefined {
   for (const page of allPageNodes()) {
-    for (const { master } of mastersIn(page.nodesById)) {
-      if (!registry.has(master.key)) registry.set(master.key, { ...master, pageId: page.pageId });
-    }
+    const hit = mastersIn(page.nodesById).find((m) => m.master.key === key);
+    if (hit) return { page, ...hit };
   }
-  memo = { scene, pages, activePageId, registry };
-  return registry;
+  return undefined;
 }
 
 /** The "Components" page, if one exists. */

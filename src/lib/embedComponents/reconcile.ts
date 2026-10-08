@@ -186,14 +186,20 @@ export function listRegionKeys(html: string): string[] {
 // Write guard
 // ---------------------------------------------------------------------------
 
-/** A region's managed zone as text: slot contents blanked, rev ignored. */
+/**
+ * A region's managed zone as text: slot contents blanked, rev ignored, and
+ * variant values (`data-v-*`) ignored — they are instance data, so a
+ * variant-only change must compare equal to the zone it started from, even
+ * when that zone is stale (older than the current master).
+ */
 function managedSignature(region: Element): string {
   const clone = region.cloneNode(true) as Element;
   for (const slot of ownSlots(clone)) slot.innerHTML = "";
-  clone.removeAttribute("data-c-rev");
-  // Nested regions carry their own rev; ignore it everywhere inside.
-  for (const nested of Array.from(clone.querySelectorAll("[data-c-rev]"))) {
-    nested.removeAttribute("data-c-rev");
+  for (const el of [clone, ...Array.from(clone.querySelectorAll("*"))]) {
+    el.removeAttribute("data-c-rev");
+    for (const attr of Array.from(el.attributes)) {
+      if (attr.name.startsWith("data-v-")) el.removeAttribute(attr.name);
+    }
   }
   return clone.outerHTML;
 }

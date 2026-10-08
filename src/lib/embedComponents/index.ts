@@ -21,7 +21,7 @@ export {
   type DetachResult,
 } from "./reconcile";
 export { findDependencyCycle } from "./cycles";
-export { finalizeEmbedHtml, describeUnknownTags, type FinalizeResult } from "./pipeline";
+export { expandMasterHtml, finalizeEmbedHtml, describeUnknownTags, type FinalizeResult } from "./pipeline";
 export {
   extractMasterDraft,
   replaceWithInstances,

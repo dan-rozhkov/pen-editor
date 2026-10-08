@@ -17,6 +17,31 @@ export type FinalizeResult =
   | { ok: true; html: string; unknownTags: string[]; warnings: string[] }
   | { ok: false; error: string };
 
+export interface ExpandedMaster {
+  html: string;
+  warnings: string[];
+  /** Set when the master's HTML cannot be accepted (it contains its own tag). */
+  error?: string;
+}
+
+/**
+ * Expand `<c-key>` tags inside a master's HTML (nested components) against the
+ * registry, EXCLUDING the master's own key: a master containing itself is an
+ * error, not an expansion. Managed `<style>` blocks the expansion adds are
+ * dropped again by `validateMaster` (the consuming embed owns them).
+ */
+export function expandMasterHtml(html: string, key: string, registry: ComponentRegistry): ExpandedMaster {
+  if (typeof html !== "string" || !html.includes("<c-")) return { html, warnings: [] };
+  const others = new Map(registry);
+  others.delete(key);
+  const expanded = expandComponentTags(html, others);
+  const selfTag = new RegExp(`<c-${key}(?=[\\s/>])`, "i");
+  if (selfTag.test(expanded.html)) {
+    return { html: expanded.html, warnings: expanded.warnings, error: `component "${key}" cannot contain itself` };
+  }
+  return { html: expanded.html, warnings: expanded.warnings };
+}
+
 /**
  * The single write-path for embed HTML coming from the agent (`batch_design`
  * and `edit_embed_html`):
@@ -29,7 +54,11 @@ export function finalizeEmbedHtml(html: string, options: FinalizeOptions): Final
   const { registry, previousHtml, masterMeta } = options;
 
   if (masterMeta) {
-    const result = validateMaster(html, masterMeta.key, masterMeta.variants);
+    const expandedMaster = expandMasterHtml(html, masterMeta.key, registry);
+    if (expandedMaster.error) {
+      return { ok: false, error: `Component "${masterMeta.key}": ${expandedMaster.error}` };
+    }
+    const result = validateMaster(expandedMaster.html, masterMeta.key, masterMeta.variants);
     if (!result.ok) {
       return { ok: false, error: `Component "${masterMeta.key}": ${result.errors.join("; ")}` };
     }
@@ -40,7 +69,7 @@ export function finalizeEmbedHtml(html: string, options: FinalizeOptions): Final
         error: `Component "${masterMeta.key}" would create a dependency cycle: ${cycle.join(" -> ")}`,
       };
     }
-    return { ok: true, html: result.master.html, unknownTags: [], warnings: [] };
+    return { ok: true, html: result.master.html, unknownTags: [], warnings: expandedMaster.warnings };
   }
 
   if (registry.size === 0 && !html.includes("<c-")) {

@@ -76,6 +76,23 @@ function createEmptyPage(name: string): PageData {
   };
 }
 
+/**
+ * Copy of a node map with `component` stripped from every embed. A duplicated
+ * page keeps its node ids' content but must not keep component masters:
+ * the copies would shadow the real masters (same key, second registry hit).
+ */
+function withoutComponentMasters(nodesById: PageData["nodesById"]): PageData["nodesById"] {
+  const out = { ...nodesById };
+  for (const id in out) {
+    const node = out[id] as unknown as { type: string; component?: unknown };
+    if (node.type === "embed" && node.component) {
+      const { component: _component, ...rest } = node;
+      out[id] = rest as unknown as PageData["nodesById"][string];
+    }
+  }
+  return out;
+}
+
 const defaultPage = createEmptyPage("Page 1");
 
 export const usePageStore = create<PageStoreState>((set, get) => ({
@@ -150,7 +167,7 @@ export const usePageStore = create<PageStoreState>((set, get) => ({
       ...sourceAfterSave,
       id: newId,
       name: `${sourceAfterSave.name} copy`,
-      nodesById: { ...sourceAfterSave.nodesById },
+      nodesById: withoutComponentMasters(sourceAfterSave.nodesById),
       parentById: { ...sourceAfterSave.parentById },
       childrenById: { ...sourceAfterSave.childrenById },
       rootIds: [...sourceAfterSave.rootIds],

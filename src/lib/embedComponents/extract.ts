@@ -32,14 +32,19 @@ function slotName(index: number): string {
   return index === 0 ? "text" : `text-${index + 1}`;
 }
 
+/** Component / detach markers: engine bookkeeping, never part of an element's identity. */
+const MARKER_ATTR = /^data-(c|c-.+|v-.+|d|d-.+)$/;
+
 /**
- * Structural fingerprint: tag + sorted attributes (minus `id`, `data-*`) +
+ * Structural fingerprint: tag + sorted attributes (minus `id` and the
+ * component markers `data-c*`, `data-v-*`, `data-d*`; other `data-*` count
+ * by name AND value) +
  * children, with each text-only leaf reduced to a placeholder so two
  * elements that differ only in their text compare equal.
  */
 export function structuralSignature(el: Element): string {
   const attrs = Array.from(el.attributes)
-    .filter((a) => a.name !== "id" && !a.name.startsWith("data-"))
+    .filter((a) => a.name !== "id" && !MARKER_ATTR.test(a.name))
     .map((a) => `${a.name}=${a.value}`)
     .sort()
     .join(";");

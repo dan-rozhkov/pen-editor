@@ -47,12 +47,12 @@ describe("validateMaster", () => {
     assertErr(validateMaster(`<div></div>`, "slot"));
   });
 
-  it("moves the root style attribute into the stylesheet and drops id", () => {
+  it("keeps the root style attribute on the root (inline precedence) and drops id", () => {
     const result = validateMaster(`<div data-c="box" id="x" style="color:red"></div>`, "box");
     assertOk(result);
-    expect(result.master.rootHtml).not.toContain("style=");
+    expect(result.master.rootHtml).toContain('style="color:red"');
     expect(result.master.rootHtml).not.toContain("id=");
-    expect(result.master.css).toContain("color:red");
+    expect(result.master.css).not.toContain("color:red");
   });
 
   it("adds meta-declared variant axes to the root", () => {

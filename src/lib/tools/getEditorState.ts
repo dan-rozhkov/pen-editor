@@ -4,7 +4,7 @@ import { useViewportStore } from "@/store/viewportStore";
 import { usePageStore } from "@/store/pageStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { effectiveVariants, parseMaster } from "@/lib/embedComponents";
-import { selectComponentRegistry } from "@/store/componentRegistry";
+import { duplicateKeyWarnings, selectComponentRegistry } from "@/store/componentRegistry";
 import { countUsage } from "@/store/componentOps";
 import type { ToolHandler } from "../toolRegistry";
 
@@ -13,6 +13,7 @@ function describeComponents() {
   const registry = selectComponentRegistry();
   if (registry.size === 0) return [];
   const usage = countUsage(registry);
+  const duplicates = (key: string) => duplicateKeyWarnings(key);
   return [...registry.values()].map((master) => {
     const parsed = parseMaster(master);
     return {
@@ -22,6 +23,7 @@ function describeComponents() {
       variants: parsed ? effectiveVariants(master, parsed) : (master.meta.variants ?? {}),
       slots: parsed?.slots ?? [],
       usedBy: usage.get(master.key) ?? 0,
+      ...(duplicates(master.key).length > 0 ? { warnings: duplicates(master.key) } : {}),
     };
   });
 }
