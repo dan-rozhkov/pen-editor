@@ -1,18 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { batchDesign } from "@/lib/tools/batchDesign";
+import { runBatch as run, sceneNode as node, type Rec } from "./batchDesignRun";
 import { useSceneStore } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
 import { resetStores } from "@/test/fixtures";
 import { serializeNodeToDepth } from "@/lib/tools/serializeUtils";
 
-type Rec = Record<string, unknown>;
-const node = (id: string) => useSceneStore.getState().nodesById[id] as unknown as Rec;
-
-async function run(operations: string) {
-  const result = JSON.parse(await batchDesign({ operations }));
-  expect(result.success).toBe(true);
-  return result as { createdNodes: { id: string }[]; warnings?: string[]; issues?: string[] };
-}
 async function runRaw(operations: string) {
   return JSON.parse(await batchDesign({ operations })) as Rec;
 }
@@ -147,5 +140,27 @@ describe("batch_design $--var for numeric properties", () => {
       gap: { variableId: "v-space" },
       cornerRadius: { variableId: "v-radius" },
     });
+  });
+
+  it("resolveVars emits the resolved number, not the $name reference", async () => {
+    const r = await run('a=I(document, {type: "frame", layout: "vertical", gap: "$--space-m", cornerRadius: "$--radius-m"})');
+    const s = useSceneStore.getState();
+    const out = serializeNodeToDepth(r.createdNodes[0].id, s.nodesById, s.childrenById, 0, {
+      resolveVars: true,
+      variableLookup: {},
+    }) as Rec;
+    expect(out.cornerRadius).toBe(8);
+    expect((out.layout as Rec).gap).toBe(16);
+    expect(out.numberBindings).toBeUndefined();
+  });
+
+  it("skips an inactive binding (width while sizing is not fixed)", async () => {
+    const r = await run('a=I(document, {type: "frame", width: "$--size-m", height: 40})');
+    const id = r.createdNodes[0].id;
+    useSceneStore.getState().updateNode(id, { sizing: { widthMode: "fill_container" } } as never);
+    const s = useSceneStore.getState();
+    const out = serializeNodeToDepth(id, s.nodesById, s.childrenById, 0) as Rec;
+    expect(out.width).not.toBe("$--size-m");
+    expect(typeof out.width).toBe("number");
   });
 });

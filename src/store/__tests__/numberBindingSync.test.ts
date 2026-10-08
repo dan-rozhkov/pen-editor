@@ -30,6 +30,8 @@ function seed(nodes: FlatSceneNode[]) {
 }
 
 let stop: () => void;
+/** Subscriber-triggered passes run in a coalesced microtask; await it. */
+const flush = () => Promise.resolve();
 
 beforeEach(() => {
   resetStores();
@@ -100,26 +102,29 @@ describe("unbind-on-literal-write (sceneStore)", () => {
 });
 
 describe("numberBindingSync", () => {
-  it("materializes bindings on start and when a variable value changes", () => {
+  it("materializes bindings on start and when a variable value changes", async () => {
     seed([bound("a"), bound("b"), frame("plain", { cornerRadius: 7 })]);
     stop = startNumberBindingSync();
     expect(n("a")).toMatchObject({ cornerRadius: 12, layout: { gap: 16 } });
     useVariableStore.getState().setVariableModeValue("r", "light", "20");
+    await flush();
     useVariableStore.getState().setVariableModeValue("r", "dark", "20");
+    await flush();
     expect(n("a").cornerRadius).toBe(20);
     expect(n("b").cornerRadius).toBe(20);
     expect(n("plain").cornerRadius).toBe(7);
   });
 
-  it("re-materializes when the active mode changes", () => {
+  it("re-materializes when the active mode changes", async () => {
     seed([bound("a")]);
     stop = startNumberBindingSync();
     expect((n("a").layout as { gap: number }).gap).toBe(16);
     useThemeStore.getState().setActiveTheme("dark");
+    await flush();
     expect((n("a").layout as { gap: number }).gap).toBe(24);
   });
 
-  it("follows a frame themeOverride on an ancestor", () => {
+  it("follows a frame themeOverride on an ancestor", async () => {
     const f = frame("f");
     const c = bound("c");
     useSceneStore.setState({
@@ -132,59 +137,68 @@ describe("numberBindingSync", () => {
     stop = startNumberBindingSync();
     expect((n("c").layout as { gap: number }).gap).toBe(16);
     scene().updateNode("f", { themeOverride: "dark" } as never);
+    await flush();
     expect((n("c").layout as { gap: number }).gap).toBe(24);
   });
 
-  it("binds a node that becomes bound later (incremental discovery)", () => {
+  it("binds a node that becomes bound later (incremental discovery)", async () => {
     seed([frame("a", { cornerRadius: 1 })]);
     stop = startNumberBindingSync();
     scene().updateNode("a", { numberBindings: { cornerRadius: { variableId: "r" } } } as never);
+    await flush();
     expect(n("a").cornerRadius).toBe(12);
   });
 
-  it("a manual edit survives later variable changes (unbound for good)", () => {
+  it("a manual edit survives later variable changes (unbound for good)", async () => {
     seed([bound("a")]);
     stop = startNumberBindingSync();
     scene().updateNode("a", { cornerRadius: 3 });
     useVariableStore.getState().setVariableModeValue("r", "light", "99");
+    await flush();
     expect(n("a").cornerRadius).toBe(3);
   });
 
-  it("writes nothing when nothing changed (no subscribe loop)", () => {
+  it("writes nothing when nothing changed (no subscribe loop)", async () => {
     seed([bound("a")]);
     stop = startNumberBindingSync();
     let writes = 0;
     const unsub = useSceneStore.subscribe(() => writes++);
     useThemeStore.getState().setActiveTheme("light"); // same value: store skips notify
+    await flush();
     useVariableStore.getState().setVariables(useVariableStore.getState().variables); // same values
+    await flush();
     unsub();
     expect(writes).toBe(0);
   });
 
-  it("marks patched ids dirty inside the same update (no full-scan poisoning)", () => {
+  it("marks patched ids dirty inside the same update (no full-scan poisoning)", async () => {
     seed([bound("a"), frame("x")]);
     stop = startNumberBindingSync();
     consumeDirty();
     useVariableStore.getState().setVariableModeValue("r", "light", "50");
+    await flush();
     useVariableStore.getState().setVariableModeValue("r", "dark", "50");
+    await flush();
     const dirty = consumeDirty();
     expect(dirty.ids.has("a")).toBe(true);
     expect(dirty.ids.has("x")).toBe(false);
   });
 
-  it("undo of a variable edit restores the variable and the materialized literals together", () => {
+  it("undo of a variable edit restores the variable and the materialized literals together", async () => {
     seed([bound("a")]);
     stop = startNumberBindingSync();
     useVariableStore.getState().updateVariable("r", { value: "33" });
+    await flush();
     expect(n("a").cornerRadius).toBe(33);
     const prev = useHistoryStore.getState().undo(createSnapshot(useSceneStore.getState()));
     assertDefined(prev);
     useSceneStore.getState().restoreSnapshot(prev);
+    await flush();
     expect(useVariableStore.getState().variables.find((v) => v.id === "r")?.value).toBe("12");
     expect(n("a").cornerRadius).toBe(12);
   });
 
-  it("5k bound nodes: one variable edit is ONE batched scene write", () => {
+  it("5k bound nodes: one variable edit is ONE batched scene write", async () => {
     const nodes: FlatSceneNode[] = [];
     for (let i = 0; i < 5000; i++) nodes.push(bound(`n${i}`));
     seed(nodes);
@@ -192,6 +206,7 @@ describe("numberBindingSync", () => {
     let writes = 0;
     const unsub = useSceneStore.subscribe(() => writes++);
     useVariableStore.getState().updateVariable("r", { value: "33" });
+    await flush();
     unsub();
     expect(writes).toBe(1);
     expect(n("n0").cornerRadius).toBe(33);
@@ -225,23 +240,25 @@ describe("numberBindingSync: non-Theme collection modes (Brand)", () => {
     consumeDirty();
   });
 
-  it("starts in the default Brand mode", () => {
+  it("starts in the default Brand mode", async () => {
     seed([radiusBound("a")]);
     stop = startNumberBindingSync();
     expect(n("a").cornerRadius).toBe(16);
   });
 
-  it("re-materializes when the document modeContext switches Brand mode", () => {
+  it("re-materializes when the document modeContext switches Brand mode", async () => {
     seed([radiusBound("a"), frame("plain", { cornerRadius: 7 })]);
     stop = startNumberBindingSync();
     useThemeStore.getState().setCollectionMode("brand", "sharp");
+    await flush();
     expect(n("a").cornerRadius).toBe(2);
     expect(n("plain").cornerRadius).toBe(7);
     useThemeStore.getState().setModeContext({ theme: "light" });
+    await flush();
     expect(n("a").cornerRadius).toBe(16);
   });
 
-  it("re-materializes descendants when a frame's modeOverrides switch Brand mode", () => {
+  it("re-materializes descendants when a frame's modeOverrides switch Brand mode", async () => {
     const f = frame("f");
     const c = radiusBound("c");
     const other = radiusBound("o");
@@ -255,13 +272,15 @@ describe("numberBindingSync: non-Theme collection modes (Brand)", () => {
     stop = startNumberBindingSync();
     expect(n("c").cornerRadius).toBe(16);
     scene().updateNode("f", { modeOverrides: { brand: "sharp" } } as never);
+    await flush();
     expect(n("c").cornerRadius).toBe(2);
     expect(n("o").cornerRadius).toBe(16); // not a descendant
     scene().updateNode("f", { modeOverrides: undefined } as never);
+    await flush();
     expect(n("c").cornerRadius).toBe(16);
   });
 
-  it("an override wins over the document context, and a nested override over its parent's", () => {
+  it("an override wins over the document context, and a nested override over its parent's", async () => {
     const f = frame("f", { modeOverrides: { brand: "sharp" } });
     const g = frame("g", { modeOverrides: { brand: "soft" } });
     const c = radiusBound("c");
@@ -273,11 +292,12 @@ describe("numberBindingSync: non-Theme collection modes (Brand)", () => {
       _cachedTree: null,
     });
     useThemeStore.getState().setCollectionMode("brand", "sharp");
+    await flush();
     stop = startNumberBindingSync();
     expect(n("c").cornerRadius).toBe(16); // g (soft) beats f (sharp) beats doc
   });
 
-  it("a legacy themeOverride change on a frame is still picked up", () => {
+  it("a legacy themeOverride change on a frame is still picked up", async () => {
     const f = frame("f");
     const c = frame("c", {
       cornerRadius: 1,
@@ -300,14 +320,86 @@ describe("numberBindingSync: non-Theme collection modes (Brand)", () => {
     stop = startNumberBindingSync();
     expect(n("c").cornerRadius).toBe(4);
     scene().updateNode("f", { themeOverride: "dark" } as never);
+    await flush();
     expect(n("c").cornerRadius).toBe(8);
   });
 
-  it("writes nothing when the new mode context resolves to the same numbers (no loop)", () => {
+  it("writes nothing when the new mode context resolves to the same numbers (no loop)", async () => {
     seed([radiusBound("a")]);
     stop = startNumberBindingSync();
     const before = scene().nodesById;
     useThemeStore.getState().setCollectionMode("theme", "dark"); // Brand var is unaffected
+    await flush();
     expect(scene().nodesById).toBe(before);
+  });
+});
+
+describe("numberBindingSync: reparenting and deferral", () => {
+  const sized = (id: string) => frame(id, { cornerRadius: 1, numberBindings: { cornerRadius: { variableId: "sp" } } });
+
+  function seedTree() {
+    const dark = frame("dark", { modeOverrides: { theme: "dark" } });
+    const light = frame("light");
+    const c = sized("c");
+    const kid = frame("kid");
+    const deep = sized("deep");
+    useSceneStore.setState({
+      nodesById: { dark, light, c, kid, deep },
+      parentById: { dark: null, light: null, c: "light", kid: "light", deep: "kid" },
+      childrenById: { dark: [], light: ["c", "kid"], kid: ["deep"] },
+      rootIds: ["dark", "light"],
+      _cachedTree: null,
+    });
+  }
+
+  it("moveNode of a bound node under a frame with other modeOverrides re-materializes it", async () => {
+    seedTree();
+    stop = startNumberBindingSync();
+    expect(n("c").cornerRadius).toBe(16);
+    scene().moveNode("c", "dark", 0);
+    await flush();
+    expect(n("c").cornerRadius).toBe(24);
+    scene().moveNode("c", "light", 0);
+    await flush();
+    expect(n("c").cornerRadius).toBe(16);
+  });
+
+  it("moving a frame re-materializes its bound descendants, and nothing else", async () => {
+    seedTree();
+    stop = startNumberBindingSync();
+    const before = n("c");
+    scene().moveNode("kid", "dark", 0);
+    await flush();
+    expect(n("deep").cornerRadius).toBe(24);
+    expect(n("c")).toBe(before);
+  });
+
+  it("defers the patch: it is not applied inside the notifying update, and triggers coalesce", async () => {
+    seed([bound("a"), bound("b")]);
+    stop = startNumberBindingSync();
+    const radiusSeenBySubscriber: unknown[] = [];
+    const unsub = useVariableStore.subscribe(() => radiusSeenBySubscriber.push(n("a").cornerRadius));
+    let sceneWrites = 0;
+    const unsubScene = useSceneStore.subscribe(() => sceneWrites++);
+    useVariableStore.getState().setVariableModeValue("r", "light", "30");
+    useVariableStore.getState().setVariableModeValue("r", "dark", "30");
+    useThemeStore.getState().setActiveTheme("dark");
+    expect(sceneWrites).toBe(0); // nothing nested in the subscribers
+    expect(n("a").cornerRadius).toBe(12);
+    await flush();
+    unsub();
+    unsubScene();
+    expect(sceneWrites).toBe(1); // three triggers, one pass
+    expect(n("a").cornerRadius).toBe(30);
+    expect(radiusSeenBySubscriber.every((v) => v === 12)).toBe(true);
+  });
+
+  it("a stopped sync drops its pending pass", async () => {
+    seed([bound("a")]);
+    stop = startNumberBindingSync();
+    useVariableStore.getState().updateVariable("r", { value: "77" });
+    stop();
+    await flush();
+    expect(n("a").cornerRadius).toBe(12);
   });
 });

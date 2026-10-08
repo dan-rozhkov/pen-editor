@@ -5,14 +5,12 @@ import { type CodegenOptions, convertPxToRem } from "./css";
 import { nodeDeclarations } from "./declarations";
 import {
   declarationsToTailwind,
-  collectSubtreeVariableIds,
-  tokensBlockForIds,
+  buildSubtreeTokens,
   UNSUPPORTED_NODE_TYPES,
   unsupportedNodeWarning,
   videoFillWarning,
   hasVideoFill,
 } from "./tailwind";
-import { MIXED_MODES_SUBTREE_WARNING, subtreeHasMixedModes } from "@/lib/designToCss/buildCss";
 
 export interface BuildReactCodeResult {
   code: string;
@@ -258,8 +256,8 @@ export function buildReactCode(
   const element = buildJsxElement(nodeId, nodesById, childrenById, undefined, true, 2, options, warnings) ?? "";
   const componentCode = `export function ${componentName}() {\n  return (\n${element}\n  );\n}\n`;
 
-  const tokensBlock = tokensBlockForIds(collectSubtreeVariableIds(nodeId, nodesById, childrenById), nodeId, nodesById);
-  if (tokensBlock && subtreeHasMixedModes(nodeId, nodesById, childrenById)) warnings.push(MIXED_MODES_SUBTREE_WARNING);
+  const { block: tokensBlock, warnings: modeWarnings } = buildSubtreeTokens(nodeId, nodesById, childrenById);
+  warnings.push(...modeWarnings);
   const code = tokensBlock ? `/* Requires CSS variables:\n${tokensBlock}\n*/\n${componentCode}` : componentCode;
   return { code, warnings };
 }

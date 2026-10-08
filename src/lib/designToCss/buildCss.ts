@@ -83,11 +83,20 @@ export function collectBoundVariableIds(node: FlatSceneNode): Set<string> {
 }
 
 /**
- * The context `nodeId`'s subtree is generated in: the document context plus
- * every ancestor's overrides and the node's own (the generated block is the
- * standalone root for that subtree, so its own picks apply to itself).
+ * The context `nodeId`'s OWN bound properties resolve in: the document context
+ * plus every ANCESTOR's overrides. A frame's own `modeOverrides` apply only to
+ * its descendants on the canvas (`getEffectiveModeContext` without
+ * `includeSelf`), so a codegen that resolved the frame's own fill in its own
+ * picks would disagree with what is painted.
  */
 export function codegenModeContext(nodeId: string, nodesById: Record<string, FlatSceneNode>): ModeContext {
+  const { parentById } = useSceneStore.getState();
+  const { modeContext } = useThemeStore.getState();
+  return getEffectiveModeContext(parentById, nodesById, nodeId, modeContext);
+}
+
+/** The context `nodeId`'s DESCENDANTS resolve in: {@link codegenModeContext} plus the node's own overrides. */
+export function codegenSubtreeModeContext(nodeId: string, nodesById: Record<string, FlatSceneNode>): ModeContext {
   const { parentById } = useSceneStore.getState();
   const { modeContext } = useThemeStore.getState();
   return getEffectiveModeContext(parentById, nodesById, nodeId, modeContext, { includeSelf: true });
@@ -95,16 +104,18 @@ export function codegenModeContext(nodeId: string, nodesById: Record<string, Fla
 
 export const MIXED_MODES_SUBTREE_WARNING =
   "Subtree contains frames with different modes; tokens shown for the root frame.";
+export const ROOT_MODE_CONFLICT_WARNING =
+  "The root frame and its contents use the same token in different modes; the root frame's value is shown.";
 export const MIXED_MODES_SELECTION_WARNING =
   "Selected nodes resolve in different modes; tokens shown for the first node.";
 
-/** True when a frame under `rootId` resolves its contents in a mode context other than the root's. */
+/** True when a frame under `rootId` resolves its contents in a mode context other than the root's contents (its subtree context). */
 export function subtreeHasMixedModes(
   rootId: string,
   nodesById: Record<string, FlatSceneNode>,
   childrenById: Record<string, string[]>,
 ): boolean {
-  const rootCtx = codegenModeContext(rootId, nodesById);
+  const rootCtx = codegenSubtreeModeContext(rootId, nodesById);
   const rootKey = modeContextKey(rootCtx);
   const stack: Array<[string, ModeContext]> = [[rootId, rootCtx]];
   const seen = new Set<string>();
@@ -188,13 +199,15 @@ export function buildCssForNodes(nodeIds: string[], nodesById: Record<string, Fl
   }
 
   const { variables, collections } = useVariableStore.getState();
-  if (mixedModes) warnings.push(MIXED_MODES_SELECTION_WARNING);
   const tokensBlock = buildTokensBlock(
     boundVariableIds,
     variables,
     tokenContext ?? useThemeStore.getState().modeContext,
     collections,
   );
+
+  // Like the React codegen: only warn when a tokens block is actually emitted.
+  if (mixedModes && tokensBlock) warnings.push(MIXED_MODES_SELECTION_WARNING);
 
   const css = [tokensBlock, ...blocks].filter(Boolean).join("\n\n");
   return { css, warnings };

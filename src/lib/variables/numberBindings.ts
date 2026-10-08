@@ -82,7 +82,7 @@ export function clampForKey(key: NumberBindingKey, value: number): number {
  * Whether `key` is bindable on this node right now. `width`/`height` bind only
  * while the sizing mode is `fixed` (otherwise the layout engine owns the size).
  */
-function isKeyActive(node: FlatSceneNode, key: NumberBindingKey): boolean {
+export function isKeyActive(node: FlatSceneNode, key: NumberBindingKey): boolean {
   if (key === "width") return (node.sizing?.widthMode ?? "fixed") === "fixed";
   if (key === "height") return (node.sizing?.heightMode ?? "fixed") === "fixed";
   return true;

@@ -5,7 +5,8 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
 import { makeThemeCollection, makeThemeVariable } from "@/lib/variables";
 import type { Variable } from "@/types/variable";
-import { buildCssForNodes } from "../buildCss";
+import { buildCssForNodes, codegenModeContext } from "../buildCss";
+import { getEffectiveModeContext } from "@/lib/variables/modeContext";
 import type { FlatFrameNode, FlatSceneNode, RectNode } from "@/types/scene";
 import { boundFillButtonRect, gradientRect } from "./cssNodeFixtures";
 
@@ -232,14 +233,27 @@ describe("buildCssForNodes mode contexts", () => {
     expect(css).toContain("--primary: #ffffff;");
   });
 
-  it("resolves tokens in the frame's own modeOverrides", () => {
+  it("a frame's own modeOverrides do not recolor its own properties (canvas agreement)", () => {
+    // On the canvas a frame's picks reach descendants only: its own fill paints in the parent context.
     const { css, warnings } = buildCssForNodes(["a"], { a: bound("a", "var-primary", { modeOverrides: { theme: "dark" } }) });
-    expect(css).toContain("--primary: #000000;");
+    expect(css).toContain("--primary: #ffffff;");
     expect(warnings).toEqual([]);
   });
 
-  it("honors a legacy themeOverride", () => {
-    const { css } = buildCssForNodes(["a"], { a: bound("a", "var-primary", { themeOverride: "dark" }) });
+  it("pins agreement with the canvas resolver for own and ancestor overrides", () => {
+    const parent = bound("p", "var-primary", { modeOverrides: { theme: "dark" } });
+    const child = bound("c", "var-primary", { modeOverrides: { theme: "light" } });
+    useSceneStore.setState({ parentById: { c: "p", p: null } });
+    const nodes = { p: parent, c: child };
+    const canvas = getEffectiveModeContext(useSceneStore.getState().parentById, nodes, "c", useThemeStore.getState().modeContext);
+    expect(codegenModeContext("c", nodes)).toEqual(canvas);
+    expect(buildCssForNodes(["c"], nodes).css).toContain("--primary: #000000;");
+  });
+
+  it("honors a legacy themeOverride on an ancestor", () => {
+    const parent = bound("p", "var-primary", { themeOverride: "dark" });
+    useSceneStore.setState({ parentById: { c: "p", p: null } });
+    const { css } = buildCssForNodes(["c"], { p: parent, c: bound("c", "var-primary") });
     expect(css).toContain("--primary: #000000;");
   });
 
@@ -252,25 +266,38 @@ describe("buildCssForNodes mode contexts", () => {
   });
 
   it("combines Theme and Brand picks", () => {
+    const parent = bound("p", "var-primary", { modeOverrides: { theme: "dark", brand: "globex" } });
+    useSceneStore.setState({ parentById: { a: "p", p: null } });
     const node = bound("a", "var-primary", {
-      modeOverrides: { theme: "dark", brand: "globex" },
       fills: [
         { id: "p1", type: "solid", color: "#1", colorBinding: { variableId: "var-primary" } },
         { id: "p2", type: "solid", color: "#2", colorBinding: { variableId: "var-accent" } },
       ],
     });
-    const { css } = buildCssForNodes(["a"], { a: node });
+    const { css } = buildCssForNodes(["a"], { p: parent, a: node });
     expect(css).toContain("--primary: #000000;");
     expect(css).toContain("--accent: #00aa00;");
   });
 
   it("warns and uses the first context when selected nodes differ", () => {
     const a = bound("a", "var-primary");
-    const b = bound("b", "var-primary", { modeOverrides: { theme: "dark" } });
-    const { css, warnings } = buildCssForNodes(["a", "b"], { a, b });
+    const p = bound("p", "var-primary", { modeOverrides: { theme: "dark" } });
+    const b = bound("b", "var-primary");
+    useSceneStore.setState({ parentById: { b: "p", p: null } });
+    const { css, warnings } = buildCssForNodes(["a", "b"], { a, b, p });
     expect(css).toContain("--primary: #ffffff;");
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatch(/different modes/);
+  });
+
+  it("does not add the mixed-modes warning when no tokens block is emitted", () => {
+    const plain = (id: string, extra: Record<string, unknown> = {}) =>
+      ({ id, type: "frame", name: id, x: 0, y: 0, width: 10, height: 10, ...extra }) as unknown as FlatSceneNode;
+    const p = plain("p", { modeOverrides: { theme: "dark" } });
+    useSceneStore.setState({ parentById: { b: "p", p: null } });
+    const { css, warnings } = buildCssForNodes(["a", "b"], { a: plain("a"), b: plain("b"), p });
+    expect(css).not.toContain(":root");
+    expect(warnings).toEqual([]);
   });
 
   it("follows the document mode context", () => {

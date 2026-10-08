@@ -6,7 +6,7 @@ import type {
   Paint,
   ParagraphAttrs,
 } from "@/types/scene";
-import { THEME_COLLECTION_ID, type ModeContext, type ThemeName } from "@/types/variable";
+import type { ModeContext } from "@/types/variable";
 import { useThemeStore } from "@/store/themeStore";
 import { getEffectiveModeContext } from "@/lib/variables/modeContext";
 import {
@@ -58,16 +58,6 @@ function resolveInheritedModeContext(
   const base = useThemeStore.getState().modeContext;
   if (!parentId) return base;
   return getEffectiveModeContext(parentById, nodesById, parentId, base, { includeSelf: true });
-}
-
-/** The Theme-collection pick of {@link resolveInheritedModeContext}, for the node mapper's `theme` option. */
-function resolveInheritedTheme(
-  parentId: string | null,
-  nodesById: Record<string, FlatSceneNode>,
-  parentById: Record<string, string | null>,
-): ThemeName {
-  const ctx = resolveInheritedModeContext(parentId, nodesById, parentById);
-  return (ctx[THEME_COLLECTION_ID] ?? "light") as ThemeName;
 }
 
 /**
@@ -282,12 +272,12 @@ function executeInsert(op: ParsedOperation, ctx: ExecutionContext): void {
   const actualParentId = resolveParent(op.args[0], ctx);
   const nodeData = resolveJsonArg(op.args[1]);
 
-  const inheritedTheme = resolveInheritedTheme(
+  const inheritedModes = resolveInheritedModeContext(
     actualParentId,
     ctx.nodesById,
     ctx.parentById,
   );
-  const node = createNodeFromAiDataWithTheme(nodeData, inheritedTheme, ctx.issues);
+  const node = createNodeFromAiDataWithTheme(nodeData, inheritedModes, ctx.issues);
 
   // Repair generated-image urls / expand document component tags in embed HTML.
   // A fresh I() insert always supplies the embed's full htmlContent, and
@@ -359,7 +349,7 @@ function executeCopy(op: ParsedOperation, ctx: ExecutionContext): void {
 
   // Map direct overrides through nodeMapper
   if (Object.keys(directOverrides).length > 0) {
-    const inheritedTheme = resolveInheritedTheme(
+    const inheritedModes = resolveInheritedModeContext(
       actualParentId,
       ctx.nodesById,
       ctx.parentById,
@@ -368,7 +358,7 @@ function executeCopy(op: ParsedOperation, ctx: ExecutionContext): void {
       directOverrides as Record<string, unknown>,
       "update",
       toFlatNode(cloned),
-      { theme: inheritedTheme },
+      { modes: inheritedModes },
     );
     delete (mapped as Record<string, unknown>)._children;
     if (mapped._warnings) {
@@ -393,7 +383,7 @@ function executeCopy(op: ParsedOperation, ctx: ExecutionContext): void {
           "update",
           newNode,
           {
-            theme: resolveInheritedTheme(
+            modes: resolveInheritedModeContext(
               ctx.parentById[newPath] ?? null,
               ctx.nodesById,
               ctx.parentById,
@@ -597,7 +587,7 @@ function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
   }
 
   const mapped = mapNodeData(updateData, "update", node, {
-    theme: resolveInheritedTheme(
+    modes: resolveInheritedModeContext(
       ctx.parentById[path] ?? null,
       ctx.nodesById,
       ctx.parentById,
@@ -671,7 +661,7 @@ function executeReplace(op: ParsedOperation, ctx: ExecutionContext): void {
   const parentId = ctx.parentById[path];
   const newNode = createNodeFromAiDataWithTheme(
     nodeData,
-    resolveInheritedTheme(parentId ?? null, ctx.nodesById, ctx.parentById),
+    resolveInheritedModeContext(parentId ?? null, ctx.nodesById, ctx.parentById),
     ctx.issues,
     existingNode,
   );

@@ -14,8 +14,7 @@ import {
 import { collectVariableValues } from "@/utils/variableCssUtils";
 import { useVariableStore } from "@/store/variableStore";
 import { getEffectiveModeContextForNode } from "@/utils/nodeThemeUtils";
-import { modeContextKey } from "@/lib/variables/modeContext";
-import { useThemeStore } from "@/store/themeStore";
+import { subscribeEmbedModeKey } from "./embedModeKeys";
 import { findHiddenSelfOrAncestor } from "@/utils/nodeUtils";
 import type { EmbedNode } from "@/types/scene";
 import { topLevelAncestorId } from "@/utils/topLevelAncestor";
@@ -485,10 +484,8 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
   // Mode changes DO live-update (the document-level mode switcher makes them
   // user-visible): a document-level context change (`themeStore.modeContext`)
   // and a change to this embed's effective context (an ancestor frame's
-  // `modeOverrides`) both re-apply the properties in place. The scene
-  // subscription compares `modeContextKey` strings and bails on every scene
-  // change that leaves this embed's key alone, so an unrelated edit or a
-  // sibling frame's override change touches nothing here.
+  // `modeOverrides`, or a reparent) both re-apply the properties in place.
+  // `subscribeEmbedModeKey` only fires for embeds whose key actually changed.
   useEffect(() => {
     const applyVariables = () => {
       const container = contentRef.current;
@@ -500,24 +497,13 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
         collectVariableValues(undefined, getEffectiveModeContextForNode(nodeId)),
       );
     };
-    let lastKey = modeContextKey(getEffectiveModeContextForNode(nodeId));
-    const applyIfModesChanged = () => {
-      const key = modeContextKey(getEffectiveModeContextForNode(nodeId));
-      if (key === lastKey) return;
-      lastKey = key;
-      applyVariables();
-    };
     const unsubVariables = useVariableStore.subscribe(applyVariables);
-    const unsubDocModes = useThemeStore.subscribe((state, prev) => {
-      if (state.modeContext !== prev.modeContext) applyIfModesChanged();
-    });
-    const unsubScene = useSceneStore.subscribe((state, prev) => {
-      if (state.nodesById !== prev.nodesById || state.parentById !== prev.parentById) applyIfModesChanged();
-    });
+    // One shared module-level subscriber (embedModeKeys.ts) tells us when THIS
+    // embed's effective mode key changed: no per-host scene subscription.
+    const unsubModes = subscribeEmbedModeKey(nodeId, applyVariables);
     return () => {
       unsubVariables();
-      unsubDocModes();
-      unsubScene();
+      unsubModes();
     };
   }, [nodeId]);
 

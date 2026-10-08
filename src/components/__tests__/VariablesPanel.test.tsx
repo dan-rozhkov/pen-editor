@@ -74,6 +74,33 @@ describe("<VariablesPanelContent />", () => {
     expect(findVariable("var-primary")?.name).toBe("--accent");
   });
 
+  it("a refused rename keeps the old name and announces the error in a status region", () => {
+    render(<VariablesPanelContent />);
+    fireEvent.click(screen.getByText("--primary"));
+    const input = screen.getByDisplayValue("--primary") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "--radius-m" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(findVariable("var-primary")?.name).toBe("--primary");
+    expect(screen.getByText("--primary")).toBeTruthy();
+    const status = screen.getAllByRole("status").find((el) => /already uses/.test(el.textContent ?? ""));
+    expect(status?.textContent).toMatch(/Another variable already uses --radius-m/);
+  });
+
+  it("clears the rename error after a successful rename", () => {
+    render(<VariablesPanelContent />);
+    fireEvent.click(screen.getByText("--primary"));
+    let input = screen.getByDisplayValue("--primary") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "--radius-m" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.click(screen.getByText("--primary"));
+    input = screen.getByDisplayValue("--primary") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "--accent" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.queryByText(/already uses/)).toBeNull();
+    expect(findVariable("var-primary")?.name).toBe("--accent");
+  });
+
   it("renaming rewrites var(--old) in embed HTML (renameVariable, not a bare name write)", async () => {
     const { useSceneStore } = await import("@/store/sceneStore");
     useSceneStore.setState({

@@ -205,6 +205,9 @@ function VariableRow({
   const renameVariable = useVariableStore((s) => s.renameVariable);
   const deleteVariable = useVariableStore((s) => s.deleteVariable);
   const [expanded, setExpanded] = useState(false);
+  // renameVariable refuses a colliding name; the draft is discarded and the old
+  // name stays, so the reason must be said somewhere.
+  const [renameError, setRenameError] = useState<string | null>(null);
   const badge = typeBadge[variable.type];
 
   return (
@@ -224,9 +227,17 @@ function VariableRow({
             <div className="min-w-0 flex-1">
               <EditableText
                 value={variable.name}
-                onCommit={(name) => renameVariable(variable.id, name)}
+                onCommit={(name) => {
+                  const result = renameVariable(variable.id, name);
+                  setRenameError("error" in result ? result.error : null);
+                }}
                 allowEmpty
               />
+              {renameError && (
+                <div role="status" className="px-2 text-[10px] text-red-400">
+                  {renameError}
+                </div>
+              )}
             </div>
             {variable.deprecated && (
               <Badge variant="outline" title={variable.deprecated.note}>

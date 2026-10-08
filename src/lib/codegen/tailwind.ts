@@ -3,10 +3,16 @@ import { FLEX_FILL } from "@/lib/designToHtml/layoutStyleGeneration";
 import { getRenderableFills } from "@/utils/fillUtils";
 import { type CodegenOptions, convertPxToRem } from "./css";
 import { nodeDeclarations } from "./declarations";
-import { collectBoundVariableIds, buildTokensBlock, codegenModeContext } from "@/lib/designToCss/buildCss";
+import {
+  MIXED_MODES_SUBTREE_WARNING,
+  ROOT_MODE_CONFLICT_WARNING,
+  codegenModeContext,
+  codegenSubtreeModeContext,
+  collectBoundVariableIds,
+  subtreeHasMixedModes,
+} from "@/lib/designToCss/buildCss";
+import { getVariableIndex, getVariableValueAt } from "@/lib/variables";
 import { useVariableStore } from "@/store/variableStore";
-import { useThemeStore } from "@/store/themeStore";
-import { useSceneStore } from "@/store/sceneStore";
 
 export function hasVideoFill(node: FlatSceneNode): boolean {
   return getRenderableFills(node).some((paint) => paint.type === "video");
@@ -35,21 +41,48 @@ export function collectSubtreeVariableIds(
 }
 
 /**
- * `:root {...}` CSS text for `variableIds` using the current variable store
- * (empty string if none resolve). Values resolve in `rootNodeId`'s mode
- * context (document context plus its ancestors' and its own overrides); with
- * no `rootNodeId` they resolve in the document context. `nodesById` defaults
- * to the scene store (pass the map being generated from when it differs).
+ * The `:root` tokens block for the generated subtree rooted at `rootId`, plus
+ * its mode warnings. The canvas resolves a frame's own bound properties in the
+ * PARENT context (its `modeOverrides` reach only descendants), so tokens the
+ * root itself uses resolve in {@link codegenModeContext} and every other token
+ * in {@link codegenSubtreeModeContext}. One `:root` block cannot hold two
+ * values for one name: when the root and its contents use the same token in
+ * different modes, the root's value is kept (it is what the generated element
+ * itself paints) and {@link ROOT_MODE_CONFLICT_WARNING} is added. Nested
+ * frames with their own overrides add {@link MIXED_MODES_SUBTREE_WARNING}.
+ * Shared by the Tailwind and React generators so they cannot disagree.
  */
-export function tokensBlockForIds(
-  variableIds: Set<string>,
-  rootNodeId?: string,
-  nodesById: Record<string, FlatSceneNode> = useSceneStore.getState().nodesById as Record<string, FlatSceneNode>,
-): string {
-  if (variableIds.size === 0) return "";
+export function buildSubtreeTokens(
+  rootId: string,
+  nodesById: Record<string, FlatSceneNode>,
+  childrenById: Record<string, string[]>,
+): { block: string; warnings: string[] } {
+  const all = collectSubtreeVariableIds(rootId, nodesById, childrenById);
+  const warnings: string[] = [];
+  if (all.size === 0) return { block: "", warnings };
+  const root = nodesById[rootId];
+  const rootOwn = root ? collectBoundVariableIds(root) : new Set<string>();
+  const contentIds = new Set<string>();
+  for (const childId of childrenById[rootId] ?? []) {
+    for (const id of collectSubtreeVariableIds(childId, nodesById, childrenById)) contentIds.add(id);
+  }
   const { variables, collections } = useVariableStore.getState();
-  const ctx = rootNodeId ? codegenModeContext(rootNodeId, nodesById) : useThemeStore.getState().modeContext;
-  return buildTokensBlock(variableIds, variables, ctx, collections);
+  const index = getVariableIndex(variables, collections);
+  const ownCtx = codegenModeContext(rootId, nodesById);
+  const subtreeCtx = codegenSubtreeModeContext(rootId, nodesById);
+  let conflict = false;
+  const lines: string[] = [];
+  for (const v of variables) {
+    if (!all.has(v.id)) continue;
+    const own = rootOwn.has(v.id);
+    const value = getVariableValueAt(v, own ? ownCtx : subtreeCtx, index);
+    if (own && contentIds.has(v.id) && value !== getVariableValueAt(v, subtreeCtx, index)) conflict = true;
+    lines.push(`  ${v.name}: ${value};`);
+  }
+  const block = lines.length > 0 ? `:root {\n${lines.join("\n")}\n}` : "";
+  if (block && conflict) warnings.push(ROOT_MODE_CONFLICT_WARNING);
+  if (block && subtreeHasMixedModes(rootId, nodesById, childrenById)) warnings.push(MIXED_MODES_SUBTREE_WARNING);
+  return { block, warnings };
 }
 
 /** Variable *names* (e.g. `--primary`) for `variableIds`, in the current variable store — used for the leaf-output warning listing needed tokens. */
@@ -430,7 +463,8 @@ export function buildTailwindCode(
   }
 
   const code = buildElement(nodeId, nodesById, childrenById, undefined, true, 0, options, warnings) ?? "";
-  const tokensBlock = tokensBlockForIds(collectSubtreeVariableIds(nodeId, nodesById, childrenById));
+  const { block: tokensBlock, warnings: modeWarnings } = buildSubtreeTokens(nodeId, nodesById, childrenById);
+  warnings.push(...modeWarnings);
   const finalCode = tokensBlock ? `<!--\n${tokensBlock}\n-->\n${code}` : code;
   return { code: finalCode, warnings };
 }

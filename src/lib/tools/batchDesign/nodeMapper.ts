@@ -15,7 +15,16 @@ import type {
   ParagraphAttrs,
 } from "@/types/scene";
 import type { NumberBindingKey, NumberBindings } from "@/types/scene";
-import type { ThemeName } from "@/types/variable";
+import {
+  THEME_COLLECTION_ID,
+  type ModeContext,
+  type ModeInput,
+  type ModeOverrides,
+  type ThemeName,
+  type VariableCollection,
+} from "@/types/variable";
+import { useThemeStore } from "@/store/themeStore";
+import { getFrameModeOverrides, mergeModeContext } from "@/lib/variables/modeContext";
 import { useVariableStore } from "@/store/variableStore";
 import {
   NUMBER_BINDING_PADDING_KEYS,
@@ -69,7 +78,7 @@ function applyColorVariable(
   result: Record<string, unknown>,
   key: string,
   value: unknown,
-  theme?: ThemeName,
+  theme?: ModeInput,
 ): void {
   const resolvedVariable = resolveVariableReference(value, theme);
   if (resolvedVariable) {
@@ -80,6 +89,80 @@ function applyColorVariable(
   }
 }
 
+
+function findByNameOrId<T extends { id: string; name: string }>(items: T[], wanted: string): T | undefined {
+  const exact = items.find((i) => i.id === wanted);
+  if (exact) return exact;
+  const lower = wanted.trim().toLowerCase();
+  return items.find((i) => i.name.toLowerCase() === lower);
+}
+
+/**
+ * Applies one `modeOverrides` / `theme` / `themeOverride` value to the frame's
+ * current picks. Returns the new picks, or undefined when the value is ignored
+ * (a warning is pushed for anything unusable). `modeOverrides` replaces the
+ * whole set (collection name or id -> mode name or id); the legacy keys only
+ * touch the Theme collection's pick. `null` / "inherit" clears (all picks for
+ * `modeOverrides`, the Theme pick for the legacy keys).
+ */
+function parseModeOverridesInput(
+  key: string,
+  value: unknown,
+  current: ModeOverrides,
+  collections: VariableCollection[],
+  warnings: string[],
+): ModeOverrides | undefined {
+  const isClear = value == null || (typeof value === "string" && value.trim().toLowerCase() === "inherit");
+  const withTheme = (modeValue: unknown): ModeOverrides | undefined => {
+    const theme = collections.find((c) => c.id === THEME_COLLECTION_ID);
+    const mode = theme && typeof modeValue === "string" ? findByNameOrId(theme.modes, modeValue) : undefined;
+    if (!theme || !mode) {
+      warnings.push(
+        `Unknown mode ${JSON.stringify(modeValue)} for the Theme collection (known: ${(theme?.modes ?? []).map((m) => m.name).join(", ") || "none"}) — "${key}" was ignored.`,
+      );
+      return undefined;
+    }
+    return { ...current, [THEME_COLLECTION_ID]: mode.id };
+  };
+
+  if (key !== "modeOverrides") {
+    if (isClear) {
+      const { [THEME_COLLECTION_ID]: _drop, ...rest } = current;
+      void _drop;
+      return rest;
+    }
+    if (typeof value === "string") return withTheme(value);
+    if (typeof value === "object" && !Array.isArray(value)) {
+      // Object form from .pen files, e.g. {"Mode": "Light"}: the last value picks the Theme mode.
+      const vals = Object.values(value as Record<string, unknown>);
+      if (vals.length > 0) return withTheme(vals[vals.length - 1]);
+    }
+    warnings.push(`Unsupported value for "${key}" — expected a mode name, "inherit" or null.`);
+    return undefined;
+  }
+
+  if (isClear) return {};
+  if (typeof value !== "object" || Array.isArray(value)) {
+    warnings.push(`"modeOverrides" must be an object of {collection: mode}, "inherit" or null — ignored.`);
+    return undefined;
+  }
+  const next: ModeOverrides = {};
+  for (const [collName, modeName] of Object.entries(value as Record<string, unknown>)) {
+    const collection = findByNameOrId(collections, collName);
+    if (!collection) {
+      warnings.push(`Unknown collection "${collName}" in modeOverrides (known: ${collections.map((c) => c.name).join(", ")}) — ignored.`);
+      continue;
+    }
+    if (modeName == null || (typeof modeName === "string" && modeName.trim().toLowerCase() === "inherit")) continue;
+    const mode = typeof modeName === "string" ? findByNameOrId(collection.modes, modeName) : undefined;
+    if (!mode) {
+      warnings.push(`Unknown mode ${JSON.stringify(modeName)} in collection "${collection.name}" (known: ${collection.modes.map((m) => m.name).join(", ")}) — ignored.`);
+      continue;
+    }
+    next[collection.id] = mode.id;
+  }
+  return next;
+}
 
 function isVariableRef(value: unknown): value is string {
   return typeof value === "string" && value.trim().startsWith("$");
@@ -94,7 +177,7 @@ function isVariableRef(value: unknown): value is string {
 function bindNumberVariable(
   key: NumberBindingKey,
   value: string,
-  theme: ThemeName | undefined,
+  theme: ModeInput | undefined,
   sets: NumberBindings,
   warnings: string[],
 ): number | null {
@@ -111,7 +194,7 @@ function bindNumberVariable(
     );
     return null;
   }
-  const resolved = resolveNumberBinding(variable, getVariableIndex(variables, collections), theme ?? "light");
+  const resolved = resolveNumberBinding(variable, getVariableIndex(variables, collections), theme ?? useThemeStore.getState().modeContext);
   if (resolved === null) {
     warnings.push(`Variable ${value} has no numeric value — "${key}" was left unchanged.`);
     return null;
@@ -167,7 +250,7 @@ function normalizeCropRect(value: unknown): ImageCropRect | undefined {
 
 function normalizePaint(
   entry: unknown,
-  theme?: ThemeName,
+  theme?: ModeInput,
   nodeType?: string,
   warnings?: string[],
 ): Paint | null {
@@ -309,7 +392,7 @@ function normalizePaint(
  */
 function normalizeFills(
   value: unknown,
-  theme?: ThemeName,
+  theme?: ModeInput,
   nodeType?: string,
   warnings?: string[],
 ): Paint[] {
@@ -417,7 +500,7 @@ export function mapNodeData(
   data: AiNodeData,
   mode: "insert" | "update",
   existingNode?: FlatSceneNode,
-  options?: { theme?: ThemeName }
+  options?: { modes?: ModeContext }
 ): Partial<FlatSceneNode> & { _children?: AiNodeData[]; _warnings?: string[] } {
   const result: Record<string, unknown> = {};
   const layout: Partial<LayoutProperties> = {};
@@ -426,11 +509,16 @@ export function mapNodeData(
   let hasSizing = false;
   let children: AiNodeData[] | undefined;
   const warnings: string[] = [];
+  // The mode context this node resolves `$--var` references under (inherited from its ancestors).
+  const inheritedModes = options?.modes ?? useThemeStore.getState().modeContext;
+  // The frame-override picks as they stand while the keys are processed in order.
+  let currentOverrides: ModeOverrides = mode === "update" ? getFrameModeOverrides(existingNode) : {};
+  let overridesTouched = false;
   // Number-variable bindings written by this data (`"$--radius-m"` on a numeric
   // property). Reconciled with the existing node's bindings after the loop.
   const numberSets: NumberBindings = {};
   const bindNumber = (key: NumberBindingKey, value: string): number | null =>
-    bindNumberVariable(key, value, options?.theme, numberSets, warnings);
+    bindNumberVariable(key, value, inheritedModes, numberSets, warnings);
   // Effective node type for this data, used to gate paints that only some
   // node types can render (e.g. pattern fills — see PATTERN_SUPPORTED_NODE_TYPES).
   const nodeTypeForFills =
@@ -491,7 +579,7 @@ export function mapNodeData(
       // Color variable references in AI format, e.g. "$color"
       case "fill":
       case "stroke": {
-        applyColorVariable(result, key, value, options?.theme);
+        applyColorVariable(result, key, value, inheritedModes);
         break;
       }
 
@@ -499,7 +587,7 @@ export function mapNodeData(
       // source of truth — clear the legacy single-fill fields so the two
       // representations never diverge.
       case "fills": {
-        const paints = normalizeFills(value, options?.theme, nodeTypeForFills, warnings);
+        const paints = normalizeFills(value, inheritedModes, nodeTypeForFills, warnings);
         result.fills = paints;
         Object.assign(result, clearLegacyFillProps());
         break;
@@ -512,7 +600,7 @@ export function mapNodeData(
       // separately (see `stroke`/`strokeThickness` cases) and stays on the
       // node regardless of which paint model is used.
       case "strokes": {
-        const rawPaints = normalizeFills(value, options?.theme, nodeTypeForFills, warnings);
+        const rawPaints = normalizeFills(value, inheritedModes, nodeTypeForFills, warnings);
         const strokePaints = rawPaints.filter((p) => {
           if (p.type === "solid" || p.type === "gradient") return true;
           warnings.push(
@@ -525,22 +613,16 @@ export function mapNodeData(
         break;
       }
 
-      // Theme shorthand
+      // Mode overrides: `modeOverrides` (collection name -> mode name) and the
+      // legacy `theme` / `themeOverride` forms (Theme collection only).
+      case "modeOverrides":
       case "theme":
       case "themeOverride": {
-        if (value === "inherit" || value == null) {
-          result.themeOverride = undefined;
-        } else if (value === "light" || value === "dark") {
-          result.themeOverride = value;
-        } else if (typeof value === "object" && value !== null) {
-          // Handle object format from .pen files, e.g. {"Mode": "Light"}
-          const vals = Object.values(value as Record<string, string>);
-          if (vals.length > 0) {
-            const themeVal = String(vals[vals.length - 1]).toLowerCase();
-            if (themeVal === "light" || themeVal === "dark") {
-              result.themeOverride = themeVal;
-            }
-          }
+        const collections = useVariableStore.getState().collections;
+        const parsed = parseModeOverridesInput(key, value, currentOverrides, collections, warnings);
+        if (parsed !== undefined) {
+          currentOverrides = parsed;
+          overridesTouched = true;
         }
         break;
       }
@@ -835,6 +917,17 @@ export function mapNodeData(
     result.sizing = existingNode.sizing;
   }
 
+  // Frame mode overrides. Always written as `modeOverrides`; the legacy
+  // `themeOverride` is cleared so the two never disagree.
+  if (overridesTouched) {
+    if (nodeTypeForFills !== undefined && nodeTypeForFills !== "frame") {
+      warnings.push(`Mode overrides only apply to frames — ignored on a ${nodeTypeForFills} node.`);
+    } else {
+      result.modeOverrides = Object.keys(currentOverrides).length > 0 ? currentOverrides : undefined;
+      result.themeOverride = undefined;
+    }
+  }
+
   // Number bindings: merge with the node's existing ones. A plain number written
   // over a bound field unbinds it (the same invariant the store enforces on
   // updateNode); a `$--var` write (re)binds it. U() does not go through the
@@ -895,13 +988,13 @@ export function createNodeFromAiData(data: AiNodeData): SceneNode {
 
 export function createNodeFromAiDataWithTheme(
   data: AiNodeData,
-  inheritedTheme?: ThemeName,
+  inheritedModes?: ModeContext,
   warnings?: string[],
   existingNode?: FlatSceneNode,
 ): SceneNode {
   const type = mapNodeType((data.type as string) ?? "frame");
   const mapped = mapNodeData(data, "insert", existingNode, {
-    theme: inheritedTheme,
+    modes: inheritedModes,
   });
   const childrenData = mapped._children;
   delete (mapped as Record<string, unknown>)._children;
@@ -944,13 +1037,17 @@ export function createNodeFromAiDataWithTheme(
 
   if (type === "frame" || type === "group") {
     const children: SceneNode[] = [];
-    const thisTheme =
+    // A frame's own overrides apply to its descendants, never to the frame itself.
+    const thisModes =
       type === "frame"
-        ? ((base as { themeOverride?: ThemeName }).themeOverride ?? inheritedTheme)
-        : inheritedTheme;
+        ? mergeModeContext(
+            inheritedModes ?? useThemeStore.getState().modeContext,
+            getFrameModeOverrides(base as { type: string; modeOverrides?: ModeOverrides; themeOverride?: ThemeName }),
+          )
+        : inheritedModes;
     if (childrenData) {
       for (const childData of childrenData) {
-        children.push(createNodeFromAiDataWithTheme(childData, thisTheme, warnings));
+        children.push(createNodeFromAiDataWithTheme(childData, thisModes, warnings));
       }
     }
     return { ...base, children } as SceneNode;
