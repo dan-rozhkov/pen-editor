@@ -9,6 +9,7 @@ import {
   ChatCircleIcon,
   PuzzlePieceIcon,
   CubeIcon,
+  ShieldCheckIcon,
 } from "@phosphor-icons/react";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import type { LeftSection } from "@/store/leftSidebarStore";
@@ -76,6 +77,7 @@ const STYLE_SECTIONS: {
   { section: "variables", testid: "rail-variables", title: "Variables", icon: <PlusCircleIcon size={20} weight="light" /> },
   { section: "textStyles", testid: "rail-text-styles", title: "Text", icon: <TextAaIcon size={20} weight="light" /> },
   { section: "styles", testid: "rail-styles", title: "Styles", icon: <PaintBrushIcon size={20} weight="light" /> },
+  { section: "lint", testid: "rail-lint", title: "Lint", icon: <ShieldCheckIcon size={20} weight="light" /> },
 ];
 
 export function LeftRail({ hiddenSections }: { hiddenSections?: readonly LeftSection[] } = {}) {
@@ -94,10 +96,9 @@ export function LeftRail({ hiddenSections }: { hiddenSections?: readonly LeftSec
   // opens to next time, just from having viewed someone else's link.
   const activeSection = resolveVisibleLeftSection(rawActiveSection, isSharedView, hiddenSections);
 
-  const visibleSections = SECTIONS.filter(
-    (item) =>
-      !(isSharedView && HIDDEN_IN_SHARED_VIEW.has(item.section)) && !hiddenSections?.includes(item.section),
-  );
+  const isVisible = (item: (typeof SECTIONS)[number]) =>
+    !(isSharedView && HIDDEN_IN_SHARED_VIEW.has(item.section)) && !hiddenSections?.includes(item.section);
+  const visibleSections = SECTIONS.filter(isVisible);
 
   // On mobile the panel is a full-width overlay the rail toggles: tapping the
   // active icon closes it, tapping another opens that section.
@@ -134,7 +135,7 @@ export function LeftRail({ hiddenSections }: { hiddenSections?: readonly LeftSec
     <div className="w-14 h-full flex flex-col items-center gap-3 pt-2 pb-4 bg-surface-panel border-r border-border-default">
       {visibleSections.map(renderRailButton)}
       <div className="h-px w-5 bg-border-default" />
-      {STYLE_SECTIONS.map(renderRailButton)}
+      {STYLE_SECTIONS.filter(isVisible).map(renderRailButton)}
     </div>
   );
 }

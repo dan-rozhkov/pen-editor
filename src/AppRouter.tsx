@@ -22,6 +22,7 @@ const SharedCanvasPage = lazy(() => import("./components/share/SharedCanvasPage"
 const SignInPage = lazy(() => import("@/routes/SignInPage"));
 const ConsentPage = lazy(() => import("@/routes/ConsentPage"));
 const AccountPage = lazy(() => import("@/routes/AccountPage"));
+const AcceptInvitationPage = lazy(() => import("@/routes/AcceptInvitationPage"));
 
 // Public legal/support documents: static, no auth, no backend.
 const PrivacyPage = lazy(() => import("@/routes/legal/PrivacyPage"));
@@ -75,6 +76,14 @@ export function AppRouter() {
           element={
             <Suspense fallback={null}>
               <AccountPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/app/accept-invitation"
+          element={
+            <Suspense fallback={null}>
+              <AcceptInvitationPage />
             </Suspense>
           }
         />

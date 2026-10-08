@@ -21,6 +21,11 @@ describe("isEditorRoute", () => {
   // Advertising a context on a page that will never register a tool is its
   // own kind of lie, and would drag this module into the showcase bundle's
   // reason for existing.
+  it("does not match account pages under /app", () => {
+    expect(isEditorRoute("/app/accept-invitation")).toBe(false);
+    expect(isEditorRoute("/app/")).toBe(true);
+  });
+
   it("does not match the showcase", () => {
     expect(isEditorRoute("/")).toBe(false);
     expect(isEditorRoute("/anything-else")).toBe(false);

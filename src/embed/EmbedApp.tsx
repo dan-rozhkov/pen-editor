@@ -18,8 +18,10 @@ import type { HostBridge } from "./hostBridge";
 import { resolveApiUrl } from "@/lib/apiBase";
 import { openInSideform } from "./openInSideform";
 
-// The Agents chat and the Components panel (its actions mutate the scene) are not part of the widget.
-const HIDDEN_SECTIONS: readonly LeftSection[] = ["agents", "components"];
+// The Agents chat is not part of the widget. The Components panel (its actions
+// mutate the scene) and the design lint (automatic re-checks and bulk fixes are
+// an editor workflow) are left out too: the widget is a slim, host-sized canvas.
+const HIDDEN_SECTIONS: readonly LeftSection[] = ["agents", "components", "lint"];
 
 function prefersDark(): boolean {
   try {

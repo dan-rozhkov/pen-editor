@@ -12,6 +12,7 @@ import { TextStylesPanelContent } from "./TextStylesPanel";
 import { StylesPanelContent } from "./StylesPanel";
 import { ComponentsPanel } from "./ComponentsPanel";
 import { CommentsPanelContent } from "./CommentsPanel";
+import { LintPanelContent } from "./LintPanel";
 import { LeftSidebarResizer } from "./LeftSidebarResizer";
 import { useSceneStore } from "@/store/sceneStore";
 import { useDocumentStore } from "@/store/documentStore";
@@ -207,6 +208,13 @@ export function LeftSidebarBase({ hiddenSections, renderHeader, renderAgents }: 
             }
           >
             <StylesPanelContent />
+          </div>
+        )}
+
+        {/* Design lint section */}
+        {!isMobileClosed && activeSection === "lint" && (
+          <div className="absolute inset-0 flex flex-col overflow-hidden">
+            <LintPanelContent />
           </div>
         )}
 
