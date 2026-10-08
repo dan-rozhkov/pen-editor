@@ -172,14 +172,17 @@ function parseCollectionSpecs(
   return out;
 }
 
-export const setVariables: ToolHandler = async (args) => {
+export interface ParsedSetVariablesArgs {
+  entries: VariableEntry[];
+  collectionSpecs: Record<string, CollectionSpec> | undefined;
+  defaultCollection: string | undefined;
+  replace: boolean;
+  errors: string[];
+}
+
+/** Shape-check `set_variables` arguments; shared with the repo import so both feed one planner. */
+export function parseSetVariablesArgs(args: Record<string, unknown>): ParsedSetVariablesArgs {
   const incoming = args.variables as Record<string, unknown> | unknown[] | undefined;
-  const replace = (args.replace as boolean) ?? false;
-
-  if (!incoming && args.collections === undefined) {
-    return JSON.stringify({ error: "No variables provided" });
-  }
-
   const errors: string[] = [];
   const entries: VariableEntry[] = [];
 
@@ -202,6 +205,23 @@ export const setVariables: ToolHandler = async (args) => {
   if (args.collection !== undefined && (typeof args.collection !== "string" || !args.collection.trim())) {
     errors.push("`collection` must be a collection name.");
   }
+  return {
+    entries,
+    collectionSpecs,
+    defaultCollection: typeof args.collection === "string" ? args.collection : undefined,
+    replace: (args.replace as boolean) ?? false,
+    errors,
+  };
+}
+
+export const setVariables: ToolHandler = async (args) => {
+  const incoming = args.variables as Record<string, unknown> | unknown[] | undefined;
+
+  if (!incoming && args.collections === undefined) {
+    return JSON.stringify({ error: "No variables provided" });
+  }
+
+  const { entries, collectionSpecs, defaultCollection, replace, errors } = parseSetVariablesArgs(args);
 
   if (errors.length > 0) {
     return JSON.stringify({ error: `set_variables changed nothing. ${errors.join(" ")}` });
@@ -214,7 +234,7 @@ export const setVariables: ToolHandler = async (args) => {
   const plan = planVariableChanges({
     entries,
     collectionSpecs,
-    defaultCollection: typeof args.collection === "string" ? args.collection : undefined,
+    defaultCollection,
     replace,
     variables: store.variables,
     collections: store.collections,
