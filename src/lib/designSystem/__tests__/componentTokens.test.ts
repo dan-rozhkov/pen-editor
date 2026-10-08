@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import * as embedHtml from "@/lib/embedHtmlDocument";
 import { buildVariableIndex } from "@/lib/variables";
 import { parseMaster } from "@/lib/embedComponents";
 import { assertDefined } from "@/test/assertions";
@@ -81,5 +82,19 @@ describe("componentTokens", () => {
       '[data-c="btn"].r1, [data-c="btn"] .r1',
       '[data-c="btn"].r2, [data-c="btn"] .r2',
     ]);
+  });
+});
+
+describe("componentTokens caching", () => {
+  it("scans the inline styles of one master once", () => {
+    const spy = vi.spyOn(embedHtml, "parseEmbedHtml");
+    const m = master("cache-key", `<div data-c="cache-key" style="color: var(--text)">x</div>`);
+    const parsed = parseMaster(m);
+    assertDefined(parsed);
+    componentTokens(parsed, VARIABLES, index, { theme: "light", brand: "a" });
+    const afterFirst = spy.mock.calls.length;
+    componentTokens(parsed, VARIABLES, index, { theme: "dark", brand: "a" });
+    expect(spy.mock.calls.length).toBe(afterFirst);
+    spy.mockRestore();
   });
 });

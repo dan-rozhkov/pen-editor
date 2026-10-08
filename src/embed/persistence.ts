@@ -6,6 +6,8 @@ import { collectDocumentData } from "@/lib/commands/fileCommands";
 import { deserializeDocument, serializeDocument } from "@/utils/fileUtils";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
 import { useSceneStore } from "@/store/sceneStore";
+import { useVariableStore } from "@/store/variableStore";
+import { useDesignSystemScopeStore } from "@/store/designSystemScopeStore";
 
 export const EMBED_DOC_KEY = "sideform.embed.doc";
 const AUTOSAVE_DEBOUNCE_MS = 1_000;
@@ -39,15 +41,17 @@ export function saveEmbedDocument(widgetKey: string): boolean {
 
 export function startEmbedAutosave(widgetKey: string, debounceMs = AUTOSAVE_DEBOUNCE_MS): () => void {
   let timer: ReturnType<typeof setTimeout> | null = null;
-  const unsubscribe = useSceneStore.subscribe(() => {
+  const schedule = () => {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;
       saveEmbedDocument(widgetKey);
     }, debounceMs);
-  });
+  };
+  // Scene, variables/collections and saved scopes all live in the saved document.
+  const unsubscribes = [useSceneStore, useVariableStore, useDesignSystemScopeStore].map((store) => store.subscribe(schedule));
   return () => {
-    unsubscribe();
+    for (const unsubscribe of unsubscribes) unsubscribe();
     if (timer) clearTimeout(timer);
   };
 }

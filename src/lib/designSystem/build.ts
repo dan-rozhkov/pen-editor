@@ -1,5 +1,4 @@
 import {
-  THEME_COLLECTION_ID,
   getVariableCssName,
   type ModeContext,
   type Variable,
@@ -10,11 +9,11 @@ import {
   collectionIdOf,
   completeModeContext,
   modeValuesOf,
-  resolveVariable,
   type VariableIndex,
 } from "@/lib/variables";
 import { effectiveVariants, parseMaster } from "@/lib/embedComponents";
-import { findCollection, findMode, formatVariableRef } from "@/lib/tools/variableToolUtils";
+import { formatVariableRef } from "@/lib/tools/variableToolUtils";
+import { describeModeValues, readModeArg } from "@/lib/tools/variableValues";
 import { componentTokens } from "./componentTokens";
 import { resolveScope, type ResolvedScope } from "./scope";
 import {
@@ -30,7 +29,7 @@ import {
 } from "./types";
 
 const MAX_LIMIT = 5000;
-const ALL_SECTIONS: readonly DesignSystemSection[] = ["tokens", "components", "lint", "library"];
+const DEFAULT_SECTIONS: readonly DesignSystemSection[] = ["tokens", "components"];
 
 function clampLimit(limit: number | undefined): number {
   if (limit === undefined || !Number.isFinite(limit) || limit < 1) return DEFAULT_LIMIT;
@@ -50,31 +49,6 @@ function tierOf(collection: VariableCollection, variables: Variable[], index: Va
   return "primitive";
 }
 
-interface ModeArg {
-  picks: ModeContext;
-  hints: string[];
-}
-
-/** `mode`: a string is a Theme mode; an object maps collection names to mode names. */
-function readModeArg(mode: DesignSystemArgs["mode"], collections: VariableCollection[]): ModeArg {
-  const picks: ModeContext = {};
-  const hints: string[] = [];
-  if (typeof mode === "string" && mode.trim() !== "") {
-    const theme = collections.find((c) => c.id === THEME_COLLECTION_ID);
-    const hit = theme ? findMode(theme, mode) : undefined;
-    if (theme && hit) picks[theme.id] = hit.id;
-    else hints.push(`No Theme mode matches "${mode}".`);
-  } else if (mode && typeof mode === "object" && !Array.isArray(mode)) {
-    for (const [collectionRef, modeRef] of Object.entries(mode)) {
-      const collection = findCollection(collections, collectionRef);
-      const hit = collection && typeof modeRef === "string" ? findMode(collection, modeRef) : undefined;
-      if (collection && hit) picks[collection.id] = hit.id;
-      else hints.push(`No mode matches ${collectionRef}: ${String(modeRef)}.`);
-    }
-  }
-  return { picks, hints };
-}
-
 function describeToken(
   v: Variable,
   collection: VariableCollection,
@@ -84,19 +58,7 @@ function describeToken(
   index: VariableIndex,
   allCollections: VariableCollection[],
 ): DesignSystemToken {
-  const raw = modeValuesOf(v);
-  const values: DesignSystemToken["values"] = {};
-  for (const mode of collection.modes) {
-    if (modeFilter && !modeFilter.has(mode.id)) continue;
-    const entry = raw[mode.id];
-    if (entry === undefined) continue;
-    const resolved = resolveVariable(index, v.id, { ...ctx, [collection.id]: mode.id });
-    const target = typeof entry === "string" ? undefined : index.byId.get(entry.alias);
-    values[mode.name] = {
-      raw: typeof entry === "string" ? entry : target ? formatVariableRef(input.variables, allCollections, target) : `$${entry.alias}`,
-      resolved: resolved.ok ? resolved.value : v.value,
-    };
-  }
+  const values = describeModeValues(v, collection, ctx, modeFilter, index, input.variables, allCollections);
   const replacedBy = v.deprecated?.replacedBy ? index.byId.get(v.deprecated.replacedBy) : undefined;
   return {
     name: v.name,
@@ -120,19 +82,32 @@ function describeToken(
   };
 }
 
-function keepToken(v: Variable, name: string, scope: ResolvedScope): boolean {
-  // A variable with no scopes is usable anywhere, so a scope filter never hides it.
-  if (scope.tokenScopes && v.scopes && v.scopes.length > 0 && !v.scopes.some((s) => scope.tokenScopes?.has(s))) {
-    return false;
-  }
-  return !scope.names || scope.names(v.name, name);
+/** A variable with no scopes is usable anywhere, so a scope filter never hides it. */
+function hasTokenScope(v: Variable, scope: ResolvedScope): boolean {
+  return !scope.tokenScopes || !v.scopes || v.scopes.length === 0 || v.scopes.some((s) => scope.tokenScopes?.has(s));
 }
 
-function keepComponent(c: ComponentInput, scope: ResolvedScope): boolean {
-  const { key, meta } = c.master;
-  if (scope.componentKeys && !scope.componentKeys.has(key)) return false;
-  if (scope.componentStatus && !scope.componentStatus.has(meta.status ?? "stable")) return false;
-  return !scope.names || scope.names(key, meta.name);
+const matchesNames = (v: Variable, scope: ResolvedScope): boolean =>
+  !scope.names || scope.names(v.name, getVariableCssName(v));
+
+const keepKey = (c: ComponentInput, scope: ResolvedScope): boolean =>
+  !scope.componentKeys || scope.componentKeys.has(c.master.key);
+
+const keepStatus = (c: ComponentInput, scope: ResolvedScope): boolean =>
+  !scope.componentStatus || scope.componentStatus.has(c.master.meta.status ?? "stable");
+
+/**
+ * Apply the filters one after another; when a stage takes the count from some
+ * to zero, name it. Null when the result is not empty or nothing was there.
+ */
+function emptiedBy<T>(items: T[], stages: [label: string, applied: string[] | undefined, keep: (x: T) => boolean][]): string | null {
+  let rest = items;
+  for (const [label, applied, keep] of stages) {
+    if (rest.length === 0) return null;
+    rest = rest.filter(keep);
+    if (rest.length === 0) return applied && applied.length > 0 ? `${label} (${applied.join(", ")})` : label;
+  }
+  return null;
 }
 
 function describeComponent(
@@ -179,7 +154,7 @@ export function buildDesignSystem(input: DesignSystemInput, args: DesignSystemAr
   const modeFilters = new Map(scope.modes);
   for (const [cid, modeId] of Object.entries(modeArg.picks)) modeFilters.set(cid, new Set([modeId]));
 
-  const sections = new Set<DesignSystemSection>(args.include && args.include.length > 0 ? args.include : ALL_SECTIONS);
+  const sections = new Set<DesignSystemSection>(args.include && args.include.length > 0 ? args.include : DEFAULT_SECTIONS);
   const limit = clampLimit(args.limit);
   let truncated = false;
 
@@ -204,7 +179,7 @@ export function buildDesignSystem(input: DesignSystemInput, args: DesignSystemAr
     const matching: DesignSystemToken[] = [];
     for (const collection of shownCollections) {
       for (const v of input.variables) {
-        if (collectionIdOf(v) !== collection.id || !keepToken(v, getVariableCssName(v), scope)) continue;
+        if (collectionIdOf(v) !== collection.id || !hasTokenScope(v, scope) || !matchesNames(v, scope)) continue;
         matching.push(describeToken(v, collection, modeContext, modeFilters.get(collection.id), input, index, allCollections));
       }
     }
@@ -214,14 +189,31 @@ export function buildDesignSystem(input: DesignSystemInput, args: DesignSystemAr
       hints.push(`${plural(matching.length - limit, "token")} not shown (limit ${limit}). Narrow the scope or raise limit.`);
     }
     if (matching.length === 0 && scope.hints.length === 0) {
-      hints.push(input.variables.length === 0 ? "The document has no variables yet." : "No token matches the scope.");
+      const culprit = emptiedBy(input.variables, [
+        ["scope.collections", scope.applied.collections, (v) => !scope.collectionIds || scope.collectionIds.has(collectionIdOf(v))],
+        ["scope.tokenScopes", scope.applied.tokenScopes, (v) => hasTokenScope(v, scope)],
+        ["scope.names", scope.applied.names, (v) => matchesNames(v, scope)],
+      ]);
+      hints.push(
+        input.variables.length === 0
+          ? "The document has no variables yet."
+          : `No token remains after the filter ${culprit ?? "scope"}.`,
+      );
     }
   }
 
   if (sections.has("components")) {
     const matching = input.components
-      .filter((c) => keepComponent(c, scope))
+      .filter((c) => keepKey(c, scope) && keepStatus(c, scope))
       .sort((a, b) => (a.master.key < b.master.key ? -1 : a.master.key > b.master.key ? 1 : 0));
+    const emptied =
+      matching.length === 0
+        ? emptiedBy(input.components, [
+            ["scope.components", scope.applied.components, (c) => keepKey(c, scope)],
+            ["scope.componentStatus", scope.applied.componentStatus, (c) => keepStatus(c, scope)],
+          ])
+        : null;
+    if (emptied) hints.push(`No component remains after the filter ${emptied}.`);
     result.components = matching.slice(0, limit).map((c) => describeComponent(c, input, index, modeContext));
     if (matching.length > limit) {
       truncated = true;
@@ -229,8 +221,10 @@ export function buildDesignSystem(input: DesignSystemInput, args: DesignSystemAr
     }
   }
 
-  if (sections.has("lint")) result.lint = { rules: [], available: false };
-  if (sections.has("library")) result.library = { id: null, version: null };
+  if (sections.has("lint")) {
+    const rules = input.lintRules ?? [];
+    result.lint = { rules, available: rules.length > 0 };
+  }
 
   result.truncated = truncated;
   if (hints.length > 0) result.hint = hints.join(" ");

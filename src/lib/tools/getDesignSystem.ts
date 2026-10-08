@@ -1,16 +1,14 @@
 import { useVariableStore } from "@/store/variableStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useDesignSystemScopeStore } from "@/store/designSystemScopeStore";
-import { allPageNodes, duplicateKeyWarnings, selectComponentRegistry } from "@/store/componentRegistry";
+import { duplicateKeyWarnings, selectComponentRegistry } from "@/store/componentRegistry";
+import { countUsage } from "@/store/componentOps";
 import { buildDesignSystem } from "@/lib/designSystem";
 import type { ComponentInput, DesignSystemArgs, DesignSystemSection } from "@/lib/designSystem";
-import type { EmbedNode } from "@/types/scene";
 import type { VariableScope } from "@/types/variable";
 import type { ToolHandler } from "../toolRegistry";
 
-// `library` is accepted but optional: the backend schema may not offer it, and
-// the builder ignores a section it has no data for.
-const SECTIONS: readonly DesignSystemSection[] = ["tokens", "components", "lint", "library"];
+const SECTIONS: readonly DesignSystemSection[] = ["tokens", "components", "lint"];
 const STATUSES = ["draft", "stable", "deprecated"] as const;
 
 function stringList(x: unknown): string[] | undefined {
@@ -52,36 +50,11 @@ function readArgs(args: Record<string, unknown>): DesignSystemArgs {
   return out;
 }
 
-const REGION_RE = /<[a-zA-Z][^>]*?\sdata-c=(["'])([^"']+)\1/g;
-
-/** Per component key: regions placed (`instances`) and embeds holding at least one (`embeds`). Masters are excluded. */
-function countUsage(keys: Iterable<string>): Map<string, { instances: number; embeds: number }> {
-  const usage = new Map<string, { instances: number; embeds: number }>();
-  for (const key of keys) usage.set(key, { instances: 0, embeds: 0 });
-  for (const page of allPageNodes()) {
-    for (const id in page.nodesById) {
-      const node = page.nodesById[id];
-      if (node.type !== "embed") continue;
-      const embed = node as unknown as EmbedNode;
-      if (embed.component || !embed.htmlContent || !embed.htmlContent.includes("data-c=")) continue;
-      const seen = new Set<string>();
-      for (const m of embed.htmlContent.matchAll(REGION_RE)) {
-        const entry = usage.get(m[2]);
-        if (!entry) continue;
-        entry.instances += 1;
-        seen.add(m[2]);
-      }
-      for (const key of seen) usage.get(key)!.embeds += 1;
-    }
-  }
-  return usage;
-}
-
 /** Read the design system: tokens, components, saved scopes. Read-only. */
 export const getDesignSystem: ToolHandler = async (args) => {
   const { variables, collections } = useVariableStore.getState();
   const registry = selectComponentRegistry();
-  const usage = countUsage(registry.keys());
+  const usage = countUsage(registry);
   const components: ComponentInput[] = [...registry.values()].map((master) => ({
     master,
     usage: usage.get(master.key) ?? { instances: 0, embeds: 0 },
@@ -95,6 +68,8 @@ export const getDesignSystem: ToolHandler = async (args) => {
       modeContext: useThemeStore.getState().modeContext,
       components,
       savedScopes: useDesignSystemScopeStore.getState().scopes,
+      // The lint rule catalog arrives with the lint engine; none is registered yet.
+      lintRules: [],
     },
     readArgs(args ?? {}),
   );

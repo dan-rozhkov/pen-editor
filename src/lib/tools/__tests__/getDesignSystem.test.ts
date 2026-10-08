@@ -7,6 +7,7 @@ import { resetWorld, seedEmbed, seedInactivePage } from "@/test/componentFixture
 import { BTN_HTML } from "@/lib/embedComponents/__tests__/fixtures";
 import { defineComponent } from "../components";
 import { getDesignSystem } from "../getDesignSystem";
+import { getVariables } from "../getVariables";
 import { toolHandlers } from "@/lib/toolRegistry";
 
 interface Result {
@@ -75,5 +76,46 @@ describe("get_design_system", () => {
     expect(result.tokens).toHaveLength(2);
     const lib = await run({ include: ["tokens", "library"] });
     expect(lib.tokens).toHaveLength(2);
+  });
+});
+
+describe("get_design_system and get_variables resolve identically", () => {
+  beforeEach(() => {
+    resetWorld();
+    useVariableStore.setState({
+      collections: [
+        makeThemeCollection(),
+        {
+          id: "brand",
+          name: "Brand",
+          modes: [
+            { id: "acme", name: "Acme" },
+            { id: "globex", name: "Globex" },
+          ],
+          defaultModeId: "acme",
+        },
+      ],
+      variables: [
+        { id: "v-acc", name: "--acc", type: "color", collectionId: "brand", valuesByMode: { acme: "#aa0000", globex: "#00aa00" }, value: "#aa0000" },
+        { id: "v-link", name: "--link", type: "color", valuesByMode: { light: { alias: "v-acc" }, dark: "#ffffff" }, value: "#aa0000" },
+      ],
+    });
+  });
+
+  const values = (tokens: { name: string; values: unknown }[]) => Object.fromEntries(tokens.map((t) => [t.name, t.values]));
+
+  it("resolve a listed mode against the document context of the other collections", async () => {
+    useThemeStore.setState({ modeContext: { theme: "light", brand: "globex" } });
+    const ds = await run({ mode: "light" });
+    const gv = JSON.parse(await getVariables({ mode: "light" })) as { variables: { name: string; values: unknown }[] };
+    expect(values(ds.tokens ?? [])).toEqual(values(gv.variables));
+    expect((ds.tokens ?? []).find((t) => t.name === "--link")?.values.Light.resolved).toBe("#00aa00");
+  });
+
+  it("agree when the mode argument names a mode in another collection", async () => {
+    const args = { mode: { Brand: "globex" } };
+    const ds = await run(args);
+    const gv = JSON.parse(await getVariables(args)) as { variables: { name: string; values: unknown }[] };
+    expect(values(ds.tokens ?? [])).toEqual(values(gv.variables));
   });
 });

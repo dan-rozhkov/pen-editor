@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetStores, seedScene } from "@/test/fixtures";
 import { useSceneStore } from "@/store/sceneStore";
+import { useVariableStore } from "@/store/variableStore";
 import { useDesignSystemScopeStore } from "@/store/designSystemScopeStore";
 import { embedDocKey, restoreEmbedDocument, saveEmbedDocument, startEmbedAutosave } from "../persistence";
 
@@ -70,5 +71,19 @@ describe("embed persistence", () => {
     seedScene();
     vi.advanceTimersByTime(1_000);
     expect(localStorage.getItem(embedDocKey("a"))).toBeNull();
+  });
+
+  it("autosaves when saved scopes or variables change", () => {
+    vi.useFakeTimers();
+    const stop = startEmbedAutosave("a", 500);
+    useDesignSystemScopeStore.getState().addScope({ name: "Only scope" });
+    vi.advanceTimersByTime(500);
+    expect(localStorage.getItem(embedDocKey("a"))).toContain("Only scope");
+
+    localStorage.clear();
+    useVariableStore.getState().addVariable({ id: "v1", name: "--zz", type: "color", value: "#000000" });
+    vi.advanceTimersByTime(500);
+    expect(localStorage.getItem(embedDocKey("a"))).toContain("--zz");
+    stop();
   });
 });

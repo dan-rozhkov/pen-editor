@@ -2,6 +2,7 @@ import { Fragment, useMemo, useState } from "react";
 import clsx from "clsx";
 import { useVariableStore } from "../store/variableStore";
 import { useDesignSystemScopeStore } from "../store/designSystemScopeStore";
+import { escapeGlob } from "../lib/designSystem/scope";
 import { generateVariableId, THEME_COLLECTION_ID } from "../types/variable";
 import type {
   Variable,
@@ -497,7 +498,14 @@ function ScopesMenu({
         <DropdownMenuItem
           className="text-xs cursor-pointer"
           disabled={query === ""}
-          onClick={() => addScope({ name: `Search: ${query}`, names: [`*${query}*`] })}
+          onClick={() => {
+            // Save what the list shows: the active collection, names containing the query literally.
+            addScope({
+              name: `Search: ${query}`,
+              names: [`*${escapeGlob(query)}*`],
+              ...(activeCollection ? { collections: [activeCollection.id] } : {}),
+            });
+          }}
         >
           Save search as scope
         </DropdownMenuItem>

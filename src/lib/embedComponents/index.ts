@@ -13,6 +13,7 @@ export { expandComponentTags, mentionsRegisteredTag, type ExpandResult } from ".
 export {
   reconcileHtml,
   hasStaleRegions,
+  countRegionsByKey,
   listRegionKeys,
   mayContainComponents,
   findManagedZoneViolation,

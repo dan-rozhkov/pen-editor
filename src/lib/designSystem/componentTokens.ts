@@ -105,6 +105,35 @@ function collectInline(rootHtml: string, key: string, out: RawUse[]): void {
 
 const MAX_FALLBACK_DEPTH = 8;
 
+// `parseMaster` returns the same object for an unchanged master, so both caches
+// live exactly as long as the master text and the variables array do.
+const lookupCache = new WeakMap<Variable[], Map<string, Variable>>();
+const usesCache = new WeakMap<ParsedMaster, RawUse[]>();
+
+/** First variable per CSS custom-property name. Built once per variables array. */
+function cssNameLookup(variables: Variable[]): Map<string, Variable> {
+  const cached = lookupCache.get(variables);
+  if (cached) return cached;
+  const byCssName = new Map<string, Variable>();
+  for (const v of variables) {
+    const name = getVariableCssName(v);
+    if (!byCssName.has(name)) byCssName.set(name, v);
+  }
+  lookupCache.set(variables, byCssName);
+  return byCssName;
+}
+
+/** Every var() use in the master (stylesheet and inline styles), independent of the mode context. */
+function rawUses(parsed: ParsedMaster): RawUse[] {
+  const cached = usesCache.get(parsed);
+  if (cached) return cached;
+  const raw: RawUse[] = [];
+  collectFromCss(parseCss(parsed.css), [], raw);
+  collectInline(parsed.rootHtml, parsed.key, raw);
+  usesCache.set(parsed, raw);
+  return raw;
+}
+
 /**
  * Every design-token reference in a component master, resolved under `ctx`.
  * Scans the scoped stylesheet (base rules, `:hover` and other pseudo rules,
@@ -121,11 +150,7 @@ export function componentTokens(
   ctx: ModeContext,
   max: number = MAX_TOKEN_USES,
 ): ComponentTokenUse[] {
-  const byCssName = new Map<string, Variable>();
-  for (const v of variables) {
-    const name = getVariableCssName(v);
-    if (!byCssName.has(name)) byCssName.set(name, v);
-  }
+  const byCssName = cssNameLookup(variables);
 
   const resolveRef = (ref: VarRef, depth = 0): string | null => {
     const variable = byCssName.get(ref.name);
@@ -142,9 +167,7 @@ export function componentTokens(
     return ref.fallback;
   };
 
-  const raw: RawUse[] = [];
-  collectFromCss(parseCss(parsed.css), [], raw);
-  collectInline(parsed.rootHtml, parsed.key, raw);
+  const raw = rawUses(parsed);
 
   const seen = new Set<string>();
   const out: ComponentTokenUse[] = [];

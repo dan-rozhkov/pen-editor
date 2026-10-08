@@ -21,7 +21,7 @@ export interface DesignSystemScope {
   };
   /** Keep variables that carry at least one of these scopes (unscoped variables always pass). */
   tokenScopes?: VariableScope[];
-  /** Name globs (`*`, `?`) matched against token names and component keys/names. */
+  /** Name globs (`*`, `?`; `\\*` and `\\?` are literal) matched against token names. They never filter components. */
   names?: string[];
 }
 

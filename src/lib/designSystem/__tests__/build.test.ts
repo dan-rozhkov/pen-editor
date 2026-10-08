@@ -1,9 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import * as variableTypes from "@/types/variable";
 import { buildVariableIndex, resolveVariable, modeValuesOf } from "@/lib/variables";
 import { assertDefined } from "@/test/assertions";
 import { buildDesignSystem } from "../build";
 import type { DesignSystemArgs } from "../types";
 import type { DesignSystemScope } from "@/types/designSystemScope";
+import type { Variable } from "@/types/variable";
 import { BTN_HTML, COLLECTIONS, VARIABLES, componentInput, makeInput, master } from "./dsFixtures";
 
 const tokenNames = (args: DesignSystemArgs, input = makeInput()) =>
@@ -16,8 +18,8 @@ describe("buildDesignSystem: shape", () => {
     expect(result.schema).toBe(1);
     expect(result.scope).toEqual({ saved: null, applied: {} });
     expect(result.modeContext).toEqual({ theme: "light", brand: "a" });
-    expect(result.lint).toEqual({ rules: [], available: false });
-    expect(result.library).toEqual({ id: null, version: null });
+    expect(result.lint).toBeUndefined();
+    expect(result).not.toHaveProperty("library");
     expect(result.truncated).toBe(false);
     expect(result.tokens).toHaveLength(VARIABLES.length);
     expect(result.components).toHaveLength(1);
@@ -60,7 +62,35 @@ describe("buildDesignSystem: shape", () => {
   });
 });
 
+describe("buildDesignSystem: lint section", () => {
+  it("reports an unavailable empty catalog when no rules are injected", () => {
+    expect(buildDesignSystem(makeInput(), { include: ["lint"] }).lint).toEqual({ rules: [], available: false });
+  });
+
+  it("returns the injected rule catalog as available", () => {
+    const lintRules = [{ id: "contrast", severity: "warning" as const, description: "Low contrast", autoFix: false }];
+    const result = buildDesignSystem(makeInput({ lintRules }), { include: ["lint"] });
+    expect(result.lint).toEqual({ rules: lintRules, available: true });
+    expect(result.tokens).toBeUndefined();
+  });
+});
+
 describe("buildDesignSystem: token values", () => {
+  it("reports resolved null and an error when a mode does not resolve", () => {
+    const broken: Variable = {
+      id: "v-loop",
+      name: "--loop",
+      type: "color",
+      collectionId: "theme",
+      valuesByMode: { light: { alias: "v-loop" }, dark: "#000000" },
+      value: "#123456",
+    };
+    const token = (buildDesignSystem(makeInput({ variables: [broken] }), {}).tokens ?? [])[0];
+    expect(token.values.Light.resolved).toBeNull();
+    expect(token.values.Light.error).toBe("cycle");
+    expect(token.values.Dark).toEqual({ raw: "#000000", resolved: "#000000" });
+  });
+
   it("matches resolveVariable for every variable and mode (what get_variables reports)", () => {
     const index = buildVariableIndex(VARIABLES, COLLECTIONS);
     const tokens = buildDesignSystem(makeInput(), {}).tokens ?? [];
@@ -184,8 +214,31 @@ describe("buildDesignSystem: scope filters", () => {
     expect(keys({})).toEqual(["btn", "card", "chip"]);
     expect(keys({ scope: { components: ["card", "chip"] } })).toEqual(["card", "chip"]);
     expect(keys({ scope: { componentStatus: ["draft", "deprecated"] } })).toEqual(["card", "chip"]);
-    expect(keys({ scope: { names: ["c*"] } })).toEqual(["card", "chip"]);
-    expect(keys({ scope: { names: ["BTN"] } })).toEqual(["btn"]);
+    expect(keys({ scope: { components: ["card"], componentStatus: ["draft"] } })).toEqual(["card"]);
+  });
+
+  it("applies names globs to tokens only, never to components", () => {
+    const input = makeInput({
+      components: [componentInput(master("btn", BTN_HTML)), componentInput(master("card", `<div data-c="card"></div>`))],
+    });
+    const result = buildDesignSystem(input, { scope: { names: ["--primary*"] } });
+    expect((result.components ?? []).map((c) => c.key)).toEqual(["btn", "card"]);
+    expect((result.tokens ?? []).map((t) => t.name)).toEqual(["--primary", "--primary-hover"]);
+  });
+
+  it("hints which filter emptied the tokens", () => {
+    expect(buildDesignSystem(makeInput(), { scope: { names: ["--zzz*"] } }).hint).toContain("names");
+    expect(buildDesignSystem(makeInput(), { scope: { collections: ["Theme"], tokenScopes: ["stroke"] } }).hint).toContain("tokenScopes");
+  });
+
+  it("hints which filter emptied the components", () => {
+    const hint = buildDesignSystem(makeInput(), { scope: { components: ["nope"] } }).hint;
+    expect(hint).toContain("components");
+    expect(buildDesignSystem(makeInput(), { scope: { componentStatus: ["draft"] } }).hint).toContain("componentStatus");
+  });
+
+  it("gives no emptied-filter hint when the document has no components", () => {
+    expect(buildDesignSystem(makeInput({ components: [] }), { scope: { components: ["nope"] } }).hint).toBeUndefined();
   });
 });
 
@@ -205,9 +258,33 @@ describe("buildDesignSystem: saved scopes", () => {
     expect(buildDesignSystem(input, { scope: { saved: "s1" } }).scope.saved).toBe("Brand only");
   });
 
-  it("lets an explicit filter replace the same field of the saved scope", () => {
+  it("never widens a saved scope: a disjoint explicit collection yields nothing", () => {
     const result = buildDesignSystem(input, { scope: { saved: "Brand only", collections: ["Theme"] } });
-    expect((result.tokens ?? []).map((t) => t.name)).toEqual(["--primary", "--primary-hover"]);
+    expect(result.tokens).toEqual([]);
+    expect(result.collections).toEqual([]);
+  });
+
+  it("intersects list filters with the saved scope", () => {
+    const wide = makeInput({
+      savedScopes: [
+        { id: "w", name: "Wide", collections: ["theme", "brand"], tokenScopes: ["fill", "text"], components: { keys: ["btn", "card"] }, names: ["--*t*"] },
+      ],
+      components: [
+        componentInput(master("btn", BTN_HTML)),
+        componentInput(master("card", `<div data-c="card"></div>`)),
+        componentInput(master("chip", `<span data-c="chip"></span>`)),
+      ],
+    });
+    const r = buildDesignSystem(wide, { scope: { saved: "Wide", collections: ["Theme"], tokenScopes: ["text", "radius"], components: ["card", "chip"] } });
+    expect(r.scope.applied).toMatchObject({ collections: ["Theme"], tokenScopes: ["text"], components: ["card"] });
+    expect((r.tokens ?? []).map((t) => t.name)).toEqual(["--text"]);
+    expect((r.components ?? []).map((c) => c.key)).toEqual(["card"]);
+  });
+
+  it("requires a token name to match both the saved and the explicit globs", () => {
+    const both = makeInput({ savedScopes: [{ id: "n", name: "Prim", names: ["--primary*"] }] });
+    expect(tokenNames({ scope: { saved: "Prim", names: ["*hover"] } }, both)).toEqual(["--primary-hover"]);
+    expect(tokenNames({ scope: { saved: "Prim", names: ["--text"] } }, both)).toEqual([]);
   });
 
   it("applies the component part of a saved scope", () => {
@@ -262,5 +339,15 @@ describe("buildDesignSystem: limit and truncation", () => {
     expect(buildDesignSystem(input, { limit: 0 }).tokens).toHaveLength(12);
     expect(buildDesignSystem(input, { limit: -3 }).tokens).toHaveLength(12);
     expect(buildDesignSystem(input, { limit: Number.NaN }).tokens).toHaveLength(12);
+  });
+});
+
+describe("buildDesignSystem: shared lookups", () => {
+  it("builds the CSS-name lookup once per call, not once per component", () => {
+    const spy = vi.spyOn(variableTypes, "getVariableCssName");
+    const components = ["a", "b", "c"].map((k) => componentInput(master(k, `<div data-c="${k}" style="color: var(--text)"></div>`)));
+    buildDesignSystem(makeInput({ components }), { include: ["components"] });
+    expect(spy.mock.calls.length).toBeLessThanOrEqual(VARIABLES.length);
+    spy.mockRestore();
   });
 });

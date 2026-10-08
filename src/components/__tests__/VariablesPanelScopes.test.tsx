@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { VariablesPanelContent } from "../VariablesPanel";
 import { useDesignSystemScopeStore } from "@/store/designSystemScopeStore";
+import { globMatcher } from "@/lib/designSystem/scope";
 import { resetStores, seedVariables } from "@/test/fixtures";
 
 vi.mock("@/components/ui/ColorPicker", () => ({
@@ -40,7 +41,19 @@ describe("<VariablesPanelContent /> Scopes menu", () => {
     openMenu();
     fireEvent.click(screen.getByText("Save search as scope"));
 
-    expect(scopes()[0]).toMatchObject({ name: "Search: primary", names: ["*primary*"] });
+    expect(scopes()[0]).toMatchObject({ name: "Search: primary", names: ["*primary*"], collections: ["theme"] });
+    expect(scopes()[0].components).toBeUndefined();
+  });
+
+  it("saves a search with * and ? as a literal substring", () => {
+    render(<VariablesPanelContent />);
+    fireEvent.change(screen.getByLabelText("Search variables"), { target: { value: "a*b?" } });
+    openMenu();
+    fireEvent.click(screen.getByText("Save search as scope"));
+
+    expect(scopes()[0].names).toEqual(["*a\\*b\\?*"]);
+    expect(globMatcher(scopes()[0].names)?.("x-a*b?-y")).toBe(true);
+    expect(globMatcher(scopes()[0].names)?.("x-aZbZ-y")).toBe(false);
   });
 
   it("lists saved scopes and deletes one", () => {

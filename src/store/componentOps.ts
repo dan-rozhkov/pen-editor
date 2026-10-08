@@ -1,6 +1,6 @@
 import type { EmbedComponentMeta, EmbedNode, FlatSceneNode } from "@/types/scene";
 import { generateId } from "@/types/scene";
-import { listRegionKeys, type ComponentRegistry } from "@/lib/embedComponents";
+import { countRegionsByKey, type ComponentRegistry } from "@/lib/embedComponents";
 import { useSceneStore } from "./sceneStore";
 import { createSnapshot } from "./sceneStore/helpers/history";
 import { usePageStore } from "./pageStore";
@@ -185,18 +185,28 @@ export function removeMasterNode(key: string): boolean {
   return true;
 }
 
-/** How many embeds (any page, masters excluded) hold at least one region of each key. */
-export function countUsage(registry: ComponentRegistry): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const key of registry.keys()) counts.set(key, 0);
+export interface ComponentUsage {
+  /** Regions placed, counting each `data-c` element. */
+  instances: number;
+  /** Embeds (any page, masters excluded) holding at least one region. */
+  embeds: number;
+}
+
+/** Usage per registered component key. Keys that no embed uses count zero. */
+export function countUsage(registry: ComponentRegistry): Map<string, ComponentUsage> {
+  const counts = new Map<string, ComponentUsage>();
+  for (const key of registry.keys()) counts.set(key, { instances: 0, embeds: 0 });
   for (const page of allPageNodes()) {
     for (const id in page.nodesById) {
       const n = page.nodesById[id];
       if (n.type !== "embed") continue;
       const embed = n as unknown as EmbedNode;
       if (embed.component || !embed.htmlContent) continue;
-      for (const key of listRegionKeys(embed.htmlContent)) {
-        if (counts.has(key)) counts.set(key, (counts.get(key) ?? 0) + 1);
+      for (const [key, regions] of countRegionsByKey(embed.htmlContent)) {
+        const entry = counts.get(key);
+        if (!entry) continue;
+        entry.embeds += 1;
+        entry.instances += regions;
       }
     }
   }

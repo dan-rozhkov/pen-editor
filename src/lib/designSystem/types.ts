@@ -3,7 +3,7 @@ import type { ComponentMaster } from "@/lib/embedComponents";
 import type { DesignSystemScope } from "@/types/designSystemScope";
 
 export type ComponentStatus = "draft" | "stable" | "deprecated";
-export type DesignSystemSection = "tokens" | "components" | "lint" | "library";
+export type DesignSystemSection = "tokens" | "components" | "lint";
 
 export const DEFAULT_LIMIT = 400;
 /** Max `tokenUses` entries kept per component. */
@@ -24,6 +24,15 @@ export interface DesignSystemInput {
   modeContext: ModeContext;
   components: ComponentInput[];
   savedScopes: DesignSystemScope[];
+  /** The lint rule catalog. It comes from the lint engine; omit it when that engine is absent. */
+  lintRules?: LintRuleInfo[];
+}
+
+export interface LintRuleInfo {
+  id: string;
+  severity: "error" | "warning" | "info";
+  description: string;
+  autoFix: boolean;
 }
 
 /** Scope filters as the agent writes them. */
@@ -33,6 +42,7 @@ export interface DesignSystemScopeArgs {
   components?: string[];
   componentStatus?: ComponentStatus[];
   tokenScopes?: VariableScope[];
+  /** Token name globs. They filter tokens only; `components` filters components. */
   names?: string[];
 }
 
@@ -53,6 +63,12 @@ export interface DesignSystemCollection {
   defaultModeId: string;
 }
 
+export interface TokenModeValue {
+  raw: string;
+  resolved: string | null;
+  error?: string;
+}
+
 export interface DesignSystemToken {
   name: string;
   cssName: string;
@@ -60,8 +76,8 @@ export interface DesignSystemToken {
   type: Variable["type"];
   scopes: VariableScope[];
   description?: string;
-  /** Mode name -> raw and resolved value. */
-  values: Record<string, { raw: string; resolved: string }>;
+  /** Mode name -> raw and resolved value. `resolved` is null, with an `error` reason, when the alias chain fails. */
+  values: Record<string, TokenModeValue>;
   deprecated?: { since?: string; replacedBy?: string; note?: string };
 }
 
@@ -106,8 +122,7 @@ export interface DesignSystemResult {
   collections: DesignSystemCollection[];
   tokens?: DesignSystemToken[];
   components?: DesignSystemComponent[];
-  lint?: { rules: string[]; available: boolean };
-  library?: { id: string | null; version: string | null };
+  lint?: { rules: LintRuleInfo[]; available: boolean };
   truncated: boolean;
   hint?: string;
 }

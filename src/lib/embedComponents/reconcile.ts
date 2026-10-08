@@ -172,14 +172,19 @@ export function hasStaleRegions(html: string, registry: ComponentRegistry): bool
   return false;
 }
 
-/** How many distinct keys appear as `data-c` regions in `html`. */
-export function listRegionKeys(html: string): string[] {
-  if (!html || !html.includes("data-c=")) return [];
-  const keys = new Set<string>();
+/** Per key: how many `data-c` regions `html` holds. */
+export function countRegionsByKey(html: string): Map<string, number> {
+  const counts = new Map<string, number>();
+  if (!html || !html.includes("data-c=")) return counts;
   const re = /<[a-zA-Z][^>]*?\sdata-c=(["'])([^"']+)\1/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(html))) keys.add(m[2]);
-  return [...keys];
+  while ((m = re.exec(html))) counts.set(m[2], (counts.get(m[2]) ?? 0) + 1);
+  return counts;
+}
+
+/** The distinct keys that appear as `data-c` regions in `html`. */
+export function listRegionKeys(html: string): string[] {
+  return [...countRegionsByKey(html).keys()];
 }
 
 // ---------------------------------------------------------------------------

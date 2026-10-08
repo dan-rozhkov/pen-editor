@@ -22,7 +22,7 @@ function describeComponents() {
       status: master.meta.status ?? "stable",
       variants: parsed ? effectiveVariants(master, parsed) : (master.meta.variants ?? {}),
       slots: parsed?.slots ?? [],
-      usedBy: usage.get(master.key) ?? 0,
+      usedBy: usage.get(master.key)?.embeds ?? 0,
       ...(warnings.length > 0 ? { warnings } : {}),
     };
   });

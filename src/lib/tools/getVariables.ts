@@ -1,26 +1,19 @@
 import { useVariableStore } from "@/store/variableStore";
 import { useThemeStore } from "@/store/themeStore";
-import {
-  THEME_COLLECTION_ID,
-  getVariableCssName,
-  type Variable,
-  type VariableCollection,
-} from "@/types/variable";
+import { getVariableCssName, type Variable, type VariableCollection } from "@/types/variable";
 import {
   buildVariableIndex,
   completeModeContext,
   collectionIdOf,
-  modeValuesOf,
-  resolveVariable,
   type VariableIndex,
 } from "@/lib/variables";
 import type { ToolHandler } from "../toolRegistry";
 import {
   findCollection,
-  findMode,
   formatVariableRef,
   resolveVariableRef,
 } from "./variableToolUtils";
+import { describeModeValues, readModeArg } from "./variableValues";
 
 /** `$--name` for an alias (`$Collection/--name` when the name is ambiguous). */
 function aliasText(index: VariableIndex, variables: Variable[], collections: VariableCollection[], targetId: string): string {
@@ -74,38 +67,16 @@ export const getVariables: ToolHandler = async (args) => {
   }
 
   // `mode`: a string is a mode of the Theme collection; an object maps
-  // collection names to mode names. Collections not named keep all modes.
-  const modeFilter = new Map<string, string>();
-  if (typeof args.mode === "string" && args.mode.trim() !== "") {
-    const theme = index.collections.get(THEME_COLLECTION_ID);
-    const mode = theme ? findMode(theme, args.mode) : undefined;
-    if (mode) modeFilter.set(THEME_COLLECTION_ID, mode.id);
-    else hints.push(`No Theme mode matches "${args.mode}".`);
-  } else if (args.mode && typeof args.mode === "object" && !Array.isArray(args.mode)) {
-    for (const [collectionRef, modeRef] of Object.entries(args.mode as Record<string, unknown>)) {
-      const collection = findCollection(allCollections, collectionRef);
-      const mode = collection && typeof modeRef === "string" ? findMode(collection, modeRef) : undefined;
-      if (collection && mode) modeFilter.set(collection.id, mode.id);
-      else hints.push(`No mode matches ${collectionRef}: ${String(modeRef)}.`);
-    }
-  }
+  // collection names to mode names. Collections not named keep all modes. The
+  // listed mode resolves against the document context for the other collections.
+  const modeArg = readModeArg(args.mode, allCollections);
+  hints.push(...modeArg.hints);
+  const resolveCtx = { ...modeContext, ...modeArg.picks };
 
   const out = selected.map((v) => {
     const cid = collectionIdOf(v);
     const collection = index.collections.get(cid);
-    const raw = modeValuesOf(v);
-    const only = modeFilter.get(cid);
-    const values: Record<string, { raw: string; resolved: string }> = {};
-    for (const mode of collection?.modes ?? []) {
-      if (only !== undefined && mode.id !== only) continue;
-      const entry = raw[mode.id];
-      if (entry === undefined) continue;
-      const resolved = resolveVariable(index, v.id, { [cid]: mode.id });
-      values[mode.name] = {
-        raw: typeof entry === "string" ? entry : aliasText(index, variables, allCollections, entry.alias),
-        resolved: resolved.ok ? resolved.value : v.value,
-      };
-    }
+    const values = describeModeValues(v, collection, resolveCtx, modeArg.picks[cid], index, variables, allCollections);
     const deprecated = v.deprecated
       ? {
           ...v.deprecated,
@@ -150,7 +121,7 @@ export const getVariables: ToolHandler = async (args) => {
       modes: c.modes,
       defaultModeId: c.defaultModeId,
     })),
-    modeContext,
+    modeContext: resolveCtx,
     variables: out,
     ...(hints.length > 0 ? { hint: hints.join(" ") } : {}),
   });
