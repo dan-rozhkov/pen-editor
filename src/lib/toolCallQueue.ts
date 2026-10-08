@@ -36,6 +36,9 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   "batch_get",
   "snapshot_layout",
   "get_variables",
+  // Reads the scene and variables and writes nothing; a big page can take
+  // several seconds, which must not hold up scene-mutating calls queued behind it.
+  "lint_design",
   "get_screenshot",
   "get_text_styles",
   "get_styles",

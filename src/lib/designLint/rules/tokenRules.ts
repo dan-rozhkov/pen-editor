@@ -3,12 +3,11 @@ import type { ModeContext, Variable, VariableScope } from "@/types/variable";
 import { getFills, getStrokes } from "@/utils/fillUtils";
 import { NUMBER_BINDING_KEYS, NUMBER_BINDING_SPECS, isKeyActive, readNumberField } from "@/lib/variables";
 import { formatVariableRef } from "@/lib/tools/variableToolUtils";
-import { colorsEqual, oklabDistance, parseColor, toHex } from "../colorMath";
+import { colorsEqual, labDistance, parseColor, toHex, toOklab, type Rgba } from "../colorMath";
 import { findingId, type ColorToken, type LintContext } from "../context";
+import { NEAR_COLOR_DISTANCE, nodeLabel, strokeIsDrawn } from "../shared";
 import type { ColorSlot, Finding, LintFix, LintRuleId } from "../types";
 
-/** Largest OKLab distance at which an unbound color still reads as "meant to be that token". */
-const NEAR_COLOR_DISTANCE = 0.04;
 /** Off-scale numbers: within this many px, or this fraction of the token, count as near. */
 const NEAR_NUMBER_PX = 2;
 const NEAR_NUMBER_RATIO = 0.25;
@@ -35,13 +34,6 @@ export function paintTargets(node: FlatSceneNode): PaintTarget[] {
   return out;
 }
 
-function strokeIsDrawn(node: FlatSceneNode): boolean {
-  if ((node.strokeWidth ?? 0) > 0) return true;
-  const sides = node.strokeWidthPerSide;
-  if (sides && [sides.top, sides.right, sides.bottom, sides.left].some((v) => (v ?? 0) > 0)) return true;
-  return ((node as { pathStroke?: { thickness?: number } }).pathStroke?.thickness ?? 0) > 0;
-}
-
 function scopeFor(node: FlatSceneNode, slot: ColorSlot): VariableScope {
   return slot === "stroke" ? "stroke" : node.type === "text" ? "text" : "fill";
 }
@@ -54,16 +46,6 @@ export function colorScopeOk(variable: Variable, scope: VariableScope): boolean 
 /** Numbers must opt in: an unscoped number variable would match every field. */
 export function numberScopeOk(variable: Variable, scopes: readonly VariableScope[]): boolean {
   return !!variable.scopes && variable.scopes.some((s) => scopes.includes(s));
-}
-
-function nodeLabel(node: FlatSceneNode): string {
-  return node.name ? `"${node.name}"` : `${node.type} ${node.id}`;
-}
-
-export function preferSemantic<T extends { semantic: boolean; variable: Variable }>(list: T[]): T[] {
-  return [...list].sort(
-    (a, b) => Number(b.semantic) - Number(a.semantic) || a.variable.name.localeCompare(b.variable.name),
-  );
 }
 
 function candidatesDetail(lc: LintContext, rest: Variable[]): string | undefined {
@@ -117,7 +99,7 @@ function colorValues(
     if (!color || color.a === 0) continue;
     const scope = scopeFor(node, slot);
     const scoped = tokens.filter((t) => colorScopeOk(t.variable, scope));
-    const exact = preferSemantic(scoped.filter((t) => colorsEqual(t.color, color)));
+    const exact = scoped.filter((t) => colorsEqual(t.color, color));
     const shown = toHex(color);
     if (exact.length > 0) {
       if (!hardcoded) continue;
@@ -162,11 +144,13 @@ function colorValues(
   }
 }
 
-function nearestColor(tokens: ColorToken[], color: ReturnType<typeof parseColor> & object): ColorToken | undefined {
+/** The closest token within `NEAR_COLOR_DISTANCE`; `tokens` are already semantic-first, so ties keep that order. */
+function nearestColor(tokens: ColorToken[], color: Rgba): ColorToken | undefined {
+  const lab = toOklab(color);
   let best: ColorToken | undefined;
   let bestD = NEAR_COLOR_DISTANCE;
-  for (const t of preferSemantic(tokens)) {
-    const d = oklabDistance(t.color, color);
+  for (const t of tokens) {
+    const d = labDistance(t.lab, lab);
     if (d < bestD) {
       best = t;
       bestD = d;
@@ -191,12 +175,13 @@ function numberValues(
     const spec = NUMBER_BINDING_SPECS[key];
     if (spec.where === "layout" && !layoutOn) continue;
     if (!isKeyActive(node, key)) continue;
+    if (key === "strokeWidth" && !strokeIsDrawn(node)) continue;
     const value = readNumberField(node, key);
     if (value === undefined || value === 0 || (key === "opacity" && value === 1)) continue;
     tokens ??= lc.numberTokens(ctx);
     const scoped = tokens.filter((t) => numberScopeOk(t.variable, spec.scopes));
     if (scoped.length === 0) continue;
-    const exact = preferSemantic(scoped.filter((t) => Math.abs(t.value - value) < 1e-6));
+    const exact = scoped.filter((t) => Math.abs(t.value - value) < 1e-6);
     if (exact.length > 0) {
       if (!hardcoded) continue;
       const best = exact[0];
@@ -219,7 +204,7 @@ function numberValues(
     if (!offScale) continue;
     const slack = key === "opacity" ? 0 : NEAR_NUMBER_PX;
     let nearest: (typeof scoped)[number] | undefined;
-    for (const t of preferSemantic(scoped)) {
+    for (const t of scoped) {
       const d = Math.abs(t.value - value);
       if (d > Math.max(slack, NEAR_NUMBER_RATIO * Math.abs(t.value))) continue;
       if (!nearest || d < Math.abs(nearest.value - value)) nearest = t;

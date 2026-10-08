@@ -28,6 +28,7 @@ export const toolDisplayNames: Record<string, string> = {
   snapshot_layout: "Snapshot Layout",
   get_screenshot: "Get Screenshot",
   get_variables: "Get Variables",
+  lint_design: "Lint design",
   get_text_styles: "Get Text Styles",
   set_text_styles: "Set Text Styles",
   apply_text_style: "Apply Text Style",

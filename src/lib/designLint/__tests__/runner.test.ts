@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { resetStores, seedScene } from "@/test/fixtures";
 import { useVariableStore } from "@/store/variableStore";
 import { useSceneStore } from "@/store/sceneStore";
+import { usePageStore, type PageData } from "@/store/pageStore";
 import { buildLintInput, runDesignLint } from "..";
 import { enumerateModeContexts } from "../context";
 import { byRule, frame, lint, lintInput, rect, text, token } from "./fixtures";
@@ -120,5 +121,23 @@ describe("buildLintInput", () => {
     useSceneStore.getState().updateNode("rect1", { fill: "#ff0000" });
     const r = runDesignLint(buildLintInput());
     expect(byRule(r, "hardcoded-value").map((f) => f.nodeId)).toEqual(["rect1"]);
+  });
+
+  it("captures the ancestor mode overrides of embeds on other pages", () => {
+    const other = {
+      id: "p2",
+      name: "Other",
+      nodesById: {
+        outer: { id: "outer", type: "frame", modeOverrides: { theme: "dark" } },
+        inner: { id: "inner", type: "frame" },
+        e2: { id: "e2", type: "embed", htmlContent: "<p>x</p>" },
+      },
+      parentById: { outer: null, inner: "outer", e2: "inner" },
+      childrenById: { outer: ["inner"], inner: ["e2"] },
+      rootIds: ["outer"],
+    } as unknown as PageData;
+    usePageStore.setState({ pages: [...usePageStore.getState().pages, other] });
+    const e2 = buildLintInput().embeds.find((e) => e.nodeId === "e2");
+    expect(e2?.modeChain).toEqual([{ theme: "dark" }]);
   });
 });

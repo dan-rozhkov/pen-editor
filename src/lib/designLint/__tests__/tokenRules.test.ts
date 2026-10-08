@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assertDefined } from "@/test/assertions";
-import { byRule, frame, lint, rect, text, token } from "./fixtures";
+import { LintContext } from "../context";
+import { byRule, frame, lint, lintInput, rect, text, token } from "./fixtures";
 
 const surface = token("v-surface", "--surface", { light: "#ffffff", dark: "#111111" }, { scopes: ["fill"] });
 const brand = token("v-brand", "--brand", "#3366ff");
@@ -136,6 +137,27 @@ describe("hardcoded-value and off-scale-value (numbers)", () => {
     expect(f.severity).toBe("info");
     expect(f.fix).toBeUndefined();
     expect(byRule(lint([rect("r1", { fill: "#ff0000" })], { variables: [brand] }), "off-scale-value")).toHaveLength(0);
+  });
+});
+
+describe("strokeWidth binding", () => {
+  const sw = token("v-sw", "--stroke-md", "2", { type: "number", scopes: ["strokeWidth"] });
+
+  it("is skipped when no stroke is drawn and reported when one is", () => {
+    const none = lint([rect("r1", { strokeWidth: 2 })], { variables: [sw] });
+    expect(byRule(none, "hardcoded-value")).toHaveLength(0);
+    const drawn = lint([rect("r1", { strokeWidth: 2, stroke: "#123456" })], { variables: [sw] });
+    expect(byRule(drawn, "hardcoded-value")).toHaveLength(1);
+  });
+});
+
+describe("token caches", () => {
+  it("orders color tokens semantic-first once per context", () => {
+    const lc = new LintContext(lintInput([rect("r1")], { variables: [brand, primary] }));
+    const list = lc.colorTokens(lc.contexts[0]);
+    expect(list.map((t) => t.variable.id)).toEqual(["v-primary", "v-brand"]);
+    expect(lc.colorTokens(lc.contexts[0])).toBe(list);
+    expect(list.every((t) => typeof t.lab.L === "number")).toBe(true);
   });
 });
 

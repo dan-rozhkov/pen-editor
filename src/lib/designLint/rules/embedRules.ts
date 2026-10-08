@@ -1,6 +1,7 @@
 import type { ModeContext, Variable, VariableScope } from "@/types/variable";
 import { getVariableCssName } from "@/types/variable";
 import { parseEmbedHtml } from "@/lib/embedHtmlDocument";
+import { mergeModeContext } from "@/lib/variables";
 import { hasStaleRegions, listRegionKeys } from "@/lib/embedComponents";
 import type { ComponentRegistry } from "@/lib/embedComponents";
 import { formatVariableRef } from "@/lib/tools/variableToolUtils";
@@ -28,12 +29,12 @@ import {
   type StyleRule,
 } from "../embedDom";
 import type { Finding, LintEmbed, LintRuleId } from "../types";
-import { colorScopeOk, numberScopeOk, preferSemantic } from "./tokenRules";
+import { colorScopeOk, numberScopeOk } from "./tokenRules";
+import { NEAR_COLOR_DISTANCE } from "../shared";
 
 export const EMBED_CONTRAST_MAX_CHARS = 200_000;
 export const EMBED_CONTRAST_MAX_TEXT_ELEMENTS = 2000;
 const EPS = 1e-9;
-const NEAR_COLOR_DISTANCE = 0.04;
 
 interface ParsedEmbed {
   embed: LintEmbed;
@@ -51,7 +52,9 @@ function parsedEmbeds(lc: LintContext): ParsedEmbed[] {
 }
 
 function baseModesFor(lc: LintContext, embed: LintEmbed, base: ModeContext): ModeContext {
-  return embed.pageId === lc.input.pageId ? lc.effectiveModes(embed.nodeId, base) : base;
+  if (embed.pageId === lc.input.pageId) return lc.effectiveModes(embed.nodeId, base);
+  // Another page: its own ancestor frames' overrides, outermost first (captured by `buildLintInput`).
+  return (embed.modeChain ?? []).reduce(mergeModeContext, base);
 }
 
 function colorScopeFor(property: string): VariableScope {
@@ -66,8 +69,8 @@ function colorScopeFor(property: string): VariableScope {
 // ---------------------------------------------------------------------------
 
 export function runEmbedLiteralRule(lc: LintContext, parsed: ParsedEmbed[]): void {
-  // Without color tokens every literal would be "wrong"; there is nothing to point at.
-  if (!lc.input.variables.some((v) => v.type === "color" && !v.deprecated)) return;
+  // Without color tokens a color literal is not "wrong" (nothing to point at), but px lengths can still match number tokens.
+  const hasColorTokens = lc.input.variables.some((v) => v.type === "color" && !v.deprecated);
   const cssName = (v: Variable) => getVariableCssName(v);
   for (const { embed, doc } of parsed) {
     if (lc.expired()) return;
@@ -77,14 +80,14 @@ export function runEmbedLiteralRule(lc: LintContext, parsed: ParsedEmbed[]): voi
     const seen = new Set<string>();
 
     const report = (path: string, property: string, value: string) => {
-      for (const literal of colorLiterals(property, value)) {
+      for (const literal of hasColorTokens ? colorLiterals(property, value) : []) {
         const color = parseColor(literal);
         if (!color) continue;
         const id = findingId("embed-literal", embed.nodeId, path, property, literal);
         if (seen.has(id)) continue;
         seen.add(id);
         const scoped = colors.filter((t) => colorScopeOk(t.variable, colorScopeFor(property)));
-        const exact = preferSemantic(scoped.filter((t) => colorsEqual(t.color, color)));
+        const exact = scoped.filter((t) => colorsEqual(t.color, color));
         const where = embed.masterKey ? `component \`${embed.masterKey}\`` : "embed";
         if (exact.length > 0) {
           const best = exact[0].variable;
@@ -99,7 +102,7 @@ export function runEmbedLiteralRule(lc: LintContext, parsed: ParsedEmbed[]): voi
             fix: { kind: "embed-replace", nodeId: embed.nodeId, property, from: literal, to: `var(${cssName(best)})` },
           });
         } else {
-          const near = preferSemantic(scoped).find((t) => oklabDistance(t.color, color) < NEAR_COLOR_DISTANCE);
+          const near = scoped.find((t) => oklabDistance(t.color, color) < NEAR_COLOR_DISTANCE);
           lc.add({
             id,
             rule: "embed-literal",
@@ -114,9 +117,7 @@ export function runEmbedLiteralRule(lc: LintContext, parsed: ParsedEmbed[]): voi
       const px = pxLiteral(property, value);
       if (!px) return;
       const scopeList: VariableScope[] = px.scope === "spacing" ? ["spacing", "gap"] : [px.scope];
-      const match = preferSemantic(
-        numbers.filter((t) => numberScopeOk(t.variable, scopeList) && Math.abs(t.value - px.px) < 1e-6),
-      )[0];
+      const match = numbers.find((t) => numberScopeOk(t.variable, scopeList) && Math.abs(t.value - px.px) < 1e-6);
       if (!match) return;
       const id = findingId("embed-literal", embed.nodeId, path, property, value);
       if (seen.has(id)) return;
@@ -218,7 +219,7 @@ class EmbedColors {
       if (image !== undefined && !/^none$/i.test(image.trim())) return null;
       if (bg === undefined) continue;
       if (/url\(|gradient\(/i.test(bg)) return null;
-      if (/^(inherit|unset|initial)$/i.test(bg.trim())) continue;
+      if (/^(inherit|unset|initial|none|transparent)$/i.test(bg.trim())) continue;
       const color = this.color(bg, cur);
       if (!color) return null;
       layers.push(color);
@@ -281,11 +282,13 @@ export function runEmbedContrastRule(lc: LintContext, parsed: ParsedEmbed[]): vo
       (el) => hasOwnText(el) && !inManagedZone(el, embed.masterKey) && !hiddenOrSkipped(el, cascade),
     );
     if (elements.length > EMBED_CONTRAST_MAX_TEXT_ELEMENTS) lc.embedsPartial++;
-    const contexts = embed.html.includes("var(") ? lc.contexts : lc.contexts.slice(0, 1);
+    // Without var() nothing in the embed depends on a mode: evaluate once and report with no mode label.
+    const modeDependent = embed.html.includes("var(");
+    const contexts = modeDependent ? lc.contexts : lc.contexts.slice(0, 1);
     const found: Finding[] = [];
     for (const base of contexts) {
       const colors = new EmbedColors(lc, cascade, baseModesFor(lc, embed, base));
-      const mode = lc.label(base);
+      const mode = modeDependent ? lc.label(base) : "";
       for (const el of elements.slice(0, EMBED_CONTRAST_MAX_TEXT_ELEMENTS)) {
         const fg = colors.foreground(el);
         const bg = fg ? colors.background(el) : null;
@@ -309,7 +312,7 @@ export function runEmbedContrastRule(lc: LintContext, parsed: ParsedEmbed[]): vo
         });
       }
     }
-    lc.addPerMode(found);
+    lc.addPerMode(found, contexts.length);
   }
 }
 

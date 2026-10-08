@@ -1,5 +1,5 @@
 import type { EmbedNode, FlatSceneNode, SceneNode } from "@/types/scene";
-import type { ModeContext, Variable, VariableCollection } from "@/types/variable";
+import type { ModeContext, ModeOverrides, Variable, VariableCollection } from "@/types/variable";
 import { useSceneStore } from "@/store/sceneStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useVariableStore } from "@/store/variableStore";
@@ -13,12 +13,13 @@ import {
   buildVariableIndex,
   completeModeContext,
   getEffectiveModeContext,
+  getFrameModeOverrides,
   modeContextKey,
   modeValuesOf,
   resolveVariable,
   type VariableIndex,
 } from "@/lib/variables";
-import { parseColor, type Rgba } from "./colorMath";
+import { parseColor, toOklab, type Oklab, type Rgba } from "./colorMath";
 import type { Finding, LintEmbed, LintInput, LintOptions, Rect } from "./types";
 
 export const DEFAULT_MAX_MODES = 8;
@@ -52,7 +53,21 @@ export function buildLintInput(): LintInput {
   };
   walk(scene.getNodes(), 0, 0);
 
-  const pageId = usePageStore.getState().activePageId;
+  const { activePageId: pageId, pages } = usePageStore.getState();
+  const snapshotOf = new Map(pages.map((p) => [p.id, p]));
+  /** Ancestor frames' overrides of a node on another page, outermost first. */
+  const modeChainOf = (embedPageId: string, nodeId: string): ModeOverrides[] => {
+    const snap = snapshotOf.get(embedPageId);
+    if (!snap) return [];
+    const chain: ModeOverrides[] = [];
+    const seen = new Set<string>();
+    for (let cur = snap.parentById[nodeId]; cur != null && !seen.has(cur); cur = snap.parentById[cur]) {
+      seen.add(cur);
+      const overrides = getFrameModeOverrides(snap.nodesById[cur]);
+      if (Object.keys(overrides).length > 0) chain.unshift(overrides);
+    }
+    return chain;
+  };
   const { variables, collections } = useVariableStore.getState();
   return {
     pageId,
@@ -72,6 +87,7 @@ export function buildLintInput(): LintInput {
       pageId: embedPageId,
       html: node.htmlContent ?? "",
       masterKey: node.component?.key,
+      ...(embedPageId === pageId ? {} : { modeChain: modeChainOf(embedPageId, node.id) }),
     })),
   };
 }
@@ -80,6 +96,8 @@ export function buildLintInput(): LintInput {
 export interface ColorToken {
   variable: Variable;
   color: Rgba;
+  /** `color` in OKLab, computed once per context. */
+  lab: Oklab;
   /** An alias onto another token (semantic tier) rather than a raw value (primitive tier). */
   semantic: boolean;
 }
@@ -92,6 +110,11 @@ export interface NumberToken {
 
 export function isSemantic(variable: Variable): boolean {
   return Object.values(modeValuesOf(variable)).some((v) => typeof v !== "string");
+}
+
+/** Semantic tier first, then by name. */
+function bySemanticThenName<T extends { semantic: boolean; variable: Variable }>(a: T, b: T): number {
+  return Number(b.semantic) - Number(a.semantic) || a.variable.name.localeCompare(b.variable.name);
 }
 
 /** Stable finding id: rule plus the identity of the offending thing, never the message. */
@@ -208,7 +231,7 @@ export class LintContext {
     return resolveVariable(this.index, variableId, ctx).chain;
   }
 
-  /** Non-deprecated color variables that resolve to a literal color under `ctx`. */
+  /** Non-deprecated color variables that resolve to a literal color under `ctx`, semantic tier first. Cached per context. */
   colorTokens(ctx: ModeContext): ColorToken[] {
     const key = modeContextKey(ctx);
     const hit = this.colorTokenCache.get(key);
@@ -217,12 +240,14 @@ export class LintContext {
     for (const variable of this.input.variables) {
       if (variable.type !== "color" || variable.deprecated) continue;
       const color = parseColor(this.resolve(variable.id, ctx));
-      if (color) out.push({ variable, color, semantic: isSemantic(variable) });
+      if (color) out.push({ variable, color, lab: toOklab(color), semantic: isSemantic(variable) });
     }
+    out.sort(bySemanticThenName);
     this.colorTokenCache.set(key, out);
     return out;
   }
 
+  /** Number tokens under `ctx`, semantic tier first. Cached per context. */
   numberTokens(ctx: ModeContext): NumberToken[] {
     const key = modeContextKey(ctx);
     const hit = this.numberTokenCache.get(key);
@@ -234,6 +259,7 @@ export class LintContext {
       const value = raw === undefined || raw.trim() === "" ? NaN : Number(raw);
       if (Number.isFinite(value)) out.push({ variable, value, semantic: isSemantic(variable) });
     }
+    out.sort(bySemanticThenName);
     this.numberTokenCache.set(key, out);
     return out;
   }
@@ -246,8 +272,10 @@ export class LintContext {
    * Add findings produced once per mode context. A finding that holds in every
    * context is reported once without a mode; one that holds in some is
    * reported with the list of modes (and an id that includes them).
+   * `evaluated` is how many contexts were actually checked (1 for a rule that
+   * is mode-independent for the thing it checked).
    */
-  addPerMode(perMode: Finding[]): void {
+  addPerMode(perMode: Finding[], evaluated = this.contexts.length): void {
     const groups = new Map<string, { f: Finding; modes: string[] }>();
     for (const f of perMode) {
       const key = `${f.id}\u0000${f.message}\u0000${f.detail ?? ""}`;
@@ -256,7 +284,7 @@ export class LintContext {
       else groups.set(key, { f, modes: [f.mode ?? ""] });
     }
     for (const { f, modes } of groups.values()) {
-      if (modes.length >= this.contexts.length || !modes[0]) this.add({ ...f, mode: undefined });
+      if (modes.length >= evaluated || !modes[0]) this.add({ ...f, mode: undefined });
       else this.add({ ...f, id: `${f.id}@${shortHash(modes.join("|"))}`, mode: modes.join("; ") });
     }
   }

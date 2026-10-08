@@ -1,5 +1,5 @@
 import type { FlatSceneNode, NumberBindingKey } from "@/types/scene";
-import type { ModeContext, Variable, VariableCollection } from "@/types/variable";
+import type { ModeContext, ModeOverrides, Variable, VariableCollection } from "@/types/variable";
 import type { ComponentRegistry } from "@/lib/embedComponents";
 
 export type Severity = "error" | "warning" | "info";
@@ -94,6 +94,11 @@ export interface LintEmbed {
   html: string;
   /** Set on a component master. */
   masterKey?: string;
+  /**
+   * Mode overrides of the embed's ancestor frames, outermost first. Only set
+   * for embeds on other pages (the active page reads them from its own tree).
+   */
+  modeChain?: ModeOverrides[];
 }
 
 /**

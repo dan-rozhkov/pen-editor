@@ -256,6 +256,9 @@ const DEFAULT_TOOL_CALL_TIMEOUT_MS = 30_000;
 const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
   generate_image: 95_000,
   generate_frame_image: 95_000,
+  // lint_design stops its own scan at an 8 s budget, but parsing the embeds
+  // of a big document before that check can add up to ~30 s.
+  lint_design: 45_000,
   // remove-background/vectorize call out to their own upstream provider and
   // can run well past the default budget; 60s is generous headroom without
   // matching generate_image's 95s (these aren't racing a comparable backend

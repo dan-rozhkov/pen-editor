@@ -235,8 +235,11 @@ export function toOklab(c: Rgba): Oklab {
 
 /** Euclidean distance in OKLab; about 0.02 is a just-noticeable difference. */
 export function oklabDistance(x: Rgba, y: Rgba): number {
-  const p = toOklab(x);
-  const q = toOklab(y);
+  return labDistance(toOklab(x), toOklab(y));
+}
+
+/** Distance between two precomputed OKLab colors. */
+export function labDistance(p: Oklab, q: Oklab): number {
   return Math.hypot(p.L - q.L, p.a - q.a, p.b - q.b);
 }
 

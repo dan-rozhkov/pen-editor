@@ -1,6 +1,7 @@
 import type { FlatSceneNode, Paint, TextNode } from "@/types/scene";
 import type { ModeContext } from "@/types/variable";
-import { getRenderableFills, getRenderableStrokes } from "@/utils/fillUtils";
+import { getPrimarySolidPaint, getRenderableFills, getRenderableStrokes } from "@/utils/fillUtils";
+import { TEXT_LINK_COLOR } from "@/lib/textLink";
 import {
   compositeOver,
   contrastRatio,
@@ -13,6 +14,7 @@ import {
   type Rgba,
 } from "../colorMath";
 import { findingId, isNodeHidden, type LintContext } from "../context";
+import { nodeLabel, strokeIsDrawn } from "../shared";
 import type { Finding, Rect } from "../types";
 
 const OPAQUE = 0.999;
@@ -203,18 +205,24 @@ function worstRatio(fgs: Rgba[], bgs: Rgba[]): Worst {
 }
 
 
-function label(node: FlatSceneNode): string {
-  return node.name ? `"${node.name}"` : `${node.type} ${node.id}`;
-}
-
-/** The text's own paint as foreground colors, or null when it cannot be read. */
-function foregroundOf(lc: LintContext, node: FlatSceneNode, ctx: ModeContext): { colors: Rgba[]; gradient: boolean } | null {
-  const fills = fillLayers(lc, node, ctx);
-  const top = fills[0];
-  if (!top || top.kind === "unresolved") return null;
-  return top.kind === "solid"
-    ? { colors: [top.color], gradient: false }
-    : { colors: top.colors, gradient: true };
+/**
+ * The text's foreground colors, as the text renderer draws them: the topmost
+ * visible SOLID paint (gradients and images are ignored), else the legacy
+ * `fill`; with neither, black, or link blue for a linked node. Null when the
+ * chosen paint cannot be read (style, blend mode, unknown variable).
+ */
+function foregroundOf(lc: LintContext, node: TextNode, ctx: ModeContext): { colors: Rgba[]; gradient: boolean } | null {
+  const paint: Paint | undefined = node.fills
+    ? getPrimarySolidPaint(node)
+    : node.fill !== undefined
+      ? { id: "legacy-fill", type: "solid", color: node.fill, opacity: node.fillOpacity, colorBinding: node.fillBinding }
+      : undefined;
+  if (!paint) {
+    const fallback = parseColor(node.link ? TEXT_LINK_COLOR : "#000000");
+    return fallback ? { colors: [withAlphaFactor(fallback, node.opacity ?? 1)], gradient: false } : null;
+  }
+  const layer = paintLayer(lc, node, paint, ctx);
+  return layer.kind === "solid" ? { colors: [layer.color], gradient: false } : null;
 }
 
 /** Native contrast: text against its backdrop (WCAG AA), optionally strokes against 3:1. */
@@ -259,7 +267,7 @@ function textContrast(
       severity: "info",
       nodeId: node.id,
       pageId: lc.input.pageId,
-      message: `Contrast of ${label(node)} was not checked: the text or what is behind it is an image, a style or a blend mode.`,
+      message: `Contrast of ${nodeLabel(node)} was not checked: the text or what is behind it is an image, a style or a blend mode.`,
     });
     return;
   }
@@ -274,7 +282,7 @@ function textContrast(
     severity: soft ? "info" : "error",
     nodeId: node.id,
     pageId: lc.input.pageId,
-    message: `Text ${label(node)} has contrast ${formatRatio(worst.ratio, need)}:1 (${toHex(worst.fg)} on ${toHex(worst.bg)}); ${large ? "large text" : "text"} needs ${need}:1.`,
+    message: `Text ${nodeLabel(node)} has contrast ${formatRatio(worst.ratio, need)}:1 (${toHex(worst.fg)} on ${toHex(worst.bg)}); ${large ? "large text" : "text"} needs ${need}:1.`,
     detail: soft ? "Worst gradient stop." : undefined,
     mode: mode || undefined,
   });
@@ -288,9 +296,10 @@ function strokeContrast(
   mode: string,
   found: Finding[],
 ): void {
+  if (!strokeIsDrawn(node)) return;
   const strokes = getRenderableStrokes(node);
   const top = strokes[strokes.length - 1];
-  if (!top || (node.strokeWidth ?? 0) <= 0) return;
+  if (!top) return;
   const layer = paintLayer(lc, node, top, lc.effectiveModes(node.id, base));
   if (layer.kind !== "solid") return;
   const backdrop = backdropOf(lc, base, node.id, rect);
@@ -303,7 +312,7 @@ function strokeContrast(
     severity: backdrop.gradient ? "info" : "warning",
     nodeId: node.id,
     pageId: lc.input.pageId,
-    message: `Stroke of ${label(node)} has contrast ${formatRatio(worst.ratio, UI_RATIO)}:1 (${toHex(worst.fg)} on ${toHex(worst.bg)}); UI boundaries need ${UI_RATIO}:1.`,
+    message: `Stroke of ${nodeLabel(node)} has contrast ${formatRatio(worst.ratio, UI_RATIO)}:1 (${toHex(worst.fg)} on ${toHex(worst.bg)}); UI boundaries need ${UI_RATIO}:1.`,
     detail: "Non-text contrast (WCAG 1.4.11).",
     mode: mode || undefined,
   });

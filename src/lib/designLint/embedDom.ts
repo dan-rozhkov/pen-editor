@@ -1,3 +1,4 @@
+import { ownSlots } from "@/lib/embedComponents/master";
 import { parseCss, type CssNode } from "@/lib/embedComponents/css";
 import { parseColor } from "./colorMath";
 
@@ -108,12 +109,22 @@ export function inManagedZone(el: Element, masterKey?: string): boolean {
   let region = el.closest("[data-c]");
   while (region) {
     const ownRoot = masterKey !== undefined && region.getAttribute("data-c") === masterKey;
-    const slot = el.closest("[data-c-slot]");
-    const inOwnSlot = !!slot && region.contains(slot) && slot.closest("[data-c]") === region && slot !== region;
-    if (!ownRoot && !inOwnSlot) return true;
+    if (!ownRoot && !inOwnSlot(region, el)) return true;
     region = region.parentElement?.closest("[data-c]") ?? null;
   }
   return false;
+}
+
+const slotCache = new WeakMap<Element, Element[]>();
+
+/** Is `el` inside one of the region's own slots (not the region's managed markup, nor a nested region's slot)? */
+function inOwnSlot(region: Element, el: Element): boolean {
+  let slots = slotCache.get(region);
+  if (!slots) {
+    slots = ownSlots(region);
+    slotCache.set(region, slots);
+  }
+  return slots.some((slot) => slot.contains(el));
 }
 
 const COLOR_PROPERTY = /^(?:color|background|fill|stroke|box-shadow|text-shadow|border(?:-[a-z]+)*|outline(?:-[a-z]+)*)$|-color$/;
@@ -123,14 +134,20 @@ export function isColorProperty(property: string): boolean {
   return !property.startsWith("--") && COLOR_PROPERTY.test(property);
 }
 
-/** `value` without any `var(...)` call (balanced), so literals in fallbacks are not reported. */
+/** `value` without any `var(...)` or `url(...)` call (balanced), so literals in fallbacks and fragment ids are not reported. */
 function stripVarCalls(value: string): string {
+  return stripCalls(value, ["var(", "url("]);
+}
+
+/** `value` with every balanced call whose name starts with one of `openers` blanked out. */
+function stripCalls(value: string, openers: string[]): string {
   let out = "";
   let i = 0;
   while (i < value.length) {
-    if (value.slice(i, i + 4).toLowerCase() === "var(") {
+    const opener = openers.find((o) => value.slice(i, i + o.length).toLowerCase() === o);
+    if (opener) {
       let depth = 1;
-      i += 4;
+      i += opener.length;
       while (i < value.length && depth > 0) {
         if (value[i] === "(") depth++;
         else if (value[i] === ")") depth--;
@@ -181,6 +198,15 @@ function specificity(selector: string): number {
   return ids * 10000 + classes * 100 + tags;
 }
 
+/** Applies one declaration; the `background` shorthand resets the longhands declared before it. */
+function setDeclared(out: Map<string, string>, d: Decl): void {
+  if (d.property === "background") {
+    out.delete("background-color");
+    out.delete("background-image");
+  }
+  out.set(d.property, d.value);
+}
+
 export function parseInlineStyle(el: Element): Decl[] {
   const raw = el.getAttribute("style");
   return raw ? parseDeclarations(raw) : [];
@@ -219,8 +245,8 @@ export class LimitedCascade {
     }
     matched.sort((a, b) => a.spec - b.spec || a.order - b.order);
     const out = new Map<string, string>();
-    for (const m of matched) for (const d of m.decls) out.set(d.property, d.value);
-    for (const d of parseInlineStyle(el)) out.set(d.property, d.value);
+    for (const m of matched) for (const d of m.decls) setDeclared(out, d);
+    for (const d of parseInlineStyle(el)) setDeclared(out, d);
     this.cache.set(el, out);
     return out;
   }

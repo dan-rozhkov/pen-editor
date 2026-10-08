@@ -14,6 +14,7 @@ import {
 
 export * from "./types";
 export * from "./colorMath";
+export { LINT_RULE_CATALOG, type LintRuleInfo } from "./ruleCatalog";
 export { buildLintInput, enumerateModeContexts, modeLabel } from "./context";
 
 export const DEFAULT_LIMIT = 100;

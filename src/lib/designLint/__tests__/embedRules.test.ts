@@ -62,6 +62,28 @@ describe("embed-literal", () => {
   });
 });
 
+describe("embed-literal edge cases", () => {
+  it("still checks px lengths against number tokens when there are no color tokens", () => {
+    const r = lint([embed("e1", `<div style="border-radius:8px;color:#3366ff">x</div>`)], { variables: [radius] });
+    const found = byRule(r, "embed-literal");
+    expect(found).toHaveLength(1);
+    expect(found[0].fix).toMatchObject({ property: "border-radius", to: "var(--radius-md)" });
+  });
+
+  it("lints slot content of a component nested inside another component's slot", () => {
+    const html = `<section data-c="card"><div data-c-slot="body"><button data-c="btn"><span data-c-slot="label"><b style="color:#3366ff">hi</b></span><i style="color:#3366ff">own</i></button></div></section>`;
+    const r = lint([embed("use", html)], { variables: [brand] });
+    const found = byRule(r, "embed-literal");
+    expect(found).toHaveLength(1);
+    expect(found[0].embedPath).toContain("b");
+  });
+
+  it("does not read hex-looking ids inside url() as colors", () => {
+    const html = `<style>.a{fill:url(#face)} .b{background:url("#cafe") no-repeat}</style><svg><rect style="fill:url(#abc)"/></svg>`;
+    expect(byRule(lint([embed("e1", html)], { variables: [brand] }), "embed-literal")).toHaveLength(0);
+  });
+});
+
 describe("embed contrast", () => {
   const page = (inner: string, vars = {}) => lint([embed("e1", inner)], vars);
 
@@ -115,6 +137,46 @@ describe("embed contrast", () => {
     const fallback = page(`<div style="background:#fff"><p style="color:var(--nope, #777)">Hi</p></div>`);
     expect(byRule(fallback, "contrast")).toHaveLength(1);
   });
+
+  it("treats background none/transparent as transparent and keeps walking up", () => {
+    for (const bg of ["none", "transparent"]) {
+      const r = page(`<div style="background:#fff"><p style="background:${bg};color:#777">x</p></div>`);
+      expect(byRule(r, "contrast")).toHaveLength(1);
+    }
+  });
+
+  it("respects declaration order between background and background-color", () => {
+    const later = page(`<p style="background-color:#000;background:#fff;color:#777">x</p>`);
+    expect(byRule(later, "contrast")).toHaveLength(1);
+    const earlier = page(`<p style="background:#fff;background-color:#000;color:#777">x</p>`);
+    expect(byRule(earlier, "contrast")).toHaveLength(0);
+  });
+
+  it("reports a var()-free embed once, without a mode label, with an id that survives an unrelated var()", () => {
+    const failing = `<p style="color:#777;background:#fff">x</p>`;
+    const [plain] = byRule(page(failing), "contrast");
+    assertDefined(plain);
+    expect(plain.mode).toBeUndefined();
+    const [withVar] = byRule(page(failing + `<div style="--z:var(--q)"></div>`), "contrast");
+    assertDefined(withVar);
+    expect(withVar.id).toBe(plain.id);
+    expect(withVar.mode).toBeUndefined();
+  });
+
+  it("evaluates embeds of other pages under their own page's ancestor mode overrides", () => {
+    const fg = token("fg", "--fg", { light: "#111111", dark: "#cccccc" });
+    const html = `<div style="background:#fff"><p style="color:var(--fg)">Hi</p></div>`;
+    const input = {
+      variables: [fg],
+      embeds: [
+        { nodeId: "far", pageId: "p2", html, modeChain: [{ theme: "dark" }] },
+        { nodeId: "near", pageId: "p2", html },
+      ],
+    };
+    const r = lint([text("t", { fill: "#000" })], input, { modes: [{ theme: "light" }] });
+    expect(byRule(r, "contrast").map((f) => f.nodeId)).toEqual(["far"]);
+  });
+
 
   it("skips managed zones of consumers but checks the master itself", () => {
     const registry = makeRegistry({ tag: `<style>[data-c="tag"]{background:#fff;color:#777}</style><span data-c="tag">T</span>` });

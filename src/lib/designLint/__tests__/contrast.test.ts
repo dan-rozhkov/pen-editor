@@ -118,4 +118,33 @@ describe("native contrast", () => {
     const r = lint([text("t", { fill: "#bbbbbb" })], { pageBackground: "#000000" });
     expect(contrastOf(r)).toHaveLength(0);
   });
+
+  describe("text foreground mirrors the renderer", () => {
+    it("treats a text node with no fills as black", () => {
+      expect(contrastOf(lint([text("t")], { pageBackground: "#000000" }))).toHaveLength(1);
+      expect(contrastOf(lint([text("t")]))).toHaveLength(0);
+    });
+
+    it("treats a linked text node with no fills as link blue", () => {
+      const [f] = contrastOf(lint([text("t", { link: { url: "https://example.com" } })]));
+      assertDefined(f);
+      expect(f.message).toContain("#0d99ff");
+    });
+
+    it("uses the topmost SOLID paint, skipping gradients above it", () => {
+      const gradient = { id: "g", type: "gradient", gradient: { type: "linear", angle: 0, stops: [{ offset: 0, color: "#ffffff" }, { offset: 1, color: "#ffffff" }] } };
+      const r = lint([text("t", { fills: [solid("#000000"), gradient] })]);
+      expect(contrastOf(r)).toHaveLength(0);
+    });
+
+    it("skips invisible solids when picking the topmost", () => {
+      const r = lint([text("t", { fills: [solid("#000000"), solid("#bbbbbb", { visible: false })] })]);
+      expect(contrastOf(r)).toHaveLength(0);
+    });
+  });
+
+  it("counts strokeWidthPerSide as a drawn stroke for UI contrast", () => {
+    const roots = [rect("box", { stroke: "#dddddd", strokeWidthPerSide: { top: 0, right: 0, bottom: 2, left: 0 } })];
+    expect(contrastOf(lint(roots, {}, { uiContrast: true }))).toHaveLength(1);
+  });
 });
