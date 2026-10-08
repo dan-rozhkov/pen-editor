@@ -10,12 +10,15 @@ import {
   parseColor,
   requiredRatio,
   toHex,
+  toOklab,
+  labDistance,
   withAlphaFactor,
   type Rgba,
 } from "../colorMath";
 import { findingId, isNodeHidden, type LintContext } from "../context";
 import { nodeLabel, strokeIsDrawn } from "../shared";
-import type { Finding, Rect } from "../types";
+import type { Finding, LintFix, Rect } from "../types";
+import { colorScopeOk } from "./tokenRules";
 
 const OPAQUE = 0.999;
 const MAX_SAMPLES = 24;
@@ -211,7 +214,11 @@ function worstRatio(fgs: Rgba[], bgs: Rgba[]): Worst {
  * `fill`; with neither, black, or link blue for a linked node. Null when the
  * chosen paint cannot be read (style, blend mode, unknown variable).
  */
-function foregroundOf(lc: LintContext, node: TextNode, ctx: ModeContext): { colors: Rgba[]; gradient: boolean } | null {
+function foregroundOf(
+  lc: LintContext,
+  node: TextNode,
+  ctx: ModeContext,
+): { colors: Rgba[]; gradient: boolean; paint?: Paint; stacked?: boolean } | null {
   const paint: Paint | undefined = node.fills
     ? getPrimarySolidPaint(node)
     : node.fill !== undefined
@@ -222,7 +229,54 @@ function foregroundOf(lc: LintContext, node: TextNode, ctx: ModeContext): { colo
     return fallback ? { colors: [withAlphaFactor(fallback, node.opacity ?? 1)], gradient: false } : null;
   }
   const layer = paintLayer(lc, node, paint, ctx);
-  return layer.kind === "solid" ? { colors: [layer.color], gradient: false } : null;
+  return layer.kind === "solid" ? { colors: [layer.color], gradient: false, paint, stacked: !!node.fills } : null;
+}
+
+/**
+ * A `bind-color` fix for failing text: the color token nearest (OKLab) to the
+ * current color that passes `need` against the backdrop in EVERY evaluated
+ * mode context. Only for an unbound solid paint over a solid backdrop;
+ * undefined when no token passes.
+ */
+function contrastFix(
+  lc: LintContext,
+  node: TextNode,
+  rect: Rect,
+  fg: NonNullable<ReturnType<typeof foregroundOf>>,
+  need: number,
+): LintFix | undefined {
+  const paint = fg.paint;
+  if (!paint || paint.type !== "solid" || paint.colorBinding || paint.styleId || fg.gradient) return undefined;
+  const original = parseColor(paint.color);
+  if (!original) return undefined;
+  const factor = (paint.opacity ?? 1) * (node.opacity ?? 1);
+  const checks: Array<{ ctx: ModeContext; samples: Rgba[] }> = [];
+  for (const base of lc.contexts) {
+    const backdrop = backdropOf(lc, base, node.id, rect);
+    if (!backdrop || backdrop.gradient) return undefined;
+    checks.push({ ctx: lc.effectiveModes(node.id, base), samples: backdrop.samples });
+  }
+  const from = toOklab(original);
+  let best: { id: string; distance: number } | undefined;
+  for (const token of lc.colorTokens(checks[0].ctx)) {
+    if (!colorScopeOk(token.variable, "text")) continue;
+    const passes = checks.every(({ ctx, samples }) => {
+      const color = parseColor(lc.resolve(token.variable.id, ctx));
+      return !!color && worstRatio([withAlphaFactor(color, factor)], samples).ratio + EPS >= need;
+    });
+    if (!passes) continue;
+    const distance = labDistance(from, token.lab);
+    if (!best || distance < best.distance) best = { id: token.variable.id, distance };
+  }
+  if (!best) return undefined;
+  return {
+    kind: "bind-color",
+    nodeId: node.id,
+    slot: "fill",
+    paintId: fg.stacked ? paint.id : undefined,
+    variableId: best.id,
+    from: paint.color,
+  };
 }
 
 /** Native contrast: text against its backdrop (WCAG AA), optionally strokes against 3:1. */
@@ -288,6 +342,7 @@ function textContrast(
     message: `Text ${nodeLabel(node)} has contrast ${formatRatio(worst.ratio, need)}:1 (${toHex(worst.fg)} on ${toHex(worst.bg)}); ${large ? "large text" : "text"} needs ${need}:1.`,
     detail: soft ? "Worst gradient stop." : undefined,
     mode: mode || undefined,
+    fix: soft ? undefined : contrastFix(lc, node, rect, fg, need),
   });
 }
 

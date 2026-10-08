@@ -23,8 +23,8 @@ const CATALOG: Record<LintRuleId, Omit<LintRuleInfo, "id">> = {
   },
   contrast: {
     defaultSeverity: "error",
-    description: "Text, native or inside an embed, below the WCAG AA contrast ratio against its backdrop.",
-    autoFix: false,
+    description: "Text, native or inside an embed, below the WCAG AA contrast ratio against its backdrop. Native text with a raw color gets a fix to the nearest passing token.",
+    autoFix: true,
   },
   "deprecated-token": {
     defaultSeverity: "warning",

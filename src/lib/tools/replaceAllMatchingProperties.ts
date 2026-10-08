@@ -1,6 +1,6 @@
 import { useSceneStore } from "@/store/sceneStore";
 import { createSnapshot, saveHistory } from "@/store/sceneStore/helpers/history";
-import type { FlatSceneNode, LayoutProperties, Paint, PathStroke } from "@/types/scene";
+import type { FlatSceneNode, LayoutProperties, Paint, PathStroke, SolidPaint } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
 import { resolveVariableReference } from "@/lib/tools/variableResolutionUtils";
 
@@ -38,6 +38,15 @@ function getColorReplacement(
     colorValue: value,
     binding: undefined,
   };
+}
+
+/**
+ * The one way this codebase writes a variable binding onto a solid paint:
+ * the literal color holds the resolved value, `colorBinding` names the
+ * variable (undefined clears it). Shared with the design-lint fix applier.
+ */
+export function bindSolidPaint(paint: SolidPaint, color: string, binding: { variableId: string } | undefined): SolidPaint {
+  return { ...paint, color, colorBinding: binding };
 }
 
 function isColorEqual(a: unknown, b: unknown): boolean {
@@ -141,11 +150,7 @@ export const replaceAllMatchingProperties: ToolHandler = async (args) => {
             const replacement = getColorReplacement(rule.to);
             changed = true;
             replacements++;
-            return {
-              ...paint,
-              color: replacement.colorValue as string,
-              colorBinding: replacement.binding,
-            };
+            return bindSolidPaint(paint, replacement.colorValue as string, replacement.binding);
           }
         }
         return paint;

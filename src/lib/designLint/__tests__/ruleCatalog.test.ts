@@ -9,7 +9,7 @@ describe("LINT_RULE_CATALOG", () => {
 
   it("marks only rules with fixes as auto-fixable", () => {
     const fixable = LINT_RULE_CATALOG.filter((r) => r.autoFix).map((r) => r.id);
-    expect(fixable).not.toContain("contrast");
+    expect(fixable).toContain("contrast");
     expect(fixable).not.toContain("deprecated-component");
     expect(fixable).toContain("hardcoded-value");
   });

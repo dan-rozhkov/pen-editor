@@ -19,7 +19,9 @@ import { resolveApiUrl } from "@/lib/apiBase";
 import { openInSideform } from "./openInSideform";
 
 // The Agents chat is not part of the widget; its rail item and panel are omitted.
-const HIDDEN_SECTIONS: readonly LeftSection[] = ["agents"];
+// The design lint is left out too: its automatic re-checks and bulk fixes are
+// an editor workflow, and the widget is a slim, host-sized canvas.
+const HIDDEN_SECTIONS: readonly LeftSection[] = ["agents", "lint"];
 
 function prefersDark(): boolean {
   try {

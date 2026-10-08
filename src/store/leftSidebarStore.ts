@@ -16,7 +16,8 @@ export type LeftSection =
   | "variables"
   | "textStyles"
   | "styles"
-  | "comments";
+  | "comments"
+  | "lint";
 
 const LEFT_SECTIONS: LeftSection[] = [
   "pages",
@@ -27,6 +28,7 @@ const LEFT_SECTIONS: LeftSection[] = [
   "textStyles",
   "styles",
   "comments",
+  "lint",
 ];
 
 interface LeftSidebarState {

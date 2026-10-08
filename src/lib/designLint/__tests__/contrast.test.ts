@@ -147,4 +147,26 @@ describe("native contrast", () => {
     const roots = [rect("box", { stroke: "#dddddd", strokeWidthPerSide: { top: 0, right: 0, bottom: 2, left: 0 } })];
     expect(contrastOf(lint(roots, {}, { uiContrast: true }))).toHaveLength(1);
   });
+
+  describe("fix", () => {
+    const ink = token("v-ink", "--ink", "#111111");
+    const grey = token("v-grey", "--grey", "#595959");
+    const faint = token("v-faint", "--faint", "#dddddd");
+
+    it("binds the nearest passing token, in a stacked paint or a legacy fill", () => {
+      const [legacy] = contrastOf(lint([text("t", { fill: "#aaaaaa" })], { variables: [ink, grey, faint] }));
+      expect(legacy.fix).toEqual({ kind: "bind-color", nodeId: "t", slot: "fill", paintId: undefined, variableId: "v-grey", from: "#aaaaaa" });
+      const [stacked] = contrastOf(lint([text("t", { fills: [solid("#aaaaaa", { id: "p1" })] })], { variables: [ink, grey] }));
+      expect(stacked.fix).toMatchObject({ paintId: "p1", variableId: "v-grey" });
+    });
+
+    it("offers no fix without a passing token, for bound paints, or in any mode where the token fails", () => {
+      expect(contrastOf(lint([text("t", { fill: "#aaaaaa" })], { variables: [faint] }))[0].fix).toBeUndefined();
+      const bound = text("t", { fill: "#aaaaaa", fillBinding: { variableId: "v-faint" } });
+      expect(contrastOf(lint([bound], { variables: [ink, faint] }))[0].fix).toBeUndefined();
+      const darkFails = token("v-split", "--split", { light: "#111111", dark: "#222222" });
+      const onDark = frame("f", { fill: "#101010", children: [text("t", { fill: "#303030" })] });
+      expect(contrastOf(lint([onDark], { variables: [darkFails] }))[0].fix).toBeUndefined();
+    });
+  });
 });
