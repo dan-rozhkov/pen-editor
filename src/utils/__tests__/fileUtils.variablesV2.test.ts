@@ -33,10 +33,10 @@ describe("document format v1.2 and the legacy migration", () => {
     expect(variables[1].valuesByMode).toEqual({ light: "8", dark: "8" });
   });
 
-  it("writes version 1.2 with collections, v2 fields AND the legacy mirrors", () => {
+  it("writes version 1.3 with collections, v2 fields AND the legacy mirrors", () => {
     open(legacyJson);
     const saved = serialize();
-    expect(saved.version).toBe("1.2");
+    expect(saved.version).toBe("1.3");
     expect(saved.variableCollections?.map((c) => c.id)).toEqual(["theme"]);
     const primary = saved.variables?.[0];
     assertDefined(primary);

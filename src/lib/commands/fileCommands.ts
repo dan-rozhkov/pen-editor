@@ -8,13 +8,14 @@ import { useThemeStore } from "@/store/themeStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { usePageStore } from "@/store/pageStore";
 import { downloadDocument, downloadPublicPen, openFilePicker } from "@/utils/fileUtils";
-import type { DocumentData } from "@/utils/fileUtils";
+import type { DocumentData, DocumentLibraryMeta } from "@/utils/fileUtils";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
 import { getCanvasViewportMetrics } from "@/utils/canvasViewport";
 import { toDtcg, fromDtcg, toCss, toTailwindTheme, type ImportResult } from "@/lib/designTokens";
 import { THEME_COLLECTION_ID } from "@/types/variable";
 import type { DtcgDocument } from "@/lib/designTokens";
 import { useHistoryStore } from "@/store/historyStore";
+import { isLibraryOwned } from "@/lib/designSystem/ownership";
 import { saveShareCredentials } from "@/lib/shareCanvas";
 import type { PaletteCommand } from "./types";
 
@@ -52,11 +53,22 @@ export function collectDocumentData(): DocumentData {
     effectStyles: useStyleStore.getState().effectStyles,
     activeTheme: useThemeStore.getState().activeTheme,
     modeContext: { ...useThemeStore.getState().modeContext },
+    ...libraryMeta(),
+  };
+}
+
+/** The file-level library state; mints the document id on first use (first save). */
+function libraryMeta(): DocumentLibraryMeta {
+  const doc = useDocumentStore.getState();
+  return {
+    documentId: doc.ensureDocumentId(),
+    ...(doc.libraries.length > 0 ? { libraries: doc.libraries } : {}),
+    ...(doc.libraryAuthor ? { libraryAuthor: doc.libraryAuthor } : {}),
   };
 }
 
 export function exportAsJson(): void {
-  const { pages, variables, variableCollections, textStyles, fillStyles, effectStyles, activeTheme, modeContext } =
+  const { pages, variables, variableCollections, textStyles, fillStyles, effectStyles, activeTheme, modeContext, ...library } =
     collectDocumentData();
   const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
   downloadDocument(
@@ -69,6 +81,7 @@ export function exportAsJson(): void {
     effectStyles,
     variableCollections,
     modeContext,
+    library,
   );
 }
 
@@ -158,9 +171,11 @@ function applyImport(result: ImportResult): void {
   const incoming = result.collections.filter(
     (c) => c.id !== THEME_COLLECTION_ID || !varStore.collections.some((e) => e.id === THEME_COLLECTION_ID),
   );
+  // Library-owned items are read-only: an import never overwrites them (their ids round-trip through an export).
+  const owned = new Set([...varStore.variables, ...varStore.collections].filter(isLibraryOwned).map((x) => x.id));
   varStore.replaceAll(
-    mergeById(varStore.variables, result.variables),
-    mergeById(varStore.collections, incoming),
+    mergeById(varStore.variables, result.variables.filter((v) => !owned.has(v.id))),
+    mergeById(varStore.collections, incoming.filter((c) => !owned.has(c.id))),
   );
   styleStore.setFillStyles(mergeById(styleStore.fillStyles, result.fillStyles));
   styleStore.setEffectStyles(mergeById(styleStore.effectStyles, result.effectStyles));

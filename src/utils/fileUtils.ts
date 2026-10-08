@@ -9,6 +9,22 @@ import { saveBlob } from "@/lib/downloadFile";
 import type { Guide } from "@/store/guidesStore";
 import type { PersistedMeasurement } from "@/store/measurementsStore";
 import type { CommentThread } from "@/store/commentsStore";
+import type { LibraryAuthor, LibraryPin } from "@/lib/designSystem/types";
+
+/**
+ * File-level design-system library state (v1.3+). All optional: a file without
+ * it is a plain document. Library-owned variables, collections and component
+ * masters carry their own `libraryId` / `component.library` flags inside the
+ * document; this holds the document's identity and what it is linked to.
+ */
+export interface DocumentLibraryMeta {
+  /** Random id of the document; minted on first save or open. */
+  documentId?: string
+  /** Libraries this document is linked to. */
+  libraries?: LibraryPin[]
+  /** Set when this document authors a library. */
+  libraryAuthor?: LibraryAuthor
+}
 
 export interface PenPage {
   id: string
@@ -23,7 +39,7 @@ export interface PenPage {
   comments?: CommentThread[]
 }
 
-export interface PenDocument {
+export interface PenDocument extends DocumentLibraryMeta {
   version: string
   // Legacy single-page format
   nodes?: SceneNode[]
@@ -51,7 +67,7 @@ export interface DocumentPageData {
   comments: CommentThread[]
 }
 
-export interface DocumentData {
+export interface DocumentData extends DocumentLibraryMeta {
   pages: DocumentPageData[]
   variables: Variable[]
   /** Optional so hand-built `DocumentData` (tests, tools) stays valid; absent = Theme only. */
@@ -63,7 +79,7 @@ export interface DocumentData {
   modeContext?: ModeContext
 }
 
-const CURRENT_VERSION = '1.2'
+const CURRENT_VERSION = '1.3'
 
 type PenPageInput = { id: string; name: string; nodes: SceneNode[]; pageBackground: string; guides?: Guide[]; slideOrder?: string[]; measurements?: PersistedMeasurement[]; comments?: CommentThread[] }
 
@@ -76,6 +92,7 @@ export function serializeDocument(
   effectStyles: EffectStyle[] = [],
   collections?: VariableCollection[],
   modeContext?: ModeContext,
+  library?: DocumentLibraryMeta,
 ): string {
   // Dual-write: each variable carries both the v2 fields and the legacy
   // `value`/`themeValues` mirrors, so an older build can still open the file.
@@ -100,8 +117,26 @@ export function serializeDocument(
     effectStyles,
     activeTheme,
     ...(modeContext && Object.keys(modeContext).length > 0 ? { modeContext } : {}),
+    ...(library?.documentId ? { documentId: library.documentId } : {}),
+    ...(library?.libraries && library.libraries.length > 0 ? { libraries: library.libraries } : {}),
+    ...(library?.libraryAuthor ? { libraryAuthor: library.libraryAuthor } : {}),
   }
   return JSON.stringify(doc, null, 2)
+}
+
+/** `serializeDocument` over a collected `DocumentData` (autosave, share links): one place that knows every field. */
+export function serializeDocumentData(doc: DocumentData, library: DocumentLibraryMeta = doc): string {
+  return serializeDocument(
+    doc.pages,
+    doc.variables,
+    doc.activeTheme,
+    doc.textStyles,
+    doc.fillStyles,
+    doc.effectStyles,
+    doc.variableCollections,
+    doc.modeContext,
+    library,
+  )
 }
 
 export function deserializeDocument(json: string): DocumentData {
@@ -144,7 +179,37 @@ export function deserializeDocument(json: string): DocumentData {
     effectStyles: doc.effectStyles ?? [],
     activeTheme: doc.activeTheme ?? 'light',
     ...(doc.modeContext ? { modeContext: doc.modeContext } : {}),
+    ...(typeof doc.documentId === 'string' && doc.documentId ? { documentId: doc.documentId } : {}),
+    ...(Array.isArray(doc.libraries) ? { libraries: sanitizeLibraryPins(doc.libraries) } : {}),
+    ...(isLibraryAuthor(doc.libraryAuthor) ? { libraryAuthor: doc.libraryAuthor } : {}),
   }
+}
+
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === 'object' && x !== null && !Array.isArray(x)
+}
+
+/** Keep well-formed pins only (a hand-edited or corrupt file must not break the load). */
+function sanitizeLibraryPins(raw: unknown[]): LibraryPin[] {
+  const out: LibraryPin[] = []
+  const seen = new Set<string>()
+  for (const p of raw) {
+    if (!isRecord(p) || typeof p.id !== 'string' || !p.id || typeof p.version !== 'string' || seen.has(p.id)) continue
+    seen.add(p.id)
+    out.push({
+      id: p.id,
+      name: typeof p.name === 'string' ? p.name : p.id,
+      version: p.version,
+      ...(p.reportUsage === true ? { reportUsage: true } : {}),
+      ...(typeof p.dismissedVersion === 'string' ? { dismissedVersion: p.dismissedVersion } : {}),
+    })
+  }
+  return out
+}
+
+function isLibraryAuthor(x: unknown): x is LibraryAuthor {
+  return isRecord(x) && typeof x.libraryId === 'string' && typeof x.name === 'string' &&
+    (x.baseVersion === null || typeof x.baseVersion === 'string')
 }
 
 export function downloadDocument(
@@ -157,6 +222,7 @@ export function downloadDocument(
   effectStyles: EffectStyle[] = [],
   collections?: VariableCollection[],
   modeContext?: ModeContext,
+  library?: DocumentLibraryMeta,
 ) {
   const json = serializeDocument(
     pages,
@@ -167,6 +233,7 @@ export function downloadDocument(
     effectStyles,
     collections,
     modeContext,
+    library,
   )
   downloadTextFile(json, filename)
 }

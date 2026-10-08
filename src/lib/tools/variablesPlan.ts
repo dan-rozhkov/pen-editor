@@ -1,6 +1,7 @@
 import {
   THEME_COLLECTION_ID,
   generateVariableId,
+  getVariableCssName,
   type ModeId,
   type Variable,
   type VariableCollection,
@@ -18,6 +19,7 @@ import {
   randomId,
   uniqueSlug,
 } from "@/lib/variables";
+import { isLibraryOwned, libraryOwnedMessage } from "@/lib/designSystem/ownership";
 import {
   findCollection,
   findMode,
@@ -86,8 +88,11 @@ export function planVariableChanges(input: PlanInput): Plan {
   let variables: Variable[] = input.variables;
 
   if (input.replace) {
-    variables = [];
-    if (input.collectionSpecs) collections = collections.filter((c) => c.id === THEME_COLLECTION_ID);
+    // Library-owned data is not the agent's to replace: it stays.
+    variables = variables.filter((v) => isLibraryOwned(v));
+    if (input.collectionSpecs) {
+      collections = collections.filter((c) => c.id === THEME_COLLECTION_ID || isLibraryOwned(c));
+    }
   }
   let next: Variable[] = variables.map((v) => ({ ...v }));
 
@@ -107,6 +112,10 @@ export function planVariableChanges(input: PlanInput): Plan {
       if (spec.defaultMode && findMode(existing, spec.defaultMode)?.id !== existing.defaultModeId) {
         errors.push(`collections.${name}: the default mode of the Theme collection is fixed.`);
       }
+      continue;
+    }
+    if (existing && isLibraryOwned(existing)) {
+      errors.push(`collections.${name}: ${libraryOwnedMessage("collection", existing.name, existing.libraryId as string)}`);
       continue;
     }
     if (existing) {
@@ -198,6 +207,24 @@ export function planVariableChanges(input: PlanInput): Plan {
         continue;
       }
       match = hits[0];
+    }
+    if (match && isLibraryOwned(match)) {
+      errors.push(`variable "${label}": ${libraryOwnedMessage("variable", match.name, match.libraryId as string)}`);
+      continue;
+    }
+    if (!match && target && isLibraryOwned(target)) {
+      errors.push(`variable "${label}": ${libraryOwnedMessage("collection", target.name, target.libraryId as string)} Cannot add variables to it.`);
+      continue;
+    }
+    // A local token must not shadow a library token's CSS name.
+    const wantedName = entry.name ?? (match ? undefined : "Untitled");
+    if (wantedName !== undefined) {
+      const css = getVariableCssName({ id: match?.id ?? entry.id ?? "", name: wantedName });
+      const clash = next.find((v) => isLibraryOwned(v) && v.id !== match?.id && getVariableCssName(v) === css);
+      if (clash) {
+        errors.push(`variable "${label}": ${css} is already used by the library-owned, read-only token "${clash.name}".`);
+        continue;
+      }
     }
     if (match && entry.collection !== undefined && target && collectionIdOf(match) !== target.id) {
       errors.push(`variable "${label}": it lives in another collection; set_variables cannot move it.`);

@@ -3,7 +3,7 @@
 // same conversation. Sandboxed iframes may deny storage outright (reads and
 // writes throw): every touch is guarded, and the widget works without it.
 import { collectDocumentData } from "@/lib/commands/fileCommands";
-import { deserializeDocument, serializeDocument } from "@/utils/fileUtils";
+import { deserializeDocument, serializeDocumentData } from "@/utils/fileUtils";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
 import { useSceneStore } from "@/store/sceneStore";
 
@@ -25,11 +25,7 @@ export function restoreEmbedDocument(widgetKey: string, viewport = { width: wind
 
 export function saveEmbedDocument(widgetKey: string): boolean {
   try {
-    const doc = collectDocumentData();
-    localStorage.setItem(
-      embedDocKey(widgetKey),
-      serializeDocument(doc.pages, doc.variables, doc.activeTheme, doc.textStyles, doc.fillStyles, doc.effectStyles, doc.variableCollections, doc.modeContext),
-    );
+    localStorage.setItem(embedDocKey(widgetKey), serializeDocumentData(collectDocumentData()));
     return true;
   } catch {
     // Storage denied or full — keep working, just without persistence.

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useVariableStore } from "../store/variableStore";
 import type { Variable, VariableScope, VariableType } from "../types/variable";
+import { isLibraryOwned } from "../lib/designSystem/ownership";
 import { Checkbox } from "./ui/checkbox";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
@@ -83,8 +84,10 @@ export function VariableDetails({ variable }: { variable: Variable }) {
     updateVariable(variable.id, { deprecated: next });
   };
 
+  const owned = isLibraryOwned(variable);
+
   return (
-    <div className="flex flex-col gap-3 px-3 py-3" role="group" aria-label={`Details of ${variable.name}`}>
+    <div className="flex flex-col gap-3 px-3 py-3" role="group" aria-label={`Details of ${variable.name}`} inert={owned}>
       <CommitField
         label="Description"
         multiline
