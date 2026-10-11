@@ -13,6 +13,10 @@ import {
   type SnapshotResult,
 } from "./shared";
 
+/** browse_act's locate call, retries included, must finish inside the default
+ * tool-call timeout (30 s, useDesignChat.ts). */
+const LOCATE_RETRY_BUDGET_MS = 25_000;
+
 /**
  * browse_act — drives the built-in browser tab: click/type/scroll/back/
  * forward/press/hover/select/reload/wait. Argument validation (target/text/
@@ -131,6 +135,12 @@ async function resolveByElement(
       // backend's non-empty-`ops` schema on a lagging deployment — see
       // filterElementsForBackend's comment.
       elements: filterElementsForBackend(snapshot.elements),
+    }, undefined, undefined, {
+      now: () => Date.now(),
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      // Stay inside browse_act's own tool-call budget: the fit check lets a
+      // 429 retry happen only while wait + request timeout still ends by then.
+      deadline: Date.now() + LOCATE_RETRY_BUDGET_MS,
     });
     if (res.status === 503) {
       return JSON.stringify({

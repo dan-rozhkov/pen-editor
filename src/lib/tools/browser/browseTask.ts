@@ -20,6 +20,7 @@ import {
 import {
   BROWSER_NOT_AVAILABLE_ERROR,
   fetchBrowseBackend,
+  type RetryClock,
   filterElementsForBackend,
   findElementByIndex,
   resultError,
@@ -557,9 +558,12 @@ async function requestStep(
   snapshot: SnapshotResult,
   history: StepHistoryEntry[],
   pageText: string | undefined,
-  screenshot?: string,
-  signal?: AbortSignal
+  screenshot: string | undefined,
+  signal: AbortSignal | undefined,
+  clock: RetryClock
 ): Promise<StepResponse> {
+  // 429 / 503+Retry-After retries happen inside, invisible to the loop: no
+  // history entry, no stall count, no step budget.
   const res = await fetchBrowseBackend("/api/browse/step", {
     goal,
     url: snapshot.url,
@@ -581,7 +585,7 @@ async function requestStep(
     ...(modalFor(snapshot) !== undefined ? { modal: modalFor(snapshot) } : {}),
     ...(pageText !== undefined ? { pageText } : {}),
     ...(screenshot !== undefined ? { screenshot } : {}),
-  }, undefined, signal);
+  }, undefined, signal, clock);
   if (!res.ok) {
     throw new Error(`/api/browse/step responded ${res.status}`);
   }
@@ -1197,7 +1201,7 @@ export async function runBrowseTaskLoop(
           capture = undefined;
         }
       }
-      decision = await requestStep(goal, snapshot, history, pageText, capture?.image, signal);
+      decision = await requestStep(goal, snapshot, history, pageText, capture?.image, signal, { now, sleep, deadline, reserveMs: STEP_DEADLINE_RESERVE_MS });
     } catch (err) {
       const stalled = note({
         operation: "STEP",
@@ -1576,7 +1580,11 @@ const DONE_ITEM_MAX_CHARS = 80;
  * (network, non-200, 503, malformed body) yields `[goal]`, as does a plan of
  * one entry — the caller then runs today's single loop unchanged.
  */
-async function planSubgoals(goal: string, url: string | undefined, signal?: AbortSignal): Promise<string[]> {
+async function planSubgoals(
+  goal: string,
+  url: string | undefined,
+  signal: AbortSignal | undefined
+): Promise<string[]> {
   if (!goal) return [goal];
   try {
     const res = await fetchBrowseBackend(
@@ -1599,27 +1607,55 @@ async function planSubgoals(goal: string, url: string | undefined, signal?: Abor
 }
 
 /**
- * The goal string for sub-goal `k` (1-based) of `n`: the sub-goal itself,
- * then where it sits in the overall task and what is already done. Capped at
- * SUBGOAL_GOAL_MAX_CHARS; the overall-goal text is truncated first and the
- * sub-goal is never cut (unless it alone exceeds the cap).
+ * The goal string for a sub-goal: the sub-goal text ONLY, then (if any) what
+ * is already done. The overall task and the step position are deliberately
+ * NOT included — they made the step model wander into later sub-goals and
+ * never answer DONE. Capped at SUBGOAL_GOAL_MAX_CHARS; the done list is
+ * truncated first and the sub-goal is never cut (unless it alone exceeds the cap).
  */
-export function buildSubgoalGoal(subgoal: string, k: number, n: number, overall: string, doneGoals: string[]): string {
-  // subgoal <= PLAN_SUBGOAL_MAX_CHARS (1000), so it always fits in 2000.
-  const header = `\n\nThis is step ${k} of ${n} of the overall task`;
+export function buildSubgoalGoal(subgoal: string, doneGoals: string[]): string {
   let doneStr = "";
   if (doneGoals.length > 0) {
     const list = truncateToChars(
       doneGoals.map((g) => truncateToChars(g, DONE_ITEM_MAX_CHARS)).join("; "),
       DONE_LIST_MAX_CHARS
     );
-    doneStr = `\nAlready done: ${list}.`;
+    doneStr = `\n\nAlready done earlier (do not redo): ${list}.`;
   }
-  // header + ": " + overall + "." + doneStr
-  const room = SUBGOAL_GOAL_MAX_CHARS - subgoal.length - header.length - 2 - 1 - doneStr.length;
-  const overallPart = room >= 20 ? `: ${truncateToChars(overall, room)}.` : ".";
-  const out = `${subgoal}${header}${overallPart}${doneStr}`;
-  return out.slice(0, SUBGOAL_GOAL_MAX_CHARS);
+  return `${subgoal}${doneStr}`.slice(0, SUBGOAL_GOAL_MAX_CHARS);
+}
+
+const SCROLL_TO_TOP_TIMEOUT_MS = 8_000;
+
+/**
+ * Brings the page to the top before a later sub-goal starts, so the site
+ * header (search box) is inside the snapshot again. Not a step: no history
+ * entry, no Jev call. One snapshot to read the scroll position, then one
+ * `act` scroll of a huge negative amount (viewport heights) unless already
+ * at top. "Top" = window y 0 AND no auto-picked scroll container, or that
+ * container at y 0 (app-shell pages scroll an inner container; `act` scroll
+ * targets it when the window cannot scroll). Best effort: bounded by
+ * SCROLL_TO_TOP_TIMEOUT_MS in total, every failure swallowed.
+ */
+async function scrollToTop(
+  browser: NonNullable<NonNullable<typeof window.penDesktop>["browser"]>
+): Promise<void> {
+  const work = (async () => {
+    const snap = (await browser.snapshot()) as SnapshotResult | undefined;
+    const scroll = snap?.scroll as { y?: unknown; container?: { y?: unknown } | null } | undefined;
+    const containerY = scroll?.container?.y;
+    if (scroll?.y === 0 && (containerY === undefined || containerY === 0)) return;
+    await browser.act({ action: "scroll", amount: -1000 });
+  })().catch(() => {});
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, SCROLL_TO_TOP_TIMEOUT_MS);
+  });
+  try {
+    await Promise.race([work, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 /** A `blocked` the remaining sub-goals cannot get past either. ONLY the
@@ -1745,15 +1781,19 @@ export async function runBrowseTask(
         continue;
       }
       lastUrl = subUrl;
+    } else if (i > 0 && !signal?.aborted) {
+      // Same site: the previous sub-goal may have left the page scrolled far down.
+      await scrollToTop(browser);
     }
     const t = await runBrowseTaskLoop(
-      buildSubgoalGoal(plan[i], k, n, goal, doneGoals),
+      buildSubgoalGoal(plan[i], doneGoals),
       Math.min(maxSteps, remainingSteps),
       browser,
       now,
       sleep,
       undefined,
-      Math.min(deadlineMs, remainingMs),
+      // Recomputed: the open / scroll-to-top above may have used time.
+      Math.min(deadlineMs, overallEnd - now()),
       // Sub-goal 1 reuses the probe snapshot; later ones take their own.
       i === 0 ? freshPreamble : {},
       signal

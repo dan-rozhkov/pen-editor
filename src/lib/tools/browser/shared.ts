@@ -263,6 +263,8 @@ export interface BrowseBackendResponse {
   status: number;
   ok: boolean;
   body: unknown;
+  /** `Retry-After` header in seconds, when present and numeric. */
+  retryAfterSec?: number;
 }
 
 /**
@@ -287,6 +289,64 @@ export async function fetchBrowseBackend(
   body: Record<string, unknown>,
   timeoutMs: number = BROWSE_BACKEND_REQUEST_TIMEOUT_MS,
   /** Aborts the request in flight (Stop / cancelled browse_task). */
+  signal?: AbortSignal,
+  /** Opt-in: wait and re-send the SAME request on 429 / 503+Retry-After. */
+  retry?: RetryClock
+): Promise<BrowseBackendResponse> {
+  let res = await fetchBrowseBackendOnce(path, body, timeoutMs, signal);
+  if (!retry) return res;
+  for (let attempt = 0; attempt < RATE_LIMIT_MAX_RETRIES && isRetryableStatus(res); attempt++) {
+    if (signal?.aborted) break;
+    const waitMs =
+      res.retryAfterSec !== undefined
+        ? Math.min(RATE_LIMIT_MAX_RETRY_AFTER_MS, res.retryAfterSec * 1000)
+        : Math.min(RATE_LIMIT_MAX_BACKOFF_MS, 1000 * 2 ** attempt);
+    // The wait AND the retried request's own worst case must still fit.
+    if (retry.deadline !== undefined && retry.now() + waitMs + timeoutMs + (retry.reserveMs ?? 0) > retry.deadline) break;
+    await abortableSleep(retry.sleep(waitMs), signal);
+    if (signal?.aborted) break;
+    res = await fetchBrowseBackendOnce(path, body, timeoutMs, signal);
+  }
+  return res;
+}
+
+/** Clock + budget for fetchBrowseBackend's opt-in rate-limit retry. */
+export interface RetryClock {
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+  /** Absolute `now()` time the caller must finish by; no limit when absent. */
+  deadline?: number;
+  /** Headroom the caller needs after the request (STEP_DEADLINE_RESERVE_MS). */
+  reserveMs?: number;
+}
+
+const RATE_LIMIT_MAX_RETRIES = 4;
+const RATE_LIMIT_MAX_BACKOFF_MS = 8_000;
+const RATE_LIMIT_MAX_RETRY_AFTER_MS = 60_000;
+
+/** 429, or 503 that carries a Retry-After: a transient "come back later". */
+function isRetryableStatus(res: BrowseBackendResponse): boolean {
+  return res.status === 429 || (res.status === 503 && res.retryAfterSec !== undefined);
+}
+
+/** Resolves when `wait` does or `signal` aborts, whichever is first. */
+function abortableSleep(wait: Promise<void>, signal?: AbortSignal): Promise<void> {
+  if (!signal) return wait;
+  if (signal.aborted) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    signal.addEventListener("abort", done, { once: true });
+    void wait.then(done, done);
+  });
+}
+
+async function fetchBrowseBackendOnce(
+  path: string,
+  body: Record<string, unknown>,
+  timeoutMs: number,
   signal?: AbortSignal
 ): Promise<BrowseBackendResponse> {
   const controller = new AbortController();
@@ -309,7 +369,14 @@ export async function fetchBrowseBackend(
       // unrecognized/missing field elsewhere on these responses.
       parsedBody = null;
     }
-    return { status: res.status, ok: res.ok, body: parsedBody };
+    const rawRetry = res.headers?.get?.("Retry-After");
+    const retryAfterSec = rawRetry != null && rawRetry.trim() !== "" ? Number(rawRetry) : NaN;
+    return {
+      status: res.status,
+      ok: res.ok,
+      body: parsedBody,
+      ...(Number.isFinite(retryAfterSec) && retryAfterSec >= 0 ? { retryAfterSec } : {}),
+    };
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener("abort", onAbort);

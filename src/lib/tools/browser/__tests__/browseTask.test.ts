@@ -1,3 +1,4 @@
+import { fetchBrowseBackend } from "../shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ACTION_CACHE_KILL_SWITCH_KEY,
@@ -2305,25 +2306,25 @@ describe("browse_task sub-goal planning", () => {
     const goals = stepBodies.map((b) => b.goal as string);
     // CLICK then DONE for each sub-goal -> 2 step calls per sub-goal
     expect(goals[0]).toContain("add a tent");
-    expect(goals[0]).toContain("step 1 of 3 of the overall task: buy camping gear.");
-    expect(goals[0]).not.toContain("Already done");
+    expect(goals[0]).toBe("add a tent");
     const second = goals.find((g) => g.startsWith("add a mat"));
-    expect(second).toContain("step 2 of 3");
-    expect(second).toContain("Already done: add a tent.");
+    expect(second).toBe("add a mat\n\nAlready done earlier (do not redo): add a tent.");
+    expect(second).not.toContain("overall task");
     const third = goals.find((g) => g.startsWith("add a bag"));
-    expect(third).toContain("Already done: add a tent; add a mat.");
+    expect(third).toContain("Already done earlier (do not redo): add a tent; add a mat.");
     expect(goals.every((g) => g.length <= 2000)).toBe(true);
     expect(t.subgoals?.map((r) => r.status)).toEqual(["done", "done", "done"]);
     expect(new Set(t.steps.map((st) => st.subgoal))).toEqual(new Set([1, 2, 3]));
   });
 
-  it("buildSubgoalGoal truncates the overall goal, never the sub-goal, within 2000 chars", () => {
+  it("buildSubgoalGoal truncates the done list, never the sub-goal, within 2000 chars", () => {
     const sub = "s".repeat(1000);
     const done = Array.from({ length: 5 }, (_, i) => `done-${i}-${"d".repeat(200)}`);
-    const g = buildSubgoalGoal(sub, 6, 12, "o".repeat(5000), done);
+    const g = buildSubgoalGoal(sub, done);
     expect(g.length).toBeLessThanOrEqual(2000);
     expect(g.startsWith(sub)).toBe(true);
-    expect(g).toContain("step 6 of 12");
+    expect(g).not.toContain("step 6 of 12");
+    expect(buildSubgoalGoal("only this", [])).toBe("only this");
   });
 
   it("continues past a sub-goal that ran out of budget and reports the worst status", async () => {
@@ -2497,5 +2498,159 @@ describe("browse_task sub-goal planning", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("browse_task rate limiting and sub-goal reset", () => {
+  // Step endpoint answers `statuses` in order (then 200 DONE); plan is a 1-entry fallback unless given.
+  function stubRateLimited(statuses: Array<{ status: number; retryAfter?: string }>, plan: string[] = []) {
+    let n = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("/api/browse/plan")) {
+        const r = statuses[Math.min(n, statuses.length)];
+        if (plan.length === 0 && r) {
+          n++;
+          return { ok: false, status: r.status, headers: new Headers(r.retryAfter ? { "Retry-After": r.retryAfter } : {}), json: async () => ({}) };
+        }
+        return { ok: true, status: 200, json: async () => ({ subgoals: plan }) };
+      }
+      const r = statuses[n++];
+      if (r) return { ok: false, status: r.status, headers: new Headers(r.retryAfter ? { "Retry-After": r.retryAfter } : {}), json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => DONE };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("retries a 429 step with exponential waits without adding history or a stall", async () => {
+    const fetchMock = stubRateLimited([{ status: 429 }, { status: 429 }, { status: 429 }]);
+    const sleeps: number[] = [];
+    const t = await runBrowseTaskLoop("go", 12, stubBrowser({}), () => 0, async (ms) => void sleeps.push(ms));
+    expect(t.status).toBe("done");
+    expect(t.steps.filter((s) => s.operation === "STEP")).toHaveLength(0);
+    expect(sleeps).toEqual([1000, 2000, 4000]);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("honours Retry-After (up to 60s) when it fits the deadline, and records the failure once retries run out", async () => {
+    stubRateLimited(Array.from({ length: 10 }, () => ({ status: 503, retryAfter: "30" })));
+    const sleeps: number[] = [];
+    const t = await runBrowseTaskLoop("go", 1, stubBrowser({}), () => 0, async (ms) => void sleeps.push(ms));
+    expect(sleeps.slice(0, 4)).toEqual([30000, 30000, 30000, 30000]);
+    expect(t.steps[0]?.label).toContain("503");
+  });
+
+  it("does not retry a 503 without Retry-After", async () => {
+    const fetchMock = stubRateLimited([{ status: 503 }]);
+    const sleeps: number[] = [];
+    await runBrowseTaskLoop("go", 1, stubBrowser({}), () => 0, async (ms) => void sleeps.push(ms));
+    expect(sleeps).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives up at once when wait + request timeout + reserve does not fit the deadline", async () => {
+    const fetchMock = stubRateLimited([{ status: 429 }, { status: 429 }]);
+    const sleeps: number[] = [];
+    const res = await fetchBrowseBackend("/api/browse/step", {}, 20_000, undefined, {
+      now: () => 0,
+      sleep: async (ms) => void sleeps.push(ms),
+      deadline: 50_000,
+      reserveMs: 35_000,
+    });
+    expect(res.status).toBe(429);
+    expect(sleeps).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("caps Retry-After at 60s and retries at most 4 times", async () => {
+    const fetchMock = stubRateLimited(Array.from({ length: 10 }, () => ({ status: 429, retryAfter: "500" })));
+    const sleeps: number[] = [];
+    await fetchBrowseBackend("/api/browse/step", {}, 1000, undefined, { now: () => 0, sleep: async (ms) => void sleeps.push(ms) });
+    expect(sleeps).toEqual([60000, 60000, 60000, 60000]);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it("returns promptly when the signal aborts during the backoff sleep", async () => {
+    stubRateLimited([{ status: 429 }, { status: 429 }]);
+    const ac = new AbortController();
+    const res = await fetchBrowseBackend("/api/browse/step", {}, 1000, ac.signal, {
+      now: () => 0,
+      sleep: () => {
+        setTimeout(() => ac.abort(), 0);
+        return new Promise(() => {}); // never resolves
+      },
+    });
+    expect(res.status).toBe(429);
+  });
+
+  it("does not retry the plan call on 429: falls back to the single loop", async () => {
+    let planCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (String(url).includes("/api/browse/plan")) {
+        planCalls++;
+        return { ok: false, status: 429, headers: new Headers({ "Retry-After": "1" }), json: async () => ({}) };
+      }
+      return { ok: true, status: 200, json: async () => DONE };
+    }));
+    const sleeps: number[] = [];
+    const t = await runBrowseTask("a and b", 12, stubBrowser({}), undefined, async (ms) => void sleeps.push(ms));
+    expect(planCalls).toBe(1);
+    expect(sleeps).toEqual([]);
+    expect(t.subgoals).toBeUndefined();
+  });
+
+  it("treats a scrolled inner container as not-at-top, and a container at 0 as top", async () => {
+    for (const [containerY, expected] of [[300, 2], [0, 0]] as const) {
+      stubPlanAndSteps(["one", "two", "three"], [DONE]);
+      const act = vi.fn(async () => ({}));
+      await runBrowseTask("x", 12, stubBrowser({
+        act,
+        snapshot: async () => ({ url: "u", title: "t", elements: [], snapshotId: "s", scroll: { y: 0, container: { index: 3, y: containerY, height: 900, atBottom: false } } }),
+      }), undefined, async () => {});
+      expect(act).toHaveBeenCalledTimes(expected);
+    }
+  });
+
+  it("bounds scroll-to-top with a timeout when the bridge hangs", async () => {
+    vi.useFakeTimers();
+    try {
+      let stepped = false;
+      stubPlanAndSteps(["one", "two"], [DONE], () => { stepped = true; });
+      let hung = 0;
+      const browser = stubBrowser({
+        snapshot: async () => {
+          if (stepped && hung === 0) { hung++; return new Promise(() => {}); }
+          return { url: "u", title: "t", elements: [], snapshotId: "s" };
+        },
+      });
+      const pending = runBrowseTask("x", 12, browser, undefined, async () => {});
+      await vi.advanceTimersByTimeAsync(9_000);
+      const t = await pending;
+      expect(hung).toBe(1);
+      expect(t.subgoals).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("scrolls to the top before sub-goal 2+ unless already at y 0, never for a single flow", async () => {
+    stubPlanAndSteps(["one", "two", "three"], [DONE]);
+    const act = vi.fn(async () => ({}));
+    const browser = stubBrowser({
+      act,
+      snapshot: async () => ({ url: "https://x.test", title: "t", elements: [], snapshotId: "s", scroll: { y: 500 } }),
+    });
+    await runBrowseTask("x", 12, browser, undefined, async () => {});
+    expect(act.mock.calls).toEqual([[{ action: "scroll", amount: -1000 }], [{ action: "scroll", amount: -1000 }]]);
+
+    const actTop = vi.fn(async () => ({}));
+    stubPlanAndSteps(["one", "two"], [DONE]);
+    await runBrowseTask("x", 12, stubBrowser({ act: actTop, snapshot: async () => ({ url: "u", title: "t", elements: [], snapshotId: "s", scroll: { y: 0 } }) }));
+    expect(actTop).not.toHaveBeenCalled();
+
+    stubPlanAndSteps(["only one"], [DONE]);
+    const act2 = vi.fn(async () => ({}));
+    await runBrowseTask("x", 12, stubBrowser({ act: act2, snapshot: async () => ({ url: "u", title: "t", elements: [], snapshotId: "s", scroll: { y: 900 } }) }));
+    expect(act2).not.toHaveBeenCalled();
   });
 });
