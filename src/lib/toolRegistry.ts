@@ -62,6 +62,9 @@ import { applyLoopGuard } from "./tools/browser/loopGuard";
 export interface ToolExecutionContext {
   sessionId?: string;
   toolCallId?: string;
+  /** Aborts when the turn is stopped/abandoned or the call times out. Only
+   * supplied for long-running cancellable tools (browse_task). */
+  signal?: AbortSignal;
 }
 
 export type ToolHandler = (

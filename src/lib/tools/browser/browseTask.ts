@@ -97,6 +97,8 @@ export function browseTaskDeadlineMs(): number {
  */
 const STEP_DEADLINE_RESERVE_MS = 35_000;
 
+const CANCELLED_REASON = "cancelled";
+
 /** design doc §3: "keeping a short history" / backend request shape: last 10 steps. */
 const HISTORY_LIMIT = 10;
 
@@ -255,9 +257,25 @@ interface StepScreenshotInfo {
   marked?: number | boolean;
 }
 
-type TranscriptStep = StepHistoryEntry & Partial<StepScreenshotInfo>;
+type TranscriptStep = StepHistoryEntry & Partial<StepScreenshotInfo> & {
+  /** 1-based sub-goal this step belongs to — only set when the task was
+   * split into more than one sub-goal. */
+  subgoal?: number;
+};
+
+/** Per-sub-goal outcome, reported only when the plan had more than one. */
+export interface SubgoalResult {
+  goal: string;
+  status: "done" | "blocked" | "budget" | "stalled";
+  reason?: string;
+}
 
 interface Transcript {
+  /** Only when the plan had more than one sub-goal (see runBrowseTask). */
+  subgoals?: SubgoalResult[];
+  /** Multi-sub-goal only: the real number of steps run — `steps` keeps just
+   * the last MULTI_SUBGOAL_STEPS_KEPT of each sub-goal. */
+  stepsTotal?: number;
   status: "done" | "blocked" | "budget" | "stalled";
   steps: TranscriptStep[];
   url: string;
@@ -531,7 +549,8 @@ async function requestStep(
   snapshot: SnapshotResult,
   history: StepHistoryEntry[],
   pageText: string | undefined,
-  screenshot?: string
+  screenshot?: string,
+  signal?: AbortSignal
 ): Promise<StepResponse> {
   const res = await fetchBrowseBackend("/api/browse/step", {
     goal,
@@ -550,7 +569,7 @@ async function requestStep(
     ...(snapshot.scroll !== undefined ? { scroll: snapshot.scroll } : {}),
     ...(pageText !== undefined ? { pageText } : {}),
     ...(screenshot !== undefined ? { screenshot } : {}),
-  });
+  }, undefined, signal);
   if (!res.ok) {
     throw new Error(`/api/browse/step responded ${res.status}`);
   }
@@ -803,15 +822,83 @@ function isEmptySnapshot(snapshot: SnapshotResult): boolean {
 async function settleEmptySnapshot(
   browser: PenDesktopBrowser,
   first: Awaited<ReturnType<typeof takeSnapshot>>,
-  sleep: (ms: number) => Promise<void>
+  sleep: (ms: number) => Promise<void>,
+  signal?: AbortSignal
 ): Promise<Awaited<ReturnType<typeof takeSnapshot>>> {
   let current = first;
   for (let i = 0; i < EMPTY_SNAPSHOT_MAX_POLLS; i++) {
+    if (signal?.aborted) return current;
     if ("error" in current || !isEmptySnapshot(current)) return current;
     await sleep(EMPTY_SNAPSHOT_POLL_MS);
     current = await takeSnapshot(browser);
   }
   return current;
+}
+
+/** Result of the pre-loop open/probe: a terminal `failure` transcript, or the
+ * snapshot to reuse as the loop's first iteration (when a tab was already
+ * open on the right page). */
+interface Preamble {
+  failure?: Transcript;
+  initialSnapshot?: SnapshotResult;
+}
+
+/**
+ * The cheap pre-loop work (see the long comment inside): open `url` / the
+ * URL named in the ORIGINAL goal, or probe for an open tab. Extracted from
+ * runBrowseTaskLoop so runBrowseTask can run it BEFORE the paid plan call.
+ */
+async function runPreamble(
+  goal: string,
+  browser: NonNullable<NonNullable<typeof window.penDesktop>["browser"]>,
+  url?: string
+): Promise<Preamble> {
+  let initialSnapshot: SnapshotResult | undefined;
+  if (url) {
+    const openFailure = await openBeforeLoop(browser, url);
+    if (openFailure) return { failure: openFailure };
+  } else {
+    const probe = await takeSnapshot(browser);
+    if ("error" in probe) {
+      if (NO_TAB_OPEN_PATTERN.test(probe.error)) {
+        const goalUrl = extractUrlFromGoal(goal);
+        if (!goalUrl) {
+          return {
+            failure: {
+              status: "blocked",
+              steps: [],
+              url: "",
+              title: "",
+              reason: "No browser tab is open — pass url or call browse_open first",
+            },
+          };
+        }
+        const openFailure = await openBeforeLoop(browser, goalUrl);
+        if (openFailure) return { failure: openFailure };
+      }
+      // Any other probe error (unrelated to "no tab") is deliberately
+      // discarded here — the loop's own first iteration takes its own
+      // fresh snapshot below, keeping this probe a pure pre-check with no
+      // effect on the loop's normal state machine.
+    } else {
+      // Finding: a tab is already open, but the goal may name a URL on a
+      // DIFFERENT origin — that used to be silently ignored whenever any
+      // tab happened to be open, even on an unrelated site. Only navigate
+      // when the goal's URL and the current tab disagree on origin; same
+      // origin (or no URL in the goal at all) means stay put and reuse this
+      // snapshot as the loop's first iteration (see `initialSnapshot`
+      // above).
+      const goalUrl = extractUrlFromGoal(goal);
+      if (goalUrl && !sameOrigin(goalUrl, probe.url)) {
+        const openFailure = await openBeforeLoop(browser, goalUrl);
+        if (openFailure) return { failure: openFailure };
+        // The page just navigated — `probe` is now stale, do NOT reuse it.
+      } else {
+        initialSnapshot = probe;
+      }
+    }
+  }
+  return { initialSnapshot };
 }
 
 /**
@@ -829,7 +916,12 @@ export async function runBrowseTaskLoop(
   now: () => number = () => Date.now(),
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   url?: string,
-  deadlineMs: number = BROWSE_TASK_DEADLINE_MS
+  deadlineMs: number = BROWSE_TASK_DEADLINE_MS,
+  /** When given, the pre-loop open/probe was already done by the caller
+   * (runBrowseTask) — skip it and reuse its snapshot. */
+  preamble?: { initialSnapshot?: SnapshotResult },
+  /** Aborts on Stop / tool-call timeout: checked at the top of every step. */
+  signal?: AbortSignal
 ): Promise<Transcript> {
   const cappedMaxSteps = Math.min(Math.max(1, Math.floor(maxSteps)), HARD_MAX_STEPS);
   const deadline = now() + deadlineMs;
@@ -853,47 +945,12 @@ export async function runBrowseTaskLoop(
   // every browse_task call that starts with a tab already open. Captured
   // here and handed to the loop as `initialSnapshot` instead.
   let initialSnapshot: SnapshotResult | undefined;
-  if (url) {
-    const openFailure = await openBeforeLoop(browser, url);
-    if (openFailure) return openFailure;
+  if (preamble) {
+    initialSnapshot = preamble.initialSnapshot;
   } else {
-    const probe = await takeSnapshot(browser);
-    if ("error" in probe) {
-      if (NO_TAB_OPEN_PATTERN.test(probe.error)) {
-        const goalUrl = extractUrlFromGoal(goal);
-        if (!goalUrl) {
-          return {
-            status: "blocked",
-            steps: [],
-            url: "",
-            title: "",
-            reason: "No browser tab is open — pass url or call browse_open first",
-          };
-        }
-        const openFailure = await openBeforeLoop(browser, goalUrl);
-        if (openFailure) return openFailure;
-      }
-      // Any other probe error (unrelated to "no tab") is deliberately
-      // discarded here — the loop's own first iteration takes its own
-      // fresh snapshot below, keeping this probe a pure pre-check with no
-      // effect on the loop's normal state machine.
-    } else {
-      // Finding: a tab is already open, but the goal may name a URL on a
-      // DIFFERENT origin — that used to be silently ignored whenever any
-      // tab happened to be open, even on an unrelated site. Only navigate
-      // when the goal's URL and the current tab disagree on origin; same
-      // origin (or no URL in the goal at all) means stay put and reuse this
-      // snapshot as the loop's first iteration (see `initialSnapshot`
-      // above).
-      const goalUrl = extractUrlFromGoal(goal);
-      if (goalUrl && !sameOrigin(goalUrl, probe.url)) {
-        const openFailure = await openBeforeLoop(browser, goalUrl);
-        if (openFailure) return openFailure;
-        // The page just navigated — `probe` is now stale, do NOT reuse it.
-      } else {
-        initialSnapshot = probe;
-      }
-    }
+    const pre = await runPreamble(goal, browser, url);
+    if (pre.failure) return pre.failure;
+    initialSnapshot = pre.initialSnapshot;
   }
 
   // PR #40: a step that landed nothing is still recorded (Jev needs to see
@@ -956,7 +1013,17 @@ export async function runBrowseTaskLoop(
     };
   };
 
+  const cancelledResult = (): Transcript => ({
+    status: "blocked",
+    steps,
+    url: lastUrl,
+    title: lastTitle,
+    reason: CANCELLED_REASON,
+    cacheHits,
+  });
+
   for (let stepCount = 0; stepCount < cappedMaxSteps; stepCount++) {
+    if (signal?.aborted) return cancelledResult();
     // browse-speed-contract.md, "Frontend" item 4: bail before STARTING a
     // step once less than STEP_DEADLINE_RESERVE_MS remains, not only once
     // the deadline itself has passed — a step begun with too little budget
@@ -970,7 +1037,8 @@ export async function runBrowseTaskLoop(
     // (when one was captured — see `initialSnapshot`'s comment above)
     // instead of immediately re-taking an identical one.
     const freshSnapshot = stepCount === 0 && initialSnapshot ? initialSnapshot : await takeSnapshot(browser);
-    const snapshotResult = stepCount === 0 ? await settleEmptySnapshot(browser, freshSnapshot, sleep) : freshSnapshot;
+    const snapshotResult = stepCount === 0 ? await settleEmptySnapshot(browser, freshSnapshot, sleep, signal) : freshSnapshot;
+    if (signal?.aborted) return cancelledResult();
     if ("error" in snapshotResult) {
       const stalled = note({
         operation: "SNAPSHOT",
@@ -1028,6 +1096,7 @@ export async function runBrowseTaskLoop(
         // targetless entry (none was ever cached) always proceeds to the
         // attempt.
         if (!unsafeAtReplay && (!cached.target || cachedIndex !== undefined)) {
+          if (signal?.aborted) return cancelledResult();
           const replay = await replayCachedStep(
             browser,
             cached,
@@ -1116,16 +1185,19 @@ export async function runBrowseTaskLoop(
           capture = undefined;
         }
       }
-      decision = await requestStep(goal, snapshot, history, pageText, capture?.image);
+      decision = await requestStep(goal, snapshot, history, pageText, capture?.image, signal);
     } catch (err) {
       const stalled = note({
         operation: "STEP",
         label: err instanceof Error ? err.message : "/api/browse/step failed",
         ok: false,
       });
+      if (signal?.aborted) return cancelledResult();
       if (stalled) return stalled;
       continue;
     }
+    // A decision that arrives after Stop must never be performed.
+    if (signal?.aborted) return cancelledResult();
 
     // Addendum B: outcome is the explicit terminal/transient signal. `done`
     // and `blocked` end the task; `retry` (Jev timeout/malformed answer/no
@@ -1309,6 +1381,7 @@ export async function runBrowseTaskLoop(
               : "press Enter"
             : "press Escape";
 
+      if (signal?.aborted) return cancelledResult();
       try {
         const acted = await browser.act(actArgs);
         // Same PR #40 contract as `perform`: the bridge resolves `{ error }`
@@ -1364,6 +1437,7 @@ export async function runBrowseTaskLoop(
       performArgs.index = decision.index;
     }
 
+    if (signal?.aborted) return cancelledResult();
     try {
       const performed = await browser.perform(performArgs);
       // PR #40: `perform` resolves with `{ error }` rather than rejecting
@@ -1448,6 +1522,263 @@ export async function runBrowseTaskLoop(
   return { status: "budget", steps, url: lastUrl, title: lastTitle, reason: "maxSteps reached", cacheHits };
 }
 
+/** Overall wall-clock bound for a multi-sub-goal browse_task call. Each
+ * sub-goal still gets browseTaskDeadlineMs(); this caps the sum. The chat-side
+ * tool-call timeout (useDesignChat.ts) is derived from these two. */
+export const MULTI_SUBGOAL_DEADLINE_MS = 12 * 60_000;
+export const CLOUD_MULTI_SUBGOAL_DEADLINE_MS = 15 * 60_000;
+/** Overall cap on loop iterations across all sub-goals of one call. */
+export const MULTI_SUBGOAL_MAX_STEPS = 150;
+
+export function browseTaskOverallDeadlineMs(): number {
+  return isDesktopBrowserAvailable() ? MULTI_SUBGOAL_DEADLINE_MS : CLOUD_MULTI_SUBGOAL_DEADLINE_MS;
+}
+
+/** Hard bound on one browse_task call, enforced inside the handler: the
+ * longest overall deadline for this browser (single flow ends sooner on its
+ * own) + one step-start reserve + settleEmptySnapshot's worst case. The
+ * chat-side timeout is a margin above this. */
+export function browseTaskInnerBoundMs(): number {
+  return browseTaskOverallDeadlineMs() + STEP_DEADLINE_RESERVE_MS + BROWSE_SETTLE_WORST_CASE_MS;
+}
+
+const PLAN_REQUEST_TIMEOUT_MS = 15_000;
+// Mirror pen-editor-backend src/ai/browsePlan.ts (MAX_SUBGOALS / MAX_SUBGOAL_CHARS = 12 / 1000).
+const PLAN_MAX_SUBGOALS = 12;
+const PLAN_SUBGOAL_MAX_CHARS = 1_000;
+/** Steps kept per sub-goal in a multi-sub-goal transcript (see stepsTotal). */
+const MULTI_SUBGOAL_STEPS_KEPT = 5;
+/** settleEmptySnapshot's worst case: EMPTY_SNAPSHOT_MAX_POLLS x (poll sleep +
+ * a 20s desktop snapshot command). Only hit on a page that stays blank; the
+ * chat-side browse_task timeout (useDesignChat.ts) includes it. */
+export const BROWSE_SETTLE_WORST_CASE_MS = EMPTY_SNAPSHOT_MAX_POLLS * (EMPTY_SNAPSHOT_POLL_MS + 20_000);
+/** Hard cap on the goal string sent to /api/browse/step for a sub-goal. */
+const SUBGOAL_GOAL_MAX_CHARS = 2_000;
+const DONE_LIST_MAX_CHARS = 400;
+const DONE_ITEM_MAX_CHARS = 80;
+
+/**
+ * Asks the backend to split `goal` into ordered sub-goals. ANY failure
+ * (network, non-200, 503, malformed body) yields `[goal]`, as does a plan of
+ * one entry — the caller then runs today's single loop unchanged.
+ */
+async function planSubgoals(goal: string, url: string | undefined, signal?: AbortSignal): Promise<string[]> {
+  if (!goal) return [goal];
+  try {
+    const res = await fetchBrowseBackend(
+      "/api/browse/plan",
+      { goal, ...(url ? { url } : {}) },
+      PLAN_REQUEST_TIMEOUT_MS,
+      signal
+    );
+    const list = res.ok && res.body && typeof res.body === "object" ? (res.body as { subgoals?: unknown }).subgoals : undefined;
+    if (!Array.isArray(list)) return [goal];
+    const subgoals = list
+      .filter((g): g is string => typeof g === "string")
+      .map((g) => g.trim().slice(0, PLAN_SUBGOAL_MAX_CHARS))
+      .filter((g) => g.length > 0)
+      .slice(0, PLAN_MAX_SUBGOALS);
+    return subgoals.length > 1 ? subgoals : [goal];
+  } catch {
+    return [goal];
+  }
+}
+
+/**
+ * The goal string for sub-goal `k` (1-based) of `n`: the sub-goal itself,
+ * then where it sits in the overall task and what is already done. Capped at
+ * SUBGOAL_GOAL_MAX_CHARS; the overall-goal text is truncated first and the
+ * sub-goal is never cut (unless it alone exceeds the cap).
+ */
+export function buildSubgoalGoal(subgoal: string, k: number, n: number, overall: string, doneGoals: string[]): string {
+  // subgoal <= PLAN_SUBGOAL_MAX_CHARS (1000), so it always fits in 2000.
+  const header = `\n\nThis is step ${k} of ${n} of the overall task`;
+  let doneStr = "";
+  if (doneGoals.length > 0) {
+    const list = truncateToChars(
+      doneGoals.map((g) => truncateToChars(g, DONE_ITEM_MAX_CHARS)).join("; "),
+      DONE_LIST_MAX_CHARS
+    );
+    doneStr = `\nAlready done: ${list}.`;
+  }
+  // header + ": " + overall + "." + doneStr
+  const room = SUBGOAL_GOAL_MAX_CHARS - subgoal.length - header.length - 2 - 1 - doneStr.length;
+  const overallPart = room >= 20 ? `: ${truncateToChars(overall, room)}.` : ".";
+  const out = `${subgoal}${header}${overallPart}${doneStr}`;
+  return out.slice(0, SUBGOAL_GOAL_MAX_CHARS);
+}
+
+/** A `blocked` the remaining sub-goals cannot get past either. ONLY the
+ * loop's / backend's own structured wall signals count — never free-form
+ * wording in a model's reason (a "Sign in link in the header" is not a wall):
+ *  - `botCheck: true` (the client open path),
+ *  - browseCaptcha.ts botWallResult: "the page is a CAPTCHA / bot check (...)
+ *    — the user must solve it themselves; ...",
+ *  - browseStepUltrafast.ts password refusals: "... the user must log in
+ *    themselves". */
+const AUTH_WALL_PATTERN = /the page is a CAPTCHA \/ bot check|the user must (?:solve it|log in) themselves/;
+
+function isAuthWall(t: Transcript): boolean {
+  return t.botCheck === true || (typeof t.reason === "string" && AUTH_WALL_PATTERN.test(t.reason));
+}
+
+function hostOf(u: string | undefined): string | undefined {
+  try {
+    return u ? new URL(u).host : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Top-level status of a multi-sub-goal call when not every sub-goal is
+ * done: the first present of blocked > stalled > budget. */
+const STATUS_PRIORITY: Transcript["status"][] = ["blocked", "stalled", "budget"];
+
+/**
+ * browse_task entry point: opens/probes the tab (cheap, before any paid call),
+ * plans, then runs runBrowseTaskLoop once (single flow, byte-for-byte as
+ * before) or once per sub-goal on the same tab.
+ *
+ * `maxSteps` is PER SUB-GOAL (capped at 25); a multi-sub-goal call is further
+ * bounded by MULTI_SUBGOAL_MAX_STEPS (150) loop iterations in total and by
+ * `overallDeadlineMs`. `signal` aborts the whole call ("cancelled").
+ */
+export async function runBrowseTask(
+  goal: string,
+  maxSteps: number,
+  browser: NonNullable<NonNullable<typeof window.penDesktop>["browser"]>,
+  now: () => number = () => Date.now(),
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  url?: string,
+  deadlineMs: number = BROWSE_TASK_DEADLINE_MS,
+  overallDeadlineMs: number = MULTI_SUBGOAL_DEADLINE_MS,
+  signal?: AbortSignal
+): Promise<Transcript> {
+  const overallEnd = now() + overallDeadlineMs;
+  // The preamble uses the ORIGINAL goal (its URL), never a composed sub-goal
+  // string. A failure ends the whole task before any paid plan call.
+  // The plan call runs IN PARALLEL with it; if the preamble fails the plan is
+  // discarded and its request aborted.
+  const planAbort = new AbortController();
+  const unlink = () => planAbort.abort();
+  if (signal?.aborted) planAbort.abort();
+  else signal?.addEventListener("abort", unlink, { once: true });
+  let seq = 0;
+  let probeSeq = 0;
+  let planSeq = 0;
+  const planPromise = planSubgoals(goal, url, planAbort.signal).then((r) => {
+    planSeq = ++seq;
+    return r;
+  });
+  let preamble: Preamble;
+  let plan: string[];
+  try {
+    preamble = await runPreamble(goal, browser, url);
+    probeSeq = ++seq;
+    if (preamble.failure) {
+      planAbort.abort();
+      return preamble.failure;
+    }
+    plan = await planPromise;
+  } finally {
+    signal?.removeEventListener("abort", unlink);
+  }
+  if (signal?.aborted) {
+    return { status: "blocked", steps: [], url: "", title: "", reason: CANCELLED_REASON };
+  }
+  // A plan that finished after the probe snapshot was taken (the page may
+  // have moved since): do not reuse that snapshot — the loop takes a fresh one.
+  const freshPreamble: Preamble = planSeq > probeSeq ? {} : preamble;
+  if (plan.length <= 1) {
+    return runBrowseTaskLoop(goal, maxSteps, browser, now, sleep, url, deadlineMs, freshPreamble, signal);
+  }
+
+  const n = plan.length;
+  const results: SubgoalResult[] = [];
+  const steps: TranscriptStep[] = [];
+  let stepsTotal = 0;
+  const doneGoals: string[] = [];
+  let lastUrl = "";
+  let lastTitle = "";
+  let cacheHits = 0;
+  let abortedBy: string | undefined;
+  let cancelled = false;
+
+  for (let i = 0; i < n; i++) {
+    const k = i + 1;
+    if (signal?.aborted) {
+      cancelled = true;
+      abortedBy = CANCELLED_REASON;
+    }
+    const remainingMs = overallEnd - now();
+    const remainingSteps = MULTI_SUBGOAL_MAX_STEPS - stepsTotal;
+    if (abortedBy || remainingMs < STEP_DEADLINE_RESERVE_MS || remainingSteps <= 0) {
+      results.push({
+        goal: plan[i],
+        status: abortedBy ? "blocked" : "budget",
+        reason: abortedBy ? `not attempted — ${abortedBy}` : remainingSteps <= 0 ? "overall step cap reached" : "overall deadline reached",
+      });
+      continue;
+    }
+    // A sub-goal that names a different site: open it first (same open path
+    // as the preamble) so the loop does not start on the wrong page.
+    const subUrl = i > 0 ? extractUrlFromGoal(plan[i]) : undefined;
+    if (subUrl && hostOf(subUrl) !== undefined && hostOf(subUrl) !== hostOf(lastUrl)) {
+      const openFailure = await openBeforeLoop(browser, subUrl);
+      if (openFailure) {
+        results.push({ goal: plan[i], status: "blocked", ...(openFailure.reason ? { reason: openFailure.reason } : {}) });
+        if (isAuthWall(openFailure)) abortedBy = `sub-goal ${k} hit a login/CAPTCHA wall`;
+        continue;
+      }
+      lastUrl = subUrl;
+    }
+    const t = await runBrowseTaskLoop(
+      buildSubgoalGoal(plan[i], k, n, goal, doneGoals),
+      Math.min(maxSteps, remainingSteps),
+      browser,
+      now,
+      sleep,
+      undefined,
+      Math.min(deadlineMs, remainingMs),
+      // Sub-goal 1 reuses the probe snapshot; later ones take their own.
+      i === 0 ? freshPreamble : {},
+      signal
+    );
+    stepsTotal += t.steps.length;
+    for (const s of t.steps.slice(-MULTI_SUBGOAL_STEPS_KEPT)) steps.push({ ...s, subgoal: k });
+    if (t.url) lastUrl = t.url;
+    if (t.title) lastTitle = t.title;
+    cacheHits += t.cacheHits ?? 0;
+    results.push({ goal: plan[i], status: t.status, ...(t.reason ? { reason: t.reason } : {}) });
+    if (t.status === "done") doneGoals.push(plan[i]);
+    else if (t.status === "blocked" && t.reason === CANCELLED_REASON) {
+      cancelled = true;
+      abortedBy = CANCELLED_REASON;
+    } else if (t.status === "blocked" && isAuthWall(t)) abortedBy = `sub-goal ${k} hit a login/CAPTCHA wall`;
+  }
+
+  const doneCount = results.filter((r) => r.status === "done").length;
+  const status = cancelled
+    ? "blocked"
+    : doneCount === n
+      ? "done"
+      : (STATUS_PRIORITY.find((s) => results.some((r) => r.status === s)) ?? "budget");
+  const problems = results
+    .map((r, i) => (r.status === "done" ? null : `#${i + 1} ${r.status}${r.reason ? `: ${truncateToChars(r.reason, 120)}` : ""}`))
+    .filter((x): x is string => x !== null);
+  const summary = `${doneCount}/${n} sub-goals done${problems.length ? `; ${problems.join("; ")}` : ""}`;
+  return {
+    status,
+    steps,
+    stepsTotal,
+    url: lastUrl,
+    title: lastTitle,
+    reason: cancelled ? CANCELLED_REASON : truncateToChars(summary, 1_000),
+    cacheHits,
+    subgoals: results,
+  };
+}
+
 export const browseTask: ToolHandler = async (args, context) => {
   const browser = getBrowserBridge(context?.sessionId);
   if (!browser) {
@@ -1461,8 +1792,35 @@ export const browseTask: ToolHandler = async (args, context) => {
       : DEFAULT_MAX_STEPS;
   const url = typeof args.url === "string" && args.url.length > 0 ? args.url : undefined;
 
+  // The race below is the REAL bound on this call; the chat-side tool-call
+  // timeout (useDesignChat.ts) is only a margin above it.
+  const inner = new AbortController();
+  const outer = context?.signal;
+  const onOuterAbort = () => inner.abort();
+  if (outer?.aborted) inner.abort();
+  else outer?.addEventListener("abort", onOuterAbort, { once: true });
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const transcript = await runBrowseTaskLoop(goal, maxSteps, browser, undefined, undefined, url, browseTaskDeadlineMs());
+    const bound = new Promise<Transcript>((resolve) => {
+      timer = setTimeout(() => {
+        inner.abort();
+        resolve({ status: "budget", steps: [], url: "", title: "", reason: "deadline exceeded" });
+      }, browseTaskInnerBoundMs());
+    });
+    const transcript = await Promise.race([
+      runBrowseTask(
+        goal,
+        maxSteps,
+        browser,
+        undefined,
+        undefined,
+        url,
+        browseTaskDeadlineMs(),
+        browseTaskOverallDeadlineMs(),
+        inner.signal
+      ),
+      bound,
+    ]);
     // Matches every other browser tool handler's "always resolves a real
     // JSON string" contract (see shared.ts's callBrowserBridge comment) —
     // this handler doesn't route through callBrowserBridge since it makes
@@ -1473,5 +1831,8 @@ export const browseTask: ToolHandler = async (args, context) => {
     return JSON.stringify({
       error: err instanceof Error ? err.message : "browse_task failed.",
     });
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    outer?.removeEventListener("abort", onOuterAbort);
   }
 };

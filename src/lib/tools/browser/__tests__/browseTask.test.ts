@@ -10,8 +10,11 @@ import {
 import {
   browseTask,
   browseTaskDeadlineMs,
+  browseTaskInnerBoundMs,
   CLOUD_BROWSE_TASK_DEADLINE_MS,
+  buildSubgoalGoal,
   extractUrlFromGoal,
+  runBrowseTask,
   runBrowseTaskLoop,
 } from "@/lib/tools/browser/browseTask";
 import { BROWSER_NOT_AVAILABLE_ERROR, type SnapshotResult } from "@/lib/tools/browser/shared";
@@ -2213,5 +2216,263 @@ describe("browse_task step screenshot (VITE_BROWSE_STEP_SCREENSHOT)", () => {
     const transcript = await runBrowseTaskLoop("accept cookies", 1, stubBrowser({ screenshot, perform: vi.fn(async () => ({})) }));
     expect(transcript.cacheHits).toBe(1);
     expect(screenshot).not.toHaveBeenCalled();
+  });
+});
+
+// Routes /api/browse/plan to `plan` ("fail" = 503) and every /api/browse/step
+// call to the next payload of `steps` (last one repeats). Records bodies.
+function stubPlanAndSteps(
+  plan: string[] | "fail",
+  steps: Array<Record<string, unknown>>,
+  onStep?: () => void
+) {
+  const stepBodies: Array<Record<string, unknown>> = [];
+  let calls = 0;
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    if (String(url).includes("/api/browse/plan")) {
+      return plan === "fail"
+        ? { ok: false, status: 503, json: async () => ({}) }
+        : { ok: true, status: 200, json: async () => ({ subgoals: plan }) };
+    }
+    stepBodies.push(body);
+    onStep?.();
+    const payload = steps[Math.min(calls, steps.length - 1)];
+    calls++;
+    return { ok: true, status: 200, json: async () => payload };
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return { fetchMock, stepBodies };
+}
+
+const BLOCKED_LOGIN = { outcome: "blocked", confidence: 0.2, model: "jev", reason: "refusing to type into a password field — the user must log in themselves" };
+const BLOCKED_OTHER = { outcome: "blocked", confidence: 0.2, model: "jev", reason: "no matching product" };
+
+describe("browse_task sub-goal planning", () => {
+  it("falls back to the single loop with the untouched goal when planning fails", async () => {
+    const { stepBodies } = stubPlanAndSteps("fail", [DONE]);
+    const t = await runBrowseTask("add a tent and a mat to the cart", 12, stubBrowser({}));
+    expect(t.status).toBe("done");
+    expect(t.subgoals).toBeUndefined();
+    expect(stepBodies).toHaveLength(1);
+    expect(stepBodies[0].goal).toBe("add a tent and a mat to the cart");
+    expect(t.steps.every((st) => st.subgoal === undefined)).toBe(true);
+  });
+
+  it("treats a 1-entry plan as the single loop with the original goal", async () => {
+    const { stepBodies } = stubPlanAndSteps(["something else entirely"], [DONE]);
+    const t = await runBrowseTask("accept cookies", 12, stubBrowser({}));
+    expect(stepBodies.map((b) => b.goal)).toEqual(["accept cookies"]);
+    expect(t.subgoals).toBeUndefined();
+  });
+
+  it("runs a long (>600 chars) 1-entry fallback plan with the full original goal", async () => {
+    const long = "buy ".concat("x".repeat(1500));
+    const { stepBodies } = stubPlanAndSteps([long], [DONE]);
+    await runBrowseTask(long, 12, stubBrowser({}));
+    expect(stepBodies[0].goal).toBe(long);
+  });
+
+  it("runs one loop per sub-goal with step k of n and already-done context", async () => {
+    const { stepBodies } = stubPlanAndSteps(["add a tent", "add a mat", "add a bag"], [CLICK_STEP, DONE, CLICK_STEP, DONE, CLICK_STEP, DONE]);
+    const open = vi.fn(async () => ({}));
+    const t = await runBrowseTask("buy camping gear", 12, stubBrowser({ open }), undefined, undefined, "https://shop.example");
+    expect(t.status).toBe("done");
+    expect(open).toHaveBeenCalledTimes(1); // url opened once, not per sub-goal
+    const goals = stepBodies.map((b) => b.goal as string);
+    // CLICK then DONE for each sub-goal -> 2 step calls per sub-goal
+    expect(goals[0]).toContain("add a tent");
+    expect(goals[0]).toContain("step 1 of 3 of the overall task: buy camping gear.");
+    expect(goals[0]).not.toContain("Already done");
+    const second = goals.find((g) => g.startsWith("add a mat"));
+    expect(second).toContain("step 2 of 3");
+    expect(second).toContain("Already done: add a tent.");
+    const third = goals.find((g) => g.startsWith("add a bag"));
+    expect(third).toContain("Already done: add a tent; add a mat.");
+    expect(goals.every((g) => g.length <= 2000)).toBe(true);
+    expect(t.subgoals?.map((r) => r.status)).toEqual(["done", "done", "done"]);
+    expect(new Set(t.steps.map((st) => st.subgoal))).toEqual(new Set([1, 2, 3]));
+  });
+
+  it("buildSubgoalGoal truncates the overall goal, never the sub-goal, within 2000 chars", () => {
+    const sub = "s".repeat(1000);
+    const done = Array.from({ length: 5 }, (_, i) => `done-${i}-${"d".repeat(200)}`);
+    const g = buildSubgoalGoal(sub, 6, 12, "o".repeat(5000), done);
+    expect(g.length).toBeLessThanOrEqual(2000);
+    expect(g.startsWith(sub)).toBe(true);
+    expect(g).toContain("step 6 of 12");
+  });
+
+  it("continues past a sub-goal that ran out of budget and reports the worst status", async () => {
+    stubPlanAndSteps(["one", "two"], [CLICK_STEP, DONE]);
+    // maxSteps 1: sub-goal 1 clicks once then hits the cap -> budget; sub-goal 2 is done.
+    const t = await runBrowseTask("do both", 1, stubBrowser({}));
+    expect(t.subgoals?.map((r) => r.status)).toEqual(["budget", "done"]);
+    expect(t.status).toBe("budget");
+    expect(t.reason).toContain("1/2 sub-goals done");
+  });
+
+  it("continues after an ordinary blocked and ranks blocked above done-less statuses", async () => {
+    stubPlanAndSteps(["one", "two"], [BLOCKED_OTHER, DONE]);
+    const t = await runBrowseTask("do both", 12, stubBrowser({}));
+    expect(t.subgoals?.map((r) => r.status)).toEqual(["blocked", "done"]);
+    expect(t.status).toBe("blocked");
+  });
+
+  it("stops the whole task on a login wall", async () => {
+    const { stepBodies } = stubPlanAndSteps(["one", "two", "three"], [DONE, BLOCKED_LOGIN]);
+    const t = await runBrowseTask("do all", 12, stubBrowser({}));
+    expect(t.status).toBe("blocked");
+    expect(t.subgoals?.map((r) => r.status)).toEqual(["done", "blocked", "blocked"]);
+    expect(t.subgoals?.[2].reason).toContain("not attempted");
+    expect(stepBodies).toHaveLength(2);
+  });
+
+  it("bounds the whole call by the overall deadline", async () => {
+    let clock = 0;
+    const now = () => clock;
+    stubPlanAndSteps(["one", "two", "three"], [DONE], () => {
+      clock += 200_000;
+    });
+    const t = await runBrowseTask("do all", 12, stubBrowser({}), now, async () => {}, undefined, 90_000, 300_000);
+    expect(t.subgoals?.map((r) => r.status)).toEqual(["done", "done", "budget"]);
+    expect(t.subgoals?.[2].reason).toBe("overall deadline reached");
+    expect(t.status).toBe("budget");
+  });
+
+  it.each([
+    "dialog in the way",
+    "catalog in stock only",
+    "designing a layout",
+    "logging output",
+    "There is a Sign in link in the header",
+    "Use login to get notified about price drops",
+  ])(
+    "continues after a blocked reason that is not a structured wall signal: %j",
+    async (reason) => {
+      const { stepBodies } = stubPlanAndSteps(["one", "two"], [{ ...BLOCKED_OTHER, reason }, DONE]);
+      const t = await runBrowseTask("do both", 12, stubBrowser({}));
+      expect(t.subgoals?.map((r) => r.status)).toEqual(["blocked", "done"]);
+      expect(stepBodies).toHaveLength(2);
+    }
+  );
+
+  it("fails fast, running no steps, when no tab is open and the goal has no URL", async () => {
+    const { stepBodies } = stubPlanAndSteps(["one", "two"], [DONE]);
+    const browser = stubBrowser({ snapshot: async () => ({ error: "No browser tab is open" }) });
+    const t = await runBrowseTask("do both", 12, browser);
+    expect(t.status).toBe("blocked");
+    expect(t.subgoals).toBeUndefined();
+    expect(stepBodies).toHaveLength(0);
+  });
+
+  it("stops the whole task when opening the url fails", async () => {
+    const { stepBodies } = stubPlanAndSteps(["one", "two"], [DONE]);
+    const browser = stubBrowser({ open: async () => ({ error: "net::ERR_NAME_NOT_RESOLVED" }) });
+    const t = await runBrowseTask("do both", 12, browser, undefined, undefined, "https://nope.invalid");
+    expect(t.status).toBe("blocked");
+    expect(t.reason).toContain("failed to open");
+    expect(stepBodies).toHaveLength(0);
+  });
+
+  it("opens the URL from the original goal exactly once", async () => {
+    const order: string[] = [];
+    const open = vi.fn(async () => {
+      order.push("open");
+      return {};
+    });
+    const browser = stubBrowser({ open, snapshot: async () => ({ error: "No browser tab is open" }) });
+    stubPlanAndSteps(["one", "two"], [DONE]);
+    await runBrowseTask("go to https://shop.example/x and do both", 12, browser);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith({ url: "https://shop.example/x" });
+    expect(order).toEqual(["open"]);
+  });
+
+  it("keeps only the last 5 steps per sub-goal and reports stepsTotal", async () => {
+    const clicks = Array.from({ length: 7 }, () => CLICK_STEP);
+    stubPlanAndSteps(["one", "two"], [...clicks, DONE, DONE]);
+    const t = await runBrowseTask("do both", 12, stubBrowser({}));
+    expect(t.stepsTotal).toBe(7);
+    expect(t.steps).toHaveLength(5);
+    expect(t.steps.every((st) => st.subgoal === 1)).toBe(true);
+  });
+
+  it("returns blocked/cancelled promptly when the signal aborts between sub-goals", async () => {
+    const ac = new AbortController();
+    const { stepBodies } = stubPlanAndSteps(["one", "two", "three"], [DONE], () => ac.abort());
+    const t = await runBrowseTask("do all", 12, stubBrowser({}), undefined, undefined, undefined, 90_000, 600_000, ac.signal);
+    expect(t.status).toBe("blocked");
+    expect(t.reason).toBe("cancelled");
+    expect(stepBodies).toHaveLength(1);
+    expect(t.subgoals?.map((r) => r.status)).toEqual(["blocked", "blocked", "blocked"]);
+  });
+
+  it("never performs a decision that arrives after Stop", async () => {
+    const ac = new AbortController();
+    stubPlanAndSteps("fail", [CLICK_STEP], () => ac.abort());
+    const perform = vi.fn(async () => ({}));
+    const t = await runBrowseTask("one flow", 12, stubBrowser({ perform }), undefined, undefined, undefined, 90_000, 600_000, ac.signal);
+    expect(t.reason).toBe("cancelled");
+    expect(perform).not.toHaveBeenCalled();
+  });
+
+  it("stops on the backend's CAPTCHA wall wording", async () => {
+    const reason =
+      "the page is a CAPTCHA / bot check (captcha-url) — the user must solve it themselves; browse_task never interacts with CAPTCHAs";
+    const { stepBodies } = stubPlanAndSteps(["one", "two"], [{ ...BLOCKED_OTHER, reason }, DONE]);
+    const t = await runBrowseTask("do both", 12, stubBrowser({}));
+    expect(t.subgoals?.map((r) => r.status)).toEqual(["blocked", "blocked"]);
+    expect(stepBodies).toHaveLength(1);
+  });
+
+  it("opens a different site named in a later sub-goal before running it", async () => {
+    stubPlanAndSteps(["one", "go to https://other.example/p and two"], [DONE]);
+    const open = vi.fn(async () => ({}));
+    await runBrowseTask("do both", 12, stubBrowser({ open }));
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith({ url: "https://other.example/p" });
+  });
+
+  it("does not reopen a sub-goal URL on the same host as the current tab", async () => {
+    stubPlanAndSteps(["one", "go to https://example.com/p and two"], [DONE]);
+    const open = vi.fn(async () => ({}));
+    await runBrowseTask("do both", 12, stubBrowser({ open }));
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("does not reuse the probe snapshot when the plan finished after it", async () => {
+    const snapshot = vi.fn(async () => EXAMPLE_SNAPSHOT);
+    stubPlanAndSteps("fail", [DONE]);
+    // Slow plan: resolves after the (instant) probe.
+    const base = globalThis.fetch;
+    vi.stubGlobal("fetch", async (u: string, init?: RequestInit) => {
+      if (String(u).includes("/plan")) await new Promise((r) => setTimeout(r, 20));
+      return base(u, init);
+    });
+    await runBrowseTask("one flow", 12, stubBrowser({ snapshot }));
+    // probe (1) + loop's own fresh snapshot (2)
+    expect(snapshot).toHaveBeenCalledTimes(2);
+  });
+
+  it("cancels the single loop between steps", async () => {
+    const ac = new AbortController();
+    stubPlanAndSteps("fail", [CLICK_STEP], () => ac.abort());
+    const t = await runBrowseTask("one flow", 12, stubBrowser({}), undefined, undefined, undefined, 90_000, 600_000, ac.signal);
+    expect(t.status).toBe("blocked");
+    expect(t.reason).toBe("cancelled");
+  });
+
+  it("handler returns a budget transcript at its own internal bound when the loop hangs", async () => {
+    vi.useFakeTimers();
+    try {
+      setPenDesktop(stubBrowser({ snapshot: () => new Promise(() => {}) }));
+      stubPlanAndSteps("fail", [DONE]);
+      const pending = browseTask({ goal: "hang forever" });
+      await vi.advanceTimersByTimeAsync(browseTaskInnerBoundMs() + 1);
+      expect(JSON.parse(await pending)).toMatchObject({ status: "budget", reason: "deadline exceeded" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

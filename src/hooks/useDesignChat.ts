@@ -282,7 +282,21 @@ const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
   // with real margin, without needing to also raise the loop's own
   // BROWSE_TASK_DEADLINE_MS (see STEP_DEADLINE_RESERVE_MS's comment for why
   // that constant didn't need to move too).
-  browse_task: 150_000,
+  //
+  // Multi-sub-goal calls (browseTask.ts runBrowseTask) are bounded by
+  // MULTI_SUBGOAL_DEADLINE_MS = 12 min overall, with every sub-goal's loop
+  // deadline clamped to what is left of it. Same reasoning as above: the
+  // last loop can end at 720 - 35 + 61.5 = 746.5s, so 780s (13 min) covers
+  // it and the <=15s planning call, which runs inside the overall budget.
+  // Plus settleEmptySnapshot's worst case at a sub-goal's first step
+  // (browseTask.ts, BROWSE_SETTLE_WORST_CASE_MS = 12 * (400ms + 20s snapshot)
+  // = 244.8s, only on a page that stays blank): 746.5 + 244.8 = 991.3s.
+  // The real bound is the handler's own internal race
+  // (browseTaskInnerBoundMs() = 720 + 35 + 244.8 = 999.8s, which returns a
+  // `budget` transcript and aborts the loop); this outer value is just 60s
+  // above it. One value serves single- and multi-sub-goal calls (not known
+  // up front).
+  browse_task: 1_060_000,
   // browse_open (docs/superpowers/specs/2026-09-18-builtin-browser-design.md
   // §5) reuses the desktop's own BROWSER_OPEN_TIMEOUT_MS = 45_000 navigation
   // budget, and — since browse-speed-contract.md's "Frontend" item 2 — also
@@ -350,10 +364,16 @@ const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
 // browse_* gets its desktop budget + 60s. Desktop values stay unchanged.
 const CLOUD_BROWSE_OPEN_TIMEOUT_MS = 150_000;
 const CLOUD_BROWSE_EXTRA_MS = 60_000;
-// browse_task's cloud loop runs CLOUD_BROWSE_TASK_DEADLINE_MS (180s,
-// browseTask.ts): 180 - 35 + 61.5 = 206.5s worst case after it starts, plus
-// the cold session create/connect above (<=50s) — 270s.
-const CLOUD_BROWSE_TASK_TIMEOUT_MS = 270_000;
+// browse_task's cloud call is bounded by CLOUD_MULTI_SUBGOAL_DEADLINE_MS
+// (15 min, browseTask.ts; a single sub-goal loop runs
+// CLOUD_BROWSE_TASK_DEADLINE_MS = 180s, clamped to what is left of it):
+// 900 - 35 + 61.5 = 926.5s worst case after it starts, plus the cold
+// session create/connect above (<=50s) and settleEmptySnapshot's worst case
+// (244.8s, see browse_task above) — 1221.3s worst case. The real bound is
+// the handler's internal race (browseTaskInnerBoundMs() = 900 + 35 + 244.8 =
+// 1179.8s, cold session included since it runs inside the call); this outer
+// value is 60s above it.
+const CLOUD_BROWSE_TASK_TIMEOUT_MS = 1_240_000;
 
 export function getToolCallTimeoutMs(toolName: string): number {
   const base = TOOL_CALL_TIMEOUT_MS_OVERRIDES[toolName] ?? DEFAULT_TOOL_CALL_TIMEOUT_MS;
@@ -422,17 +442,28 @@ export async function executeToolCall(
     // Bound-number patches are applied in a microtask; flush before the handler
     // reads literals and after it returns, so neither the handler nor whatever
     // runs right after the result sees a stale literal.
+    // Every handler gets a signal that fires on the caller's signal (Stop,
+    // abandoned turn) AND on this timeout, so a long tool (browse_task)
+    // stops instead of running on after the model was told it timed out.
+    // The timer is cleared once the call settles.
+    const timeoutAbort = new AbortController();
+    const signal = context?.signal ? AbortSignal.any([context.signal, timeoutAbort.signal]) : timeoutAbort.signal;
+    const handlerContext: ToolExecutionContext = { ...context, signal };
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const result = await runToolCall(toolName, () => {
       flushNumberBindings();
       return Promise.race([
-        handler(args, context),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error("Tool call timed out")),
-            getToolCallTimeoutMs(toolName)
-          )
-        ),
-      ]).finally(flushNumberBindings);
+        handler(args, handlerContext),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            timeoutAbort.abort();
+            reject(new Error("Tool call timed out"));
+          }, getToolCallTimeoutMs(toolName));
+        }),
+      ]).finally(() => {
+        if (timer !== undefined) clearTimeout(timer);
+        flushNumberBindings();
+      });
     });
     // Handlers report failure as a JSON `{"error": ...}` string rather than
     // throwing; detect that shape so `ok` reflects the real outcome. Cheap
@@ -663,12 +694,24 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       if (toolCall.toolName === "ask_user") {
         return;
       }
-      const handlerResult = await executeToolCall(
-        toolCall.toolName,
-        toolCall.input,
-        { sessionId, toolCallId: toolCall.toolCallId },
-        "chat"
-      );
+      // Every tool call gets the turn's abort signal (browse_task runs for
+      // minutes): every terminal-abandonment path (user Stop, external abort,
+      // failed request, unmount — all via clearStreamingToolSession) aborts
+      // it. Created already aborted if the turn was stopped meanwhile.
+      const toolAbort = new AbortController();
+      if (turnStoppedRef.current) toolAbort.abort();
+      pendingToolCallAbortsRef.current.add(toolAbort);
+      let handlerResult: string;
+      try {
+        handlerResult = await executeToolCall(
+          toolCall.toolName,
+          toolCall.input,
+          { sessionId, toolCallId: toolCall.toolCallId, signal: toolAbort.signal },
+          "chat"
+        );
+      } finally {
+        pendingToolCallAbortsRef.current.delete(toolAbort);
+      }
       let output = handlerResult;
       // Jev taste check (src/lib/tools/tasteCheck.ts): a no-op for every
       // tool except batch_design/edit_embed_html, and even for those two
@@ -765,6 +808,9 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const awaitingAnswer = hasPendingAskUser(chat.messages);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // In-flight tool calls' AbortControllers (see onToolCall), aborted on the
+  // same terminal-abandonment paths as the taste checks below.
+  const pendingToolCallAbortsRef = useRef<Set<AbortController>>(new Set());
   // Every Jev taste-check `AbortController` currently in flight for this
   // session (one per batch_design/edit_embed_html call awaiting a check
   // inside `onToolCall` above) — a Set, not a single controller, because
@@ -829,6 +875,9 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const clearStreamingToolSession = useCallback(() => {
     turnStoppedRef.current = true;
     for (const controller of pendingTasteCheckAbortsRef.current) {
+      controller.abort();
+    }
+    for (const controller of pendingToolCallAbortsRef.current) {
       controller.abort();
     }
     for (const [key, call] of seenStreamingCallsRef.current) {

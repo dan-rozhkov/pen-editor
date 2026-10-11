@@ -280,10 +280,16 @@ export interface BrowseBackendResponse {
  */
 export async function fetchBrowseBackend(
   path: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  timeoutMs: number = BROWSE_BACKEND_REQUEST_TIMEOUT_MS,
+  /** Aborts the request in flight (Stop / cancelled browse_task). */
+  signal?: AbortSignal
 ): Promise<BrowseBackendResponse> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), BROWSE_BACKEND_REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onAbort = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  else signal?.addEventListener("abort", onAbort, { once: true });
   try {
     const res = await apiFetch(path, {
       method: "POST",
@@ -302,5 +308,6 @@ export async function fetchBrowseBackend(
     return { status: res.status, ok: res.ok, body: parsedBody };
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
   }
 }
