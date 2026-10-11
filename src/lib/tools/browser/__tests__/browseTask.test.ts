@@ -379,7 +379,7 @@ describe("browse_task", () => {
     const transcript = await runBrowseTaskLoop("scroll down", 1, browser);
 
     expect(perform).toHaveBeenCalledTimes(1);
-    const performArgs = perform.mock.calls[0][0];
+    const performArgs = (perform.mock.calls as unknown as unknown[][])[0][0];
     expect(performArgs).not.toHaveProperty("index");
     expect(performArgs).toMatchObject({ operation: "SCROLL_DOWN", snapshotId: "snap-1" });
     expect(transcript.steps).toEqual([{ operation: "SCROLL_DOWN", label: "", ok: true }]);
@@ -2094,5 +2094,107 @@ describe("browse_task", () => {
         "WAIT:false",
       ]);
     });
+  });
+});
+
+describe("browse_task step screenshot (VITE_BROWSE_STEP_SCREENSHOT)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
+  });
+
+  const bodies: Array<Record<string, unknown>> = [];
+  const run = async (
+    screenshot: PenDesktopBrowser["screenshot"] | undefined,
+    sequence: unknown[] = [DONE],
+    overrides: Partial<PenDesktopBrowser> = {}
+  ) => {
+    bodies.length = 0;
+    stubFetchSequence(sequence as Record<string, unknown>[], (init) => bodies.push(JSON.parse(String(init.body))));
+    const browser = stubBrowser({ ...(screenshot ? { screenshot } : {}), ...overrides });
+    const transcript = await runBrowseTaskLoop("accept cookies", 3, browser);
+    return { body: bodies[0], transcript };
+  };
+
+  it("flag off: no screenshot call, body has no screenshot", async () => {
+    vi.stubEnv("VITE_BROWSE_STEP_SCREENSHOT", "");
+    const screenshot = vi.fn(async () => ({ imageData: "data:image/jpeg;base64,AAA", snapshotId: "snap-1" }));
+    const { body } = await run(screenshot);
+    expect(screenshot).not.toHaveBeenCalled();
+    expect(body).not.toHaveProperty("screenshot");
+  });
+
+  it("flag on: captures with the loop's snapshotId and sends imageData untouched (trimmed)", async () => {
+    vi.stubEnv("VITE_BROWSE_STEP_SCREENSHOT", "true");
+    const screenshot = vi.fn(async () => ({ imageData: "  QUJD\n", snapshotId: "snap-1" }));
+    const { body } = await run(screenshot);
+    expect(screenshot).toHaveBeenCalledWith({ annotate: true, snapshotId: "snap-1" });
+    expect(body.screenshot).toBe("QUJD");
+  });
+
+  it.each<[string, PenDesktopBrowser["screenshot"] | undefined]>([
+    ["error result", vi.fn(async () => ({ error: "boom" }))],
+    ["throw", vi.fn(async () => { throw new Error("x"); })],
+    ["missing method", undefined],
+  ])("%s: step still sent without screenshot", async (_name, screenshot) => {
+    vi.stubEnv("VITE_BROWSE_STEP_SCREENSHOT", "true");
+    const { body } = await run(screenshot);
+    expect(body).toBeDefined();
+    expect(body).not.toHaveProperty("screenshot");
+  });
+
+  it("timeout: step is sent without screenshot", async () => {
+    vi.stubEnv("VITE_BROWSE_STEP_SCREENSHOT", "true");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const pending = run(vi.fn(() => new Promise(() => {})) as PenDesktopBrowser["screenshot"]);
+    await vi.advanceTimersByTimeAsync(4_100);
+    expect((await pending).body).not.toHaveProperty("screenshot");
+  });
+
+  it("records the capture outcome and marked on the step entry", async () => {
+    vi.stubEnv("VITE_BROWSE_STEP_SCREENSHOT", "true");
+    const screenshot = vi.fn(async () => ({ imageData: "AAA", snapshotId: "snap-1", marked: 7 }));
+    const { transcript } = await run(screenshot, [CLICK_STEP, DONE], { perform: vi.fn(async () => ({})) });
+    expect(transcript.steps[0]).toMatchObject({ operation: "CLICK", screenshot: "sent", marked: 7 });
+    expect(typeof transcript.steps[0].screenshotMs).toBe("number");
+    expect(JSON.parse(JSON.stringify(transcript.steps))).toEqual(transcript.steps);
+  });
+
+  it("bridge ignoring snapshotId: image discarded, capture stops, snapshot re-taken", async () => {
+    vi.stubEnv("VITE_BROWSE_STEP_SCREENSHOT", "true");
+    const screenshot = vi.fn(async () => ({ imageData: "AAA", snapshotId: "other" }));
+    const snapshot = vi
+      .fn()
+      .mockResolvedValueOnce(EXAMPLE_SNAPSHOT)
+      .mockResolvedValue({ ...EXAMPLE_SNAPSHOT, snapshotId: "snap-2" });
+    const perform = vi.fn(async () => ({}));
+    const { body, transcript } = await run(screenshot, [CLICK_STEP, CLICK_STEP, DONE], { snapshot, perform });
+    expect(screenshot).toHaveBeenCalledTimes(1);
+    expect(bodies.every((b) => !("screenshot" in b))).toBe(true);
+    expect(body).not.toHaveProperty("screenshot");
+    expect((perform.mock.calls as unknown as unknown[][])[0][0]).toMatchObject({ snapshotId: "snap-2" });
+    expect(transcript.steps[0]).toMatchObject({ screenshot: "unsupported" });
+  });
+
+  it("result without snapshotId counts as ignored", async () => {
+    vi.stubEnv("VITE_BROWSE_STEP_SCREENSHOT", "true");
+    const { body } = await run(vi.fn(async () => ({ imageData: "AAA" })));
+    expect(body).not.toHaveProperty("screenshot");
+  });
+
+  it("action-cache hit: no capture", async () => {
+    vi.stubEnv("VITE_BROWSE_STEP_SCREENSHOT", "true");
+    const key = buildStepCacheKey(
+      "accept cookies", EXAMPLE_SNAPSHOT.url, EXAMPLE_SNAPSHOT.title, EXAMPLE_SNAPSHOT.elements, []
+    );
+    writeStepCacheEntry(key, "accept cookies", EXAMPLE_SNAPSHOT.elements, {
+      operation: "CLICK",
+      target: { labelHash: hashCachedLabel("Accept all"), tag: "button" },
+    });
+    vi.stubGlobal("fetch", vi.fn());
+    const screenshot = vi.fn(async () => ({ imageData: "AAA", snapshotId: "snap-1" }));
+    const transcript = await runBrowseTaskLoop("accept cookies", 1, stubBrowser({ screenshot, perform: vi.fn(async () => ({})) }));
+    expect(transcript.cacheHits).toBe(1);
+    expect(screenshot).not.toHaveBeenCalled();
   });
 });

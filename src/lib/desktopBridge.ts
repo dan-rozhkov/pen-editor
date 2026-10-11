@@ -78,7 +78,7 @@ export interface PenDesktopApi {
      * Optional — absent on desktop builds older than this feature; see the
      * class doc above for why every `browser` method is guarded with `?.`.
      */
-    screenshot?(args?: { annotate?: boolean }): Promise<unknown>;
+    screenshot?(args?: { annotate?: boolean; snapshotId?: string }): Promise<unknown>;
     /**
      * browse_tabs (same design doc) — list/switch/close/open the desktop
      * shell's browser tabs. `new` optionally loads `url` with `open`'s

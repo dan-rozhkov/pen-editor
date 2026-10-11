@@ -243,7 +243,17 @@ interface StepResponse {
   cascade?: boolean;
 }
 
-type TranscriptStep = StepHistoryEntry;
+/** How the per-step screenshot capture went (VITE_BROWSE_STEP_SCREENSHOT). */
+type StepScreenshotOutcome = "sent" | "unsupported" | "failed" | "timeout";
+
+/** Capture outcome recorded on the step entry the bench reads. JSON-plain. */
+interface StepScreenshotInfo {
+  screenshot: StepScreenshotOutcome;
+  screenshotMs: number;
+  marked?: number | boolean;
+}
+
+type TranscriptStep = StepHistoryEntry & Partial<StepScreenshotInfo>;
 
 interface Transcript {
   status: "done" | "blocked" | "budget" | "stalled";
@@ -444,11 +454,79 @@ async function pageTextFor(browser: PenDesktopBrowser, snapshot: SnapshotResult)
   }
 }
 
+/** Experiment flag: send a marked screenshot of the step's snapshot to the backend. */
+export function browseStepScreenshotEnabled(): boolean {
+  return import.meta.env.VITE_BROWSE_STEP_SCREENSHOT === "true";
+}
+
+const STEP_SCREENSHOT_TIMEOUT_MS = 4_000;
+
+interface StepCapture {
+  info: StepScreenshotInfo;
+  /** Image exactly as the bridge returned it (trimmed); the backend normalizes. */
+  image?: string;
+  /** The bridge ignored `snapshotId` and minted a new snapshot, so the
+   * loop's id is stale and must be re-taken. */
+  staleSnapshot?: boolean;
+}
+
+/**
+ * Captures a marked screenshot of THE GIVEN snapshot (no new snapshot).
+ * Never throws: any error, timeout or malformed result yields an outcome
+ * without an image so the step is sent without one.
+ *
+ * Old shells / old cloud vendors ignore `snapshotId` and mint a fresh
+ * snapshot; the result's `snapshotId` then differs (or is missing). The image
+ * is discarded and `staleSnapshot` tells the caller to stop capturing and
+ * re-take its snapshot.
+ *
+ * The timeout is client-side only: the bridge command may still hold the
+ * controller lock after we give up (desktop `withCommandTimeout` bounds it).
+ */
+export async function captureStepScreenshot(
+  browser: PenDesktopBrowser,
+  snapshotId: string
+): Promise<StepCapture> {
+  const started = Date.now();
+  const done = (screenshot: StepScreenshotOutcome, extra: Partial<StepCapture> & { marked?: unknown } = {}): StepCapture => {
+    const { marked, ...rest } = extra;
+    return {
+      info: {
+        screenshot,
+        screenshotMs: Date.now() - started,
+        ...(typeof marked === "number" || typeof marked === "boolean" ? { marked } : {}),
+      },
+      ...rest,
+    };
+  };
+  if (typeof browser.screenshot !== "function") return done("unsupported");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const raw = await Promise.race([
+      browser.screenshot({ annotate: true, snapshotId }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("screenshot timeout")), STEP_SCREENSHOT_TIMEOUT_MS);
+      }),
+    ]);
+    if (resultError(raw) || !raw || typeof raw !== "object") return done("failed");
+    const result = raw as { imageData?: unknown; snapshotId?: unknown; marked?: unknown };
+    if (result.snapshotId !== snapshotId) return done("unsupported", { staleSnapshot: true });
+    const data = typeof result.imageData === "string" ? result.imageData.trim() : "";
+    if (data === "") return done("failed");
+    return done("sent", { image: data, marked: result.marked });
+  } catch (err) {
+    return done(err instanceof Error && err.message === "screenshot timeout" ? "timeout" : "failed");
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 async function requestStep(
   goal: string,
   snapshot: SnapshotResult,
   history: StepHistoryEntry[],
-  pageText: string | undefined
+  pageText: string | undefined,
+  screenshot?: string
 ): Promise<StepResponse> {
   const res = await fetchBrowseBackend("/api/browse/step", {
     goal,
@@ -466,6 +544,7 @@ async function requestStep(
     // snapshot doesn't carry one — an older desktop bridge, say.
     ...(snapshot.scroll !== undefined ? { scroll: snapshot.scroll } : {}),
     ...(pageText !== undefined ? { pageText } : {}),
+    ...(screenshot !== undefined ? { screenshot } : {}),
   });
   if (!res.ok) {
     throw new Error(`/api/browse/step responded ${res.status}`);
@@ -843,10 +922,18 @@ export async function runBrowseTaskLoop(
    * calling /api/browse/step — see the cache-replay block at the top of the
    * loop below, and Transcript.cacheHits' doc comment. */
   let cacheHits = 0;
+  /** Per-task: set once a capture shows the bridge can't do snapshot-bound
+   * screenshots (no method, or it ignored `snapshotId`); no more calls. */
+  let screenshotsUnsupported = false;
+  /** Capture outcome of the current iteration, merged into the next note(). */
+  let pendingShot: StepScreenshotInfo | undefined;
   /** recordStep plus the no-progress check. Returns the transcript to
    * return when the loop has stalled, or null to carry on. */
   const note = (entry: TranscriptStep): Transcript | null => {
-    recordStep(steps, history, entry);
+    // The step screenshot capture outcome rides on the first entry recorded
+    // after it (the bench reads the transcript).
+    recordStep(steps, history, pendingShot ? { ...entry, ...pendingShot } : entry);
+    pendingShot = undefined;
     if (entry.ok) {
       unproductive = 0;
       lastLandedOperation = entry.operation;
@@ -888,7 +975,8 @@ export async function runBrowseTaskLoop(
       if (stalled) return stalled;
       continue;
     }
-    const snapshot: SnapshotResult = snapshotResult;
+    let snapshot: SnapshotResult = snapshotResult;
+    pendingShot = undefined;
 
     lastUrl = snapshot.url;
     lastTitle = snapshot.title;
@@ -901,7 +989,7 @@ export async function runBrowseTaskLoop(
     // title + exact element set + full history so far + bucketed scroll",
     // exactly what a future identical run would see at the same point (and
     // never anything less exact than that — see the module header for why).
-    const stepCacheKey = isActionCacheEnabled()
+    let stepCacheKey = isActionCacheEnabled()
       ? buildStepCacheKey(goal, snapshot.url, snapshot.title, snapshot.elements, history, snapshot.scroll)
       : undefined;
     if (stepCacheKey) {
@@ -996,7 +1084,34 @@ export async function runBrowseTaskLoop(
 
     let decision: StepResponse;
     try {
-      decision = await requestStep(goal, snapshot, history, await pageTextFor(browser, snapshot));
+      const capturing = browseStepScreenshotEnabled() && !screenshotsUnsupported;
+      let [pageText, capture] = await Promise.all([
+        pageTextFor(browser, snapshot),
+        capturing ? captureStepScreenshot(browser, snapshot.snapshotId) : undefined,
+      ]);
+      if (capture) {
+        pendingShot = capture.info;
+        if (capture.info.screenshot === "unsupported") screenshotsUnsupported = true;
+        if (capture.staleSnapshot) {
+          // The bridge minted a new snapshot behind our back, so the loop's
+          // snapshotId is stale for the perform below. Re-take it.
+          const retaken = await takeSnapshot(browser);
+          if ("error" in retaken) {
+            const stalled = note({ operation: "SNAPSHOT", label: retaken.error, ok: false });
+            if (stalled) return stalled;
+            continue;
+          }
+          snapshot = retaken;
+          lastUrl = snapshot.url;
+          lastTitle = snapshot.title;
+          if (stepCacheKey) {
+            stepCacheKey = buildStepCacheKey(goal, snapshot.url, snapshot.title, snapshot.elements, history, snapshot.scroll);
+          }
+          pageText = await pageTextFor(browser, snapshot);
+          capture = undefined;
+        }
+      }
+      decision = await requestStep(goal, snapshot, history, pageText, capture?.image);
     } catch (err) {
       const stalled = note({
         operation: "STEP",
