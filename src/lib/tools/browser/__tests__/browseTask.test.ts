@@ -2151,6 +2151,23 @@ describe("browse_task step screenshot (VITE_BROWSE_STEP_SCREENSHOT)", () => {
     expect((await pending).body).not.toHaveProperty("screenshot");
   });
 
+  it("marked 0: image is not sent and the transcript says unmarked", async () => {
+    vi.stubEnv("VITE_BROWSE_STEP_SCREENSHOT", "true");
+    const screenshot = vi.fn(async () => ({ imageData: "AAA", snapshotId: "snap-1", marked: 0 }));
+    const { body, transcript } = await run(screenshot, [CLICK_STEP, DONE], { perform: vi.fn(async () => ({})) });
+    expect(body).not.toHaveProperty("screenshot");
+    expect(transcript.steps[0]).toMatchObject({ screenshot: "unmarked", marked: 0 });
+  });
+
+  it("records the final step's capture info on a done terminal entry", async () => {
+    vi.stubEnv("VITE_BROWSE_STEP_SCREENSHOT", "true");
+    const screenshot = vi.fn(async () => ({ imageData: "AAA", snapshotId: "snap-1", marked: 4 }));
+    const { transcript } = await run(screenshot, [DONE]);
+    expect(transcript.status).toBe("done");
+    expect(transcript.steps).toHaveLength(1);
+    expect(transcript.steps[0]).toMatchObject({ operation: "DONE", screenshot: "sent", marked: 4 });
+  });
+
   it("records the capture outcome and marked on the step entry", async () => {
     vi.stubEnv("VITE_BROWSE_STEP_SCREENSHOT", "true");
     const screenshot = vi.fn(async () => ({ imageData: "AAA", snapshotId: "snap-1", marked: 7 }));

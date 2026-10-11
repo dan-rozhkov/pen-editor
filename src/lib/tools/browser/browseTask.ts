@@ -244,7 +244,7 @@ interface StepResponse {
 }
 
 /** How the per-step screenshot capture went (VITE_BROWSE_STEP_SCREENSHOT). */
-type StepScreenshotOutcome = "sent" | "unsupported" | "failed" | "timeout";
+type StepScreenshotOutcome = "sent" | "unsupported" | "failed" | "timeout" | "unmarked";
 
 /** Capture outcome recorded on the step entry the bench reads. JSON-plain. */
 interface StepScreenshotInfo {
@@ -513,6 +513,9 @@ export async function captureStepScreenshot(
     if (result.snapshotId !== snapshotId) return done("unsupported", { staleSnapshot: true });
     const data = typeof result.imageData === "string" ? result.imageData.trim() : "";
     if (data === "") return done("failed");
+    // Nothing was outlined: the prompt note would promise numbered boxes that
+    // are not there, so the image is not sent.
+    if (result.marked === 0) return done("unmarked", { marked: 0 });
     return done("sent", { image: data, marked: result.marked });
   } catch (err) {
     return done(err instanceof Error && err.message === "screenshot timeout" ? "timeout" : "failed");
@@ -1133,6 +1136,16 @@ export async function runBrowseTaskLoop(
     const terminalReason = decision.cascade
       ? `${decision.reason ?? ""}${decision.reason ? " " : ""}(via cascade)`
       : decision.reason;
+    // The final step's capture info would otherwise be dropped (no note()).
+    if ((decision.outcome === "done" || decision.outcome === "blocked") && pendingShot) {
+      steps.push({
+        operation: decision.operation ?? (decision.outcome === "done" ? "DONE" : "BLOCKED"),
+        label: truncateToChars(terminalReason ?? decision.outcome, HISTORY_LABEL_MAX_CHARS),
+        ok: decision.outcome === "done",
+        ...pendingShot,
+      });
+      pendingShot = undefined;
+    }
     if (decision.outcome === "done") {
       return { status: "done", steps, url: lastUrl, title: lastTitle, reason: terminalReason, cacheHits };
     }
