@@ -14,6 +14,7 @@ import {
   browseTaskInnerBoundMs,
   CLOUD_BROWSE_TASK_DEADLINE_MS,
   buildSubgoalGoal,
+  carryOverHistory,
   extractUrlFromGoal,
   runBrowseTask,
   runBrowseTaskLoop,
@@ -884,7 +885,8 @@ describe("browse_task", () => {
     expect(transcript.steps).toEqual([
       {
         operation: "CLICK",
-        label: 'Accept all (page updated: "Added to cart (1 item)")',
+        label:
+          'Accept all (page updated: "Added to cart (1 item)") → effect: appeared: "Added to cart (1 item)"; appeared: "Go to cart"',
         ok: true,
         index: 0,
       },
@@ -2652,5 +2654,123 @@ describe("browse_task rate limiting and sub-goal reset", () => {
     const act2 = vi.fn(async () => ({}));
     await runBrowseTask("x", 12, stubBrowser({ act: act2, snapshot: async () => ({ url: "u", title: "t", elements: [], snapshotId: "s", scroll: { y: 900 } }) }));
     expect(act2).not.toHaveBeenCalled();
+  });
+});
+
+describe("browse_task effect notes, history carry-over and recovery", () => {
+  const withText = {
+    url: "https://shop.test",
+    title: "Shop",
+    elements: [
+      { index: 0, tag: "input", label: "Search", ops: ["TYPE_TEXT"] },
+      { index: 1, tag: "button", label: "Add to cart", ops: ["CLICK"] },
+    ],
+    snapshotId: "s",
+    scroll: { y: 0 },
+  };
+
+  it("appends the effect of a landed CLICK to its history label for the next request", async () => {
+    const after = { ...withText, elements: [withText.elements[0], { index: 1, tag: "button", label: "Add to cart 1", ops: ["CLICK"] }] };
+    const bodies: Array<{ history: Array<{ label: string }> }> = [];
+    stubFetchSequence([{ ...CLICK_STEP, index: 1 }, DONE], (init) => bodies.push(JSON.parse(String(init.body))));
+    const browser = stubBrowser({ snapshot: async () => after });
+    const t = await runBrowseTaskLoop("add it", 5, browser, undefined, undefined, undefined, undefined, { initialSnapshot: withText });
+    expect(bodies[1].history[0].label).toBe('Add to cart → effect: "Add to cart" became "Add to cart 1"');
+    expect(t.steps[0].label).toBe(bodies[1].history[0].label);
+  });
+
+  it("carryOverHistory keeps the last 2 entries, suffixed, within the cap, once", () => {
+    const base = { operation: "CLICK", ok: true };
+    const out = carryOverHistory([
+      { ...base, label: "first" },
+      { ...base, label: "second", index: 4 },
+      { ...base, label: "x".repeat(200) },
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out[0]).toEqual({ operation: "CLICK", label: "second (earlier sub-goal)", ok: true });
+    expect(out[1].label).toHaveLength(200);
+    expect(out[1].label.endsWith(" (earlier sub-goal)")).toBe(true);
+    expect(carryOverHistory(out)[0].label).toBe("second (earlier sub-goal)");
+  });
+
+  it("seeds sub-goal 2 history with the previous sub-goal's last entries", async () => {
+    const { stepBodies } = stubPlanAndSteps(["one", "two"], [CLICK_STEP, CLICK_STEP, DONE, DONE]);
+    await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => withText }), undefined, undefined, "https://shop.test");
+    const first = (stepBodies[3].history as Array<{ label: string }>).map((h) => h.label);
+    expect(first).toHaveLength(2);
+    expect(first.every((l) => l.endsWith(" (earlier sub-goal)"))).toBe(true);
+  });
+
+  it("at sub-goal start: Escape on a dialog, then reopens the start URL if still no text field", async () => {
+    stubPlanAndSteps(["one", "search for a product"], [DONE]);
+    const act = vi.fn(async () => ({}));
+    const open = vi.fn(async () => ({}));
+    const blocked = { ...withText, elements: [withText.elements[1]], modal: "Your cart" };
+    const t = await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => blocked, act, open }), undefined, undefined, "https://shop.test");
+    expect(act).toHaveBeenCalledWith({ action: "press", key: "Escape" });
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(t.steps.filter((s) => s.subgoal === 2).map((s) => s.operation)).toEqual(expect.arrayContaining(["PRESS_ESCAPE", "OPEN"]));
+  });
+
+  it("does nothing at sub-goal start when a text field is present", async () => {
+    stubPlanAndSteps(["one", "find the item"], [DONE]);
+    const open = vi.fn(async () => ({}));
+    await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => withText, open }), undefined, undefined, "https://shop.test");
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it("reopens the start URL once and retries a sub-goal that stalled scrolling/refusing", async () => {
+    const refuse = { outcome: "retry", operation: "CLICK", confidence: 0.1, model: "jev", reason: "BLOCKED: no candidate fits CLICK" };
+    stubPlanAndSteps(["one", "two"], [refuse, refuse, refuse, DONE]);
+    const open = vi.fn(async () => ({}));
+    const t = await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => withText, open }), undefined, undefined, "https://shop.test");
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(t.subgoals?.[0].status).toBe("done");
+  });
+
+  it("leaves an open dialog alone when the sub-goal does not ask to search", async () => {
+    stubPlanAndSteps(["one", "proceed to checkout"], [DONE]);
+    const act = vi.fn(async () => ({}));
+    const open = vi.fn(async () => ({}));
+    const blocked = { ...withText, elements: [withText.elements[1]], modal: "Your cart" };
+    await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => blocked, act, open }), undefined, undefined, "https://shop.test");
+    expect(act).not.toHaveBeenCalledWith({ action: "press", key: "Escape" });
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it("reopens the second site, not the start URL, when a stall happens there", async () => {
+    const refuse = { outcome: "retry", operation: "CLICK", confidence: 0.1, model: "jev", reason: "BLOCKED: no candidate fits CLICK" };
+    stubPlanAndSteps(["one", "go to https://other.example/p and two"], [DONE, refuse, refuse, refuse, DONE]);
+    const open = vi.fn(async (_a: { url: string }) => ({}));
+    await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => withText, open }), undefined, undefined, "https://shop.test");
+    expect(open.mock.calls.map((c) => c[0].url)).toEqual(["https://shop.test", "https://other.example/p", "https://other.example/p"]);
+  });
+
+  it("seeds the stall retry with the stalled attempt's entries, without the earlier-sub-goal mark", async () => {
+    const refuse = { outcome: "retry", operation: "CLICK", confidence: 0.1, model: "jev", reason: "BLOCKED: no candidate fits CLICK" };
+    const { stepBodies } = stubPlanAndSteps(["one", "two"], [refuse, refuse, refuse, DONE]);
+    await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => withText }), undefined, undefined, "https://shop.test");
+    const retry = stepBodies[3].history as Array<{ label: string }>;
+    expect(retry).toHaveLength(2);
+    expect(retry.some((h) => h.label.includes("earlier sub-goal"))).toBe(false);
+  });
+
+  it("records the stall-recovery OPEN after the stalled steps, and counts it", async () => {
+    const refuse = { outcome: "retry", operation: "CLICK", confidence: 0.1, model: "jev", reason: "BLOCKED: no candidate fits CLICK" };
+    stubPlanAndSteps(["one", "two"], [refuse, refuse, refuse, DONE]);
+    const t = await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => withText }), undefined, undefined, "https://shop.test");
+    const ops = t.steps.map((s) => s.operation);
+    const openAt = ops.indexOf("OPEN");
+    expect(openAt).toBeGreaterThan(0);
+    expect(t.steps.slice(0, openAt).every((s) => s.operation !== "OPEN")).toBe(true);
+    expect(t.stepsTotal).toBeGreaterThanOrEqual(4);
+  });
+
+  it("keeps the effect note whole when carrying a long label over", () => {
+    const label = `${"x".repeat(150)} → effect: "Add to cart" became "Add to cart 1"`;
+    const out = carryOverHistory([{ operation: "CLICK", label, ok: true }]);
+    expect(out[0].label).toHaveLength(200);
+    expect(out[0].label).toContain('became "Add to cart 1"');
+    expect(out[0].label.endsWith(" (earlier sub-goal)")).toBe(true);
   });
 });

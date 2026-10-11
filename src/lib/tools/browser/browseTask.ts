@@ -1,6 +1,14 @@
 import type { ToolHandler } from "../../toolRegistry";
 import { getBrowserBridge, isDesktopBrowserAvailable } from "./bridge";
 import {
+  appendKeepingSuffix,
+  describeEffect,
+  EARLIER_SUBGOAL_SUFFIX,
+  fitLabel,
+  stripVolatileLabelParts,
+  type ActedElement,
+} from "./actionEffect";
+import {
   buildStepCacheKey,
   deleteCacheEntry,
   findTextRangeInGoal,
@@ -681,6 +689,8 @@ function describePageUpdate(value: unknown): string | null {
 interface CacheReplayResult {
   ok: boolean;
   label: string;
+  /** The raw `perform` result of a landed replay — feeds the effect note. */
+  result?: unknown;
 }
 
 /**
@@ -737,6 +747,7 @@ async function replayCachedStep(
     return {
       ok: true,
       label: `${displayLabel}${describeSideEffects(performed)}${pageUpdate ? ` ${pageUpdate}` : ""}`,
+      result: performed,
     };
   } catch (err) {
     return { ok: false, label: err instanceof Error ? err.message : "cache replay failed" };
@@ -812,18 +823,99 @@ function recordStep(
   steps: TranscriptStep[],
   history: StepHistoryEntry[],
   entry: TranscriptStep
-): void {
+): { step: TranscriptStep; hist: StepHistoryEntry } {
   const truncated: TranscriptStep = {
     ...entry,
-    label: truncateToChars(entry.label, HISTORY_LABEL_MAX_CHARS),
+    label: fitLabel(entry.label, HISTORY_LABEL_MAX_CHARS),
   };
   steps.push(truncated);
-  history.push({
+  const hist: StepHistoryEntry = {
     operation: truncated.operation,
     label: truncated.label,
     ok: truncated.ok,
     ...(truncated.index !== undefined ? { index: truncated.index } : {}),
-  });
+  };
+  history.push(hist);
+  return { step: truncated, hist };
+}
+
+export { EARLIER_SUBGOAL_SUFFIX };
+/** How many trailing history entries the next sub-goal inherits. */
+const CARRYOVER_ENTRIES = 2;
+
+/**
+ * Seed history for sub-goal k>1: the last CARRYOVER_ENTRIES entries of the
+ * previous one, each label suffixed EARLIER_SUBGOAL_SUFFIX (the base is cut to
+ * keep the 200-char cap, never the suffix). `index` is dropped: it points into
+ * a snapshot that no longer exists.
+ */
+export function carryOverHistory(previous: StepHistoryEntry[]): StepHistoryEntry[] {
+  return previous.slice(-CARRYOVER_ENTRIES).map((e) => ({
+    operation: e.operation,
+    label: e.label.endsWith(EARLIER_SUBGOAL_SUFFIX)
+      ? e.label
+      : appendKeepingSuffix(e.label, EARLIER_SUBGOAL_SUFFIX, HISTORY_LABEL_MAX_CHARS),
+    ok: e.ok,
+    ...(e.via ? { via: e.via } : {}),
+  }));
+}
+
+/** Retry of the SAME sub-goal: its stalled attempt's last entries, without the
+ * "earlier sub-goal" marker (they belong to this sub-goal). */
+export function sameGoalSeed(previous: StepHistoryEntry[]): StepHistoryEntry[] {
+  return previous.slice(-CARRYOVER_ENTRIES).map((e) => ({
+    operation: e.operation,
+    label: e.label.split(EARLIER_SUBGOAL_SUFFIX).join(""),
+    ok: e.ok,
+    ...(e.via ? { via: e.via } : {}),
+  }));
+}
+
+/** History as the step-cache key sees it: no volatile effect notes, no
+ * carried-over entries (they differ across runs). */
+function cacheKeyHistory(history: StepHistoryEntry[]): StepHistoryEntry[] {
+  return history
+    .filter((e) => !e.label.endsWith(EARLIER_SUBGOAL_SUFFIX))
+    .map((e) => ({ ...e, label: stripVolatileLabelParts(e.label) }));
+}
+
+/** A landed CLICK waiting for the next snapshot to learn what it did. */
+interface PendingEffect {
+  prev: SnapshotResult;
+  acted: ActedElement | undefined;
+  result: unknown;
+  step: TranscriptStep;
+  hist: StepHistoryEntry;
+}
+
+function actedElementOf(snapshot: SnapshotResult, index: number | undefined): ActedElement | undefined {
+  if (index == null) return undefined;
+  const el = findElementByIndex(snapshot.elements, index) as
+    | { label?: unknown; tag?: unknown; role?: unknown }
+    | undefined;
+  if (!el || typeof el.label !== "string") return undefined;
+  return {
+    index,
+    label: el.label,
+    ...(typeof el.tag === "string" ? { tag: el.tag } : {}),
+    ...(typeof el.role === "string" ? { role: el.role } : {}),
+  };
+}
+
+/** Appends the effect note to the recorded CLICK (transcript + history). */
+function applyPendingEffect(pending: PendingEffect, next: SnapshotResult): void {
+  const note = describeEffect(pending.prev, next, pending.acted, pending.result);
+  if (!note) return;
+  const label = appendKeepingSuffix(pending.step.label, note, HISTORY_LABEL_MAX_CHARS);
+  pending.step.label = label;
+  pending.hist.label = label;
+}
+
+/** Sub-goal bookkeeping shared with the caller: `seed` goes in front of the
+ * loop's history, `final` receives the (live) history array. */
+export interface HistoryShare {
+  seed?: StepHistoryEntry[];
+  final?: StepHistoryEntry[];
 }
 
 /** Blank = no elements AND page text that is present but empty. A missing
@@ -937,12 +1029,16 @@ export async function runBrowseTaskLoop(
    * (runBrowseTask) — skip it and reuse its snapshot. */
   preamble?: { initialSnapshot?: SnapshotResult },
   /** Aborts on Stop / tool-call timeout: checked at the top of every step. */
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  /** Sub-goal history carry-over (see carryOverHistory). */
+  share?: HistoryShare
 ): Promise<Transcript> {
   const cappedMaxSteps = Math.min(Math.max(1, Math.floor(maxSteps)), HARD_MAX_STEPS);
   const deadline = now() + deadlineMs;
   const steps: TranscriptStep[] = [];
-  const history: StepHistoryEntry[] = [];
+  const history: StepHistoryEntry[] = share?.seed ? [...share.seed] : [];
+  if (share) share.final = history;
+  let pendingEffect: PendingEffect | null = null;
 
   let lastUrl = "";
   let lastTitle = "";
@@ -1007,10 +1103,11 @@ export async function runBrowseTaskLoop(
   let pendingShot: StepScreenshotInfo | undefined;
   /** recordStep plus the no-progress check. Returns the transcript to
    * return when the loop has stalled, or null to carry on. */
+  let lastRecorded: { step: TranscriptStep; hist: StepHistoryEntry } | null = null;
   const note = (entry: TranscriptStep): Transcript | null => {
     // The step screenshot capture outcome rides on the first entry recorded
     // after it (the bench reads the transcript).
-    recordStep(steps, history, pendingShot ? { ...entry, ...pendingShot } : entry);
+    lastRecorded = recordStep(steps, history, pendingShot ? { ...entry, ...pendingShot } : entry);
     pendingShot = undefined;
     if (entry.ok) {
       unproductive = 0;
@@ -1056,6 +1153,7 @@ export async function runBrowseTaskLoop(
     const snapshotResult = stepCount === 0 ? await settleEmptySnapshot(browser, freshSnapshot, sleep, signal) : freshSnapshot;
     if (signal?.aborted) return cancelledResult();
     if ("error" in snapshotResult) {
+      pendingEffect = null;
       const stalled = note({
         operation: "SNAPSHOT",
         label: snapshotResult.error,
@@ -1066,6 +1164,10 @@ export async function runBrowseTaskLoop(
     }
     let snapshot: SnapshotResult = snapshotResult;
     pendingShot = undefined;
+    if (pendingEffect) {
+      applyPendingEffect(pendingEffect, snapshot);
+      pendingEffect = null;
+    }
 
     lastUrl = snapshot.url;
     lastTitle = snapshot.title;
@@ -1079,7 +1181,7 @@ export async function runBrowseTaskLoop(
     // exactly what a future identical run would see at the same point (and
     // never anything less exact than that — see the module header for why).
     let stepCacheKey = isActionCacheEnabled()
-      ? buildStepCacheKey(goal, snapshot.url, snapshot.title, snapshot.elements, history, snapshot.scroll, modalFor(snapshot))
+      ? buildStepCacheKey(goal, snapshot.url, snapshot.title, snapshot.elements, cacheKeyHistory(history), snapshot.scroll, modalFor(snapshot))
       : undefined;
     if (stepCacheKey) {
       const cached = lookupStepCache(stepCacheKey, goal, snapshot.elements);
@@ -1122,13 +1224,22 @@ export async function runBrowseTaskLoop(
             typeof resolvedElement?.label === "string" ? resolvedElement.label : undefined
           );
           if (replay.ok) {
-            recordStep(steps, history, {
+            const recorded = recordStep(steps, history, {
               operation: cached.operation,
               label: replay.label,
               ok: true,
               index: cachedIndex,
               via: "cache",
             });
+            if (cached.operation === "CLICK") {
+              pendingEffect = {
+                prev: snapshot,
+                acted: actedElementOf(snapshot, cachedIndex),
+                result: replay.result,
+                step: recorded.step,
+                hist: recorded.hist,
+              };
+            }
             unproductive = 0;
             lastLandedOperation = cached.operation;
             if (cached.operation === "TYPE_TEXT" && cachedIndex != null) {
@@ -1195,7 +1306,7 @@ export async function runBrowseTaskLoop(
           lastUrl = snapshot.url;
           lastTitle = snapshot.title;
           if (stepCacheKey) {
-            stepCacheKey = buildStepCacheKey(goal, snapshot.url, snapshot.title, snapshot.elements, history, snapshot.scroll, modalFor(snapshot));
+            stepCacheKey = buildStepCacheKey(goal, snapshot.url, snapshot.title, snapshot.elements, cacheKeyHistory(history), snapshot.scroll, modalFor(snapshot));
           }
           pageText = await pageTextFor(browser, snapshot);
           capture = undefined;
@@ -1504,6 +1615,17 @@ export async function runBrowseTaskLoop(
             }
       );
       if (stalled) return stalled;
+      // A landed CLICK: the next snapshot tells what it did (effect note).
+      if (operation === "CLICK" && !rejected && !noEffect && (lastRecorded as { step: TranscriptStep; hist: StepHistoryEntry } | null)) {
+        const rec = lastRecorded as unknown as { step: TranscriptStep; hist: StepHistoryEntry };
+        pendingEffect = {
+          prev: snapshot,
+          acted: actedElementOf(snapshot, decision.index),
+          result: performed,
+          step: rec.step,
+          hist: rec.hist,
+        };
+      }
       // Track the just-landed TYPE_TEXT for the next iteration's dedup
       // rule above — only on a genuinely landed (not rejected, not
       // no-effect) TYPE_TEXT.
@@ -1658,6 +1780,81 @@ async function scrollToTop(
   }
 }
 
+/** True when the snapshot offers a text-entry element (any op list with TYPE_TEXT). */
+function hasTextEntry(snapshot: SnapshotResult): boolean {
+  return snapshot.elements.some((el) => {
+    const ops = (el as { ops?: unknown } | undefined)?.ops;
+    return Array.isArray(ops) && ops.includes("TYPE_TEXT");
+  });
+}
+
+/**
+ * Sub-goal start recovery (k>1, same site). Finding: an unclosed overlay can
+ * hide the site's only text field, and the sub-goal then stalls scrolling or
+ * clicking nothing. If the snapshot has no text-entry element: close an open
+ * dialog with Escape; if there is still none, reopen the start URL. At most
+ * once per sub-goal; every action lands in `records` (transcript, not history).
+ * Returns the last snapshot when nothing acted after it (the loop reuses it).
+ */
+async function recoverTextEntry(
+  browser: PenDesktopBrowser,
+  siteUrl: string | undefined,
+  k: number,
+  records: TranscriptStep[],
+  canContinue: () => boolean
+): Promise<SnapshotResult | undefined> {
+  try {
+    if (!canContinue()) return undefined;
+    const snap = await takeSnapshot(browser);
+    if ("error" in snap) return undefined;
+    if (hasTextEntry(snap)) return snap;
+    // Only a snapshot that reports an open dialog is treated as "text field
+    // hidden behind an overlay"; a page that simply has no text field is left be.
+    if (modalFor(snap) === undefined) return snap;
+    if (canContinue()) {
+      const acted = await browser.act({ action: "press", key: "Escape" });
+      records.push({
+        operation: "PRESS_ESCAPE",
+        label: "press Escape (sub-goal start: no text field, dialog open)",
+        ok: !resultError(acted),
+        subgoal: k,
+      });
+      if (!canContinue()) return undefined;
+      const after = await takeSnapshot(browser);
+      if (!("error" in after) && hasTextEntry(after)) return after;
+    }
+    if (!siteUrl || !canContinue()) return undefined;
+    const failure = await openBeforeLoop(browser, siteUrl);
+    records.push({
+      operation: "OPEN",
+      label: `reopened ${truncateToChars(siteUrl, 100)} (sub-goal start: no text field)`,
+      ok: !failure,
+      subgoal: k,
+    });
+  } catch {
+    // best effort: the sub-goal runs on whatever page there is
+  }
+  return undefined;
+}
+
+/** Sub-goal text that asks to search / find / type into a field. Verbs only. */
+const SEARCH_INTENT = /(?<!\p{L})(?:search|find|look\s+(?:for|up)|type\b[^.]{0,60}?\binto|найди|найти|поиск|ищи)/iu;
+export function wantsTextEntry(subGoal: string): boolean {
+  return SEARCH_INTENT.test(subGoal);
+}
+
+/** The tail of a stalled run shows a page the sub-goal cannot work on: only
+ * no-effect scrolls and "no candidate fits" refusals. */
+function isRecoverableStall(steps: TranscriptStep[]): boolean {
+  const tail = steps.slice(-MAX_CONSECUTIVE_UNPRODUCTIVE_STEPS);
+  if (tail.length < MAX_CONSECUTIVE_UNPRODUCTIVE_STEPS) return false;
+  return tail.every(
+    (st) =>
+      /no candidate fits/i.test(st.label) ||
+      (st.operation.startsWith("SCROLL_") && /\(no effect\)/.test(st.label))
+  );
+}
+
 /** A `blocked` the remaining sub-goals cannot get past either. ONLY the
  * loop's / backend's own structured wall signals count — never free-form
  * wording in a model's reason (a "Sign in link in the header" is not a wall):
@@ -1753,6 +1950,10 @@ export async function runBrowseTask(
   let cacheHits = 0;
   let abortedBy: string | undefined;
   let cancelled = false;
+  // The URL most recently opened for the CURRENT site: the start URL until a
+  // sub-goal opens another domain.
+  let siteUrl: string | undefined = url ?? extractUrlFromGoal(goal) ?? freshPreamble.initialSnapshot?.url ?? preamble.initialSnapshot?.url;
+  let previousHistory: StepHistoryEntry[] = [];
 
   for (let i = 0; i < n; i++) {
     const k = i + 1;
@@ -1772,6 +1973,7 @@ export async function runBrowseTask(
     }
     // A sub-goal that names a different site: open it first (same open path
     // as the preamble) so the loop does not start on the wrong page.
+    let recoveredSnapshot: SnapshotResult | undefined;
     const subUrl = i > 0 ? extractUrlFromGoal(plan[i]) : undefined;
     if (subUrl && hostOf(subUrl) !== undefined && hostOf(subUrl) !== hostOf(lastUrl)) {
       const openFailure = await openBeforeLoop(browser, subUrl);
@@ -1781,13 +1983,30 @@ export async function runBrowseTask(
         continue;
       }
       lastUrl = subUrl;
+      siteUrl = subUrl;
     } else if (i > 0 && !signal?.aborted) {
       // Same site: the previous sub-goal may have left the page scrolled far down.
       await scrollToTop(browser);
+      if (wantsTextEntry(plan[i])) {
+        const records: TranscriptStep[] = [];
+        recoveredSnapshot = await recoverTextEntry(
+          browser,
+          siteUrl,
+          k,
+          records,
+          () => !signal?.aborted && overallEnd - now() >= STEP_DEADLINE_RESERVE_MS
+        );
+        steps.push(...records);
+        stepsTotal += records.length;
+      }
     }
-    const t = await runBrowseTaskLoop(
-      buildSubgoalGoal(plan[i], doneGoals),
-      Math.min(maxSteps, remainingSteps),
+    const subGoalText = buildSubgoalGoal(plan[i], doneGoals);
+    const subMaxSteps = Math.min(maxSteps, Math.max(1, MULTI_SUBGOAL_MAX_STEPS - stepsTotal));
+    const subStart = now();
+    const share: HistoryShare = { seed: i > 0 ? carryOverHistory(previousHistory) : undefined };
+    let t = await runBrowseTaskLoop(
+      subGoalText,
+      subMaxSteps,
       browser,
       now,
       sleep,
@@ -1795,11 +2014,57 @@ export async function runBrowseTask(
       // Recomputed: the open / scroll-to-top above may have used time.
       Math.min(deadlineMs, overallEnd - now()),
       // Sub-goal 1 reuses the probe snapshot; later ones take their own.
-      i === 0 ? freshPreamble : {},
-      signal
+      i === 0 ? freshPreamble : recoveredSnapshot ? { initialSnapshot: recoveredSnapshot } : {},
+      signal,
+      share
     );
+    // Stall safety net: ONE reopen of the current site's URL and a retry on
+    // the remaining budget (no fresh step allowance) before reporting stalled.
+    const attempts: Array<{ steps: TranscriptStep[]; record?: TranscriptStep }> = [{ steps: t.steps }];
+    if (t.status === "stalled" && siteUrl && !signal?.aborted && isRecoverableStall(t.steps)) {
+      const capLeft = MULTI_SUBGOAL_MAX_STEPS - stepsTotal - t.steps.length - 1;
+      const leftSteps = Math.min(Math.min(subMaxSteps, HARD_MAX_STEPS) - t.steps.length, capLeft);
+      const leftMs = Math.min(deadlineMs - (now() - subStart), overallEnd - now());
+      if (leftSteps > 0 && leftMs >= STEP_DEADLINE_RESERVE_MS) {
+        const failure = await openBeforeLoop(browser, siteUrl);
+        const record: TranscriptStep = {
+          operation: "OPEN",
+          label: `reopened ${truncateToChars(siteUrl, 100)} (stall recovery)`,
+          ok: !failure,
+          subgoal: k,
+        };
+        if (!failure) {
+          const retryShare: HistoryShare = { seed: sameGoalSeed(share.final ?? []) };
+          const t2 = await runBrowseTaskLoop(
+            subGoalText,
+            leftSteps,
+            browser,
+            now,
+            sleep,
+            undefined,
+            Math.min(leftMs, overallEnd - now()),
+            {},
+            signal,
+            retryShare
+          );
+          share.final = retryShare.final;
+          attempts.push({ steps: t2.steps, record });
+          t = { ...t2, steps: [...t.steps, ...t2.steps], cacheHits: (t.cacheHits ?? 0) + (t2.cacheHits ?? 0) };
+        } else {
+          attempts.push({ steps: [], record });
+        }
+      }
+    }
+    previousHistory = share.final ?? [];
+    // Chronological: stalled attempt, recovery OPEN, retry. The OPEN counts as a step.
     stepsTotal += t.steps.length;
-    for (const s of t.steps.slice(-MULTI_SUBGOAL_STEPS_KEPT)) steps.push({ ...s, subgoal: k });
+    for (const att of attempts) {
+      if (att.record) {
+        steps.push(att.record);
+        stepsTotal += 1;
+      }
+      for (const s of att.steps.slice(-MULTI_SUBGOAL_STEPS_KEPT)) steps.push({ ...s, subgoal: k });
+    }
     if (t.url) lastUrl = t.url;
     if (t.title) lastTitle = t.title;
     cacheHits += t.cacheHits ?? 0;
