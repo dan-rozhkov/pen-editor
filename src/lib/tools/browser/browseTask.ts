@@ -544,6 +544,14 @@ export async function captureStepScreenshot(
   }
 }
 
+const MODAL_MAX_CHARS = 200;
+
+function modalFor(snapshot: SnapshotResult): string | undefined {
+  if (typeof snapshot.modal !== "string") return undefined;
+  const modal = snapshot.modal.trim().slice(0, MODAL_MAX_CHARS);
+  return modal || undefined;
+}
+
 async function requestStep(
   goal: string,
   snapshot: SnapshotResult,
@@ -567,6 +575,10 @@ async function requestStep(
     // which JSON.stringify would drop from the body anyway) when the
     // snapshot doesn't carry one — an older desktop bridge, say.
     ...(snapshot.scroll !== undefined ? { scroll: snapshot.scroll } : {}),
+    // Name of an open aria-modal dialog the element table was scoped to, so
+    // the backend knows a dialog covers the page. Trimmed and capped; omitted
+    // when absent/empty. An older backend's zod object strips unknown keys.
+    ...(modalFor(snapshot) !== undefined ? { modal: modalFor(snapshot) } : {}),
     ...(pageText !== undefined ? { pageText } : {}),
     ...(screenshot !== undefined ? { screenshot } : {}),
   }, undefined, signal);
@@ -1063,7 +1075,7 @@ export async function runBrowseTaskLoop(
     // exactly what a future identical run would see at the same point (and
     // never anything less exact than that — see the module header for why).
     let stepCacheKey = isActionCacheEnabled()
-      ? buildStepCacheKey(goal, snapshot.url, snapshot.title, snapshot.elements, history, snapshot.scroll)
+      ? buildStepCacheKey(goal, snapshot.url, snapshot.title, snapshot.elements, history, snapshot.scroll, modalFor(snapshot))
       : undefined;
     if (stepCacheKey) {
       const cached = lookupStepCache(stepCacheKey, goal, snapshot.elements);
@@ -1179,7 +1191,7 @@ export async function runBrowseTaskLoop(
           lastUrl = snapshot.url;
           lastTitle = snapshot.title;
           if (stepCacheKey) {
-            stepCacheKey = buildStepCacheKey(goal, snapshot.url, snapshot.title, snapshot.elements, history, snapshot.scroll);
+            stepCacheKey = buildStepCacheKey(goal, snapshot.url, snapshot.title, snapshot.elements, history, snapshot.scroll, modalFor(snapshot));
           }
           pageText = await pageTextFor(browser, snapshot);
           capture = undefined;

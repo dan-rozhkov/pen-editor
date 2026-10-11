@@ -93,6 +93,10 @@ export interface SnapshotResult {
   /** Visible text inside the viewport (≤6000 chars) — a desktop build that
    * predates it omits the field. */
   text?: string;
+  /** Name (≤80 chars) of an open aria-modal dialog the element table was
+   * scoped to — desktop and cloud (Steel) snapshots share this shape. Absent
+   * when no dialog is open or on a build that predates it. */
+  modal?: string;
 }
 
 /**

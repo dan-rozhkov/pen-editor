@@ -340,7 +340,8 @@ export function buildStepCacheKey(
   title: string,
   elements: unknown[],
   history: Array<{ operation: string; label: string }>,
-  scroll?: unknown
+  scroll?: unknown,
+  modal?: string
 ): string {
   return `step:${hashParts([
     goal,
@@ -349,6 +350,10 @@ export function buildStepCacheKey(
     elementSetFingerprint(elements),
     historySignature(history),
     scrollFingerprint(scroll),
+    // Appended only when a dialog is open, so keys for modal-free pages are
+    // unchanged. The element table is already modal-scoped, but the same
+    // table could in principle appear with and without the dialog.
+    ...(modal ? [`modal:${modal}`] : []),
   ])}`;
 }
 

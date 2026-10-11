@@ -1035,6 +1035,29 @@ describe("browse_task", () => {
     expect(receivedBodies[0]).not.toHaveProperty("scroll");
   });
 
+  it.each([
+    ["trimmed and capped at 200 chars", `  ${"x".repeat(300)}  `, "x".repeat(200)],
+    ["omitted when undefined", undefined, undefined],
+    ["omitted when empty", "", undefined],
+    ["omitted when whitespace", "   ", undefined],
+  ])("step body modal: %s", async (_name, modal, expected) => {
+    const receivedBodies: Array<Record<string, unknown>> = [];
+    stubFetchSequence([DONE], (init) => {
+      receivedBodies.push(JSON.parse(init.body as string));
+    });
+    const snapshot = vi.fn(async () => ({
+      url: "https://example.com",
+      title: "Example",
+      elements: [],
+      snapshotId: "snap-1",
+      ...(modal !== undefined ? { modal } : {}),
+    }));
+    await runBrowseTaskLoop("pick dates", 12, stubBrowser({ snapshot }));
+    // Omitted means the key is absent, not merely undefined.
+    expect("modal" in receivedBodies[0]!).toBe(expected !== undefined);
+    expect(receivedBodies[0]!.modal).toBe(expected);
+  });
+
   // The ultrafast step policy reads visible page text: from the snapshot on a
   // current desktop build, from one `read` on an older one, and a failing
   // read must never fail the step — it just goes without text.
