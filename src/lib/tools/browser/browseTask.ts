@@ -1542,7 +1542,9 @@ export function browseTaskInnerBoundMs(): number {
   return browseTaskOverallDeadlineMs() + STEP_DEADLINE_RESERVE_MS + BROWSE_SETTLE_WORST_CASE_MS;
 }
 
-const PLAN_REQUEST_TIMEOUT_MS = 15_000;
+// Above the backend model budget (BROWSE_PLAN_TIMEOUT_MS = 20 s): the plan runs
+// in parallel with the preamble, so headroom costs nothing on a fast answer.
+const PLAN_REQUEST_TIMEOUT_MS = 25_000;
 // Mirror pen-editor-backend src/ai/browsePlan.ts (MAX_SUBGOALS / MAX_SUBGOAL_CHARS = 12 / 1000).
 const PLAN_MAX_SUBGOALS = 12;
 const PLAN_SUBGOAL_MAX_CHARS = 1_000;
