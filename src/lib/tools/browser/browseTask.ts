@@ -47,8 +47,10 @@ import {
  * runs" section for why this lives here rather than on the backend.
  */
 
-/** design doc §3: "maxSteps default 12, hard cap 25". */
-const DEFAULT_MAX_STEPS = 12;
+/** design doc §3 had "default 12, hard cap 25"; the default is now the cap:
+ * the chat agent hands the user's WHOLE goal to one call (backend Browser
+ * tasks rule), and a model that omits maxSteps must not stop at 12. */
+const DEFAULT_MAX_STEPS = 25;
 const HARD_MAX_STEPS = 25;
 
 /** design doc §3: BROWSE_TASK_DEADLINE_MS = 90_000. */
