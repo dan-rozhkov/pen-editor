@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appendKeepingSuffix, describeEffect, EFFECT_NOTE_MAX_CHARS, fitLabel, stripVolatileLabelParts } from "../actionEffect";
+import { appendKeepingSuffix, describeEffect, describeEffectDetailed, EFFECT_NOTE_MAX_CHARS, fitLabel, isCommitEffect, stripVolatileLabelParts } from "../actionEffect";
 
 const btn = (index: number, label: string, extra: Record<string, unknown> = {}) => ({
   index,
@@ -98,5 +98,35 @@ describe("fitLabel / stripVolatileLabelParts", () => {
 
   it("strips effect notes and page-updated text, keeps other suffixes", () => {
     expect(stripVolatileLabelParts('Add → effect: "A" became "A 1" (page updated: "x") (no effect)')).toBe("Add (no effect)");
+  });
+});
+
+describe("isCommitEffect", () => {
+  const b = (o: string, n: string) => ({ old: o, new: n });
+  it("accepts one bare number at the very start or end", () => {
+    expect(isCommitEffect(b("Add to cart", "Add to cart 1"))).toBe('"Add to cart" became "Add to cart 1"');
+    expect(isCommitEffect(b("Add to cart", "1 Add to cart"))).not.toBeNull();
+  });
+  it.each([
+    ["changed number", "Page 2", "Page 3"],
+    ["old label has a number", "Adults 2", "Adults 2 3"],
+    ["bracketed", "Load more", "Load more (24)"],
+    ["mid-label", "Show results", "Show 245 results"],
+    ["not a number", "Add", "Add now"],
+    ["two numbers", "Add", "Add 1 2"],
+  ])("rejects %s", (_n, o, n) => {
+    expect(isCommitEffect(b(o, n))).toBeNull();
+  });
+  it("rejects a missing relabel", () => {
+    expect(isCommitEffect(undefined)).toBeNull();
+  });
+});
+
+describe("describeEffectDetailed", () => {
+  it("returns the structured relabel only for the acted element", () => {
+    const d = describeEffectDetailed(snap([btn(0, "Add to cart")]), snap([btn(0, "Add to cart 1")]), acted("Add to cart"));
+    expect(d.became).toEqual({ old: "Add to cart", new: "Add to cart 1" });
+    expect(describeEffectDetailed(snap([btn(0, "Add")]), snap([btn(0, "Add 1")]), undefined).became).toBeUndefined();
+    expect(describeEffectDetailed(snap([btn(0, "Add")]), snap([btn(0, "Add")]), acted("Add")).became).toBeUndefined();
   });
 });

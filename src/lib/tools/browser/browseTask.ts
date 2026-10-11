@@ -2,7 +2,9 @@ import type { ToolHandler } from "../../toolRegistry";
 import { getBrowserBridge, isDesktopBrowserAvailable } from "./bridge";
 import {
   appendKeepingSuffix,
-  describeEffect,
+  describeEffectDetailed,
+  isCommitEffect,
+  type BecameLabel,
   EARLIER_SUBGOAL_SUFFIX,
   fitLabel,
   stripVolatileLabelParts,
@@ -903,12 +905,13 @@ function actedElementOf(snapshot: SnapshotResult, index: number | undefined): Ac
 }
 
 /** Appends the effect note to the recorded CLICK (transcript + history). */
-function applyPendingEffect(pending: PendingEffect, next: SnapshotResult): void {
-  const note = describeEffect(pending.prev, next, pending.acted, pending.result);
-  if (!note) return;
+function applyPendingEffect(pending: PendingEffect, next: SnapshotResult): BecameLabel | undefined {
+  const { note, became } = describeEffectDetailed(pending.prev, next, pending.acted, pending.result);
+  if (!note) return undefined;
   const label = appendKeepingSuffix(pending.step.label, note, HISTORY_LABEL_MAX_CHARS);
   pending.step.label = label;
   pending.hist.label = label;
+  return became;
 }
 
 /** Sub-goal bookkeeping shared with the caller: `seed` goes in front of the
@@ -916,7 +919,16 @@ function applyPendingEffect(pending: PendingEffect, next: SnapshotResult): void 
 export interface HistoryShare {
   seed?: StepHistoryEntry[];
   final?: StepHistoryEntry[];
+  /** Multi-sub-goal runs only: a CLICK whose effect shows a commit (see
+   * isCommitEffect) ends the sub-goal as done without another step request. */
+  autoConfirmCommit?: boolean;
 }
+
+/** Label prefix of the synthetic DONE step the auto-confirm records. It is not
+ * an action, so multi-sub-goal step accounting skips it (see actionSteps). */
+const AUTO_CONFIRM_LABEL = "auto-confirmed by effect";
+const actionSteps = (steps: TranscriptStep[]): number =>
+  steps.filter((s) => !(s.operation === "DONE" && s.label.startsWith(AUTO_CONFIRM_LABEL))).length;
 
 /** Blank = no elements AND page text that is present but empty. A missing
  * `text` means an older desktop build that never sends it (pageTextFor falls
@@ -1165,8 +1177,18 @@ export async function runBrowseTaskLoop(
     let snapshot: SnapshotResult = snapshotResult;
     pendingShot = undefined;
     if (pendingEffect) {
-      applyPendingEffect(pendingEffect, snapshot);
+      const became = applyPendingEffect(pendingEffect, snapshot);
       pendingEffect = null;
+      const commit = share?.autoConfirmCommit ? isCommitEffect(became) : null;
+      if (commit) {
+        const reason = `commit effect observed: ${commit}`;
+        recordStep(steps, history, {
+          operation: "DONE",
+          label: `${AUTO_CONFIRM_LABEL} — ${commit}`,
+          ok: true,
+        });
+        return { status: "done", steps, url: snapshot.url, title: snapshot.title, reason, cacheHits };
+      }
     }
 
     lastUrl = snapshot.url;
@@ -2003,7 +2025,7 @@ export async function runBrowseTask(
     const subGoalText = buildSubgoalGoal(plan[i], doneGoals);
     const subMaxSteps = Math.min(maxSteps, Math.max(1, MULTI_SUBGOAL_MAX_STEPS - stepsTotal));
     const subStart = now();
-    const share: HistoryShare = { seed: i > 0 ? carryOverHistory(previousHistory) : undefined };
+    const share: HistoryShare = { seed: i > 0 ? carryOverHistory(previousHistory) : undefined, autoConfirmCommit: true };
     let t = await runBrowseTaskLoop(
       subGoalText,
       subMaxSteps,
@@ -2034,7 +2056,7 @@ export async function runBrowseTask(
           subgoal: k,
         };
         if (!failure) {
-          const retryShare: HistoryShare = { seed: sameGoalSeed(share.final ?? []) };
+          const retryShare: HistoryShare = { seed: sameGoalSeed(share.final ?? []), autoConfirmCommit: true };
           const t2 = await runBrowseTaskLoop(
             subGoalText,
             leftSteps,
@@ -2057,7 +2079,7 @@ export async function runBrowseTask(
     }
     previousHistory = share.final ?? [];
     // Chronological: stalled attempt, recovery OPEN, retry. The OPEN counts as a step.
-    stepsTotal += t.steps.length;
+    stepsTotal += actionSteps(t.steps);
     for (const att of attempts) {
       if (att.record) {
         steps.push(att.record);

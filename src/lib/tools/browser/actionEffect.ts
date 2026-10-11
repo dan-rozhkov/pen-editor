@@ -131,7 +131,28 @@ export function describeEffect(
   acted: ActedElement | undefined,
   result?: unknown
 ): string {
-  if (prev.url !== undefined && next.url !== undefined && prev.url !== next.url) return "";
+  return describeEffectDetailed(prev, next, acted, result).note;
+}
+
+/** The acted element's relabel, unclipped (the note itself clips fragments). */
+export interface BecameLabel {
+  old: string;
+  new: string;
+}
+
+/**
+ * Same as `describeEffect`, plus the structured relabel when the note kept it.
+ * `became` is only ever produced for the acted element: `findBecame` matches
+ * on the acted element's own kind and label skeleton (no acted element, no
+ * relabel).
+ */
+export function describeEffectDetailed(
+  prev: SnapshotLike,
+  next: SnapshotLike,
+  acted: ActedElement | undefined,
+  result?: unknown
+): { note: string; became?: BecameLabel } {
+  if (prev.url !== undefined && next.url !== undefined && prev.url !== next.url) return { note: "" };
 
   const appeared = (() => {
     const raw = result && typeof result === "object" ? (result as { appeared?: unknown }).appeared : undefined;
@@ -141,6 +162,7 @@ export function describeEffect(
   const parts: string[] = [];
   const became = acted ? findBecame(next, acted) : undefined;
   if (acted && became) parts.push(`"${clip(acted.label, FRAGMENT_MAX_CHARS)}" became "${clip(became, FRAGMENT_MAX_CHARS)}"`);
+  const becameIsFirst = parts.length === 1 && Boolean(acted && became);
 
   const counter = findCounter(prev, next, appeared, became);
   if (counter) parts.push(counter);
@@ -160,7 +182,33 @@ export function describeEffect(
     const candidate = EFFECT_PREFIX + [...kept, part].join("; ");
     if (candidate.length <= EFFECT_NOTE_MAX_CHARS) kept.push(part);
   }
-  return kept.length > 0 ? EFFECT_PREFIX + kept.join("; ") : "";
+  if (kept.length === 0) return { note: "" };
+  const note = EFFECT_PREFIX + kept.join("; ");
+  return becameIsFirst && acted && became && kept[0] === parts[0] ? { note, became: { old: acted.label, new: became } } : { note };
+}
+
+const collapse = (t: string): string => t.replace(/\s+/g, " ").trim();
+
+/**
+ * Does the acted element's relabel show a COMMIT of the click? Only when the
+ * new label is the old label plus ONE bare number, separated by whitespace, at
+ * the very start or very end ("Add to cart" → "Add to cart 1" / "1 Add to
+ * cart"), and the old label has no number of its own. Bracketed counts
+ * ("Load more (24)"), mid-label numbers ("Show 245 results") and changed
+ * numbers ("Adults 2" → "Adults 3") do not count. Page-wide counters are
+ * deliberately NOT considered: they are not tied to the clicked element
+ * (wizard "Step 1→2", live badges). Works on the structured relabel from
+ * `describeEffectDetailed`, not on the clipped note text.
+ */
+export function isCommitEffect(became: BecameLabel | undefined): string | null {
+  if (!became) return null;
+  const oldLabel = collapse(became.old);
+  const newLabel = collapse(became.new);
+  if (!oldLabel || /\d/.test(oldLabel)) return null;
+  const tail = newLabel.startsWith(oldLabel + " ") ? newLabel.slice(oldLabel.length + 1) : null;
+  const head = newLabel.endsWith(" " + oldLabel) ? newLabel.slice(0, newLabel.length - oldLabel.length - 1) : null;
+  const isNum = (x: string | null): boolean => x !== null && /^\d+$/.test(x);
+  return isNum(tail) || isNum(head) ? `"${clip(oldLabel, FRAGMENT_MAX_CHARS)}" became "${clip(newLabel, FRAGMENT_MAX_CHARS)}"` : null;
 }
 
 export const EARLIER_SUBGOAL_SUFFIX = " (earlier sub-goal)";

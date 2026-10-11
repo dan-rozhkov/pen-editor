@@ -2679,6 +2679,76 @@ describe("browse_task effect notes, history carry-over and recovery", () => {
     expect(t.steps[0].label).toBe(bodies[1].history[0].label);
   });
 
+  describe("commit effect auto-confirm", () => {
+    const CLICK1 = { ...CLICK_STEP, index: 1 };
+    const page = (label: string, extra: Array<Record<string, unknown>> = []) => ({
+      ...withText,
+      elements: [withText.elements[0], { index: 1, tag: "button", label, ops: ["CLICK"] }, ...extra],
+    });
+    /** Two sub-goals; sub-goal 1 clicks element 1, whose page changes before -> after. */
+    async function run(before: ReturnType<typeof page>, after: ReturnType<typeof page>) {
+      const { stepBodies } = stubPlanAndSteps(["add the mat", "open the cart"], [CLICK1, DONE, DONE]);
+      let clicked = false;
+      const browser = stubBrowser({
+        snapshot: async () => (clicked ? after : before),
+        perform: vi.fn(async () => {
+          clicked = true;
+          return {};
+        }),
+      });
+      const t = await runBrowseTask("add the mat then open the cart", 5, browser);
+      return { t, stepBodies };
+    }
+    const synthetic = (t: Awaited<ReturnType<typeof run>>["t"]) => t.steps.filter((s) => String(s.label).startsWith("auto-confirmed by effect"));
+
+    it("positive: a relabel adding one bare number ends the sub-goal as done", async () => {
+      const { t, stepBodies } = await run(page("Add to cart"), page("Add to cart 1"));
+      expect(t.subgoals?.[0]).toMatchObject({ status: "done" });
+      expect(t.subgoals?.[0].reason).toContain("commit effect observed");
+      expect(synthetic(t)).toHaveLength(1);
+      // sub-goal 1: only the CLICK request; sub-goal 2 proceeds (its first step is DONE).
+      expect(stepBodies).toHaveLength(2);
+      expect(String(stepBodies[1].goal)).toContain("open the cart");
+      expect(t.status).toBe("done");
+    });
+
+    it("the synthetic step does not count toward stepsTotal", async () => {
+      const { t } = await run(page("Add to cart"), page("Add to cart 1"));
+      expect(synthetic(t)).toHaveLength(1);
+      expect(t.stepsTotal).toBe(t.steps.length - 1);
+    });
+
+    it.each([
+      ["stepper Adults 2 -> 3", page("Adults 2"), page("Adults 3")],
+      ["Load more -> Load more (24)", page("Load more"), page("Load more (24)")],
+      ["mid-label number", page("Show results"), page("Show 245 results")],
+    ])("negative: %s does not auto-finish", async (_name, before, after) => {
+      const { t, stepBodies } = await run(before, after);
+      expect(synthetic(t)).toHaveLength(0);
+      expect(t.subgoals?.[0].reason ?? "").not.toContain("commit effect");
+      // CLICK then the model's own DONE for sub-goal 1, then sub-goal 2.
+      expect(stepBodies).toHaveLength(3);
+    });
+
+    it("negative: a counter moving 0 -> 1 elsewhere does not auto-finish", async () => {
+      const { t, stepBodies } = await run(
+        page("Add to cart", [{ index: 2, tag: "a", label: "Cart", ops: ["CLICK"] }]),
+        page("Add to cart", [{ index: 2, tag: "a", label: "Cart 1", ops: ["CLICK"] }])
+      );
+      expect(synthetic(t)).toHaveLength(0);
+      expect(stepBodies).toHaveLength(3);
+    });
+
+    it("single-goal run: the same effect does not auto-finish", async () => {
+      const stepBodies: unknown[] = [];
+      stubFetchSequence([CLICK1, DONE], (init) => stepBodies.push(JSON.parse(String(init.body))));
+      const browser = stubBrowser({ snapshot: async () => page("Add to cart 1") });
+      const t = await runBrowseTaskLoop("add it", 5, browser, undefined, undefined, undefined, undefined, { initialSnapshot: withText });
+      expect(stepBodies).toHaveLength(2);
+      expect(t.reason ?? "").not.toContain("commit effect");
+    });
+  });
+
   it("carryOverHistory keeps the last 2 entries, suffixed, within the cap, once", () => {
     const base = { operation: "CLICK", ok: true };
     const out = carryOverHistory([
