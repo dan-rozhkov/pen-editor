@@ -2850,7 +2850,7 @@ describe("browse_task effect notes, history carry-over and recovery", () => {
     const reopened = (t: { steps: Array<{ label: string; subgoal?: number }> }) =>
       t.steps.filter((s) => s.label.includes("sub-goal start: new search"));
 
-    it("reopens the site URL when both sub-goals search and the page moved", async () => {
+    it("reopens the site URL when the sub-goal is a quoted search and the page moved", async () => {
       stubPlanAndSteps(['search for "shoes"', 'search for "hats"'], [DONE]);
       const open = vi.fn(async () => ({}));
       const act = vi.fn(async () => ({}));
@@ -2864,12 +2864,28 @@ describe("browse_task effect notes, history carry-over and recovery", () => {
     });
 
     it.each([
+      [["open the hotels tab", 'search for "Paris"']],
+      [["one", 'Find a suitable "tent" and add it to the cart']],
+      [["one", "Search 'σκηνή camping'"]],
+      [["one", "On Skroutz: search 'αδιάβροχο μπουφάν', click the first result"]],
+    ])("resets for %j", async (plan) => {
+      stubPlanAndSteps(plan, [DONE]);
+      const open = vi.fn(async () => ({}));
+      const t = await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => inSection, open }), undefined, undefined, "https://shop.test");
+      expect(open).toHaveBeenCalledTimes(2);
+      expect(reopened(t)).toHaveLength(1);
+    });
+
+    it.each([
       [["search for hotels in Paris", "find the cheapest one and open it"]],
       [['type "John" into the first name field', 'type "Smith" into the last name field']],
       [["search for shoes", "search for hats"]],
       [['search for "shoes"', "search for hats"]],
-      [["open the hotels tab", 'search for "Paris"']],
+      [["search for shoes", "find the cheapest one and open it"]],
+      [["one", "Don't stop, it's here: find it"]],
+      [["one", 'type "John" into First name']],
       [['search for "shoes"', "add the first one to the cart"]],
+      [["open the cart", "Find the 'Checkout' button and click it"]],
     ])("does not reset for %j", async (plan) => {
       stubPlanAndSteps(plan, [DONE]);
       const open = vi.fn(async () => ({}));

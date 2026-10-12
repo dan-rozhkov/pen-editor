@@ -1914,13 +1914,19 @@ export function wantsTextEntry(subGoal: string): boolean {
   return SEARCH_INTENT.test(subGoal);
 }
 
-/** Narrow check for the sub-goal start reset: an explicit search verb (not
- * the generic find / type-into) AND a quoted phrase — the planner quotes the
- * text to type into the search box. */
+/** Narrow check for the sub-goal start reset: a quoted phrase after an
+ * explicit search / find verb (never "type ... into": a multi-page form step
+ * must not reset). The planner puts the text to type in double quotes and
+ * control labels in single ones ("Find the 'Checkout' button" must not leave
+ * the cart), so a single-quoted phrase counts only with a search verb, and
+ * only at word edges (an apostrophe, as in don't, opens none). */
 const SEARCH_VERB = /(?<!\p{L})(?:search|look\s+up|поиск|ищи|искать)/iu;
-const QUOTED_PHRASE = /"[^"]+"|“[^”]+”|«[^»]+»/u;
+const FIND_VERB = /(?<!\p{L})(?:find|найди|найти)/iu;
+const DOUBLE_QUOTED = /"[^"]+"|“[^”]+”|«[^»]+»/u;
+const SINGLE_QUOTED = /(?<![\p{L}\p{N}])'[^']+'(?![\p{L}\p{N}])/u;
 function isQuotedSearch(subGoal: string): boolean {
-  return SEARCH_VERB.test(subGoal) && QUOTED_PHRASE.test(subGoal);
+  if (SEARCH_VERB.test(subGoal)) return DOUBLE_QUOTED.test(subGoal) || SINGLE_QUOTED.test(subGoal);
+  return FIND_VERB.test(subGoal) && DOUBLE_QUOTED.test(subGoal);
 }
 
 /** The tail of a stalled run shows a page the sub-goal cannot work on: only
@@ -2076,15 +2082,15 @@ export async function runBrowseTask(
       lastUrl = subUrl;
       siteUrl = subUrl;
     } else if (i > 0 && !signal?.aborted) {
-      // Consecutive independent searches: the previous one may have ended
-      // inside a site section, and the site's search box then searches only
-      // within it. Start from the site URL instead (a fresh page needs no
-      // scroll-to-top / text-entry recovery). A failed open falls through.
+      // A quoted search sub-goal: an earlier sub-goal may have left the page
+      // inside a site section or a non-root page, where the search box
+      // searches only within it or the type loop stalls. Start from the site
+      // URL instead (a fresh page needs no scroll-to-top / text-entry
+      // recovery). A failed open falls through.
       let reset = false;
       if (
         siteUrl &&
         isQuotedSearch(plan[i]) &&
-        isQuotedSearch(plan[i - 1]) &&
         comparableUrl(lastUrl) !== comparableUrl(siteUrl)
       ) {
         const failure = await openBeforeLoop(browser, siteUrl);
