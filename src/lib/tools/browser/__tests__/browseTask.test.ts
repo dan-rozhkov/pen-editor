@@ -2937,6 +2937,72 @@ describe("browse_task effect notes, history carry-over and recovery", () => {
     expect(t.subgoals?.[0].status).toBe("done");
   });
 
+  it("does not reopen after a landed TYPE_TEXT: a reload would wipe the typed form", async () => {
+    const refuse = { outcome: "retry", operation: "CLICK", confidence: 0.1, model: "jev", reason: "BLOCKED: no candidate fits CLICK" };
+    stubPlanAndSteps(["one", "two"], [DONE, TYPE_TEXT_STEP, refuse, refuse, refuse, DONE]);
+    const open = vi.fn(async () => ({}));
+    const t = await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => withText, open }), undefined, undefined, "https://shop.test");
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(t.steps.some((s) => s.label.includes("stall recovery"))).toBe(false);
+    expect(t.subgoals?.[1].status).toBe("stalled");
+  });
+
+  it("does not reopen after a landed CLICK on a choice control (role=option)", async () => {
+    const refuse = { outcome: "retry", operation: "CLICK", confidence: 0.1, model: "jev", reason: "BLOCKED: no candidate fits CLICK" };
+    const clickAt = (index: number) => ({ outcome: "act", operation: "CLICK", index, confidence: 0.9, model: "jev" });
+    const withOption = { ...withText, elements: [...withText.elements, { index: 2, tag: "div", role: "option", label: "Acme Inc", ops: ["CLICK"] }] };
+    stubPlanAndSteps(["one", "two"], [DONE, clickAt(2), refuse, refuse, refuse, DONE]);
+    const open = vi.fn(async () => ({}));
+    const t = await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => withOption, open }), undefined, undefined, "https://shop.test");
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(t.steps.some((s) => s.label.includes("stall recovery"))).toBe(false);
+    expect(JSON.stringify(t.steps)).not.toMatch(/choice|setsState/i);
+  });
+
+  it("still reopens when the typed text was left behind on an earlier page (search submitted)", async () => {
+    const refuse = { outcome: "retry", operation: "CLICK", confidence: 0.1, model: "jev", reason: "BLOCKED: no candidate fits CLICK" };
+    stubPlanAndSteps(["one", "two"], [DONE, TYPE_TEXT_STEP, refuse, refuse, refuse, DONE]);
+    const open = vi.fn(async () => ({}));
+    let typed = false;
+    const perform = vi.fn(async () => {
+      typed = true;
+      return {};
+    });
+    const results = { ...withText, url: "https://shop.test/search?q=headphones" };
+    const snapshot = async () => (typed ? results : withText);
+    await runBrowseTask("g", 12, stubBrowser({ snapshot, open, perform }), undefined, undefined, "https://shop.test");
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it("still reopens after a landed CLICK on a tab (checked, but navigation, not a choice)", async () => {
+    const refuse = { outcome: "retry", operation: "CLICK", confidence: 0.1, model: "jev", reason: "BLOCKED: no candidate fits CLICK" };
+    const clickAt = (index: number) => ({ outcome: "act", operation: "CLICK", index, confidence: 0.9, model: "jev" });
+    const withTab = { ...withText, elements: [...withText.elements, { index: 2, tag: "div", role: "tab", label: "Hotels", checked: false, ops: ["CLICK"] }] };
+    stubPlanAndSteps(["one", "two"], [DONE, clickAt(2), refuse, refuse, refuse, DONE]);
+    const open = vi.fn(async () => ({}));
+    await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => withTab, open }), undefined, undefined, "https://shop.test");
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not reopen after a landed CLICK on a native checkbox (no role, reports checked)", async () => {
+    const refuse = { outcome: "retry", operation: "CLICK", confidence: 0.1, model: "jev", reason: "BLOCKED: no candidate fits CLICK" };
+    const clickAt = (index: number) => ({ outcome: "act", operation: "CLICK", index, confidence: 0.9, model: "jev" });
+    const withBox = { ...withText, elements: [...withText.elements, { index: 2, tag: "input", label: "I agree", checked: false, ops: ["CLICK"] }] };
+    stubPlanAndSteps(["one", "two"], [DONE, clickAt(2), refuse, refuse, refuse, DONE]);
+    const open = vi.fn(async () => ({}));
+    await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => withBox, open }), undefined, undefined, "https://shop.test");
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it("still reopens after a landed CLICK on a plain button", async () => {
+    const refuse = { outcome: "retry", operation: "CLICK", confidence: 0.1, model: "jev", reason: "BLOCKED: no candidate fits CLICK" };
+    const click = { outcome: "act", operation: "CLICK", index: 1, confidence: 0.9, model: "jev" };
+    stubPlanAndSteps(["one", "two"], [DONE, click, refuse, refuse, refuse, DONE]);
+    const open = vi.fn(async () => ({}));
+    await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => withText, open }), undefined, undefined, "https://shop.test");
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
   it("leaves an open dialog alone when the sub-goal does not ask to search", async () => {
     stubPlanAndSteps(["one", "proceed to checkout"], [DONE]);
     const act = vi.fn(async () => ({}));

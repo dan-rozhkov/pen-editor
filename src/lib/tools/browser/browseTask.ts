@@ -1300,6 +1300,7 @@ export async function runBrowseTaskLoop(
               via: "cache",
             });
             stepUrls.set(recorded.step, lastUrl);
+            markPageState(recorded.step, cached.operation, snapshot, cachedIndex, lastUrl);
             if (cached.operation === "CLICK") {
               pendingEffect = {
                 prev: snapshot,
@@ -1686,6 +1687,9 @@ export async function runBrowseTaskLoop(
             }
       );
       if (stalled) return stalled;
+      if (!rejected && !noEffect && lastRecorded) {
+        markPageState((lastRecorded as { step: TranscriptStep }).step, operation, snapshot, decision.index, lastUrl);
+      }
       // A landed CLICK: the next snapshot tells what it did (effect note).
       if (operation === "CLICK" && !rejected && !noEffect && (lastRecorded as { step: TranscriptStep; hist: StepHistoryEntry } | null)) {
         const rec = lastRecorded as unknown as { step: TranscriptStep; hist: StepHistoryEntry };
@@ -1941,6 +1945,49 @@ function isRecoverableStall(steps: TranscriptStep[]): boolean {
   );
 }
 
+/** Landed steps that left state on their page (typed text, a picked
+ * option, a ticked box), with the url they ran on. A side table, not a
+ * TranscriptStep field: the transcript is serialized to the model and the
+ * bench, and this is internal bookkeeping. */
+const pageStateSteps = new WeakMap<TranscriptStep, string>();
+const CHOICE_ROLES = new Set([
+  "option", "menuitemradio", "menuitemcheckbox", "checkbox", "radio", "switch", "treeitem", "gridcell",
+]);
+
+/** Record `step` in pageStateSteps when it set a value or a choice: TYPE_TEXT,
+ * SELECT, or a CLICK on a choice control — a choice role, or a role-less
+ * element the snapshot reports an on/off `checked` for (a native
+ * checkbox/radio; a role=tab also reports `checked` but is navigation). */
+function markPageState(
+  step: TranscriptStep,
+  operation: string,
+  snapshot: SnapshotResult,
+  index: number | undefined,
+  url: string
+): void {
+  let sets = operation === "TYPE_TEXT" || operation === "SELECT";
+  if (operation === "CLICK" && index != null) {
+    const el = findElementByIndex(snapshot.elements, index) as { role?: unknown; checked?: unknown } | undefined;
+    const role = typeof el?.role === "string" ? el.role.toLowerCase() : "";
+    sets = CHOICE_ROLES.has(role) || (!role && typeof el?.checked === "boolean");
+  }
+  if (sets) pageStateSteps.set(step, url);
+}
+
+/** The stalled attempt left state on the page it is still on (a landed
+ * TYPE_TEXT / SELECT / choice CLICK that ran on `currentUrl`). A reload would
+ * wipe it: open modal forms and filled fields do not survive, and the retry
+ * would start on an empty form. State entered on a page the attempt has since
+ * left (a search typed, then submitted) is already gone, so it does not count. */
+function hasPageStateToLose(steps: TranscriptStep[], currentUrl: string | undefined): boolean {
+  if (!currentUrl) return false;
+  const here = comparableUrl(currentUrl);
+  return steps.some((st) => {
+    const at = st.ok ? pageStateSteps.get(st) : undefined;
+    return at !== undefined && comparableUrl(at) === here;
+  });
+}
+
 /** A `blocked` the remaining sub-goals cannot get past either. ONLY the
  * loop's / backend's own structured wall signals count — never free-form
  * wording in a model's reason (a "Sign in link in the header" is not a wall):
@@ -2142,7 +2189,7 @@ export async function runBrowseTask(
     // Stall safety net: ONE reopen of the current site's URL and a retry on
     // the remaining budget (no fresh step allowance) before reporting stalled.
     const attempts: Array<{ steps: TranscriptStep[]; record?: TranscriptStep }> = [{ steps: t.steps }];
-    if (t.status === "stalled" && siteUrl && !signal?.aborted && isRecoverableStall(t.steps)) {
+    if (t.status === "stalled" && siteUrl && !signal?.aborted && isRecoverableStall(t.steps) && !hasPageStateToLose(t.steps, t.url)) {
       const capLeft = MULTI_SUBGOAL_MAX_STEPS - stepsTotal - t.steps.length - 1;
       const leftSteps = Math.min(Math.min(subMaxSteps, HARD_MAX_STEPS) - t.steps.length, capLeft);
       const leftMs = Math.min(deadlineMs - (now() - subStart), overallEnd - now());
