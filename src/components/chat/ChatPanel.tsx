@@ -34,6 +34,7 @@ import { CloudBrowserPanel } from "./CloudBrowserPanel";
 import { releaseCloudBrowser } from "@/lib/cloudBrowser";
 import { SkillsPanel } from "./SkillsPanel";
 import { ContextMeter } from "./ContextMeter";
+import { BrowserAgentSettings } from "./BrowserAgentSettings";
 import { OpenCodeKeyDialog } from "./OpenCodeKeyDialog";
 import { hasPendingAskUser } from "./pendingAskUser";
 import { InlineAlert } from "@/components/ui/inline-alert";
@@ -509,6 +510,7 @@ export function ChatPanelContent() {
       </IconButton>
       <div className="ml-auto flex items-center gap-1">
         <ContextMeter />
+        <BrowserAgentSettings />
         <DropdownMenu>
           <DropdownMenuTrigger
             render={

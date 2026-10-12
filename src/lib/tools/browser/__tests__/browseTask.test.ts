@@ -1,3 +1,4 @@
+import { useBrowserAgentSettingsStore } from "@/store/browserAgentSettingsStore";
 import { fetchBrowseBackend } from "../shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -68,6 +69,7 @@ const PRESS_ESCAPE_STEP = { outcome: "act", operation: "PRESS_ESCAPE", confidenc
 const HOVER_STEP = { outcome: "act", operation: "HOVER", index: 0, confidence: 0.9, model: "jev" };
 
 afterEach(() => {
+  useBrowserAgentSettingsStore.setState({ allowPasswordEntry: false, confirmIrreversible: true });
   delete window.penDesktop;
   vi.unstubAllGlobals();
   // The action cache (actionCache.ts) persists to real localStorage — clear
@@ -1087,6 +1089,21 @@ describe("browse_task", () => {
     await runBrowseTaskLoop("scroll and read", 12, browser);
 
     expect(receivedBodies[0]!.scroll).toEqual({ y: 240, height: 1200, atBottom: false });
+  });
+
+  it.each([
+    ["defaults", { allowPasswordEntry: false, confirmIrreversible: true }, { allowPasswordEntry: false, confirmIrreversible: true }],
+    ["toggled values", { allowPasswordEntry: true, confirmIrreversible: false }, { allowPasswordEntry: true, confirmIrreversible: false }],
+  ])("step body carries `permissions`: %s", async (_name, toggled, expected) => {
+    useBrowserAgentSettingsStore.setState(toggled);
+    const receivedBodies: Array<Record<string, unknown>> = [];
+    stubFetchSequence([DONE], (init) => {
+      receivedBodies.push(JSON.parse(init.body as string));
+    });
+
+    await runBrowseTaskLoop("accept cookies", 12, stubBrowser({}));
+
+    expect(receivedBodies[0]!.permissions).toEqual(expected);
   });
 
   it("omits `scroll` from the /api/browse/step body when the snapshot doesn't carry one", async () => {

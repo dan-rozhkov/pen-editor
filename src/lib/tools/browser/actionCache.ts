@@ -561,8 +561,83 @@ export function looksSensitive(text: string | undefined): boolean {
 const IRREVERSIBLE_LABEL_PATTERN =
   /place order|pay|buy now|purchase|checkout|confirm|submit order|delete|remove|cancel|refund|send|transfer|unsubscribe|log ?out|sign ?out|оплат|плат|купить|купи|покуп|удал|отправ|подтверд|заказ|оформ|выйти|выход|отмен|перевод|перевест|подпис/i;
 
+/** Commit-control labels (reserve / buy / send), a port of the backend's
+ * browseCommitGuard.ts `commitKind` prefilter (en/ru/de, Unicode-aware
+ * boundaries, marketing and nav-link stripping, punctuation-stripped bare
+ * verbs). A replay would skip /api/browse/step and therefore the backend
+ * guard, so these are never cached nor replayed. Pinned to the backend by
+ * src/lib/__tests__/commitLabelContract.test.ts. */
+const word = (src: string): RegExp =>
+  new RegExp(`(?<![\\p{L}\\p{N}])(?:${src})(?![\\p{L}\\p{N}])`, "iu");
+const TAIL = "[\\p{L}]*";
+
+const COMMIT_LABEL_RES: RegExp[] = [
+  word(
+    [
+      "reserve",
+      "(?:book|reserve) (?:tickets?|seats?|now|it|this|online)",
+      "book (?:now|this)",
+      "book (?:a |an )?(?:table|room|seat|ticket|flight|stay|appointment)",
+      "(?:confirm|complete) (?:booking|reservation)",
+      "hold (?:this |the )?(?:table|seat|room)",
+      `(?:за)?бронировать|(?:за)?бронируй(?:те)?|зарезервировать|зарезервируйте|забронир${TAIL}|брониру${TAIL}`,
+      `reservier${TAIL}|jetzt buchen|buchen|reservieren`,
+    ].join("|")
+  ),
+  word(
+    [
+      "buy now",
+      "place (?:your |an )?order",
+      "submit order",
+      "pay",
+      "(?:complete|confirm) (?:purchase|order|payment)",
+      "proceed to (?:checkout|payment)",
+      "check ?out",
+      "purchase",
+      "(?:buy|order|purchase) (?:tickets?|seats?|now|it|this|online)",
+      "(?:continue|go) to (?:payment|checkout)",
+      `купить|оплатить|оформить заказ|перейти к оплате|оформление заказа|оплат${TAIL}|заказать`,
+      "kaufen|bezahlen|zahlungspflichtig bestellen|zur kasse|bestellen",
+    ].join("|")
+  ),
+  word(
+    [
+      "(?:send|submit) (?:application|request|message|form|enquiry|inquiry)",
+      "confirm and send",
+      "sign (?:and|&) submit",
+      "отправить заявку|отправить запрос",
+      "absenden|anfrage senden",
+    ].join("|")
+  ),
+];
+
+const COMMIT_MARKETING_RE = word(
+  "reserve now,? pay (?:later|at the \\p{L}+)|pay later|pay at the \\p{L}+|pay on arrival|pay when you stay|pay in store"
+);
+const COMMIT_NOUN_LINK_RE = word(
+  "(?:purchase|checkout|check out|reserve|reservation|booking|book|buy|pay|order)s? (?:history|policy|guide|options|methods|terms|protection|details|info|list|management)"
+);
+
+/** A label that is only a bare commit verb ("Book", "Confirm", "Оплатить"). */
+const BARE_COMMIT_LABELS = new Set([
+  "book", "book it", "reserve", "забронировать", "buchen", "reservieren",
+  "submit", "confirm", "send", "отправить", "подтвердить", "absenden", "bestätigen",
+  "order", "pay", "buy", "purchase", "checkout", "check out",
+  "оплатить", "купить", "заказать", "bezahlen", "kaufen", "bestellen",
+]);
+
+function isCommitLabel(label: string): boolean {
+  const bare = label.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "").trim().toLowerCase();
+  if (BARE_COMMIT_LABELS.has(bare)) return true;
+  const clean = label
+    .replace(/[’]/g, "'")
+    .replace(new RegExp(COMMIT_MARKETING_RE.source, "giu"), " ")
+    .replace(new RegExp(COMMIT_NOUN_LINK_RE.source, "giu"), " ");
+  return COMMIT_LABEL_RES.some((re) => re.test(clean));
+}
+
 export function isIrreversibleLabel(label: string | undefined): boolean {
-  return !!label && IRREVERSIBLE_LABEL_PATTERN.test(label);
+  return !!label && (IRREVERSIBLE_LABEL_PATTERN.test(label) || isCommitLabel(label));
 }
 
 /** Field label/type patterns that must never have TYPE_TEXT/SELECT cached

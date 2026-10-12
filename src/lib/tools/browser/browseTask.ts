@@ -1,4 +1,5 @@
 import type { ToolHandler } from "../../toolRegistry";
+import { getBrowserAgentPermissions } from "@/store/browserAgentSettingsStore";
 import { getBrowserBridge, isDesktopBrowserAvailable } from "./bridge";
 import {
   appendKeepingSuffix,
@@ -606,6 +607,9 @@ async function requestStep(
     ...(modalFor(snapshot) !== undefined ? { modal: modalFor(snapshot) } : {}),
     ...(pageText !== undefined ? { pageText } : {}),
     ...(screenshot !== undefined ? { screenshot } : {}),
+    // User switches (password entry / confirm irreversible), read now rather
+    // than cached at module load. An older backend's zod object strips it.
+    permissions: getBrowserAgentPermissions(),
   }, undefined, signal, clock);
   if (!res.ok) {
     throw new Error(`/api/browse/step responded ${res.status}`);

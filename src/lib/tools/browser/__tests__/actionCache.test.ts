@@ -559,6 +559,46 @@ describe("actionCache: cacheability guards", () => {
     expect(looksSensitive(undefined)).toBe(false);
   });
 
+  it.each([
+    "Reserve table",
+    "Book now",
+    "Book a table",
+    "Complete reservation",
+    "Hold this seat",
+    "Place your order",
+    "Proceed to payment",
+    "Send application",
+    "Submit inquiry",
+    "Забронировать столик",
+    "Зарезервировать",
+    "Перейти к оплате",
+    "Отправить заявку",
+    "Jetzt buchen",
+    "Tisch reservieren",
+    "Zahlungspflichtig bestellen",
+    "Zur Kasse",
+    "Absenden",
+    "Book",
+    " Book it ",
+    "ORDER",
+    "Buy",
+    "Check out",
+    "Confirm",
+    "Заказать",
+    "Bestellen",
+    "Bestätigen",
+  ])("commit label %j is never cached nor replayed", (label) => {
+    expect(isIrreversibleLabel(label)).toBe(true);
+    expect(isUnsafeCachedTarget("CLICK", label, undefined, undefined)).toBe(true);
+  });
+
+  it.each(["Booking.com", "Reservations", "Add to cart", "Bookmark", "Поиск", "Weiter"])(
+    "non-commit label %j stays cacheable",
+    (label) => {
+      expect(isIrreversibleLabel(label)).toBe(false);
+    }
+  );
+
   it("isIrreversibleLabel flags destructive/one-way action labels in English and Russian", () => {
     for (const label of [
       "Place order",
