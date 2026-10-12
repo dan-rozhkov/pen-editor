@@ -739,6 +739,69 @@ describe("browse_task", () => {
     ]);
   });
 
+  describe("two-step cycle detection", () => {
+    const THREE_BUTTONS: SnapshotResult = {
+      url: "https://example.com",
+      title: "Example",
+      elements: [
+        { index: 0, tag: "button", label: "Search field", ops: ["CLICK"] },
+        { index: 1, tag: "button", label: "Close", ops: ["CLICK"] },
+        { index: 2, tag: "button", label: "Other", ops: ["CLICK"] },
+      ],
+      snapshotId: "snap-1",
+    };
+    const hover = (index: number) => ({ ...HOVER_STEP, index });
+    // Every act lands ("page updated"), so only the cycle rule can stop the loop.
+    const updated = async () => ({ changed: false, pageChanged: true, appeared: ["dropdown"] });
+
+    it("stalls at exactly the sixth step of an A,B,A,B,A,B pattern", async () => {
+      const fetchMock = stubFetchSequence([hover(0), hover(1), hover(0), hover(1), hover(0), hover(1)]);
+      const browser = stubBrowser({ act: updated, snapshot: async () => THREE_BUTTONS });
+      const t = await runBrowseTaskLoop("open the menu", 20, browser);
+      expect(t.status).toBe("stalled");
+      expect(t.steps).toHaveLength(6);
+      expect(fetchMock).toHaveBeenCalledTimes(6);
+      expect(t.reason).toBe(
+        'cycle — "Search field (page updated: "dropdown")" and "Close (page updated: "dropdown")" repeated 3 times'
+      );
+    });
+
+    it("stalls on A,B,A,B,A,B where A and B are landed CLICKs with identical effects", async () => {
+      const click = (index: number) => ({ ...HOVER_STEP, operation: "CLICK", index });
+      stubFetchSequence([click(0), click(1), click(0), click(1), click(0), click(1), DONE]);
+      const browser = stubBrowser({ act: updated, snapshot: async () => THREE_BUTTONS });
+      const t = await runBrowseTaskLoop("open the menu", 20, browser);
+      expect(t.status).toBe("stalled");
+      expect(t.reason).toMatch(/^cycle — /);
+      expect(t.steps).toHaveLength(6);
+    });
+
+    it("does not fire for A,B,A,B,A,C", async () => {
+      stubFetchSequence([hover(0), hover(1), hover(0), hover(1), hover(0), hover(2), DONE]);
+      const browser = stubBrowser({ act: updated, snapshot: async () => THREE_BUTTONS });
+      const t = await runBrowseTaskLoop("open the menu", 20, browser);
+      expect(t.status).toBe("done");
+      expect(t.steps).toHaveLength(6);
+    });
+
+    it("does not fire when the effect text differs between repeats", async () => {
+      stubFetchSequence([hover(0), hover(1), hover(0), hover(1), hover(0), hover(1), DONE]);
+      let n = 0;
+      const act = async () => ({ changed: false, pageChanged: true, appeared: [`item ${n++}`] });
+      const browser = stubBrowser({ act, snapshot: async () => THREE_BUTTONS });
+      const t = await runBrowseTaskLoop("open the menu", 20, browser);
+      expect(t.status).toBe("done");
+    });
+
+    it("does not fire when the page url differs between repeats", async () => {
+      stubFetchSequence([hover(0), hover(1), hover(0), hover(1), hover(0), hover(1), DONE]);
+      let n = 0;
+      const browser = stubBrowser({ act: updated, snapshot: async () => ({ ...THREE_BUTTONS, url: `https://example.com/p${n++}` }) });
+      const t = await runBrowseTaskLoop("open the menu", 20, browser);
+      expect(t.status).toBe("done");
+    });
+  });
+
   it("counts a changed:false act result (PRESS_ESCAPE/HOVER/PRESS_ENTER) as unproductive for stall detection", async () => {
     // Escape with nothing open to close: the act "succeeds" (no `{error}`)
     // but reports changed:false — must be treated like a rejected act for
@@ -2780,6 +2843,66 @@ describe("browse_task effect notes, history carry-over and recovery", () => {
     expect(act).toHaveBeenCalledWith({ action: "press", key: "Escape" });
     expect(open).toHaveBeenCalledTimes(2);
     expect(t.steps.filter((s) => s.subgoal === 2).map((s) => s.operation)).toEqual(expect.arrayContaining(["PRESS_ESCAPE", "OPEN"]));
+  });
+
+  describe("sub-goal start reset for consecutive searches", () => {
+    const inSection = { ...withText, url: "https://shop.test/section/shoes" };
+    const reopened = (t: { steps: Array<{ label: string; subgoal?: number }> }) =>
+      t.steps.filter((s) => s.label.includes("sub-goal start: new search"));
+
+    it("reopens the site URL when both sub-goals search and the page moved", async () => {
+      stubPlanAndSteps(['search for "shoes"', 'search for "hats"'], [DONE]);
+      const open = vi.fn(async () => ({}));
+      const act = vi.fn(async () => ({}));
+      const t = await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => inSection, open, act }), undefined, undefined, "https://shop.test");
+      expect(open).toHaveBeenCalledTimes(2);
+      expect(reopened(t)).toEqual([
+        { operation: "OPEN", label: "reopened https://shop.test (sub-goal start: new search)", ok: true, subgoal: 2 },
+      ]);
+      // A fresh page needs no scroll-to-top.
+      expect(act).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [["search for hotels in Paris", "find the cheapest one and open it"]],
+      [['type "John" into the first name field', 'type "Smith" into the last name field']],
+      [["search for shoes", "search for hats"]],
+      [['search for "shoes"', "search for hats"]],
+      [["open the hotels tab", 'search for "Paris"']],
+      [['search for "shoes"', "add the first one to the cart"]],
+    ])("does not reset for %j", async (plan) => {
+      stubPlanAndSteps(plan, [DONE]);
+      const open = vi.fn(async () => ({}));
+      const t = await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => inSection, open }), undefined, undefined, "https://shop.test");
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(reopened(t)).toHaveLength(0);
+    });
+
+    it("counts the reopen in stepsTotal", async () => {
+      stubPlanAndSteps(['search for "shoes"', 'search for "hats"'], [DONE]);
+      const t = await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => inSection }), undefined, undefined, "https://shop.test");
+      expect(t.stepsTotal).toBeGreaterThanOrEqual(1);
+      expect(t.steps.some((s) => s.operation === "OPEN" && s.subgoal === 2)).toBe(true);
+    });
+
+    it("does not reset when the page already is the site URL (hash ignored)", async () => {
+      stubPlanAndSteps(['search for "shoes"', 'search for "hats"'], [DONE]);
+      const open = vi.fn(async () => ({}));
+      const atSite = { ...withText, url: "https://shop.test/#results" };
+      await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => atSite, open }), undefined, undefined, "https://shop.test/");
+      expect(open).toHaveBeenCalledTimes(1);
+    });
+
+    it("falls back to the usual start (scroll-to-top) when the reopen fails", async () => {
+      stubPlanAndSteps(['search for "shoes"', 'search for "hats"'], [DONE]);
+      let opens = 0;
+      const open = vi.fn(async () => (++opens === 1 ? {} : { error: "net::ERR" }));
+      const snapshot = vi.fn(async () => ({ ...inSection, scroll: { y: 500 } }));
+      const act = vi.fn(async () => ({}));
+      const t = await runBrowseTask("g", 12, stubBrowser({ snapshot, open, act }), undefined, undefined, "https://shop.test");
+      expect(reopened(t)).toEqual([expect.objectContaining({ ok: false, subgoal: 2 })]);
+      expect(act).toHaveBeenCalledWith({ action: "scroll", amount: -1000 });
+    });
   });
 
   it("does nothing at sub-goal start when a text field is present", async () => {

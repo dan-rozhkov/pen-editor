@@ -126,6 +126,17 @@ const HISTORY_LIMIT = 10;
 const MAX_CONSECUTIVE_UNPRODUCTIVE_STEPS = 3;
 
 /**
+ * Live run finding: CLICK on a search field (opens a dropdown, recorded ok
+ * with "page updated: …") then PRESS_ESCAPE (closes it, ok:false) repeated
+ * ~70 times. The unproductive counter never fires because every other step is
+ * ok. A two-step cycle is the last CYCLE_PERIOD_REPEATS * 2 recorded steps
+ * reading A,B,A,B,A,B (A≠B) with byte-identical keys (operation + FULL label
+ * + page url). The effect text stays in the key on purpose: a legit repeated
+ * "Load more" shows different appeared text each time, a true cycle does not.
+ */
+const CYCLE_PERIOD_REPEATS = 3;
+
+/**
  * Addendum A: "the loop sleeps ~400 ms itself, takes a fresh snapshot and
  * continues" when the decision is WAIT.
  */
@@ -1116,11 +1127,36 @@ export async function runBrowseTaskLoop(
   /** recordStep plus the no-progress check. Returns the transcript to
    * return when the loop has stalled, or null to carry on. */
   let lastRecorded: { step: TranscriptStep; hist: StepHistoryEntry } | null = null;
+  /** Page url each recorded step ran on, for the two-step cycle check. */
+  const stepUrls = new WeakMap<TranscriptStep, string>();
+  const stepKey = (st: TranscriptStep): string => `${st.operation}\u0000${st.label}\u0000${stepUrls.get(st) ?? ""}`;
+  /** The stalled transcript when the last steps repeat A,B,A,B,A,B, else null.
+   * Keys are read now, not at record time: a CLICK's effect text is appended
+   * to its label one snapshot later. */
+  const detectCycle = (): Transcript | null => {
+    const len = CYCLE_PERIOD_REPEATS * 2;
+    if (steps.length < len) return null;
+    const tail = steps.slice(-len);
+    const keys = tail.map(stepKey);
+    if (keys[0] === keys[1]) return null;
+    if (!keys.every((key, j) => key === keys[j % 2])) return null;
+    return {
+      status: "stalled",
+      steps,
+      url: lastUrl,
+      title: lastTitle,
+      reason: `cycle — "${tail[0].label}" and "${tail[1].label}" repeated ${CYCLE_PERIOD_REPEATS} times`,
+      cacheHits,
+    };
+  };
   const note = (entry: TranscriptStep): Transcript | null => {
     // The step screenshot capture outcome rides on the first entry recorded
     // after it (the bench reads the transcript).
     lastRecorded = recordStep(steps, history, pendingShot ? { ...entry, ...pendingShot } : entry);
     pendingShot = undefined;
+    stepUrls.set(lastRecorded.step, lastUrl);
+    const cycle = detectCycle();
+    if (cycle) return cycle;
     if (entry.ok) {
       unproductive = 0;
       lastLandedOperation = entry.operation;
@@ -1176,9 +1212,11 @@ export async function runBrowseTaskLoop(
     }
     let snapshot: SnapshotResult = snapshotResult;
     pendingShot = undefined;
+    let effectApplied = false;
     if (pendingEffect) {
       const became = applyPendingEffect(pendingEffect, snapshot);
       pendingEffect = null;
+      effectApplied = true;
       const commit = share?.autoConfirmCommit ? isCommitEffect(became) : null;
       if (commit) {
         const reason = `commit effect observed: ${commit}`;
@@ -1193,6 +1231,14 @@ export async function runBrowseTaskLoop(
 
     lastUrl = snapshot.url;
     lastTitle = snapshot.title;
+
+    // The landed CLICK's effect suffix is now part of its label, so a cycle
+    // ending in a CLICK only shows here. A cycle already reported by note()
+    // never reaches this point (the run returned).
+    if (effectApplied) {
+      const cycle = detectCycle();
+      if (cycle) return cycle;
+    }
 
     // Action cache (Stagehand-style EXACT-INPUT MEMO, see actionCache.ts's
     // header comment): computed once per iteration and reused both for the
@@ -1253,6 +1299,7 @@ export async function runBrowseTaskLoop(
               index: cachedIndex,
               via: "cache",
             });
+            stepUrls.set(recorded.step, lastUrl);
             if (cached.operation === "CLICK") {
               pendingEffect = {
                 prev: snapshot,
@@ -1275,6 +1322,8 @@ export async function runBrowseTaskLoop(
             waitStreakUrl = null;
             cacheHits++;
             touchCacheEntry(stepCacheKey);
+            const cycle = detectCycle();
+            if (cycle) return cycle;
             continue;
           }
           // The replay was actually DISPATCHED to `browser.perform` and
@@ -1865,6 +1914,15 @@ export function wantsTextEntry(subGoal: string): boolean {
   return SEARCH_INTENT.test(subGoal);
 }
 
+/** Narrow check for the sub-goal start reset: an explicit search verb (not
+ * the generic find / type-into) AND a quoted phrase — the planner quotes the
+ * text to type into the search box. */
+const SEARCH_VERB = /(?<!\p{L})(?:search|look\s+up|поиск|ищи|искать)/iu;
+const QUOTED_PHRASE = /"[^"]+"|“[^”]+”|«[^»]+»/u;
+function isQuotedSearch(subGoal: string): boolean {
+  return SEARCH_VERB.test(subGoal) && QUOTED_PHRASE.test(subGoal);
+}
+
 /** The tail of a stalled run shows a page the sub-goal cannot work on: only
  * no-effect scrolls and "no candidate fits" refusals. */
 function isRecoverableStall(steps: TranscriptStep[]): boolean {
@@ -1889,6 +1947,17 @@ const AUTH_WALL_PATTERN = /the page is a CAPTCHA \/ bot check|the user must (?:s
 
 function isAuthWall(t: Transcript): boolean {
   return t.botCheck === true || (typeof t.reason === "string" && AUTH_WALL_PATTERN.test(t.reason));
+}
+
+/** origin + pathname + search: a url compared without its hash. Unparseable
+ * input is returned as is. */
+function comparableUrl(u: string): string {
+  try {
+    const p = new URL(u);
+    return p.origin + p.pathname + p.search;
+  } catch {
+    return u;
+  }
 }
 
 function hostOf(u: string | undefined): string | undefined {
@@ -2007,9 +2076,33 @@ export async function runBrowseTask(
       lastUrl = subUrl;
       siteUrl = subUrl;
     } else if (i > 0 && !signal?.aborted) {
+      // Consecutive independent searches: the previous one may have ended
+      // inside a site section, and the site's search box then searches only
+      // within it. Start from the site URL instead (a fresh page needs no
+      // scroll-to-top / text-entry recovery). A failed open falls through.
+      let reset = false;
+      if (
+        siteUrl &&
+        isQuotedSearch(plan[i]) &&
+        isQuotedSearch(plan[i - 1]) &&
+        comparableUrl(lastUrl) !== comparableUrl(siteUrl)
+      ) {
+        const failure = await openBeforeLoop(browser, siteUrl);
+        steps.push({
+          operation: "OPEN",
+          label: `reopened ${truncateToChars(siteUrl, 100)} (sub-goal start: new search)`,
+          ok: !failure,
+          subgoal: k,
+        });
+        stepsTotal += 1;
+        if (!failure) {
+          lastUrl = siteUrl;
+          reset = true;
+        }
+      }
       // Same site: the previous sub-goal may have left the page scrolled far down.
-      await scrollToTop(browser);
-      if (wantsTextEntry(plan[i])) {
+      if (!reset) await scrollToTop(browser);
+      if (!reset && wantsTextEntry(plan[i])) {
         const records: TranscriptStep[] = [];
         recoveredSnapshot = await recoverTextEntry(
           browser,
