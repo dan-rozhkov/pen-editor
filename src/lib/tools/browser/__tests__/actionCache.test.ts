@@ -64,6 +64,19 @@ describe("actionCache: EXACT-INPUT step cache key", () => {
     expect(a).not.toBe(b);
   });
 
+  it("changes when an element becomes disabled", () => {
+    const url = "https://shop.example.com/cart";
+    const enabled = buildStepCacheKey("search", url, "Cart", ELS, []);
+    const disabled = buildStepCacheKey("search", url, "Cart", [{ ...ELS[0]!, disabled: true }], []);
+    expect(enabled).not.toBe(disabled);
+  });
+
+  it("isUnsafeCachedTarget: a disabled target is never replayed or cached", () => {
+    expect(isUnsafeCachedTarget("CLICK", "Accept all", undefined, false, true)).toBe(true);
+    expect(isUnsafeCachedTarget("CLICK", "Accept all", undefined, false, false)).toBe(false);
+    expect(isUnsafeCachedTarget("CLICK", "Accept all", undefined, false)).toBe(false);
+  });
+
   it("changes when the element set changes, with no indices involved", () => {
     const base = buildStepCacheKey("search", "https://shop.example.com/cart", "Cart", ELS, []);
     const grown = buildStepCacheKey(

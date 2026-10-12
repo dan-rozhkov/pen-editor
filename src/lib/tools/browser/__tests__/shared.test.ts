@@ -48,4 +48,17 @@ describe("filterElementsForBackend", () => {
     const weird = ["a string element", 42, null];
     expect(filterElementsForBackend(weird)).toEqual(weird);
   });
+
+  it("passes `disabled: true` through and omits any other disabled value", () => {
+    const out = filterElementsForBackend([
+      { index: 0, ops: ["CLICK"], disabled: true },
+      { index: 1, ops: ["CLICK"], disabled: false },
+      { index: 2, ops: ["CLICK"] },
+    ]);
+    expect(out).toEqual([
+      { index: 0, ops: ["CLICK"], disabled: true },
+      { index: 1, ops: ["CLICK"] },
+      { index: 2, ops: ["CLICK"] },
+    ]);
+  });
 });

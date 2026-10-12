@@ -802,11 +802,11 @@ function maybeWriteStepCache(
   let target: CachedStepTarget | undefined;
   if (index != null) {
     const el = findElementByIndex(elements, index) as
-      | { label?: unknown; tag?: unknown; role?: unknown; type?: unknown; isPassword?: unknown }
+      | { label?: unknown; tag?: unknown; role?: unknown; type?: unknown; isPassword?: unknown; disabled?: unknown }
       | undefined;
     if (!el || typeof el.tag !== "string") return;
     const label = typeof el.label === "string" ? el.label : "";
-    if (isUnsafeCachedTarget(operation, label, el.type, el.isPassword)) return;
+    if (isUnsafeCachedTarget(operation, label, el.type, el.isPassword, el.disabled)) return;
     target = {
       labelHash: hashCachedLabel(label),
       tag: el.tag,
@@ -1262,7 +1262,7 @@ export async function runBrowseTaskLoop(
         const resolvedElement =
           cachedIndex != null
             ? (findElementByIndex(snapshot.elements, cachedIndex) as
-                | { label?: unknown; type?: unknown; isPassword?: unknown }
+                | { label?: unknown; type?: unknown; isPassword?: unknown; disabled?: unknown }
                 | undefined)
             : undefined;
         // Replay-time re-check (on top of the write-time check
@@ -1277,7 +1277,8 @@ export async function runBrowseTaskLoop(
             cached.operation,
             typeof resolvedElement.label === "string" ? resolvedElement.label : undefined,
             resolvedElement.type,
-            resolvedElement.isPassword
+            resolvedElement.isPassword,
+            resolvedElement.disabled
           );
         // A target-bearing entry with no unique match (the element is gone,
         // or the page now has more than one candidate), or one that is now

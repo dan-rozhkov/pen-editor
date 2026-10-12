@@ -231,11 +231,19 @@ export async function attachSnapshot(
  * POSTing.
  */
 export function filterElementsForBackend(elements: unknown[]): unknown[] {
-  return elements.filter((el) => {
-    if (!el || typeof el !== "object") return true;
-    const ops = (el as { ops?: unknown }).ops;
-    return Array.isArray(ops) && ops.length > 0;
-  });
+  return elements
+    .filter((el) => {
+      if (!el || typeof el !== "object") return true;
+      const ops = (el as { ops?: unknown }).ops;
+      return Array.isArray(ops) && ops.length > 0;
+    })
+    .map((el) => {
+      // `disabled: true` rides through; any other `disabled` value is dropped
+      // so the body only ever carries the flag when it is set.
+      if (!el || typeof el !== "object" || !("disabled" in el)) return el;
+      const { disabled, ...rest } = el as { disabled?: unknown } & Record<string, unknown>;
+      return disabled === true ? el : rest;
+    });
 }
 
 /**

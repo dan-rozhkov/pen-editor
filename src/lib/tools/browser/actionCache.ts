@@ -228,7 +228,7 @@ function hashParts(parts: string[]): string {
  * Per-element fingerprint fragment for the step-cache key: every field Jev's
  * own digest (`elementDigestLine` in pen-editor-backend's `browseStep.ts`)
  * can see or act on for this element — `tag|role|label|ops|isPassword|
- * checked|hasValue|value|scrollable|frame|options` — so a page whose
+ * checked|hasValue|value|scrollable|frame|options|disabled` — so a page whose
  * element gained/lost ANY signal Jev would itself notice mints a different
  * key rather than silently matching a since-mutated page. Deliberately
  * excludes the element's own `index` — two pages with an identical set of
@@ -256,6 +256,7 @@ function elementFingerprintRow(el: unknown): string {
     scrollable?: unknown;
     frame?: unknown;
     options?: unknown;
+    disabled?: unknown;
   };
   const tag = typeof e.tag === "string" ? e.tag : "";
   const role = typeof e.role === "string" ? e.role : "";
@@ -270,7 +271,8 @@ function elementFingerprintRow(el: unknown): string {
   const options = Array.isArray(e.options)
     ? e.options.filter((o): o is string => typeof o === "string").join(",")
     : "";
-  return [tag, role, label, ops, isPassword, checked, hasValue, value, scrollable, frame, options].join("|");
+  const disabled = e.disabled === true ? "1" : "0";
+  return [tag, role, label, ops, isPassword, checked, hasValue, value, scrollable, frame, options, disabled].join("|");
 }
 
 /** Sorted (order-independent) fingerprint of EVERY element in the snapshot
@@ -666,8 +668,12 @@ export function isUnsafeCachedTarget(
   operation: string,
   label: string | undefined,
   type: unknown,
-  isPassword: unknown
+  isPassword: unknown,
+  disabled?: unknown
 ): boolean {
+  // A disabled control cannot act: replaying a step onto it would be a no-op
+  // the loop might misread as success.
+  if (disabled === true) return true;
   if (isIrreversibleLabel(label)) return true;
   if (operation === "TYPE_TEXT" || operation === "SELECT") {
     if (isPassword === true) return true;
