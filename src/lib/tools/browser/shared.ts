@@ -231,19 +231,109 @@ export async function attachSnapshot(
  * POSTing.
  */
 export function filterElementsForBackend(elements: unknown[]): unknown[] {
-  return elements
-    .filter((el) => {
-      if (!el || typeof el !== "object") return true;
-      const ops = (el as { ops?: unknown }).ops;
-      return Array.isArray(ops) && ops.length > 0;
-    })
-    .map((el) => {
-      // `disabled: true` rides through; any other `disabled` value is dropped
-      // so the body only ever carries the flag when it is set.
-      if (!el || typeof el !== "object" || !("disabled" in el)) return el;
-      const { disabled, ...rest } = el as { disabled?: unknown } & Record<string, unknown>;
-      return disabled === true ? el : rest;
-    });
+  const out: unknown[] = [];
+  for (const el of elements) {
+    const clean = sanitizeElementForBackend(el);
+    if (clean) out.push(clean);
+    if (out.length >= BACKEND_MAX_ELEMENTS) break;
+  }
+  return out;
+}
+
+/**
+ * Backend limits. The ELEMENT caps are the backend's EFFECTIVE ones
+ * (pen-editor-backend src/ai/browseStep.ts: MAX_SNAPSHOT_ELEMENTS,
+ * MAX_ELEMENT_VALUE_CHARS, MAX_ELEMENT_OPTIONS, MAX_OPTION_CHARS) — it
+ * truncates to them anyway, so sending more only inflates the request. The
+ * rest are the zod maxima of routes/browseStep.ts and browseLocate.ts, where
+ * no tighter effective cap exists. One oversized field 400s the whole step.
+ */
+export const BACKEND_MAX_ELEMENTS = 120;
+const ELEMENT_CAPS = { tag: 40, role: 60, label: 200, value: 500, frame: 200 } as const;
+const OPTIONS_MAX_ITEMS = 100;
+const OPTION_MAX_CHARS = 200;
+export const BACKEND_MAX_GOAL = 2_000;
+export const BACKEND_MAX_URL = 4_000;
+export const BACKEND_MAX_TITLE = 500;
+export const BACKEND_MAX_DESCRIPTION = 300;
+/** Marked-screenshot data URL cap in the step schema. */
+export const BACKEND_MAX_SCREENSHOT_CHARS = 4_000_000;
+const ELEMENT_BOOLEANS = ["hasValue", "checked", "expanded", "isPassword", "scrollable"] as const;
+const VALID_OPS = new Set(["CLICK", "TYPE_TEXT", "SELECT"]);
+
+/** Cuts to at most `max` UTF-16 units without splitting a surrogate pair. */
+export function sliceToChars(value: string, max: number): string {
+  if (value.length <= max) return value;
+  const end = max > 0 && isHighSurrogate(value.charCodeAt(max - 1)) ? max - 1 : max;
+  return value.slice(0, end);
+}
+
+function isHighSurrogate(code: number): boolean {
+  return code >= 0xd800 && code <= 0xdbff;
+}
+
+/** Truncates to at most `max` characters, ending in a single "…" when it
+ * cut; never splits a surrogate pair. */
+export function truncateToChars(value: string, max: number): string {
+  return value.length > max ? `${sliceToChars(value, Math.max(0, max - 1))}…` : value;
+}
+
+/**
+ * One element, clamped to the backend's elementSchema; `null` when a required
+ * field is unusable (non-object, bad index, empty tag) or it has no usable
+ * ops and is not a scroll container (`ops: []` + `scrollable: true` is kept —
+ * the backend accepts it). `disabled` survives only when `true`.
+ */
+export function sanitizeElementForBackend(el: unknown): Record<string, unknown> | null {
+  if (!el || typeof el !== "object") return null;
+  const e = el as Record<string, unknown>;
+  if (typeof e.index !== "number" || !Number.isInteger(e.index) || e.index < 0) return null;
+  if (typeof e.tag !== "string" || e.tag.length === 0) return null;
+  if (!Array.isArray(e.ops)) return null;
+  const ops = e.ops.filter((o): o is string => typeof o === "string" && VALID_OPS.has(o));
+  if (ops.length === 0 && e.scrollable !== true) return null;
+
+  const out: Record<string, unknown> = {
+    ...e,
+    tag: truncateToChars(e.tag, ELEMENT_CAPS.tag),
+    label: typeof e.label === "string" ? truncateToChars(e.label, ELEMENT_CAPS.label) : "",
+    ops,
+  };
+  for (const key of ["role", "value", "frame"] as const) {
+    if (typeof e[key] === "string") out[key] = truncateToChars(e[key], ELEMENT_CAPS[key]);
+    else delete out[key];
+  }
+  for (const key of ELEMENT_BOOLEANS) {
+    if (typeof e[key] !== "boolean") delete out[key];
+  }
+  if (e.disabled !== true) delete out.disabled;
+  if (Array.isArray(e.options)) {
+    out.options = e.options
+      .filter((o): o is string => typeof o === "string")
+      .slice(0, OPTIONS_MAX_ITEMS)
+      .map((o) => truncateToChars(o, OPTION_MAX_CHARS));
+  } else {
+    delete out.options;
+  }
+  return out;
+}
+
+/**
+ * The page-identity fields shared by every `/api/browse/*` request body
+ * (step and locate): url, title and the sanitized element table. Every
+ * forwarding site builds its body from this so none can send an oversized or
+ * malformed field.
+ */
+export function sanitizedPageBody(snapshot: { url: string; title?: string; elements: unknown[] }): {
+  url: string;
+  title: string;
+  elements: unknown[];
+} {
+  return {
+    url: truncateToChars(snapshot.url, BACKEND_MAX_URL),
+    title: truncateToChars(snapshot.title ?? "", BACKEND_MAX_TITLE),
+    elements: filterElementsForBackend(snapshot.elements),
+  };
 }
 
 /**

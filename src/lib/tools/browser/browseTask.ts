@@ -32,7 +32,11 @@ import {
   BROWSER_NOT_AVAILABLE_ERROR,
   fetchBrowseBackend,
   type RetryClock,
-  filterElementsForBackend,
+  BACKEND_MAX_GOAL,
+  BACKEND_MAX_SCREENSHOT_CHARS,
+  sanitizedPageBody,
+  sliceToChars,
+  truncateToChars,
   findElementByIndex,
   resultError,
   takeSnapshot,
@@ -201,12 +205,6 @@ const HISTORY_LABEL_MAX_CHARS = 200;
  */
 const SIDE_EFFECT_FRAGMENT_MAX_CHARS = 60;
 
-/** Truncates `value` to at most `max` characters, replacing anything cut
- * with a single ellipsis character so the cap is still exactly `max`. */
-function truncateToChars(value: string, max: number): string {
-  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
-}
-
 /** The operations `perform` actually accepts (addendum A: WAIT never reaches it). */
 type PerformOperation = "CLICK" | "TYPE_TEXT" | "SELECT" | "SCROLL_UP" | "SCROLL_DOWN";
 
@@ -271,7 +269,7 @@ interface StepResponse {
 }
 
 /** How the per-step screenshot capture went (VITE_BROWSE_STEP_SCREENSHOT). */
-type StepScreenshotOutcome = "sent" | "unsupported" | "failed" | "timeout" | "unmarked";
+type StepScreenshotOutcome = "sent" | "unsupported" | "failed" | "timeout" | "unmarked" | "too_large";
 
 /** Capture outcome recorded on the step entry the bench reads. JSON-plain. */
 interface StepScreenshotInfo {
@@ -559,6 +557,8 @@ export async function captureStepScreenshot(
     // Nothing was outlined: the prompt note would promise numbered boxes that
     // are not there, so the image is not sent.
     if (result.marked === 0) return done("unmarked", { marked: 0 });
+    // Over the step schema's cap: sending it would 400 the whole step.
+    if (data.length > BACKEND_MAX_SCREENSHOT_CHARS) return done("too_large", { marked: result.marked });
     return done("sent", { image: data, marked: result.marked });
   } catch (err) {
     return done(err instanceof Error && err.message === "screenshot timeout" ? "timeout" : "failed");
@@ -571,7 +571,7 @@ const MODAL_MAX_CHARS = 200;
 
 function modalFor(snapshot: SnapshotResult): string | undefined {
   if (typeof snapshot.modal !== "string") return undefined;
-  const modal = snapshot.modal.trim().slice(0, MODAL_MAX_CHARS);
+  const modal = sliceToChars(snapshot.modal.trim(), MODAL_MAX_CHARS);
   return modal || undefined;
 }
 
@@ -586,14 +586,10 @@ async function requestStep(
 ): Promise<StepResponse> {
   // 429 / 503+Retry-After retries happen inside, invisible to the loop: no
   // history entry, no stall count, no step budget.
+  const modal = modalFor(snapshot);
   const res = await fetchBrowseBackend("/api/browse/step", {
-    goal,
-    url: snapshot.url,
-    title: snapshot.title,
-    // Scroll-container entries (`ops: []`, `scrollable: true`) fail the
-    // backend's non-empty-`ops` schema on a lagging deployment — see
-    // filterElementsForBackend's comment.
-    elements: filterElementsForBackend(snapshot.elements),
+    goal: truncateToChars(goal, BACKEND_MAX_GOAL),
+    ...sanitizedPageBody(snapshot),
     history: history.slice(-HISTORY_LIMIT),
     // browse-speed-contract.md, "Frontend" item 4 / "Backend" item 5: the
     // snapshot's scroll position, forwarded untouched so Jev's state digest
@@ -604,7 +600,7 @@ async function requestStep(
     // Name of an open aria-modal dialog the element table was scoped to, so
     // the backend knows a dialog covers the page. Trimmed and capped; omitted
     // when absent/empty. An older backend's zod object strips unknown keys.
-    ...(modalFor(snapshot) !== undefined ? { modal: modalFor(snapshot) } : {}),
+    ...(modal !== undefined ? { modal } : {}),
     ...(pageText !== undefined ? { pageText } : {}),
     ...(screenshot !== undefined ? { screenshot } : {}),
     // User switches (password entry / confirm irreversible), read now rather
@@ -1060,6 +1056,10 @@ export async function runBrowseTaskLoop(
   /** Sub-goal history carry-over (see carryOverHistory). */
   share?: HistoryShare
 ): Promise<Transcript> {
+  // An empty goal would 400 /api/browse/step (goal min 1) on every cycle.
+  if (goal.trim() === "") {
+    return { status: "blocked", steps: [], url: "", title: "", reason: "browse_task: the goal is empty — describe what to do in the browser." };
+  }
   const cappedMaxSteps = Math.min(Math.max(1, Math.floor(maxSteps)), HARD_MAX_STEPS);
   const deadline = now() + deadlineMs;
   const steps: TranscriptStep[] = [];

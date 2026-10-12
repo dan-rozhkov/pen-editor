@@ -5,10 +5,12 @@ import {
   BROWSER_NOT_AVAILABLE_ERROR,
   callBrowserBridge,
   fetchBrowseBackend,
-  filterElementsForBackend,
+  BACKEND_MAX_DESCRIPTION,
   resultError,
+  sanitizedPageBody,
   safeParseObject,
   takeSnapshot,
+  truncateToChars,
   type PenDesktopBrowser,
   type SnapshotResult,
 } from "./shared";
@@ -127,14 +129,9 @@ async function resolveByElement(
   let located: LocateResponse;
   try {
     const res = await fetchBrowseBackend("/api/browse/locate", {
-      description: element,
+      description: truncateToChars(element, BACKEND_MAX_DESCRIPTION),
       operation: ACTION_TO_LOCATE_OPERATION[action] ?? "CLICK",
-      url: snapshot.url,
-      title: snapshot.title,
-      // Scroll-container entries (`ops: []`, `scrollable: true`) fail the
-      // backend's non-empty-`ops` schema on a lagging deployment — see
-      // filterElementsForBackend's comment.
-      elements: filterElementsForBackend(snapshot.elements),
+      ...sanitizedPageBody(snapshot),
     }, undefined, undefined, {
       now: () => Date.now(),
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),

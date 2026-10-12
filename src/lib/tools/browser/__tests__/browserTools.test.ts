@@ -234,6 +234,22 @@ describe("browse_act element targeting", () => {
     });
   });
 
+  it("clamps the locate body: description <= 300, url <= 4000, title <= 500", async () => {
+    let receivedBody: { description: string; url: string; title: string } | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        receivedBody = JSON.parse(init.body as string);
+        return { ok: true, status: 200, json: async () => ({ outcome: "not_found", model: "jev" }) };
+      })
+    );
+    setPenDesktop(stubSnapshotBrowser({}));
+    await browseAct({ action: "click", element: "e".repeat(1_000) });
+    expect(receivedBody!.description).toHaveLength(300);
+    expect(receivedBody!.url.length).toBeLessThanOrEqual(4_000);
+    expect(receivedBody!.title.length).toBeLessThanOrEqual(500);
+  });
+
   it("includes `resolved` (with the fresh snapshotId) on an error result when the act itself fails after a successful locate", async () => {
     stubLocateFetch({ outcome: "found", index: 2, label: "Search", confidence: 0.9, model: "jev" });
 

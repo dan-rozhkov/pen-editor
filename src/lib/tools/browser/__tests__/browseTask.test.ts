@@ -1106,6 +1106,46 @@ describe("browse_task", () => {
     expect(receivedBodies[0]!.permissions).toEqual(expected);
   });
 
+  it("clamps oversized goal/title/url/history/pageText/modal fields in the step body", async () => {
+    const receivedBodies: Array<{ goal: string; url: string; title: string }> = [];
+    stubFetchSequence([DONE], (init) => {
+      receivedBodies.push(JSON.parse(init.body as string));
+    });
+    const snapshot = vi.fn(async () => ({
+      url: `https://example.com/${"u".repeat(5_000)}`,
+      title: "t".repeat(900),
+      elements: [],
+      snapshotId: "snap-1",
+    }));
+    await runBrowseTaskLoop("g".repeat(3_000), 12, stubBrowser({ snapshot }));
+    const body = receivedBodies[0]!;
+    expect(body.goal.length).toBe(2_000);
+    expect(body.url.length).toBe(4_000);
+    expect(body.title.length).toBe(500);
+  });
+
+  it.each(["", "   \n"])("an empty goal (%j) never calls the backend", async (goal) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const transcript = await runBrowseTaskLoop(goal, 12, stubBrowser({}));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(transcript.status).toBe("blocked");
+    expect(transcript.reason).toMatch(/goal is empty/);
+  });
+
+  it("caps the modal at 200 characters without splitting a surrogate pair", async () => {
+    const receivedBodies: Array<{ modal?: string }> = [];
+    stubFetchSequence([DONE], (init) => {
+      receivedBodies.push(JSON.parse(init.body as string));
+    });
+    const snapshot = vi.fn(async () => ({
+      url: "https://example.com", title: "t", elements: [], snapshotId: "snap-1",
+      modal: `${"m".repeat(199)}😀tail`,
+    }));
+    await runBrowseTaskLoop("g", 12, stubBrowser({ snapshot }));
+    expect(receivedBodies[0]!.modal).toBe("m".repeat(199));
+  });
+
   it("omits `scroll` from the /api/browse/step body when the snapshot doesn't carry one", async () => {
     const receivedBodies: Array<Record<string, unknown>> = [];
     stubFetchSequence([DONE], (init) => {
@@ -2266,6 +2306,14 @@ describe("browse_task step screenshot (VITE_BROWSE_STEP_SCREENSHOT)", () => {
     const { body, transcript } = await run(screenshot, [CLICK_STEP, DONE], { perform: vi.fn(async () => ({})) });
     expect(body).not.toHaveProperty("screenshot");
     expect(transcript.steps[0]).toMatchObject({ screenshot: "unmarked", marked: 0 });
+  });
+
+  it("over-cap screenshot: not sent, transcript says too_large", async () => {
+    vi.stubEnv("VITE_BROWSE_STEP_SCREENSHOT", "true");
+    const screenshot = vi.fn(async () => ({ imageData: "A".repeat(4_000_001), snapshotId: "snap-1", marked: 3 }));
+    const { body, transcript } = await run(screenshot, [CLICK_STEP, DONE], { perform: vi.fn(async () => ({})) });
+    expect(body).not.toHaveProperty("screenshot");
+    expect(transcript.steps[0]).toMatchObject({ screenshot: "too_large", marked: 3 });
   });
 
   it("records the final step's capture info on a done terminal entry", async () => {
