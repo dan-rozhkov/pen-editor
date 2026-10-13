@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.81.0] - 2026-10-13
+
+Three themes: design tokens with modes and organization libraries, the
+Sideform canvas inside other agents (MCP Apps), and the browser agent.
+
+### Changed
+- **Browser agent permission switches removed** from the chat panel. The
+  backend now drives the browser in manual mode by default
+  (pen-editor-backend 0.40.0), and the switches only ever reached
+  `browse_task`. `browse_task` (rollback only) runs with the safe defaults:
+  no password entry, confirm irreversible steps.
+- `browse_task` runs through `@sideform/browser-agent` (v0.2.7): sub-goal
+  plans for multi-item goals, open-dialog awareness, observations of the
+  final page, a faster cursor.
+
+### Added
+- **Tokens v2:** collections, modes and aliases; DTCG v2, `tokens.css` and
+  Tailwind v4 export; per-frame and canvas mode switchers; import tokens from
+  a GitHub repo.
+- **Design system:** design lint panel with one-step fixes and the
+  `lint_design` tool, `get_design_system`, a Components panel, embed HTML
+  components, a local usage report.
+- **Accounts:** sign-in, account page, organizations, members, roles and
+  invitations; a session-bound MCP bridge.
+- **MCP Apps widget:** the canvas as an embed entry for MCP hosts.
+- Legal pages (privacy, terms, support); liking reference images the agent
+  found.
+
 ## [0.80.0] - 2026-09-29
 
 Three themes: the agent can drive a browser from the web build too, a screen
