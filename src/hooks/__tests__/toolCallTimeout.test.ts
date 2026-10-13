@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { browseTaskInnerBoundMs } from "@sideform/browser-agent/loop";
 import { getToolCallTimeoutMs } from "../useDesignChat";
 
 afterEach(() => {
@@ -11,7 +12,7 @@ describe("getToolCallTimeoutMs browse_* desktop/cloud split", () => {
     expect(getToolCallTimeoutMs("browse_open")).toBe(70_000);
     expect(getToolCallTimeoutMs("browse_act")).toBe(120_000);
     expect(getToolCallTimeoutMs("browse_snapshot")).toBe(30_000);
-    expect(getToolCallTimeoutMs("browse_task")).toBe(1_060_000);
+    expect(getToolCallTimeoutMs("browse_task")).toBe(browseTaskInnerBoundMs(false) + 60_000);
   });
 
   it("adds cloud headroom without a desktop browser", () => {
@@ -20,7 +21,7 @@ describe("getToolCallTimeoutMs browse_* desktop/cloud split", () => {
     expect(getToolCallTimeoutMs("browse_tabs")).toBe(130_000);
     expect(getToolCallTimeoutMs("browse_snapshot")).toBe(90_000);
     // Covers the cloud loop's longer deadline (browseTask.ts).
-    expect(getToolCallTimeoutMs("browse_task")).toBe(1_240_000);
+    expect(getToolCallTimeoutMs("browse_task")).toBe(browseTaskInnerBoundMs(true) + 60_000);
   });
 
   it("treats penDesktop without .browser as cloud, and leaves non-browse tools alone", () => {

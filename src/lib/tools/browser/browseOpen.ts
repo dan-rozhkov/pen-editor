@@ -1,6 +1,7 @@
 import type { ToolHandler } from "../../toolRegistry";
 import { getBrowserBridge } from "./bridge";
-import { attachSnapshot, callBrowserBridge, resultError, safeParseObject } from "./shared";
+import { resultError } from "@sideform/browser-agent/loop";
+import { attachSnapshot, callBrowserBridge, safeParseObject } from "./shared";
 
 /**
  * browse_open — opens (creating if needed) the desktop shell's built-in

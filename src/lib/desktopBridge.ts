@@ -1,3 +1,4 @@
+import type { BrowserBridge } from "@sideform/browser-agent/loop";
 import { getCommands, runCommand } from "@/lib/commands/registry";
 import { useDocumentStore } from "@/store/documentStore";
 
@@ -41,56 +42,12 @@ export interface PenDesktopApi {
    * never rejects with anything the handler needs to catch specially — but
    * the handlers still wrap every call in try/catch defensively, matching
    * every other ToolHandler's "always resolves" contract.
+   *
+   * Typed as the package's `BrowserBridge` (the shape the browse_task loop
+   * drives) so the two cannot drift; `findImages` is optional there but this
+   * shell always provides it.
    */
-  browser?: {
-    open(args: { url: string }): Promise<unknown>;
-    act(args: Record<string, unknown>): Promise<unknown>;
-    findImages(args: Record<string, unknown>): Promise<unknown>;
-    /**
-     * browse_read (docs/superpowers/specs/2026-09-18-browse-task-jev-loop-
-     * design.md, Addendum 2 §2) — a readable digest of the current page:
-     * headings, capped visible text, and links.
-     */
-    read(args: Record<string, unknown>): Promise<unknown>;
-    /**
-     * browse_task loop internals (docs/superpowers/specs/
-     * 2026-09-18-browse-task-jev-loop-design.md §1/§3). Not exposed as their
-     * own chat tools — `snapshot` returns the page's element table stamped
-     * with a `snapshotId`, and `perform` acts by index against that same
-     * snapshot, rejecting a stale id. Only `src/lib/tools/browser/
-     * browseTask.ts` calls these; the model never sees them directly.
-     */
-    snapshot(): Promise<unknown>;
-    perform(args: {
-      snapshotId: string;
-      index?: number;
-      operation: string;
-      text?: string;
-    }): Promise<unknown>;
-    /**
-     * browse_screenshot (docs/superpowers/specs/
-     * 2026-09-23-full-browser-use-design.md, "Desktop bridge") — a viewport
-     * capture of the current browser tab, downscaled and JPEG-encoded on
-     * the main-process side. `annotate: true` additionally takes a fresh
-     * snapshot and overlays numbered labels (set-of-marks), returning
-     * `snapshotId`/`elements` alongside the image so a following
-     * `browse_act`/`browse_snapshot` call can act by index against it.
-     * Optional — absent on desktop builds older than this feature; see the
-     * class doc above for why every `browser` method is guarded with `?.`.
-     */
-    screenshot?(args?: { annotate?: boolean; snapshotId?: string }): Promise<unknown>;
-    /**
-     * browse_tabs (same design doc) — list/switch/close/open the desktop
-     * shell's browser tabs. `new` optionally loads `url` with `open`'s
-     * semantics and makes the new tab the agent's current tab. Optional —
-     * absent on desktop builds older than this feature.
-     */
-    tabs?(args: {
-      action: "list" | "switch" | "close" | "new";
-      tabId?: number;
-      url?: string;
-    }): Promise<unknown>;
-  };
+  browser?: BrowserBridge & Required<Pick<BrowserBridge, "findImages">>;
 }
 
 declare global {

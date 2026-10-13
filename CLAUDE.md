@@ -143,6 +143,18 @@ no-ops.
 `../plans/desktop-mcp-bridge.md` for the full cross-repo design (handshake,
 token, tab routing, security).
 
+### browse_task loop (`@sideform/browser-agent`)
+
+The browse_task loop (snapshot -> `/api/browse/step` -> perform, sub-goal
+planning, the action cache `pen.browseActionCache.v1`, loop guard, commit-label
+rules) is NOT in this repo: it comes from `@sideform/browser-agent/loop`
+(`github:dan-rozhkov/browser-agent#v0.2.1`, public MIT repo, no token needed;
+`npm ci` builds its `dist/` through its `prepare` script). Here `src/lib/tools/browser/browseTask.ts` is only
+the `ToolHandler` glue; `backend.ts` builds the one `createHttpBackend`
+(`apiFetch`: base URL and cookie resolved per request) that `browseTask`
+and `browseAct` share. `window.penDesktop.browser` is typed as the package's
+`BrowserBridge`. Loop tests and `commitLabelContract` live in the package.
+
 ### Accounts (Better Auth)
 
 Optional sign-in (Google / email link / password); anonymous use is unchanged. Backend contract: Better Auth at `<backend>/api/auth`, `GET /api/auth-config` -> `{enabled, appOrigin?, google, emailEnabled}` (accounts count as enabled ONLY when `enabled` and `appOrigin` equals `window.location.origin`, trailing slash ignored; any other host serving this build, or a backend without `appOrigin`, behaves as `enabled:false`), `POST /api/account/claim-anon`.

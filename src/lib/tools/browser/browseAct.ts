@@ -1,18 +1,21 @@
 import type { ToolHandler } from "../../toolRegistry";
 import { getBrowserBridge } from "./bridge";
 import {
+  BACKEND_MAX_DESCRIPTION,
+  fetchBrowseBackend,
+  resultError,
+  sanitizedPageBody,
+  takeSnapshot,
+  truncateToChars,
+  type SnapshotResult,
+} from "@sideform/browser-agent/loop";
+import { browseBackend } from "./backend";
+import {
   attachSnapshot,
   BROWSER_NOT_AVAILABLE_ERROR,
   callBrowserBridge,
-  fetchBrowseBackend,
-  BACKEND_MAX_DESCRIPTION,
-  resultError,
-  sanitizedPageBody,
   safeParseObject,
-  takeSnapshot,
-  truncateToChars,
   type PenDesktopBrowser,
-  type SnapshotResult,
 } from "./shared";
 
 /** browse_act's locate call, retries included, must finish inside the default
@@ -41,10 +44,10 @@ const LOCATE_RETRY_BUDGET_MS = 25_000;
  * explicit index/target is silently ignored rather than raced against it.
  *
  * `element` resolution ALWAYS calls `/api/browse/locate` — a prior local
- * cache here (mirroring browseTask.ts's step cache) was removed by a code
- * review: it duplicated most of actionCache.ts's machinery for a
- * lower-value, harder-to-verify-safe path, and browseTask.ts's step cache
- * remains the one local-replay cache in this module.
+ * cache here (mirroring the loop's step cache in the package) was removed by a code
+ * review: it duplicated most of the package action cache's machinery for a
+ * lower-value, harder-to-verify-safe path, and the package's step cache
+ * remains the one local-replay cache.
  */
 
 /**
@@ -128,7 +131,7 @@ async function resolveByElement(
 
   let located: LocateResponse;
   try {
-    const res = await fetchBrowseBackend("/api/browse/locate", {
+    const res = await fetchBrowseBackend(browseBackend, "/api/browse/locate", {
       description: truncateToChars(element, BACKEND_MAX_DESCRIPTION),
       operation: ACTION_TO_LOCATE_OPERATION[action] ?? "CLICK",
       ...sanitizedPageBody(snapshot),

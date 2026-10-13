@@ -51,7 +51,7 @@ import { browseScreenshot } from "./tools/browser/browseScreenshot";
 import { browseTabs } from "./tools/browser/browseTabs";
 import { browseTask } from "./tools/browser/browseTask";
 import { defineComponent, extractComponent, detachInstance, deleteComponent } from "./tools/components";
-import { applyLoopGuard } from "./tools/browser/loopGuard";
+import { applyLoopGuard } from "@sideform/browser-agent/loop";
 
 /**
  * Per-call metadata threaded through to handlers that need to correlate
@@ -74,7 +74,7 @@ export type ToolHandler = (
 
 /**
  * Wraps a browse_* handler with the loop guard (browse-speed-contract.md,
- * "Frontend" item 5 — see loopGuard.ts's header comment). Applied here,
+ * "Frontend" item 5 — see loopGuard in @sideform/browser-agent/loop). Applied here,
  * once, at registration — rather than inside each browse_* module — so
  * every entry point that runs a browse_* call (chat, both MCP bridges,
  * WebMCP) gets it for free, the same way `runToolCall`'s mutual exclusion

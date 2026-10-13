@@ -1,3 +1,4 @@
+import { browseTaskInnerBoundMs } from "@sideform/browser-agent/loop";
 import { flushNumberBindings } from "@/store/numberBindingSync";
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
@@ -253,6 +254,10 @@ const DEFAULT_TOOL_CALL_TIMEOUT_MS = 30_000;
 // the race instead of this client cutting the call off first and reporting
 // a misleading "Tool call timed out" while the server keeps working (and
 // paying for it) in the background.
+/** Margin the chat-side browse_task timeout keeps above the loop's own
+ * bound (`browseTaskInnerBoundMs`, the REAL bound on the call). */
+const BROWSE_TASK_OUTER_MARGIN_MS = 60_000;
+
 const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
   generate_image: 95_000,
   generate_frame_image: 95_000,
@@ -273,7 +278,7 @@ const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
   // it.
   //
   // Finding: 100s wasn't enough margin over the loop's own worst case. The
-  // loop's STEP_DEADLINE_RESERVE_MS (browseTask.ts) only guarantees a step
+  // loop's STEP_DEADLINE_RESERVE_MS (@sideform/browser-agent loop) only guarantees a step
   // won't START once fewer than 35s remain of the 90s internal deadline —
   // an already-started step can still take up to ~61.5s (snapshot + the
   // /api/browse/step round trip + the act/perform call itself, see that
@@ -283,20 +288,20 @@ const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
   // BROWSE_TASK_DEADLINE_MS (see STEP_DEADLINE_RESERVE_MS's comment for why
   // that constant didn't need to move too).
   //
-  // Multi-sub-goal calls (browseTask.ts runBrowseTask) are bounded by
+  // Multi-sub-goal calls (@sideform/browser-agent runBrowseTask) are bounded by
   // MULTI_SUBGOAL_DEADLINE_MS = 12 min overall, with every sub-goal's loop
   // deadline clamped to what is left of it. Same reasoning as above: the
   // last loop can end at 720 - 35 + 61.5 = 746.5s, so 780s (13 min) covers
   // it and the <=15s planning call, which runs inside the overall budget.
   // Plus settleEmptySnapshot's worst case at a sub-goal's first step
-  // (browseTask.ts, BROWSE_SETTLE_WORST_CASE_MS = 12 * (400ms + 20s snapshot)
+  // (@sideform/browser-agent loop, BROWSE_SETTLE_WORST_CASE_MS = 12 * (400ms + 20s snapshot)
   // = 244.8s, only on a page that stays blank): 746.5 + 244.8 = 991.3s.
   // The real bound is the handler's own internal race
   // (browseTaskInnerBoundMs() = 720 + 35 + 244.8 = 999.8s, which returns a
   // `budget` transcript and aborts the loop); this outer value is just 60s
   // above it. One value serves single- and multi-sub-goal calls (not known
   // up front).
-  browse_task: 1_060_000,
+  browse_task: browseTaskInnerBoundMs(false) + BROWSE_TASK_OUTER_MARGIN_MS,
   // browse_open (docs/superpowers/specs/2026-09-18-builtin-browser-design.md
   // §5) reuses the desktop's own BROWSER_OPEN_TIMEOUT_MS = 45_000 navigation
   // budget, and — since browse-speed-contract.md's "Frontend" item 2 — also
@@ -365,7 +370,7 @@ const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
 const CLOUD_BROWSE_OPEN_TIMEOUT_MS = 150_000;
 const CLOUD_BROWSE_EXTRA_MS = 60_000;
 // browse_task's cloud call is bounded by CLOUD_MULTI_SUBGOAL_DEADLINE_MS
-// (15 min, browseTask.ts; a single sub-goal loop runs
+// (15 min, @sideform/browser-agent loop; a single sub-goal loop runs
 // CLOUD_BROWSE_TASK_DEADLINE_MS = 180s, clamped to what is left of it):
 // 900 - 35 + 61.5 = 926.5s worst case after it starts, plus the cold
 // session create/connect above (<=50s) and settleEmptySnapshot's worst case
@@ -373,7 +378,7 @@ const CLOUD_BROWSE_EXTRA_MS = 60_000;
 // the handler's internal race (browseTaskInnerBoundMs() = 900 + 35 + 244.8 =
 // 1179.8s, cold session included since it runs inside the call); this outer
 // value is 60s above it.
-const CLOUD_BROWSE_TASK_TIMEOUT_MS = 1_240_000;
+const CLOUD_BROWSE_TASK_TIMEOUT_MS = browseTaskInnerBoundMs(true) + BROWSE_TASK_OUTER_MARGIN_MS;
 
 export function getToolCallTimeoutMs(toolName: string): number {
   const base = TOOL_CALL_TIMEOUT_MS_OVERRIDES[toolName] ?? DEFAULT_TOOL_CALL_TIMEOUT_MS;

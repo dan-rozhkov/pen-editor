@@ -26,8 +26,8 @@ vi.mock("@/lib/cloudBrowser", async (importOriginal) => ({
 afterEach(() => {
   delete window.penDesktop;
   vi.unstubAllGlobals();
-  // The action cache (actionCache.ts) persists to real localStorage — clear
-  // it so a write in one test can't be replayed as a cache hit in another.
+  // The browse_task action cache (@sideform/browser-agent) persists to real
+  // localStorage — clear it so a write in one test can't leak into another.
   localStorage.clear();
 });
 
@@ -689,7 +689,7 @@ describe("browse_read", () => {
 // and 2) — a `snapshot` field valid enough for `takeSnapshot`'s shape check
 // to accept, used by the tests below to exercise the attach path. The
 // suites above rely on the DEFAULT stub's `snapshot: async () => ({})`
-// being invalid on purpose (see shared.ts's `isSnapshotResult`) so none of
+// being invalid on purpose (see `isSnapshotResult` in @sideform/browser-agent/loop) so none of
 // them accidentally pick up a `snapshot` field.
 const VALID_SNAPSHOT = {
   url: "https://example.com",
