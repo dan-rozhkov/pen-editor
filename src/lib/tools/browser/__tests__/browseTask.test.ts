@@ -20,6 +20,7 @@ import {
   extractUrlFromGoal,
   runBrowseTask,
   runBrowseTaskLoop,
+  wantsTextEntry,
 } from "@/lib/tools/browser/browseTask";
 import { BROWSER_NOT_AVAILABLE_ERROR, type SnapshotResult } from "@/lib/tools/browser/shared";
 import {
@@ -2934,6 +2935,10 @@ describe("browse_task effect notes, history carry-over and recovery", () => {
       [["one", 'Find a suitable "tent" and add it to the cart']],
       [["one", "Search 'σκηνή camping'"]],
       [["one", "On Skroutz: search 'αδιάβροχο μπουφάν', click the first result"]],
+      [["one", 'Search for "hats". Done when: results for "hats" are visible.']],
+      [["one", 'Go to the search page and search for "hats". Done when: the search results show hats.']],
+      [["one", 'Search for hats. Done when: results for "hats" are visible.']],
+      [["one", 'Done when: search for "hats" is done']],
     ])("resets for %j", async (plan) => {
       stubPlanAndSteps(plan, [DONE]);
       const open = vi.fn(async () => ({}));
@@ -2952,12 +2957,38 @@ describe("browse_task effect notes, history carry-over and recovery", () => {
       [["one", 'type "John" into First name']],
       [['search for "shoes"', "add the first one to the cart"]],
       [["open the cart", "Find the 'Checkout' button and click it"]],
+      [["one", 'Apply the filter Condition = Used. Done when: the search results are filtered by "Condition = Used".']],
+      [["one", 'Apply the filter Buying format = Buy It Now only. Done when: the search results are filtered by "Buying format = Buy It Now only".']],
+      [["one", 'Set the number of bedrooms to "2". Done when: the search results show properties with 2 bedrooms.']],
+      [["one", 'Set the maximum price to "&pound;2,500 pcm". Done when: the search results show properties within the &pound;2,500 pcm limit.']],
+      [["one", "Change the Sort dropdown to 'Price + Shipping: lowest first'. Done when: the search results are re-sorted by 'Price + Shipping: lowest first' and the first listing reflects this sorting."]],
+      [["one", "Apply the search filter 'Preis' for '50 bis 100 EUR'. Done when: Search results are filtered by price range 50 to 100 EUR."]],
+      [["one", 'Add the tent to the cart. Does not count: a search for "tent pegs"']],
+      [["one", "Click the 'Nike Air' search suggestion. Done when: the product page is visible."]],
+      [["one", "Open the first item in the search-results list ('Preis' filter applied)"]],
+      [["one", "Откройте первый товар в результатах поиска 'X'"]],
     ])("does not reset for %j", async (plan) => {
       stubPlanAndSteps(plan, [DONE]);
       const open = vi.fn(async () => ({}));
       const t = await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => inSection, open }), undefined, undefined, "https://shop.test");
       expect(open).toHaveBeenCalledTimes(1);
       expect(reopened(t)).toHaveLength(0);
+    });
+
+    it.each([
+      ["Open the first listing in the search results. Done when: the listing page is visible.", false],
+      ["Apply the filter X. Done when: the search results show X.", false],
+      ["Search for shoes. Done when: results are visible.", true],
+      ['type "x" into the search box', true],
+    ])("wantsTextEntry(%j) is %s", (subGoal, expected) => {
+      expect(wantsTextEntry(subGoal)).toBe(expected);
+    });
+
+    it("ignores a URL that appears only in the Done-when clause", async () => {
+      stubPlanAndSteps(["one", "Apply the price filter. Done when: the URL https://other.test/s?price=50 is shown"], [DONE]);
+      const open = vi.fn(async () => ({}));
+      await runBrowseTask("g", 12, stubBrowser({ snapshot: async () => inSection, open }), undefined, undefined, "https://shop.test");
+      expect(open).toHaveBeenCalledTimes(1);
     });
 
     it("counts the reopen in stepsTotal", async () => {

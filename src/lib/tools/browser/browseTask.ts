@@ -2052,10 +2052,31 @@ async function recoverTextEntry(
   return undefined;
 }
 
-/** Sub-goal text that asks to search / find / type into a field. Verbs only. */
-const SEARCH_INTENT = /(?<!\p{L})(?:search|find|look\s+(?:for|up)|type\b[^.]{0,60}?\binto|найди|найти|поиск|ищи)/iu;
+/** The action part of a sub-goal: the text before the first "Done when:" /
+ * "Does not count:" marker (the whole string without one). The planner writes
+ * "<action>. Done when: <visible condition>", and the condition describes the
+ * results page, so its nouns ("the search results are filtered by ...") must
+ * not read as an action. */
+const SUBGOAL_CONDITION_MARKER = /\b(?:done\s+when|does\s+not\s+count)\s*:/i;
+function subGoalAction(subGoal: string): string {
+  const m = SUBGOAL_CONDITION_MARKER.exec(subGoal);
+  const action = m ? subGoal.slice(0, m.index) : subGoal;
+  // A sub-goal that starts with the marker has no action part to read.
+  return action.trim() === "" ? subGoal : action;
+}
+
+/** "search" as a noun ("search results", "search filter") is not a verb. */
+const SEARCH_NOUN_TAIL = String.raw`(?![\s-]+(?:results?|filters?|page|criteria|settings|options|history|suggestions?|hits?|listings?|list)(?!\p{L}))`;
+
+/** Sub-goal text that asks to search / find / type into a field. Verbs only.
+ * Reads only the action part: the "Done when" clause describes the results
+ * page, and a reset triggered by its nouns would throw the page state away. */
+const SEARCH_INTENT = new RegExp(String.raw`(?<!\p{L})(?:search${SEARCH_NOUN_TAIL}|find|look\s+(?:for|up)|type\b[^.]{0,60}?\binto|найди|найти|поиск(?!\p{L})|ищи)`, "iu");
+function actionWantsTextEntry(action: string): boolean {
+  return SEARCH_INTENT.test(action);
+}
 export function wantsTextEntry(subGoal: string): boolean {
-  return SEARCH_INTENT.test(subGoal);
+  return actionWantsTextEntry(subGoalAction(subGoal));
 }
 
 /** Narrow check for the sub-goal start reset: a quoted phrase after an
@@ -2063,14 +2084,18 @@ export function wantsTextEntry(subGoal: string): boolean {
  * must not reset). The planner puts the text to type in double quotes and
  * control labels in single ones ("Find the 'Checkout' button" must not leave
  * the cart), so a single-quoted phrase counts only with a search verb, and
- * only at word edges (an apostrophe, as in don't, opens none). */
-const SEARCH_VERB = /(?<!\p{L})(?:search|look\s+up|поиск|ищи|искать)/iu;
+ * only at word edges (an apostrophe, as in don't, opens none). Only the action
+ * part is read (see subGoalAction): the "Done when" clause describes the
+ * results page, so its nouns must not trigger a reset that throws the page
+ * state (filters, sort) away. */
+const SEARCH_VERB = new RegExp(String.raw`(?<!\p{L})(?:search${SEARCH_NOUN_TAIL}|look\s+up|поиск(?!\p{L})|ищи|искать)`, "iu");
 const FIND_VERB = /(?<!\p{L})(?:find|найди|найти)/iu;
 const DOUBLE_QUOTED = /"[^"]+"|“[^”]+”|«[^»]+»/u;
 const SINGLE_QUOTED = /(?<![\p{L}\p{N}])'[^']+'(?![\p{L}\p{N}])/u;
-function isQuotedSearch(subGoal: string): boolean {
-  if (SEARCH_VERB.test(subGoal)) return DOUBLE_QUOTED.test(subGoal) || SINGLE_QUOTED.test(subGoal);
-  return FIND_VERB.test(subGoal) && DOUBLE_QUOTED.test(subGoal);
+function isQuotedSearch(action: string, subGoal: string): boolean {
+  // The verb must be in the action; the quoted phrase may sit anywhere in the sub-goal.
+  if (SEARCH_VERB.test(action)) return DOUBLE_QUOTED.test(subGoal) || SINGLE_QUOTED.test(subGoal);
+  return FIND_VERB.test(action) && DOUBLE_QUOTED.test(subGoal);
 }
 
 /** The tail of a stalled run shows a page the sub-goal cannot work on: only
@@ -2263,7 +2288,8 @@ export async function runBrowseTask(
     // A sub-goal that names a different site: open it first (same open path
     // as the preamble) so the loop does not start on the wrong page.
     let recoveredSnapshot: SnapshotResult | undefined;
-    const subUrl = i > 0 ? extractUrlFromGoal(plan[i]) : undefined;
+    const action = subGoalAction(plan[i]);
+    const subUrl = i > 0 ? extractUrlFromGoal(action) : undefined;
     if (subUrl && hostOf(subUrl) !== undefined && hostOf(subUrl) !== hostOf(lastUrl)) {
       const openFailure = await openBeforeLoop(browser, subUrl);
       if (openFailure) {
@@ -2282,7 +2308,7 @@ export async function runBrowseTask(
       let reset = false;
       if (
         siteUrl &&
-        isQuotedSearch(plan[i]) &&
+        isQuotedSearch(action, plan[i]) &&
         comparableUrl(lastUrl) !== comparableUrl(siteUrl)
       ) {
         const failure = await openBeforeLoop(browser, siteUrl);
@@ -2300,7 +2326,7 @@ export async function runBrowseTask(
       }
       // Same site: the previous sub-goal may have left the page scrolled far down.
       if (!reset) await scrollToTop(browser);
-      if (!reset && wantsTextEntry(plan[i])) {
+      if (!reset && actionWantsTextEntry(action)) {
         const records: TranscriptStep[] = [];
         recoveredSnapshot = await recoverTextEntry(
           browser,
