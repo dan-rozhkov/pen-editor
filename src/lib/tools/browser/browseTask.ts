@@ -1,6 +1,5 @@
 import { runBrowseTask } from "@sideform/browser-agent/loop";
 import type { ToolHandler } from "../../toolRegistry";
-import { getBrowserAgentPermissions } from "@/store/browserAgentSettingsStore";
 import { browseBackend } from "./backend";
 import { getBrowserBridge, isDesktopBrowserAvailable } from "./bridge";
 import { BROWSER_NOT_AVAILABLE_ERROR } from "./shared";
@@ -28,6 +27,9 @@ function safeLocalStorage(): Storage | undefined {
   }
 }
 
+// The user-facing switches were removed when manual browse mode became the default; browse_task (rollback only) always runs with the safe defaults.
+const BROWSE_TASK_PERMISSIONS = { allowPasswordEntry: false, confirmIrreversible: true };
+
 export const browseTask: ToolHandler = async (args, context) => {
   const browser = getBrowserBridge(context?.sessionId);
   if (!browser) {
@@ -43,7 +45,7 @@ export const browseTask: ToolHandler = async (args, context) => {
     const transcript = await runBrowseTask(goal, {
       browser,
       backend: browseBackend,
-      permissions: getBrowserAgentPermissions,
+      permissions: () => BROWSE_TASK_PERMISSIONS,
       storage: safeLocalStorage(),
       cloud: !isDesktopBrowserAvailable(),
       stepScreenshots: browseStepScreenshotEnabled(),

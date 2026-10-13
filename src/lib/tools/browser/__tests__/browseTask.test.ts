@@ -17,7 +17,6 @@ vi.mock("@/lib/cloudBrowser", async (importOriginal) => ({
 import { browseTask } from "@/lib/tools/browser/browseTask";
 import { browseBackend } from "@/lib/tools/browser/backend";
 import { BROWSER_NOT_AVAILABLE_ERROR } from "@/lib/tools/browser/shared";
-import { getBrowserAgentPermissions } from "@/store/browserAgentSettingsStore";
 import { setCredentialsEnabled } from "@/lib/apiBase";
 import { setPenDesktop, stubBrowser } from "./helpers";
 
@@ -57,9 +56,8 @@ describe("browse_task handler", () => {
       maxSteps: 7,
       url: "https://example.com",
     });
-    // A getter, so a switch flipped mid-run applies from the next step.
-    expect(opts.permissions).toBe(getBrowserAgentPermissions);
-    expect(opts.permissions()).toEqual(getBrowserAgentPermissions());
+    // No user-facing switches any more: always the safe defaults.
+    expect(opts.permissions()).toEqual({ allowPasswordEntry: false, confirmIrreversible: true });
   });
 
   it("passes cloud: true without a desktop browser (cloud bridge)", async () => {
