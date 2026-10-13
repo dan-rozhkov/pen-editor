@@ -105,6 +105,6 @@ describe.runIf(backendExists)("ds-diff fixtures against the sibling backend", ()
   });
 });
 
-describe.runIf(backendExists)("ds-diff golden fixtures (sibling backend)", () => {
-  describeSet("sibling backend", BACKEND_DIR);
-});
+// A plain `if`, not describe.runIf: vitest still runs a skipped suite's body at
+// collection time, and describeSet reads the directory right there.
+if (backendExists) describeSet("sibling backend", BACKEND_DIR);
