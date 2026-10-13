@@ -291,7 +291,19 @@ export interface SubgoalResult {
   reason?: string;
 }
 
+/** The visible text of the page where a loop ended. */
+export interface Observation {
+  /** 1-based sub-goal; absent for a single-flow task. */
+  subgoal?: number;
+  url: string;
+  text: string;
+}
+
 interface Transcript {
+  /** Page text captured when the task (or each sub-goal) ended, so the chat
+   * model reads the values the user asked for from here, not from memory.
+   * Omitted when nothing was captured. */
+  observations?: Observation[];
   /** Only when the plan had more than one sub-goal (see runBrowseTask). */
   subgoals?: SubgoalResult[];
   /** Multi-sub-goal only: the real number of steps run — `steps` keeps just
@@ -486,13 +498,133 @@ const PAGE_TEXT_MAX_CHARS = 6_000;
  */
 async function pageTextFor(browser: PenDesktopBrowser, snapshot: SnapshotResult): Promise<string | undefined> {
   if (typeof snapshot.text === "string") return snapshot.text.slice(0, PAGE_TEXT_MAX_CHARS);
+  return (await readPageText(browser, PAGE_TEXT_MAX_CHARS))?.text;
+}
+
+/** One `read` of the page text, cut to `maxChars`; `url` and `truncated` are
+ * what the desktop's read result reports. Any failure gives undefined. */
+async function readPageText(
+  browser: PenDesktopBrowser,
+  maxChars: number
+): Promise<{ text: string; url?: string; truncated: boolean } | undefined> {
   try {
-    const read = await browser.read({ maxChars: PAGE_TEXT_MAX_CHARS });
-    const text = read && typeof read === "object" ? (read as { text?: unknown }).text : undefined;
-    return typeof text === "string" ? text.slice(0, PAGE_TEXT_MAX_CHARS) : undefined;
+    const read = await browser.read({ maxChars });
+    if (!read || typeof read !== "object") return undefined;
+    const r = read as { text?: unknown; url?: unknown; truncated?: unknown };
+    if (typeof r.text !== "string") return undefined;
+    return {
+      text: r.text.slice(0, maxChars),
+      ...(typeof r.url === "string" && r.url ? { url: r.url } : {}),
+      truncated: r.truncated === true || r.text.length > maxChars,
+    };
   } catch {
     return undefined;
   }
+}
+
+/** Most characters the FINAL page's observation keeps. */
+const OBSERVATION_LAST_MAX_CHARS = 4_000;
+/** Most characters every earlier observation keeps. */
+const OBSERVATION_EARLIER_MAX_CHARS = 1_500;
+/** Most observations a transcript keeps — the last ones. */
+const OBSERVATIONS_KEPT = 5;
+/** Most characters all observations keep together; the oldest are trimmed first. */
+const OBSERVATIONS_TOTAL_MAX_CHARS = 10_000;
+/** An observation trimmed below this many characters is dropped, not kept as a stub. */
+const OBSERVATION_MIN_CHARS = 100;
+/** Ends every observation text that is partial. */
+const OBSERVATION_CUT_MARKER = " …[cut]";
+/** Longest wait for one end-of-loop page read, so a hung tab never blocks the
+ * tool. At most OBSERVATIONS_KEPT reads run, all inside the overall deadline
+ * (a read starts only with this much of it left), so they fit in
+ * browseTaskInnerBoundMs()'s margin. */
+const OBSERVATION_READ_TIMEOUT_MS = 5_000;
+
+/** An observation before the caps: `cut` marks text already partial;
+ * `sameAs` marks a page identical to that sub-goal's (its text is a pointer). */
+type RawObservation = Observation & { cut?: boolean; sameAs?: number };
+
+/**
+ * Reads the visible page text once, bounded by a timeout, an abort and
+ * `maxChars`. Any failure (no tab, bridge error, timeout, empty page) means
+ * no observation. `url` is the page the read result reports.
+ */
+async function readObservation(
+  browser: PenDesktopBrowser,
+  fallbackUrl: string,
+  subgoal: number | undefined,
+  signal: AbortSignal | undefined,
+  maxChars: number
+): Promise<RawObservation | undefined> {
+  if (signal?.aborted) return undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let onAbort: (() => void) | undefined;
+  try {
+    const read = await Promise.race([
+      readPageText(browser, maxChars),
+      new Promise<undefined>((resolve) => {
+        timer = setTimeout(() => resolve(undefined), OBSERVATION_READ_TIMEOUT_MS);
+        onAbort = () => resolve(undefined);
+        signal?.addEventListener("abort", onAbort, { once: true });
+      }),
+    ]);
+    if (!read || signal?.aborted) return undefined;
+    const text = read.text.trim();
+    if (!text) return undefined;
+    return {
+      ...(subgoal !== undefined ? { subgoal } : {}),
+      url: read.url ?? fallbackUrl,
+      text,
+      ...(read.truncated ? { cut: true } : {}),
+    };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    if (onAbort) signal?.removeEventListener("abort", onAbort);
+  }
+}
+
+function lastReal(list: RawObservation[]): RawObservation | undefined {
+  for (let i = list.length - 1; i >= 0; i--) if (list[i].sameAs === undefined) return list[i];
+  return undefined;
+}
+
+/**
+ * Applies the caps to the captured observations: keeps the last
+ * OBSERVATIONS_KEPT, then trims the oldest until the total fits. Every cut
+ * text ends with OBSERVATION_CUT_MARKER; one trimmed below
+ * OBSERVATION_MIN_CHARS is dropped. A `sameAs` entry keeps its pointer text
+ * and is exempt from both. Returns undefined when nothing is left.
+ */
+export function capObservations(all: RawObservation[]): Observation[] | undefined {
+  const kept = all.slice(-OBSERVATIONS_KEPT).map((o) => ({ ...o }));
+  const real = (o: RawObservation) => o.sameAs === undefined;
+  let excess = kept.filter(real).reduce((n, o) => n + o.text.length, 0) - OBSERVATIONS_TOTAL_MAX_CHARS;
+  for (const o of kept) {
+    if (excess <= 0) break;
+    if (!real(o)) continue;
+    const room = o.text.length - excess;
+    if (room < OBSERVATION_MIN_CHARS) {
+      excess -= o.text.length;
+      o.text = "";
+    } else {
+      o.text = o.text.slice(0, room);
+      o.cut = true;
+      excess = 0;
+    }
+  }
+  const out: Observation[] = [];
+  for (const o of kept) {
+    if (real(o)) {
+      if (!o.text) continue;
+      out.push({ ...(o.subgoal !== undefined ? { subgoal: o.subgoal } : {}), url: o.url, text: o.cut ? o.text + OBSERVATION_CUT_MARKER : o.text });
+    } else {
+      // The entry it points to may have been dropped by the caps above.
+      const shown = out.some((p) => p.subgoal === o.sameAs);
+      const text = shown ? `(same page as sub-goal ${o.sameAs})` : `(same page as sub-goal ${o.sameAs}; its text was not kept)`;
+      out.push({ ...(o.subgoal !== undefined ? { subgoal: o.subgoal } : {}), url: o.url, text });
+    }
+  }
+  return out.length > 0 ? out : undefined;
 }
 
 /** Experiment flag: send a marked screenshot of the step's snapshot to the backend. */
@@ -1755,7 +1887,10 @@ export function browseTaskOverallDeadlineMs(): number {
 /** Hard bound on one browse_task call, enforced inside the handler: the
  * longest overall deadline for this browser (single flow ends sooner on its
  * own) + one step-start reserve + settleEmptySnapshot's worst case. The
- * chat-side timeout is a margin above this. */
+ * chat-side timeout is a margin above this. The end-of-loop observation reads
+ * (<= OBSERVATIONS_KEPT x OBSERVATION_READ_TIMEOUT_MS) add nothing: each one
+ * starts only with OBSERVATION_READ_TIMEOUT_MS left of the overall deadline,
+ * so it ends inside it. */
 export function browseTaskInnerBoundMs(): number {
   return browseTaskOverallDeadlineMs() + STEP_DEADLINE_RESERVE_MS + BROWSE_SETTLE_WORST_CASE_MS;
 }
@@ -2086,7 +2221,11 @@ export async function runBrowseTask(
   // have moved since): do not reuse that snapshot — the loop takes a fresh one.
   const freshPreamble: Preamble = planSeq > probeSeq ? {} : preamble;
   if (plan.length <= 1) {
-    return runBrowseTaskLoop(goal, maxSteps, browser, now, sleep, url, deadlineMs, freshPreamble, signal);
+    const single = await runBrowseTaskLoop(goal, maxSteps, browser, now, sleep, url, deadlineMs, freshPreamble, signal);
+    if (single.reason === CANCELLED_REASON || signal?.aborted || overallEnd - now() < OBSERVATION_READ_TIMEOUT_MS) return single;
+    const observation = await readObservation(browser, single.url, undefined, signal, OBSERVATION_LAST_MAX_CHARS);
+    const observations = observation ? capObservations([observation]) : undefined;
+    return observations ? { ...single, observations } : single;
   }
 
   const n = plan.length;
@@ -2097,6 +2236,7 @@ export async function runBrowseTask(
   let lastUrl = "";
   let lastTitle = "";
   let cacheHits = 0;
+  const observed: RawObservation[] = [];
   let abortedBy: string | undefined;
   let cancelled = false;
   // The URL most recently opened for the CURRENT site: the start URL until a
@@ -2240,6 +2380,27 @@ export async function runBrowseTask(
     }
     if (t.url) lastUrl = t.url;
     if (t.title) lastTitle = t.title;
+    if (
+      i >= n - OBSERVATIONS_KEPT &&
+      !(t.status === "blocked" && t.reason === CANCELLED_REASON) &&
+      !signal?.aborted &&
+      overallEnd - now() >= OBSERVATION_READ_TIMEOUT_MS
+    ) {
+      const observation = await readObservation(
+        browser,
+        lastUrl,
+        k,
+        signal,
+        i === n - 1 ? OBSERVATION_LAST_MAX_CHARS : OBSERVATION_EARLIER_MAX_CHARS
+      );
+      if (observation) {
+        // Same page only when the whole text matched: two cut texts share a
+        // prefix (site header, filters) even on different pages.
+        const same = lastReal(observed);
+        const isSame = same && same.url === observation.url && !same.cut && !observation.cut && same.text === observation.text;
+        observed.push(isSame ? { ...observation, text: "", sameAs: same.subgoal } : observation);
+      }
+    }
     cacheHits += t.cacheHits ?? 0;
     results.push({ goal: plan[i], status: t.status, ...(t.reason ? { reason: t.reason } : {}) });
     if (t.status === "done") doneGoals.push(plan[i]);
@@ -2259,6 +2420,7 @@ export async function runBrowseTask(
     .map((r, i) => (r.status === "done" ? null : `#${i + 1} ${r.status}${r.reason ? `: ${truncateToChars(r.reason, 120)}` : ""}`))
     .filter((x): x is string => x !== null);
   const summary = `${doneCount}/${n} sub-goals done${problems.length ? `; ${problems.join("; ")}` : ""}`;
+  const observations = capObservations(observed);
   return {
     status,
     steps,
@@ -2268,6 +2430,7 @@ export async function runBrowseTask(
     reason: cancelled ? CANCELLED_REASON : truncateToChars(summary, 1_000),
     cacheHits,
     subgoals: results,
+    ...(observations ? { observations } : {}),
   };
 }
 

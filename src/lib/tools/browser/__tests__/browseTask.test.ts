@@ -15,6 +15,7 @@ import {
   browseTaskInnerBoundMs,
   CLOUD_BROWSE_TASK_DEADLINE_MS,
   buildSubgoalGoal,
+  capObservations,
   carryOverHistory,
   extractUrlFromGoal,
   runBrowseTask,
@@ -3112,5 +3113,161 @@ describe("browse_task effect notes, history carry-over and recovery", () => {
     expect(out[0].label).toHaveLength(200);
     expect(out[0].label).toContain('became "Add to cart 1"');
     expect(out[0].label.endsWith(" (earlier sub-goal)")).toBe(true);
+  });
+});
+
+describe("browse_task observations", () => {
+  // The snapshot carries `text`, which keeps the step loop from calling
+  // read() itself, so every read() call below is an end-of-loop read.
+  const withText: SnapshotResult = { ...EXAMPLE_SNAPSHOT, text: "page" };
+  type ReadAnswer = string | Error | { text: string; url?: string; truncated?: boolean };
+  function readSequence(answers: ReadAnswer[]) {
+    let i = 0;
+    return vi.fn(async (_opts?: { maxChars?: number }) => {
+      const next = answers[Math.min(i++, answers.length - 1)];
+      if (next instanceof Error) throw next;
+      return typeof next === "string" ? { text: next } : next;
+    });
+  }
+  const run = (goal: string, browser: PenDesktopBrowser, ...rest: unknown[]) =>
+    (runBrowseTask as (...a: unknown[]) => ReturnType<typeof runBrowseTask>)(goal, 12, browser, ...rest);
+  const CUT = " …[cut]";
+
+  it("attaches one observation of the final page for a single flow", async () => {
+    stubPlanAndSteps(["only one"], [DONE]);
+    const read = readSequence(["Cafe A 4.7 Cafe B 4.5"]);
+    const t = await run("list shops", stubBrowser({ read, snapshot: async () => withText }));
+    expect(t.observations).toEqual([{ url: "https://example.com", text: "Cafe A 4.7 Cafe B 4.5" }]);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(read).toHaveBeenCalledWith({ maxChars: 4_000 });
+  });
+
+  it("takes the url from the read result, falling back to the loop url", async () => {
+    stubPlanAndSteps(["a", "b"], [DONE, DONE]);
+    const read = readSequence([{ text: "first", url: "https://read.example/page" }, "second"]);
+    const t = await run("g", stubBrowser({ read, snapshot: async () => withText }));
+    expect(t.observations?.map((o) => o.url)).toEqual(["https://read.example/page", "https://example.com"]);
+  });
+
+  it("attaches one observation per sub-goal, numbered from 1, with a smaller budget for earlier ones", async () => {
+    stubPlanAndSteps(["one", "two"], [DONE, DONE]);
+    const read = readSequence(["first page", "second page"]);
+    const t = await run("do both", stubBrowser({ read, snapshot: async () => withText }));
+    expect(t.observations).toEqual([
+      { subgoal: 1, url: "https://example.com", text: "first page" },
+      { subgoal: 2, url: "https://example.com", text: "second page" },
+    ]);
+    expect(read.mock.calls.map((c) => c[0]?.maxChars)).toEqual([1_500, 4_000]);
+  });
+
+  it("marks text cut when the read reports truncated, or the page is longer than the budget", async () => {
+    stubPlanAndSteps(["a", "b"], [DONE, DONE]);
+    const read = readSequence([{ text: "partial page", truncated: true }, "y".repeat(5_000)]);
+    const t = await run("g", stubBrowser({ read, snapshot: async () => withText }));
+    expect(t.observations?.[0].text).toBe(`partial page${CUT}`);
+    expect(t.observations?.[1].text).toBe("y".repeat(4_000) + CUT);
+  });
+
+  it("reads and keeps only the last 5 sub-goals", async () => {
+    stubPlanAndSteps(["a", "b", "c", "d", "e", "f", "g", "h"], [DONE]);
+    const read = readSequence(["p4", "p5", "p6", "p7", "p8"]);
+    const t = await run("g", stubBrowser({ read, snapshot: async () => withText }));
+    expect(read).toHaveBeenCalledTimes(5);
+    expect(t.observations?.map((o) => o.subgoal)).toEqual([4, 5, 6, 7, 8]);
+  });
+
+  it("trims the oldest first to the 10000 total, marks it cut and drops stubs", () => {
+    const entries = (last: number) =>
+      "abcde".split("").map((c, i) => ({ subgoal: i + 1, url: "u", text: c.repeat(i === 4 ? last : 1_500) }));
+    // 4 x 1500 + 5500 = 11500: excess 1500 cuts the oldest to 0, so it is dropped.
+    expect(capObservations(entries(5_500))?.map((o) => o.subgoal)).toEqual([2, 3, 4, 5]);
+    // Excess 700: the oldest keeps 800 chars plus the marker.
+    const t = capObservations(entries(4_700));
+    expect(t?.[0].text).toBe("a".repeat(800) + CUT);
+    expect(t).toHaveLength(5);
+  });
+
+  it("does not treat two cut texts with the same prefix as the same page", async () => {
+    stubPlanAndSteps(["a", "b", "c"], [DONE]);
+    const read = readSequence([{ text: "header", truncated: true }, { text: "header", truncated: true }, "end"]);
+    const t = await run("g", stubBrowser({ read, snapshot: async () => withText }));
+    expect(t.observations?.map((o) => o.text)).toEqual([`header${CUT}`, `header${CUT}`, "end"]);
+  });
+
+  it("keeps a placeholder for a page identical to the previous one", async () => {
+    stubPlanAndSteps(["a", "b", "c"], [DONE]);
+    const read = readSequence(["same", "same", "other"]);
+    const t = await run("g", stubBrowser({ read, snapshot: async () => withText }));
+    expect(t.observations?.map((o) => [o.subgoal, o.text])).toEqual([
+      [1, "same"],
+      [2, "(same page as sub-goal 1)"],
+      [3, "other"],
+    ]);
+  });
+
+  it("omits the field when the read fails or returns no text", async () => {
+    stubPlanAndSteps(["only one"], [DONE]);
+    const failing = await run("g", stubBrowser({ read: readSequence([new Error("no tab")]), snapshot: async () => withText }));
+    expect("observations" in failing).toBe(false);
+    const empty = await run("g", stubBrowser({ read: readSequence(["   "]), snapshot: async () => withText }));
+    expect("observations" in empty).toBe(false);
+  });
+
+  it("does not read the page when the task fails before the loop", async () => {
+    stubPlanAndSteps(["a", "b"], [DONE]);
+    const read = readSequence(["never"]);
+    const open = vi.fn(async () => ({ error: "net::ERR_NAME_NOT_RESOLVED" }));
+    const t = await run("g", stubBrowser({ read, open }), undefined, undefined, "https://shop.test");
+    expect(t.status).toBe("blocked");
+    expect(t.observations).toBeUndefined();
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it("does not read the page when the task was cancelled", async () => {
+    stubPlanAndSteps(["only one"], [DONE]);
+    const read = readSequence(["never"]);
+    const ac = new AbortController();
+    ac.abort();
+    const t = await run("g", stubBrowser({ read, snapshot: async () => withText }), undefined, undefined, undefined, undefined, undefined, ac.signal);
+    expect(t.observations).toBeUndefined();
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it("does not start a read with less than the read timeout left of the overall deadline", async () => {
+    stubPlanAndSteps(["only one"], [DONE]);
+    const read = readSequence(["never"]);
+    // overallDeadlineMs 4000 < the 5000 ms read timeout
+    const t = await run("g", stubBrowser({ read, snapshot: async () => withText }), undefined, undefined, undefined, undefined, 4_000);
+    expect(t.status).toBe("done");
+    expect(t.observations).toBeUndefined();
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it("stops waiting for a hung read as soon as the signal aborts", async () => {
+    stubPlanAndSteps(["only one"], [DONE]);
+    const ac = new AbortController();
+    const read = vi.fn(() => {
+      queueMicrotask(() => setTimeout(() => ac.abort(), 0));
+      return new Promise<never>(() => {});
+    });
+    const t = await run("g", stubBrowser({ read, snapshot: async () => withText }), undefined, undefined, undefined, undefined, undefined, ac.signal);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(t.observations).toBeUndefined();
+  });
+});
+
+describe("capObservations", () => {
+  it("says so when the page a placeholder points to was dropped by the total cap", () => {
+    const big = "x".repeat(1_500);
+    const out = capObservations([
+      { subgoal: 1, url: "u1", text: "y".repeat(1_500) },
+      { subgoal: 2, url: "u2", text: "", sameAs: 1 },
+      { subgoal: 3, url: "u3", text: big },
+      { subgoal: 4, url: "u4", text: big },
+      { subgoal: 5, url: "u5", text: big },
+      { subgoal: 6, url: "u6", text: "z".repeat(5_500) },
+    ]);
+    expect(out?.some((o) => o.subgoal === 1)).toBe(false);
+    expect(out?.find((o) => o.subgoal === 2)?.text).toBe("(same page as sub-goal 1; its text was not kept)");
   });
 });
