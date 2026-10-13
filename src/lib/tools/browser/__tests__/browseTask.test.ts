@@ -3004,6 +3004,7 @@ describe("browse_task effect notes, history carry-over and recovery", () => {
       [["one", 'Go to the search page and search for "hats". Done when: the search results show hats.']],
       [["one", 'Search for hats. Done when: results for "hats" are visible.']],
       [["one", 'Done when: search for "hats" is done']],
+      [["one", "Do a search for 'red shoes'"]],
     ])("resets for %j", async (plan) => {
       stubPlanAndSteps(plan, [DONE]);
       const open = vi.fn(async () => ({}));
@@ -3032,6 +3033,8 @@ describe("browse_task effect notes, history carry-over and recovery", () => {
       [["one", "Click the 'Nike Air' search suggestion. Done when: the product page is visible."]],
       [["one", "Open the first item in the search-results list ('Preis' filter applied)"]],
       [["one", "Откройте первый товар в результатах поиска 'X'"]],
+      [["one", "Tick the 'Nur Direktverbindungen' filter and start the search. Done when: the search results page is loaded with direct connections displayed."]],
+      [["one", "Click the search button. Done when: results are visible."]],
     ])("does not reset for %j", async (plan) => {
       stubPlanAndSteps(plan, [DONE]);
       const open = vi.fn(async () => ({}));
@@ -3045,6 +3048,9 @@ describe("browse_task effect notes, history carry-over and recovery", () => {
       ["Apply the filter X. Done when: the search results show X.", false],
       ["Search for shoes. Done when: results are visible.", true],
       ['type "x" into the search box', true],
+      ["start the search", false],
+      ['Do a search for "red shoes"', true],
+      ["Perform a new search for shoes", true],
     ])("wantsTextEntry(%j) is %s", (subGoal, expected) => {
       expect(wantsTextEntry(subGoal)).toBe(expected);
     });

@@ -2090,13 +2090,19 @@ function subGoalAction(subGoal: string): string {
   return action.trim() === "" ? subGoal : action;
 }
 
-/** "search" as a noun ("search results", "search filter") is not a verb. */
+/** "search" as a noun is not a verb: a noun head before it ("the search",
+ * "a new search") or a noun tail after it ("search results", "search filter"). */
+const SEARCH_NOUN_HEAD = String.raw`(?<!(?<!\p{L})(?:the|a|an|your|my|this|that|new)\s+)`;
 const SEARCH_NOUN_TAIL = String.raw`(?![\s-]+(?:results?|filters?|page|criteria|settings|options|history|suggestions?|hits?|listings?|list)(?!\p{L}))`;
+
+/** "search" as a verb: "search for X" / "search 'X'" always counts ("do a
+ * search for X" included); otherwise a noun head or tail rules it out. */
+const SEARCH_WORD = String.raw`search(?=\s+(?:for(?!\p{L})|["“«']))|${SEARCH_NOUN_HEAD}search${SEARCH_NOUN_TAIL}`;
 
 /** Sub-goal text that asks to search / find / type into a field. Verbs only.
  * Reads only the action part: the "Done when" clause describes the results
  * page, and a reset triggered by its nouns would throw the page state away. */
-const SEARCH_INTENT = new RegExp(String.raw`(?<!\p{L})(?:search${SEARCH_NOUN_TAIL}|find|look\s+(?:for|up)|type\b[^.]{0,60}?\binto|найди|найти|поиск(?!\p{L})|ищи)`, "iu");
+const SEARCH_INTENT = new RegExp(String.raw`(?<!\p{L})(?:${SEARCH_WORD}|find|look\s+(?:for|up)|type\b[^.]{0,60}?\binto|найди|найти|поиск(?!\p{L})|ищи)`, "iu");
 function actionWantsTextEntry(action: string): boolean {
   return SEARCH_INTENT.test(action);
 }
@@ -2113,7 +2119,7 @@ export function wantsTextEntry(subGoal: string): boolean {
  * part is read (see subGoalAction): the "Done when" clause describes the
  * results page, so its nouns must not trigger a reset that throws the page
  * state (filters, sort) away. */
-const SEARCH_VERB = new RegExp(String.raw`(?<!\p{L})(?:search${SEARCH_NOUN_TAIL}|look\s+up|поиск(?!\p{L})|ищи|искать)`, "iu");
+const SEARCH_VERB = new RegExp(String.raw`(?<!\p{L})(?:${SEARCH_WORD}|look\s+up|поиск(?!\p{L})|ищи|искать)`, "iu");
 const FIND_VERB = /(?<!\p{L})(?:find|найди|найти)/iu;
 const DOUBLE_QUOTED = /"[^"]+"|“[^”]+”|«[^»]+»/u;
 const SINGLE_QUOTED = /(?<![\p{L}\p{N}])'[^']+'(?![\p{L}\p{N}])/u;
