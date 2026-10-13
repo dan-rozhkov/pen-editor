@@ -806,6 +806,71 @@ describe("browse_task", () => {
     });
   });
 
+  describe("scroll oscillation", () => {
+    const scroll = (operation: "SCROLL_UP" | "SCROLL_DOWN") => ({ operation, outcome: "act", confidence: 0.9, model: "jev" });
+    const D = scroll("SCROLL_DOWN");
+    const U = scroll("SCROLL_UP");
+    const PAGE: SnapshotResult = {
+      url: "https://example.com/configure",
+      title: "Configurator",
+      elements: [{ index: 0, tag: "button", label: "Option", ops: ["CLICK"] }],
+      snapshotId: "snap-1",
+    };
+
+    it("stalls after the sixth alternating scroll without a seventh step request", async () => {
+      const fetchMock = stubFetchSequence([D, D, U, U, D, U, DONE]);
+      const browser = stubBrowser({ snapshot: async () => PAGE });
+      const t = await runBrowseTaskLoop("configure it", 20, browser);
+      expect(t.status).toBe("stalled");
+      expect(t.steps).toHaveLength(6);
+      expect(fetchMock).toHaveBeenCalledTimes(6);
+      expect(t.reason).toBe("scroll oscillation — scrolled back and forth 6 times without acting");
+    });
+
+    it.each([
+      ["five down then one up", [D, D, D, D, D, U]],
+      ["one up then five down", [U, D, D, D, D, D]],
+    ])("does not fire on a single reversal: %s", async (_name, seq) => {
+      stubFetchSequence([...seq, DONE]);
+      const browser = stubBrowser({ snapshot: async () => PAGE });
+      const t = await runBrowseTaskLoop("read the page", 20, browser);
+      expect(t.status).toBe("done");
+      expect(t.steps).toHaveLength(6);
+    });
+
+    it("stalls on D,D,D,U,U,D (two reversals)", async () => {
+      const fetchMock = stubFetchSequence([D, D, D, U, U, D, DONE]);
+      const browser = stubBrowser({ snapshot: async () => PAGE });
+      const t = await runBrowseTaskLoop("configure it", 20, browser);
+      expect(t.status).toBe("stalled");
+      expect(fetchMock).toHaveBeenCalledTimes(6);
+    });
+
+    it("does not fire for eight scrolls in one direction", async () => {
+      stubFetchSequence([D, D, D, D, D, D, D, D, DONE]);
+      const browser = stubBrowser({ snapshot: async () => PAGE });
+      const t = await runBrowseTaskLoop("read the page", 20, browser);
+      expect(t.status).toBe("done");
+      expect(t.steps).toHaveLength(8);
+    });
+
+    it("resets the window on a non-scroll step", async () => {
+      stubFetchSequence([D, D, U, { ...HOVER_STEP, operation: "CLICK", index: 0 }, U, D, U, D, DONE]);
+      const browser = stubBrowser({ snapshot: async () => PAGE });
+      const t = await runBrowseTaskLoop("configure it", 20, browser);
+      expect(t.status).toBe("done");
+      expect(t.steps).toHaveLength(8);
+    });
+
+    it("does not fire when the url differs inside the window", async () => {
+      stubFetchSequence([D, D, U, U, D, U, DONE]);
+      let n = 0;
+      const browser = stubBrowser({ snapshot: async () => ({ ...PAGE, url: `https://example.com/p${n++}` }) });
+      const t = await runBrowseTaskLoop("configure it", 20, browser);
+      expect(t.status).toBe("done");
+    });
+  });
+
   it("counts a changed:false act result (PRESS_ESCAPE/HOVER/PRESS_ENTER) as unproductive for stall detection", async () => {
     // Escape with nothing open to close: the act "succeeds" (no `{error}`)
     // but reports changed:false — must be treated like a rejected act for

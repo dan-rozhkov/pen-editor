@@ -141,6 +141,9 @@ const MAX_CONSECUTIVE_UNPRODUCTIVE_STEPS = 3;
  */
 const CYCLE_PERIOD_REPEATS = 3;
 
+/** Consecutive landed scrolls on one url, with 2+ direction reversals, that count as oscillation. */
+const SCROLL_OSCILLATION_WINDOW = 6;
+
 /**
  * Addendum A: "the loop sleeps ~400 ms itself, takes a fresh snapshot and
  * continues" when the decision is WAIT.
@@ -1266,10 +1269,32 @@ export async function runBrowseTaskLoop(
   /** Page url each recorded step ran on, for the two-step cycle check. */
   const stepUrls = new WeakMap<TranscriptStep, string>();
   const stepKey = (st: TranscriptStep): string => `${st.operation}\u0000${st.label}\u0000${stepUrls.get(st) ?? ""}`;
+  /** Live run finding: SCROLL_DOWN/SCROLL_UP alternating for 30-40 steps on a long
+   * page. Fires when the last SCROLL_OSCILLATION_WINDOW steps are all landed
+   * scrolls on one url with at least 2 direction reversals; any other step resets it. */
+  const detectScrollOscillation = (): Transcript | null => {
+    if (steps.length < SCROLL_OSCILLATION_WINDOW) return null;
+    const tail = steps.slice(-SCROLL_OSCILLATION_WINDOW);
+    if (!tail.every((st) => st.ok && (st.operation === "SCROLL_UP" || st.operation === "SCROLL_DOWN"))) return null;
+    // A lone reversal is reading then overshoot, not oscillation.
+    const reversals = tail.filter((st, j) => j > 0 && st.operation !== tail[j - 1].operation).length;
+    if (reversals < 2) return null;
+    if (new Set(tail.map((st) => comparableUrl(stepUrls.get(st) ?? ""))).size > 1) return null;
+    return {
+      status: "stalled",
+      steps,
+      url: lastUrl,
+      title: lastTitle,
+      reason: `scroll oscillation — scrolled back and forth ${SCROLL_OSCILLATION_WINDOW} times without acting`,
+      cacheHits,
+    };
+  };
   /** The stalled transcript when the last steps repeat A,B,A,B,A,B, else null.
    * Keys are read now, not at record time: a CLICK's effect text is appended
    * to its label one snapshot later. */
   const detectCycle = (): Transcript | null => {
+    const oscillation = detectScrollOscillation();
+    if (oscillation) return oscillation;
     const len = CYCLE_PERIOD_REPEATS * 2;
     if (steps.length < len) return null;
     const tail = steps.slice(-len);
