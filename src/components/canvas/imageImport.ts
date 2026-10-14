@@ -58,7 +58,7 @@ export function readBlobAsDataURL(blob: Blob): Promise<string> {
   });
 }
 
-function loadImageSize(url: string): Promise<Size> {
+export function loadImageSize(url: string): Promise<Size> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });

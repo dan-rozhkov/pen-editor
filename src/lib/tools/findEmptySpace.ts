@@ -2,18 +2,26 @@ import { useSceneStore } from "@/store/sceneStore";
 import type { ToolHandler } from "../toolRegistry";
 import { getAbsolutePositionFlat } from "@/utils/nodeUtils";
 
-export const findEmptySpace: ToolHandler = async (args) => {
-  const width = args.width as number;
-  const height = args.height as number;
-  const padding = (args.padding as number) ?? 50;
-  const direction = (args.direction as string) ?? "right";
-  const nodeId = args.nodeId as string | undefined;
+type SceneSlice = Pick<ReturnType<typeof useSceneStore.getState>, "nodesById" | "parentById" | "rootIds">;
 
-  if (!width || !height) {
-    return JSON.stringify({ error: "width and height are required" });
-  }
+export interface EmptySpaceQuery {
+  width: number;
+  height: number;
+  padding?: number;
+  direction?: string;
+  nodeId?: string;
+}
 
-  const { nodesById, parentById, rootIds } = useSceneStore.getState();
+/**
+ * Pure placement logic behind find_empty_space_on_canvas (also used by
+ * browse_screenshot's placeOnCanvas): top-left of a width x height box that
+ * sits next to the anchor node, or next to all visible root content.
+ */
+export function computeEmptySpace(
+  scene: SceneSlice,
+  { width, height, padding = 50, direction = "right", nodeId }: EmptySpaceQuery
+): { x: number; y: number } | { error: string } {
+  const { nodesById, parentById, rootIds } = scene;
 
   let bounds: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
 
@@ -21,7 +29,7 @@ export const findEmptySpace: ToolHandler = async (args) => {
     // Use the specified node's bounds
     const node = nodesById[nodeId];
     if (!node) {
-      return JSON.stringify({ error: `Node "${nodeId}" not found` });
+      return { error: `Node "${nodeId}" not found` };
     }
     const abs = getAbsolutePositionFlat(nodeId, nodesById, parentById);
     bounds = {
@@ -50,7 +58,7 @@ export const findEmptySpace: ToolHandler = async (args) => {
 
   // If canvas is empty, place at origin
   if (!bounds) {
-    return JSON.stringify({ x: 0, y: 0 });
+    return { x: 0, y: 0 };
   }
 
   const centerX = (bounds.minX + bounds.maxX) / 2;
@@ -60,10 +68,6 @@ export const findEmptySpace: ToolHandler = async (args) => {
   let y: number;
 
   switch (direction) {
-    case "right":
-      x = bounds.maxX + padding;
-      y = centerY - height / 2;
-      break;
     case "left":
       x = bounds.minX - padding - width;
       y = centerY - height / 2;
@@ -81,6 +85,21 @@ export const findEmptySpace: ToolHandler = async (args) => {
       y = centerY - height / 2;
   }
 
-  return JSON.stringify({ x: Math.round(x), y: Math.round(y) });
-};
+  return { x: Math.round(x), y: Math.round(y) };
+}
 
+export const findEmptySpace: ToolHandler = async (args) => {
+  const width = args.width as number;
+  const height = args.height as number;
+  const padding = (args.padding as number) ?? 50;
+  const direction = (args.direction as string) ?? "right";
+  const nodeId = args.nodeId as string | undefined;
+
+  if (!width || !height) {
+    return JSON.stringify({ error: "width and height are required" });
+  }
+
+  return JSON.stringify(
+    computeEmptySpace(useSceneStore.getState(), { width, height, padding, direction, nodeId })
+  );
+};

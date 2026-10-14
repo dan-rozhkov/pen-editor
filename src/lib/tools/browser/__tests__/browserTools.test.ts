@@ -10,6 +10,9 @@ import {
   BROWSER_BRIDGE_METHOD_MISSING_ERROR,
   BROWSER_NOT_AVAILABLE_ERROR,
 } from "@/lib/tools/browser/shared";
+import { useSceneStore } from "@/store/sceneStore";
+import { resetStores, seedScene } from "@/test/fixtures";
+import { getFills } from "@/utils/fillUtils";
 import { setPenDesktop, stubBrowser, stubLocateFetch, type PenDesktopBrowser } from "./helpers";
 
 // These suites pin the desktop-bridge behavior, including the "no bridge at
@@ -544,6 +547,112 @@ describe("browse_screenshot", () => {
     const result = JSON.parse(await browseScreenshot({}));
 
     expect(result).toEqual({ error: "capture failed" });
+  });
+});
+
+describe("browse_screenshot placeOnCanvas", () => {
+  const shot = {
+    imageData: "data:image/jpeg;base64,AAAA",
+    width: 800,
+    height: 600,
+    url: "https://example.com/page",
+    title: "Example",
+  };
+  const rootCount = () => useSceneStore.getState().rootIds.length;
+  const stubShot = (screenshot: PenDesktopBrowser["screenshot"]) =>
+    setPenDesktop(stubBrowser({ screenshot }));
+
+  it("places nothing and forwards args unchanged by default", async () => {
+    resetStores();
+    const received: unknown[] = [];
+    stubShot(async (a) => (received.push(a), shot));
+    const out = JSON.parse(await browseScreenshot({ annotate: false }));
+    expect(received).toEqual([{ annotate: false }]);
+    expect(out).toEqual(shot);
+    expect(rootCount()).toBe(0);
+  });
+
+  it("places one image rect at x/y with the screenshot size and strips the args", async () => {
+    resetStores();
+    const received: unknown[] = [];
+    stubShot(async (a) => (received.push(a), shot));
+    const out = JSON.parse(await browseScreenshot({ placeOnCanvas: true, x: 30, y: 40 }));
+    expect(received).toEqual([{}]);
+    expect(rootCount()).toBe(1);
+    const node = useSceneStore.getState().nodesById[out.placedNodeId];
+    expect(node).toMatchObject({ type: "rect", x: 30, y: 40, width: 800, height: 600, name: "Screenshot — Example" });
+    const fill = getFills(node)[0];
+    expect(fill).toMatchObject({ type: "image", image: { url: shot.imageData, mode: "fill" } });
+    expect(out.placedAt).toEqual({ x: 30, y: 40, width: 800, height: 600 });
+    expect(out.imageData).toBe(shot.imageData);
+  });
+
+  it("places to the right of existing content when x/y are omitted, names by hostname", async () => {
+    resetStores();
+    seedScene();
+    stubShot(async () => ({ ...shot, title: "" }));
+    const out = JSON.parse(await browseScreenshot({ placeOnCanvas: true }));
+    const node = useSceneStore.getState().nodesById[out.placedNodeId];
+    // content spans x 100..800, y 100..400 -> right edge 800 + 50
+    expect(node.x).toBe(850);
+    expect(node.name).toBe("Screenshot — example.com");
+  });
+
+  it("uses a second plain capture for the fill when annotate is true", async () => {
+    resetStores();
+    const received: unknown[] = [];
+    stubShot(async (a) => {
+      received.push(a);
+      return (a as { annotate?: boolean }).annotate
+        ? { ...shot, imageData: "data:image/jpeg;base64,LABELS", snapshotId: "s1", elements: [] }
+        : { ...shot, imageData: "data:image/jpeg;base64,PLAIN" };
+    });
+    const out = JSON.parse(await browseScreenshot({ annotate: true, placeOnCanvas: true, x: 0, y: 0 }));
+    expect(received).toEqual([{ annotate: true }, { annotate: false }]);
+    expect(out.imageData).toBe("data:image/jpeg;base64,LABELS");
+    expect(out.snapshotId).toBe("s1");
+    const fill = getFills(useSceneStore.getState().nodesById[out.placedNodeId])[0];
+    expect(fill).toMatchObject({ image: { url: "data:image/jpeg;base64,PLAIN" } });
+  });
+
+  it("returns placeError and places nothing when the plain re-capture fails", async () => {
+    resetStores();
+    let n = 0;
+    stubShot(async () => {
+      if (n++ === 0) return shot;
+      throw new Error("boom");
+    });
+    const out = JSON.parse(await browseScreenshot({ annotate: true, placeOnCanvas: true }));
+    expect(out.imageData).toBe(shot.imageData);
+    expect(out.placeError).toContain("boom");
+    expect(out.placedNodeId).toBeUndefined();
+    expect(rootCount()).toBe(0);
+  });
+
+  it("returns placeError and places nothing when the capture has no image data", async () => {
+    resetStores();
+    stubShot(async () => ({ url: shot.url, title: shot.title }));
+    const out = JSON.parse(await browseScreenshot({ placeOnCanvas: true }));
+    expect(out.placeError).toBe("The capture returned no image data.");
+    expect(rootCount()).toBe(0);
+  });
+
+  it("ignores a single coordinate and auto-places instead", async () => {
+    resetStores();
+    seedScene();
+    stubShot(async () => shot);
+    const out = JSON.parse(await browseScreenshot({ placeOnCanvas: true, x: 0 }));
+    expect(useSceneStore.getState().nodesById[out.placedNodeId].x).toBe(850);
+  });
+
+  it("places nothing when the bridge reports an error", async () => {
+    resetStores();
+    stubShot(async () => {
+      throw new Error("capture failed");
+    });
+    const out = JSON.parse(await browseScreenshot({ placeOnCanvas: true }));
+    expect(out).toEqual({ error: "capture failed" });
+    expect(rootCount()).toBe(0);
   });
 });
 

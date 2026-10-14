@@ -72,8 +72,10 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   // browse_snapshot/browse_screenshot/browse_tabs (docs/superpowers/specs/
   // 2026-09-23-full-browser-use-design.md) are the same kind of thin
   // forwarder as the four browse_* tools above — they read/control the
-  // browser tab (element table, a pixel capture, tab list/switch/close/open)
-  // and never touch the scene graph.
+  // browser tab (element table, a pixel capture, tab list/switch/close/open).
+  // browse_screenshot with placeOnCanvas:true does write to the scene: it
+  // stays unserialized because the capture can take seconds, and queues
+  // only its final position-and-addNode step through `runSerialized`.
   "browse_snapshot",
   "browse_screenshot",
   "browse_tabs",
@@ -103,7 +105,16 @@ let queue: Promise<unknown> = Promise.resolve();
  */
 export function runToolCall<T>(toolName: string, task: () => Promise<T>): Promise<T> {
   if (!isSerializedTool(toolName)) return task();
+  return runSerialized(task);
+}
 
+/**
+ * Queues one scene write from inside an unserialized tool — e.g.
+ * browse_screenshot's `placeOnCanvas`, whose seconds-long capture must not
+ * hold the queue but whose final `addNode` must not land in the middle of a
+ * serialized writer's snapshot-and-commit.
+ */
+export function runSerialized<T>(task: () => Promise<T>): Promise<T> {
   const result = queue.then(task, task);
   queue = result.then(
     () => undefined,
