@@ -50,6 +50,7 @@ import { browseSnapshot } from "./tools/browser/browseSnapshot";
 import { browseScreenshot } from "./tools/browser/browseScreenshot";
 import { browseTabs } from "./tools/browser/browseTabs";
 import { browseTask } from "./tools/browser/browseTask";
+import { browseAgent } from "./tools/browser/browseAgent";
 import { defineComponent, extractComponent, detachInstance, deleteComponent } from "./tools/components";
 import { applyLoopGuard } from "@sideform/browser-agent/loop";
 
@@ -168,4 +169,10 @@ export const toolHandlers: Record<string, ToolHandler> = {
   // 2026-09-18-browse-task-jev-loop-design.md) — a client-side loop, not a
   // single forwarded call. See browseTask.ts's header comment.
   browse_task: withBrowseLoopGuard("browse_task", browseTask),
+  // browse_agent (pen-editor-backend docs/specs/2026-10-14-browse-subagent-
+  // design.md) is deliberately NOT loop-guarded: it is a whole task, not one
+  // browser action, and the guard keys on (tool, args) repetition. Its nested
+  // browse_* calls already pass through the guarded handlers above, under the
+  // parent's sessionId, so loops inside the sub-agent are still caught.
+  browse_agent: browseAgent,
 };

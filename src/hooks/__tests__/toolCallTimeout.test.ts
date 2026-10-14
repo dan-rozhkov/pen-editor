@@ -13,6 +13,7 @@ describe("getToolCallTimeoutMs browse_* desktop/cloud split", () => {
     expect(getToolCallTimeoutMs("browse_act")).toBe(120_000);
     expect(getToolCallTimeoutMs("browse_snapshot")).toBe(30_000);
     expect(getToolCallTimeoutMs("browse_task")).toBe(browseTaskInnerBoundMs(false) + 60_000);
+    expect(getToolCallTimeoutMs("browse_agent")).toBe(900_000);
   });
 
   it("adds cloud headroom without a desktop browser", () => {
@@ -22,6 +23,8 @@ describe("getToolCallTimeoutMs browse_* desktop/cloud split", () => {
     expect(getToolCallTimeoutMs("browse_snapshot")).toBe(90_000);
     // Covers the cloud loop's longer deadline (browseTask.ts).
     expect(getToolCallTimeoutMs("browse_task")).toBe(browseTaskInnerBoundMs(true) + 60_000);
+    // No cloud headroom on top: the nested calls carry their own.
+    expect(getToolCallTimeoutMs("browse_agent")).toBe(900_000);
   });
 
   it("treats penDesktop without .browser as cloud, and leaves non-browse tools alone", () => {

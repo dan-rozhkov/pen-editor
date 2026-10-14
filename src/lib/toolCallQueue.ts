@@ -86,6 +86,10 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   // be the worst case of the head-of-line stall this list already exists to
   // avoid.
   "browse_task",
+  // browse_agent runs a nested chat whose own browse_* calls go through this
+  // same queue's funnel; they are unserialized, but a serialized parent would
+  // still hold every scene-mutating call behind it for minutes.
+  "browse_agent",
 ];
 
 const unserialized = new Set(UNSERIALIZED_TOOL_NAMES);

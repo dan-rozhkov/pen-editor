@@ -82,6 +82,7 @@ export const toolDisplayNames: Record<string, string> = {
   browse_screenshot: "Screenshot Browser",
   browse_tabs: "Manage Browser Tabs",
   browse_task: "Browse Task",
+  browse_agent: "Browse Agent",
   web_search: "Search the Web",
   fetch_url: "Read Web Pages",
   ...mobbinToolDisplayNames,

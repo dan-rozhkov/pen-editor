@@ -47,8 +47,10 @@ export interface AnalyticsEventMap {
     error_kind?: string;
     // "webmcp": an in-page agent calling through navigator.modelContext
     // (src/lib/webmcp/). Kept distinct from "bridge" so the MCP bridges'
-    // numbers stay comparable across the change.
-    source: "chat" | "bridge" | "webmcp";
+    // numbers stay comparable across the change. "browse_agent": a browse_*
+    // call made by the nested browse sub-agent session, kept apart from the
+    // user's own chat calls.
+    source: "chat" | "bridge" | "webmcp" | "browse_agent";
   };
   agent_turn_failed: { error_kind: string };
   editor_command_run: { command_id: string };

@@ -123,6 +123,7 @@ const toolIcons: Record<string, Icon> = {
   browse_screenshot: CameraIcon,
   browse_tabs: StackIcon,
   browse_task: CompassIcon,
+  browse_agent: CompassIcon,
   web_search: GlobeIcon,
   fetch_url: LinkIcon,
   // Every Mobbin-served tool carries the Mobbin mark instead of a
