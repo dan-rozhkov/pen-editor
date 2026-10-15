@@ -24,6 +24,10 @@ const COMMAND_TIMEOUT_MS: Record<string, number> = {
   open: 145_000,
   act: 175_000,
   tabs: 125_000,
+  // The controller's fixture budget is capped at 5 min (MAX_BUDGET_MS in
+  // browser-agent/src/fixture/apply.ts); this must outlast it (+30s margin),
+  // or the fetch aborts a setup that is still legitimately running.
+  applyFixture: 330_000,
 };
 const DEFAULT_COMMAND_TIMEOUT_MS = 85_000;
 const TIMEOUT_ERROR = "Cloud browser timed out — try again.";
@@ -240,6 +244,11 @@ function makeBridge(resolveChat: () => string): CloudBrowserBridge {
     perform: (args) => call("perform", args),
     screenshot: (args) => call("screenshot", args),
     tabs: (args) => call("tabs", args),
+    // The signal and options of the BrowserBridge call stay local: the host
+    // gate (allowNetworkMocks) is set by the backend, and the command timeout
+    // bounds the request.
+    applyFixture: (fixture) => call("applyFixture", { fixture }),
+    releaseFixture: (token) => call("releaseFixture", { token }),
   };
 }
 

@@ -12,6 +12,7 @@ import { PanelEmptyState } from "@/components/PanelEmptyState";
 import { messageToMarkdown } from "@/lib/chatExport";
 import { SimpleMarkdown } from "./SimpleMarkdown";
 import { ToolCallIndicator } from "./ToolCallIndicator";
+import { BrowseAgentIndicator } from "./BrowseAgentIndicator";
 import type { LikeMeta } from "./LikeReferenceButton";
 import { ThinkingIndicator } from "./ThinkingIndicator";
 import { ImageLightbox } from "./ImageLightbox";
@@ -434,6 +435,9 @@ export function MessageList({
                 }
                 if (isToolUIPart(part)) {
                   const tp = part as { toolCallId: string };
+                  if (part.type === "tool-browse_agent") {
+                    return <BrowseAgentIndicator key={tp.toolCallId} part={part} />;
+                  }
                   return (
                     <ToolCallIndicator key={tp.toolCallId} part={part} />
                   );

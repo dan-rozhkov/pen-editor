@@ -2,36 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toolHandlers, type ToolHandler } from "@/lib/toolRegistry";
 import { clearOpenCodeKey, setOpenCodeKey } from "@/lib/opencodeKey";
 import { useChatStore } from "@/store/chatStore";
+import { sse, textTurn } from "./helpers";
 import { BROWSE_AGENT_DEADLINE_MS, browseAgent, nestedChatId } from "../browseAgent";
-
-type Chunk = Record<string, unknown>;
-
-function sse(chunks: Chunk[]): Response {
-  const body = [...chunks, "[DONE]"]
-    .map((c) => `data: ${typeof c === "string" ? c : JSON.stringify(c)}\n\n`)
-    .join("");
-  return new Response(body, {
-    status: 200,
-    headers: { "content-type": "text/event-stream", "x-vercel-ai-ui-message-stream": "v1" },
-  });
-}
 
 const toolTurn = (toolName: string, input: unknown, toolCallId = "call-1"): Response =>
   sse([
     { type: "start" },
     { type: "start-step" },
     { type: "tool-input-available", toolCallId, toolName, input },
-    { type: "finish-step" },
-    { type: "finish" },
-  ]);
-
-const textTurn = (text: string): Response =>
-  sse([
-    { type: "start" },
-    { type: "start-step" },
-    { type: "text-start", id: "t1" },
-    { type: "text-delta", id: "t1", delta: text },
-    { type: "text-end", id: "t1" },
     { type: "finish-step" },
     { type: "finish" },
   ]);

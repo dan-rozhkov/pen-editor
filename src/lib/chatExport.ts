@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai";
 import { isToolUIPart, getToolName } from "ai";
 import { getToolDisplayName } from "@/lib/toolDisplayNames";
+import { redactBrowseSetupInput } from "@/lib/tools/browser/redactBrowseSetupInput";
 
 const MAX_BLOCK_CHARS = 4000;
 const DATA_IMAGE_RE = /data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/gi;
@@ -52,7 +53,7 @@ function toolPartToMarkdown(part: unknown): string {
   const lines: string[] = [`**Tool:** ${getToolDisplayName(name)}`];
 
   if (tp.input !== undefined) {
-    lines.push(jsonBlock("Input", tp.input));
+    lines.push(jsonBlock("Input", name === "browse_agent" ? redactBrowseSetupInput(tp.input) : tp.input));
   }
   if (tp.output !== undefined) {
     lines.push(jsonBlock("Output", tp.output));

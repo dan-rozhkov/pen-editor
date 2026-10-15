@@ -6,13 +6,19 @@ import {
   BROWSE_AGENT_OUTER_TIMEOUT_MS,
   createBrowseAgentSession,
   goalRequiredResult,
+  SetupError,
+  createFixtureSetup,
   singleUseTool,
 } from "@sideform/browser-agent/agent/session";
+import { parsePageFixture } from "@sideform/browser-agent/fixture";
 import { Chat } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai";
 import { getRequestUserId } from "@/lib/auth/authState";
 import { createChatTransport, CLIENT_CAPABILITIES } from "@/lib/chatTransport";
 import type { ToolHandler } from "../../toolRegistry";
+import { getBrowserBridge, isDesktopBrowserAvailable, type BrowserBridge } from "./bridge";
+import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
+import { useCloudBrowserStore } from "@/store/cloudBrowserStore";
 
 /**
  * browse_agent — runs a browse-only sub-agent as a nested, headless chat
@@ -118,15 +124,81 @@ export const browseAgent: ToolHandler = async (args, context) => {
   // Fresh loop-guard ring: nested calls share the parent's sessionId.
   resetLoopGuard(parentSessionId);
 
-  const result = await session.run(
-    goal,
-    {
-      send: (text) => chat.sendMessage({ text }),
-      stop: () => void chat.stop(),
-      messages: () => chat.messages,
-      error: () => chat.error,
-    },
-    { url: url || undefined, toolCallId: context?.toolCallId },
-  );
-  return JSON.stringify(result);
+  const driver = {
+    send: (text: string) => chat.sendMessage({ text }),
+    stop: () => void chat.stop(),
+    messages: () => chat.messages,
+    error: () => chat.error,
+  };
+  const toolCallId = context?.toolCallId;
+  const setup = args.setup;
+  const hasSetup = setup !== undefined && setup !== null;
+
+  if (!hasSetup) {
+    const result = await session.run(goal, driver, { url: url || undefined, toolCallId });
+    return JSON.stringify(result);
+  }
+
+  // Page fixture (spec 2026-10-15-browse-fixture-design.md): the package's
+  // createFixtureSetup owns apply + release (incl. a late apply after abort).
+  // Never `url` together with `setup`: the fixture carries the start URL.
+  const bridge = getBrowserBridge(parentSessionId);
+  const cloud = !isDesktopBrowserAvailable();
+  const setPhase = (phase: "setup" | "running") => {
+    if (toolCallId) useBrowseAgentPhaseStore.getState().setPhase(toolCallId, phase);
+  };
+  // Unique per run: the banner count belongs to the run that installed it.
+  const mockOwner = toolCallId ?? `browse-agent-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const setMocks = (count: number) => {
+    if (!cloud || !parentSessionId) return;
+    const store = useCloudBrowserStore.getState();
+    if (count > 0) store.setMockCount(parentSessionId, count, mockOwner);
+    else store.clearMockCount(parentSessionId, mockOwner);
+  };
+  // The tool's `url` is the only start URL; the model-supplied `version` and
+  // `url` inside `setup` never win.
+  const parsed =
+    typeof setup === "object" && !Array.isArray(setup)
+      ? parsePageFixture({
+          ...(({ url: _ignored, ...rest }) => rest)(setup as Record<string, unknown>),
+          version: 1,
+          ...(url ? { url } : {}),
+        })
+      : ({ ok: false, error: "setup must be an object" } as const);
+  let setupApplied = false;
+  const fs = parsed.ok
+    ? createFixtureSetup((bridge ?? {}) as BrowserBridge, parsed.value, {
+        allowNetworkMocks: true,
+        snapshot: () =>
+          executeToolCall(
+            "browse_snapshot",
+            {},
+            { sessionId: parentSessionId, toolCallId: `${toolCallId ?? "browse_agent"}:setup`, signal: context?.signal },
+            "browse_agent",
+          ),
+        // Not called after fs.release(), so a late apply never sets the banner.
+        onApplied: ({ mockCount }) => {
+          setupApplied = true;
+          setPhase("running");
+          setMocks(mockCount);
+        },
+      })
+    : undefined;
+  setPhase("setup");
+  try {
+    const result = await session.run(goal, driver, {
+      toolCallId,
+      setup:
+        fs?.setup ??
+        (async () => {
+          throw new SetupError("validate", parsed.ok ? "" : parsed.error);
+        }),
+    });
+    return JSON.stringify(setupApplied ? { ...result, setupApplied: true } : result);
+  } finally {
+    // The mocks live until the task ends, whatever the outcome.
+    await fs?.release();
+    setMocks(0);
+    if (toolCallId) useBrowseAgentPhaseStore.getState().clearPhase(toolCallId);
+  }
 };

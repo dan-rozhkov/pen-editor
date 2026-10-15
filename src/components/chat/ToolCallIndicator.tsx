@@ -1,4 +1,4 @@
-import { createElement, useMemo, useState } from "react";
+import { createElement, useMemo, useState, type ReactNode } from "react";
 import {
   CaretDownIcon,
   DownloadSimpleIcon,
@@ -65,9 +65,17 @@ function formatJson(value: unknown): string {
 interface ToolCallIndicatorProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   part: any;
+  /** Replaces the status word ("Running...", "Done", "Error"). Used by BrowseAgentIndicator. */
+  statusLabel?: string;
+  /** Amber instead of the muted status color. */
+  statusWarning?: boolean;
+  /** Lines shown under the chip, above the expandable Input/Output. */
+  detail?: ReactNode;
+  /** Replaces the raw tool input in the expandable Input pane (e.g. a redacted copy). */
+  inputForDisplay?: unknown;
 }
 
-export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
+export function ToolCallIndicator({ part, statusLabel, statusWarning, detail, inputForDisplay }: ToolCallIndicatorProps) {
   const [open, setOpen] = useState(false);
   const toolPart = part as AnyToolPart;
   const status = getToolStatus(toolPart);
@@ -118,12 +126,12 @@ export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
           <span className="truncate">{displayName}</span>
         )}
         <span
-          className={`shrink-0 ${status === "error" ? "text-red-500" : "text-text-disabled"}`}
+          className={`shrink-0 ${status === "error" ? "text-red-500" : statusWarning ? "text-amber-500" : "text-text-disabled"}`}
         >
           {status === "running" ? (
-            <Shimmer as="span">{statusText(status)}</Shimmer>
+            <Shimmer as="span">{statusLabel ?? statusText(status)}</Shimmer>
           ) : (
-            statusText(status)
+            (statusLabel ?? statusText(status))
           )}
         </span>
         <CaretDownIcon
@@ -131,6 +139,7 @@ export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
           className={`transition-transform duration-250 ease-smooth-out shrink-0 ${open ? "" : "-rotate-90"}`}
         />
       </button>
+      {detail}
       {status === "completed" && imageUrls.length > 0 && (
         <div className="mt-1.5 mb-1.5">
           {imageUrls.length >= 2 && (
@@ -176,7 +185,7 @@ export function ToolCallIndicator({ part }: ToolCallIndicatorProps) {
               Input
             </div>
             <pre className="p-2 rounded bg-surface-elevated font-mono text-[11px] text-text-muted max-h-40 overflow-auto whitespace-pre-wrap break-all">
-              {formatJson(toolPart.input)}
+              {formatJson(inputForDisplay !== undefined ? inputForDisplay : toolPart.input)}
             </pre>
           </div>
           <div>

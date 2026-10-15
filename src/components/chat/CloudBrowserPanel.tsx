@@ -22,6 +22,7 @@ const MAX_TIMER_MS = 2 ** 31 - 1;
  */
 export function CloudBrowserPanel({ chatId }: { chatId: string }) {
   const session = useCloudBrowserStore((s) => s.sessions[chatId]);
+  const mockCount = useCloudBrowserStore((s) => s.mocks[chatId]?.count ?? 0);
   const [collapsed, setCollapsed] = useState(false);
 
   // One timer set to the moment the backend will have dropped the session
@@ -97,6 +98,14 @@ export function CloudBrowserPanel({ chatId }: { chatId: string }) {
           {collapsed ? <CaretDownIcon /> : <CaretUpIcon />}
         </Button>
       </div>
+      {mockCount > 0 && (
+        <div
+          role="status"
+          className="border-t border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-500"
+        >
+          {`⚠ ${mockCount} API ${mockCount === 1 ? "mock" : "mocks"} active`}
+        </div>
+      )}
       {!collapsed && (
         <iframe
           title="Cloud browser live view"
