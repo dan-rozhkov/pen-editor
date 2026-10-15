@@ -25,7 +25,10 @@ export interface BridgeCall {
 
 /** A scripted step that makes the bridge method reject with `error`. */
 export class Throws {
-  constructor(readonly error: unknown) {}
+  readonly error: unknown;
+  constructor(error: unknown) {
+    this.error = error;
+  }
 }
 export const throws = (error: unknown) => new Throws(error);
 

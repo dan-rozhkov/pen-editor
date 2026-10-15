@@ -133,7 +133,7 @@ describe("browse_screenshot placeOnCanvas", () => {
     const names: string[] = [];
     for (let i = 0; i < 4; i++) {
       const p = JSON.parse(await browseScreenshot({ placeOnCanvas: true, x: i, y: 0 }));
-      names.push(node(p.placedNodeId).name);
+      names.push(node(p.placedNodeId).name ?? "<unnamed>");
     }
     expect(names).toEqual([
       "Screenshot — browser",

@@ -34,7 +34,7 @@ describe("callBrowserBridge", () => {
 
   it("passes the args object itself to the call and stringifies the result", async () => {
     const args = { a: 1 };
-    const call = vi.fn(async () => ({ ok: true }));
+    const call = vi.fn(async (_args: unknown) => ({ ok: true }));
     expect(await callBrowserBridge(call, args)).toBe('{"ok":true}');
     expect(call.mock.calls[0][0]).toBe(args);
   });
