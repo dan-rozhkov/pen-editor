@@ -149,7 +149,7 @@ The browse_task loop (snapshot -> `/api/browse/step` -> perform, sub-goal
 planning, the action cache `pen.browseActionCache.v1`, loop guard, commit-label
 rules) is NOT in this repo: it comes from `@sideform/browser-agent/loop`
 (`github:dan-rozhkov/browser-agent#v0.2.1`, public MIT repo, no token needed;
-`npm ci` builds its `dist/` through its `prepare` script). Here `src/lib/tools/browser/browseTask.ts` is only
+`npm ci` builds its `dist/` through its `prepare` script). Renovate (`renovate.json`) opens bump PRs for `@sideform/browser-agent` only. Patch bumps automerge on green CI. Minor bumps are breaking in 0.x and need a human. Here `src/lib/tools/browser/browseTask.ts` is only
 the `ToolHandler` glue; `backend.ts` builds the one `createHttpBackend`
 (`apiFetch`: base URL and cookie resolved per request) that `browseTask`
 and `browseAct` share. `window.penDesktop.browser` is typed as the package's
