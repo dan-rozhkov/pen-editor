@@ -4,12 +4,15 @@ import { browseAct, runActionsBatch } from "@/lib/tools/browser/browseAct";
 import { browseFindImages } from "@/lib/tools/browser/browseFindImages";
 import { browseRead } from "@/lib/tools/browser/browseRead";
 import { browseSnapshot } from "@/lib/tools/browser/browseSnapshot";
+import { runSerialized } from "@/lib/toolCallQueue";
+import { browseCapture } from "@/lib/tools/browser/browseCapture";
 import { browseScreenshot } from "@/lib/tools/browser/browseScreenshot";
 import { browseTabs } from "@/lib/tools/browser/browseTabs";
 import {
   BROWSER_BRIDGE_METHOD_MISSING_ERROR,
   BROWSER_NOT_AVAILABLE_ERROR,
 } from "@/lib/tools/browser/shared";
+import { useHistoryStore } from "@/store/historyStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { resetStores, seedScene } from "@/test/fixtures";
 import { getFills } from "@/utils/fillUtils";
@@ -1214,5 +1217,90 @@ describe("browse_act actions batch", () => {
     expect(result.completed).toBe(1);
     expect(result.error).toBeUndefined();
     expect(result.snapshot).toBeUndefined();
+  });
+});
+
+describe("browse_capture", () => {
+  const page = {
+    html: "<!doctype html><html><body><b>hi</b></body></html>",
+    width: 1000,
+    height: 2000,
+    url: "https://example.com/p",
+    title: "Example",
+  };
+  const stubCapture = (capture: (a: unknown) => Promise<unknown>) =>
+    setPenDesktop(stubBrowser({ capture } as Partial<PenDesktopBrowser>));
+  const nodes = () => useSceneStore.getState().nodesById;
+
+  it("creates one embed at x/y, strips x/y from the bridge call, never returns the html", async () => {
+    resetStores();
+    const received: unknown[] = [];
+    stubCapture(async (a) => (received.push(a), page));
+    const raw = await browseCapture({ index: 3, snapshotId: "s1", x: 30, y: 40 });
+    const out = JSON.parse(raw);
+    expect(received).toEqual([{ index: 3, snapshotId: "s1" }]);
+    expect(out).toEqual({ nodeId: expect.any(String), width: 1000, height: 2000, url: page.url, title: "Example" });
+    expect(raw).not.toContain("<b>");
+    expect(useSceneStore.getState().rootIds).toEqual([out.nodeId]);
+    expect(nodes()[out.nodeId]).toMatchObject({
+      type: "embed", x: 30, y: 40, width: 1000, height: 2000, htmlContent: page.html, name: "Page — Example",
+    });
+  });
+
+  it("auto-places right of content, names by hostname, falls back on a bad size", async () => {
+    resetStores();
+    seedScene();
+    stubCapture(async () => ({ ...page, title: "", width: -1 }));
+    const out = JSON.parse(await browseCapture({ x: 5 }));
+    expect(nodes()[out.nodeId]).toMatchObject({ x: 850, width: 1280, height: 800, name: "Page — example.com" });
+  });
+
+  it("is one undo step", async () => {
+    resetStores();
+    stubCapture(async () => page);
+    const before = useHistoryStore.getState().past.length;
+    await browseCapture({});
+    expect(useHistoryStore.getState().past.length).toBe(before + 1);
+  });
+
+  it("passes a bridge error through and places nothing", async () => {
+    resetStores();
+    stubCapture(async () => ({ error: "Page is too large to capture" }));
+    expect(JSON.parse(await browseCapture({}))).toEqual({ error: "Page is too large to capture" });
+    expect(useSceneStore.getState().rootIds).toEqual([]);
+  });
+
+  it("adds no node when the signal aborts before the bridge call returns", async () => {
+    resetStores();
+    const ac = new AbortController();
+    stubCapture(async () => {
+      ac.abort();
+      return page;
+    });
+    const out = JSON.parse(await browseCapture({}, { signal: ac.signal }));
+    expect(out.error).toMatch(/aborted or timed out/);
+    expect(useSceneStore.getState().rootIds).toEqual([]);
+  });
+
+  it("adds no node when the signal aborts after the bridge resolves, before placement", async () => {
+    resetStores();
+    const ac = new AbortController();
+    stubCapture(async () => page);
+    // Occupy the serialized queue so the abort lands before the placement task runs.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const blocker = runSerialized(() => gate);
+    const pending = browseCapture({}, { signal: ac.signal });
+    await new Promise((r) => setTimeout(r, 0));
+    ac.abort();
+    release();
+    await blocker;
+    expect(JSON.parse(await pending).error).toMatch(/aborted or timed out/);
+    expect(useSceneStore.getState().rootIds).toEqual([]);
+  });
+
+  it("returns the 'needs a newer desktop app' error when the bridge lacks .capture", async () => {
+    setPenDesktop(stubBrowser());
+    expect(JSON.parse(await browseCapture({}))).toEqual({ error: BROWSER_BRIDGE_METHOD_MISSING_ERROR });
   });
 });

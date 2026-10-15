@@ -235,6 +235,7 @@ function makeBridge(resolveChat: () => string): CloudBrowserBridge {
     act: (args) => call("act", args),
     findImages: (args) => call("findImages", args),
     read: (args) => call("read", args),
+    capture: (args) => call("capture", args),
     snapshot: () => call("snapshot"),
     perform: (args) => call("perform", args),
     screenshot: (args) => call("screenshot", args),

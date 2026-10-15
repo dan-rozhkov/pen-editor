@@ -311,6 +311,10 @@ const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
   // browse_open's ~65s worst case (see browse_open's override above), so it
   // needs the same headroom as browse_open — 70s leaves margin above that.
   browse_tabs: 70_000,
+  // browse_capture serializes the whole DOM (and, on cloud, ships up to ~3 MB of
+  // HTML back). The desktop command budget is 20s; 60s sits well above it, and
+  // cloud mode adds its usual +60s.
+  browse_capture: 60_000,
   // generate_vector hands the prompt to QuiverAI's arrow-2, which draws the
   // SVG token by token: measured 20s for a simple icon and ~90s for a
   // detailed illustration, against the backend's own QUIVER_TIMEOUT_MS =

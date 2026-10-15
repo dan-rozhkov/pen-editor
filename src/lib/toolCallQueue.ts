@@ -79,6 +79,10 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   "browse_snapshot",
   "browse_screenshot",
   "browse_tabs",
+  // browse_capture writes one embed to the scene like browse_screenshot's
+  // placeOnCanvas: the DOM serialization can take seconds, so only its final
+  // position-and-addNode step is queued through `runSerialized`.
+  "browse_capture",
   // browse_task (docs/superpowers/specs/2026-09-18-browse-task-jev-loop-
   // design.md) runs a whole snapshot/step/perform loop bounded by a 90s
   // deadline — it holds its connection far longer than the other three

@@ -1,5 +1,6 @@
 import {
   ArticleIcon,
+  CopyIcon,
   BezierCurveIcon,
   BinocularsIcon,
   BookOpenIcon,
@@ -122,6 +123,7 @@ const toolIcons: Record<string, Icon> = {
   browse_snapshot: ListChecksIcon,
   browse_screenshot: CameraIcon,
   browse_tabs: StackIcon,
+  browse_capture: CopyIcon,
   browse_task: CompassIcon,
   browse_agent: CompassIcon,
   web_search: GlobeIcon,

@@ -4,6 +4,7 @@ import { lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai"
 import { getRequestUserId } from "@/lib/auth/authState";
 import { createChatTransport, CLIENT_CAPABILITIES } from "@/lib/chatTransport";
 import type { ToolHandler } from "../../toolRegistry";
+import { safeParseObject } from "./shared";
 
 /**
  * browse_agent — runs a browse-only sub-agent as a nested, headless chat
@@ -34,7 +35,7 @@ const ANSWER_MAX_CHARS = 8000;
 const ERROR_MAX_CHARS = 300;
 const NESTED_ID_MAX_CHARS = 200;
 
-const BROWSE_AGENT_TOOLS: ReadonlySet<string> = new Set([
+const BASE_BROWSE_AGENT_TOOLS = [
   "browse_open",
   "browse_snapshot",
   "browse_screenshot",
@@ -42,7 +43,9 @@ const BROWSE_AGENT_TOOLS: ReadonlySet<string> = new Set([
   "browse_tabs",
   "browse_find_images",
   "browse_read",
-]);
+] as const;
+/** Allowed only when the caller passed `capture: true` (the user's direct ask). */
+const CAPTURE_TOOL = "browse_capture";
 
 export type BrowseAgentStatus = "done" | "error" | "aborted" | "step_limit" | "timeout";
 
@@ -90,6 +93,15 @@ export const browseAgent: ToolHandler = async (args, context) => {
     return JSON.stringify({ status: "error", answer: "", steps: 0, error: "goal is required" });
   }
   const url = typeof args.url === "string" ? args.url.trim() : "";
+  // The gate: browse_capture reaches the subagent only on the main agent's
+  // explicit `capture: true` (spec 2026-10-15-browse-capture-design.md).
+  const captureAllowed = args.capture === true;
+  const allowedTools: ReadonlySet<string> = new Set<string>(
+    captureAllowed ? [...BASE_BROWSE_AGENT_TOOLS, CAPTURE_TOOL] : BASE_BROWSE_AGENT_TOOLS,
+  );
+  let captureState: "idle" | "in-flight" | "done" = "idle";
+  let captured: Record<string, unknown> | undefined;
+  let capturedNodeId = "";
 
   // Lazy: useDesignChat imports toolRegistry, which imports this module.
   const { executeToolCall } = await import("@/hooks/useDesignChat");
@@ -119,6 +131,7 @@ export const browseAgent: ToolHandler = async (args, context) => {
       // header is sent.
       body: () => ({
         agentMode: "browse",
+        ...(captureAllowed ? { browseCapture: true } : {}),
         userId: getRequestUserId(),
         clientCapabilities: CLIENT_CAPABILITIES,
       }),
@@ -138,11 +151,20 @@ export const browseAgent: ToolHandler = async (args, context) => {
     onToolCall: ({ toolCall }) => {
       const run = (async () => {
         let output: string;
-        if (!BROWSE_AGENT_TOOLS.has(toolCall.toolName)) {
+        if (!allowedTools.has(toolCall.toolName)) {
           output = JSON.stringify({
-            error: `Tool ${toolCall.toolName} is not available to the browse agent. Use only: ${[...BROWSE_AGENT_TOOLS].join(", ")}.`,
+            error: `Tool ${toolCall.toolName} is not available to the browse agent. Use only: ${[...allowedTools].join(", ")}.`,
+          });
+        } else if (toolCall.toolName === CAPTURE_TOOL && captureState === "in-flight") {
+          output = JSON.stringify({
+            error: "browse_capture is already running in this task; wait for its result.",
+          });
+        } else if (toolCall.toolName === CAPTURE_TOOL && captureState === "done") {
+          output = JSON.stringify({
+            error: `browse_capture already ran in this task; the page is on the canvas as ${capturedNodeId || "an existing node"}.`,
           });
         } else {
+          if (toolCall.toolName === CAPTURE_TOOL) captureState = "in-flight";
           steps += 1;
           try {
             output = await executeToolCall(
@@ -153,6 +175,23 @@ export const browseAgent: ToolHandler = async (args, context) => {
             );
           } catch (err) {
             output = JSON.stringify({ error: errorMessage(err) });
+          }
+          if (toolCall.toolName === CAPTURE_TOOL) {
+            const done = safeParseObject(output);
+            // A failed (or timed-out/aborted) capture placed nothing, so the
+            // one allowed try is not spent.
+            if (typeof done.nodeId !== "string") captureState = "idle";
+            else {
+              captureState = "done";
+              capturedNodeId = done.nodeId;
+              captured = {
+                nodeId: done.nodeId,
+                width: done.width,
+                height: done.height,
+                url: done.url,
+                title: done.title,
+              };
+            }
           }
         }
         // Always written, even after a stop: an input-available part with no
@@ -186,7 +225,7 @@ export const browseAgent: ToolHandler = async (args, context) => {
   }, BROWSE_AGENT_DEADLINE_MS);
 
   const result = (status: BrowseAgentStatus, extra?: { error?: string }) =>
-    JSON.stringify({ status, answer: finalAnswer(chat.messages, status), steps, ...extra });
+    JSON.stringify({ status, answer: finalAnswer(chat.messages, status), steps, ...(captured ? { captured } : {}), ...extra });
 
   try {
     if (stopped) return result("aborted");

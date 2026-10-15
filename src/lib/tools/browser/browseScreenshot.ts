@@ -1,11 +1,9 @@
 import type { ToolHandler } from "../../toolRegistry";
-import { useSceneStore } from "@/store/sceneStore";
 import { createImagePaint, clearLegacyFillProps } from "@/utils/fillUtils";
 import { generateId, type RectNode } from "@/types/scene";
-import { computeEmptySpace } from "../findEmptySpace";
-import { runSerialized } from "@/lib/toolCallQueue";
 import { loadImageSize } from "@/components/canvas/imageImport";
 import { getBrowserBridge } from "./bridge";
+import { FALLBACK_SIZE, isPositive, pageNodeName, placeNodeOnCanvas } from "./placeOnCanvas";
 import {
   BROWSER_BRIDGE_METHOD_MISSING_ERROR,
   callBrowserBridge,
@@ -35,17 +33,6 @@ import {
  * so the numbered labels don't end up in the design. `x`/`y` apply only as a
  * pair. The scene write goes through `runSerialized`; the capture does not.
  */
-const MAX_NAME_TITLE = 60;
-const FALLBACK_SIZE = { width: 1280, height: 800 };
-
-function isFiniteNumber(n: unknown): n is number {
-  return typeof n === "number" && Number.isFinite(n);
-}
-
-function isPositive(n: unknown): n is number {
-  return isFiniteNumber(n) && n > 0;
-}
-
 async function screenshotSize(shot: Record<string, unknown>, dataUrl: string) {
   if (isPositive(shot.width) && isPositive(shot.height)) {
     return { width: shot.width, height: shot.height };
@@ -57,20 +44,6 @@ async function screenshotSize(shot: Record<string, unknown>, dataUrl: string) {
     // fall through
   }
   return FALLBACK_SIZE;
-}
-
-function screenshotName(shot: Record<string, unknown>): string {
-  let label = typeof shot.title === "string" ? shot.title.trim() : "";
-  if (!label && typeof shot.url === "string") {
-    try {
-      label = new URL(shot.url).hostname;
-    } catch {
-      label = "";
-    }
-  }
-  if (!label) label = "browser";
-  if (label.length > MAX_NAME_TITLE) label = `${label.slice(0, MAX_NAME_TITLE - 1)}…`;
-  return `Screenshot — ${label}`;
 }
 
 export const browseScreenshot: ToolHandler = async (args, context) => {
@@ -105,33 +78,21 @@ export const browseScreenshot: ToolHandler = async (args, context) => {
   }
   const dataUrl = shot.imageData as string;
   const { width, height } = await screenshotSize(shot, dataUrl);
-  const name = screenshotName(shot);
+  const name = pageNodeName(shot, "Screenshot");
 
-  // Queued so the read of the scene (for the position) and the addNode are
-  // not interleaved with a serialized writer's snapshot-and-commit.
-  const placedAt = await runSerialized(async () => {
-    const spot =
-      isFiniteNumber(x) && isFiniteNumber(y)
-        ? { x, y }
-        : computeEmptySpace(useSceneStore.getState(), { width, height });
-    // computeEmptySpace only errors for a missing `nodeId` anchor, which is never passed here.
-    const { x: px, y: py } = spot as { x: number; y: number };
-    const node = {
-      id: generateId(),
-      type: "rect",
-      name,
-      x: px,
-      y: py,
-      width,
-      height,
-      cornerRadius: 0,
-      fills: [createImagePaint({ url: dataUrl, mode: "fill" })],
-      ...clearLegacyFillProps(),
-    } as RectNode;
-    useSceneStore.getState().addNode(node);
-    return { id: node.id, x: px, y: py, width, height };
-  });
+  const placedAt = await placeNodeOnCanvas(x, y, { width, height }, (pos) => ({
+    id: generateId(),
+    type: "rect",
+    name,
+    x: pos.x,
+    y: pos.y,
+    width,
+    height,
+    cornerRadius: 0,
+    fills: [createImagePaint({ url: dataUrl, mode: "fill" })],
+    ...clearLegacyFillProps(),
+  } as RectNode)) as { id: string; x: number; y: number };
+  const placedRect = { x: placedAt.x, y: placedAt.y, width, height };
 
-  const { id, ...rect } = placedAt;
-  return JSON.stringify({ ...result, placedNodeId: id, placedAt: rect });
+  return JSON.stringify({ ...result, placedNodeId: placedAt.id, placedAt: placedRect });
 };

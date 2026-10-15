@@ -61,7 +61,7 @@ function setChatModel(model: string) {
 }
 
 let saved: Record<string, ToolHandler | undefined>;
-const stubbed = ["browse_open", "batch_design"];
+const stubbed = ["browse_open", "browse_capture", "batch_design"];
 
 beforeEach(() => {
   setChatModel("google/gemini-2.5-flash");
@@ -122,6 +122,61 @@ describe("browse_agent", () => {
     expect(first.parts[0].text).toContain("https://example.com");
     // The pre-open result rides in the first message.
     expect(first.parts[0].text).toContain('{"ok":true}');
+  });
+
+  describe("browse_capture gate", () => {
+    const run = (capture?: boolean) =>
+      browseAgent({ goal: "copy it", ...(capture === undefined ? {} : { capture }) }, { sessionId: "chat-1", toolCallId: "tc-1" });
+    const outputOf = (captured: Captured[], turn: number, toolCallId: string) => {
+      const msgs = captured[turn].body.messages as Array<{ parts: Array<Record<string, unknown>> }>;
+      return msgs.flatMap((m) => m.parts).find((p) => p.toolCallId === toolCallId)?.output as string;
+    };
+
+    it("flag off: no browseCapture in the body and the tool is refused", async () => {
+      const capture = vi.fn(async () => JSON.stringify({ nodeId: "n1" }));
+      toolHandlers.browse_capture = capture;
+      const captured = stubFetch([() => toolTurn("browse_capture", {}), () => textTurn("done")]);
+      const result = JSON.parse(await run());
+      expect(captured[0].body).not.toHaveProperty("browseCapture");
+      expect(capture).not.toHaveBeenCalled();
+      expect(JSON.stringify(outputOf(captured, 1, "call-1"))).toContain("not available to the browse agent");
+      expect(result).not.toHaveProperty("captured");
+    });
+
+    it("flag on: body carries browseCapture, first capture runs, second is refused, result has captured", async () => {
+      const info = { nodeId: "n1", width: 10, height: 20, url: "https://e.com", title: "E" };
+      const capture = vi.fn(async () => JSON.stringify(info));
+      toolHandlers.browse_capture = capture;
+      const captured = stubFetch([
+        () => toolTurn("browse_capture", {}, "c1"),
+        () => toolTurn("browse_capture", {}, "c2"),
+        () => textTurn("copied"),
+      ]);
+      const result = JSON.parse(await run(true));
+      expect(captured.every((c) => c.body.browseCapture === true)).toBe(true);
+      expect(capture).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(outputOf(captured, 2, "c2"))).toContain(
+        "browse_capture already ran in this task; the page is on the canvas as n1.",
+      );
+      expect(result.captured).toEqual(info);
+    });
+
+    it("a failed (aborted/timed-out) capture leaves the gate idle, so a retry runs", async () => {
+      const info = { nodeId: "n2", width: 1, height: 2, url: "", title: "" };
+      const capture = vi
+        .fn()
+        .mockResolvedValueOnce(JSON.stringify({ error: "browse_capture was aborted or timed out; nothing was added." }))
+        .mockResolvedValueOnce(JSON.stringify(info));
+      toolHandlers.browse_capture = capture;
+      stubFetch([
+        () => toolTurn("browse_capture", {}, "c1"),
+        () => toolTurn("browse_capture", {}, "c2"),
+        () => textTurn("copied"),
+      ]);
+      const result = JSON.parse(await run(true));
+      expect(capture).toHaveBeenCalledTimes(2);
+      expect(result.captured).toEqual(info);
+    });
   });
 
   it.each([

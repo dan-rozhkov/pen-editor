@@ -45,7 +45,8 @@ export interface PenDesktopApi {
    *
    * Typed as the package's `BrowserBridge` (the shape the browse_task loop
    * drives) so the two cannot drift; `findImages` is optional there but this
-   * shell always provides it.
+   * shell always provides it. `capture` (browse_capture) stays optional:
+   * desktop builds older than that tool lack it.
    */
   browser?: BrowserBridge & Required<Pick<BrowserBridge, "findImages">>;
 }
