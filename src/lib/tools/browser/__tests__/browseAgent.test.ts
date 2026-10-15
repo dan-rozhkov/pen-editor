@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toolHandlers, type ToolHandler } from "@/lib/toolRegistry";
 import { clearOpenCodeKey, setOpenCodeKey } from "@/lib/opencodeKey";
 import { useChatStore } from "@/store/chatStore";
-import { BROWSE_AGENT_DEADLINE_MS, BROWSE_AGENT_OPENCODE_MODEL, browseAgent, nestedChatId } from "../browseAgent";
+import { BROWSE_AGENT_DEADLINE_MS, browseAgent, nestedChatId } from "../browseAgent";
 
 type Chunk = Record<string, unknown>;
 
@@ -124,21 +124,8 @@ describe("browse_agent", () => {
     expect(first.parts[0].text).toContain('{"ok":true}');
   });
 
-  it("pins the OpenCode model and sends the key header for an opencode-go chat model with a key", async () => {
-    // Key first: changing it re-runs reconcileModels, which resets models
-    // the (empty, in tests) backend list does not offer.
-    setOpenCodeKey("sk-test");
-    setChatModel("opencode-go/glm-5");
-    const captured = stubFetch([() => textTurn("ok")]);
-
-    const raw = await browseAgent({ goal: "x" }, { sessionId: "chat-1", toolCallId: "tc-1" });
-
-    expect(JSON.parse(raw).status).toBe("done");
-    expect(captured[0].body.model).toBe(BROWSE_AGENT_OPENCODE_MODEL);
-    expect(captured[0].headers.get("X-OpenCode-Key")).toBe("sk-test");
-  });
-
   it.each([
+    ["an opencode-go chat model with a stored key", () => { setOpenCodeKey("sk-test"); setChatModel("opencode-go/glm-5"); }],
     ["an OpenRouter chat model with a stored key", () => { setOpenCodeKey("sk-test"); setChatModel("google/gemini-2.5-flash"); }],
     ["a Zen chat model with a stored key", () => { setOpenCodeKey("sk-test"); setChatModel("opencode/big-pickle"); }],
     ["an opencode-go chat model without a key", () => setChatModel("opencode-go/glm-5")],

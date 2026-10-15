@@ -3,14 +3,14 @@ import { Chat } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai";
 import { getRequestUserId } from "@/lib/auth/authState";
 import { createChatTransport, CLIENT_CAPABILITIES } from "@/lib/chatTransport";
-import { getOpenCodeKey } from "@/lib/opencodeKey";
 import type { ToolHandler } from "../../toolRegistry";
 
 /**
  * browse_agent — runs a browse-only sub-agent as a nested, headless chat
  * session against the same /api/chat (`agentMode: "browse"`), pinned by the
- * backend to a non-reasoning deepseek model whatever the user's main model
- * is (pen-editor-backend docs/specs/2026-10-14-browse-subagent-design.md).
+ * backend to a non-reasoning deepseek model on OpenRouter whatever the user's
+ * main model is, OpenCode Go included
+ * (pen-editor-backend docs/specs/2026-10-14-browse-subagent-design.md).
  *
  * Execution stays on the client: the nested session's tool calls go through
  * the normal `executeToolCall` with the PARENT chat's sessionId, so the same
@@ -20,10 +20,6 @@ import type { ToolHandler } from "../../toolRegistry";
  * would deadlock behind their own parent.
  */
 
-/** Model for the sub-agent, sent ONLY when the parent chat's model is an
- * `opencode-go/` model and an OpenCode key is stored. Otherwise no model is
- * sent and the backend pins its own. */
-export const BROWSE_AGENT_OPENCODE_MODEL = "opencode-go/deepseek-v4.1-flash";
 /** Chat-side (useDesignChat) timeout for a browse_agent call. */
 export const BROWSE_AGENT_OUTER_TIMEOUT_MS = 15 * 60_000;
 /** How far below the outer timeout the handler's own deadline sits, so the
@@ -96,15 +92,10 @@ export const browseAgent: ToolHandler = async (args, context) => {
   const url = typeof args.url === "string" ? args.url.trim() : "";
 
   // Lazy: useDesignChat imports toolRegistry, which imports this module.
-  const { executeToolCall, resolveSessionModel } = await import("@/hooks/useDesignChat");
+  const { executeToolCall } = await import("@/hooks/useDesignChat");
 
   const parentSessionId = context?.sessionId;
   const parentSignal = context?.signal;
-  // Pin the OpenCode Go model only when the user chose an opencode-go chat
-  // model AND has a key; anything else (OpenRouter chat, Zen-only or lapsed
-  // key) lets the backend pin its own, so no plan is billed unasked.
-  const useOpenCodeModel =
-    resolveSessionModel(parentSessionId).startsWith("opencode-go/") && !!getOpenCodeKey();
 
   // Fresh loop-guard ring: nested calls share the parent's sessionId.
   resetLoopGuard(parentSessionId);
@@ -123,14 +114,13 @@ export const browseAgent: ToolHandler = async (args, context) => {
   const chat: Chat<UIMessage> = new Chat<UIMessage>({
     id: nestedChatId(parentSessionId, context?.toolCallId),
     transport: createChatTransport({
-      // No canvasContext: the sub-agent never sees the scene. The model is
-      // only sent for an opencode-go chat model with a key; otherwise the
-      // backend pins its own.
+      // No canvasContext: the sub-agent never sees the scene. No model
+      // either: the backend pins its own (OpenRouter), so no OpenCode key
+      // header is sent.
       body: () => ({
         agentMode: "browse",
         userId: getRequestUserId(),
         clientCapabilities: CLIENT_CAPABILITIES,
-        ...(useOpenCodeModel ? { model: BROWSE_AGENT_OPENCODE_MODEL } : {}),
       }),
     }),
     sendAutomaticallyWhen: (options) => {
