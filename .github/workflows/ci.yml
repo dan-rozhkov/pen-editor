@@ -45,7 +45,7 @@ jobs:
       # Playwright starts the Vite dev server itself (webServer in
       # playwright.config.ts); /api/chat is stubbed, no backend needed.
       - run: npm run test:e2e
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: playwright-traces
@@ -54,7 +54,7 @@ jobs:
       # HTML report (with the trace viewer for every retry attempt) for
       # flaky/failed runs, kept short since this is a build artifact, not a
       # record — always() so a failed run's report is captured too.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: playwright-report
