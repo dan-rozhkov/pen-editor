@@ -1,10 +1,18 @@
 import { resetLoopGuard } from "@sideform/browser-agent/loop";
+import {
+  BROWSE_AGENT_DEADLINE_MARGIN_MS,
+  BROWSE_AGENT_DEADLINE_MS,
+  BROWSE_AGENT_MAX_REQUESTS,
+  BROWSE_AGENT_OUTER_TIMEOUT_MS,
+  createBrowseAgentSession,
+  goalRequiredResult,
+  singleUseTool,
+} from "@sideform/browser-agent/agent/session";
 import { Chat } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai";
 import { getRequestUserId } from "@/lib/auth/authState";
 import { createChatTransport, CLIENT_CAPABILITIES } from "@/lib/chatTransport";
 import type { ToolHandler } from "../../toolRegistry";
-import { safeParseObject } from "./shared";
 
 /**
  * browse_agent — runs a browse-only sub-agent as a nested, headless chat
@@ -12,6 +20,11 @@ import { safeParseObject } from "./shared";
  * backend to a non-reasoning deepseek model on OpenRouter whatever the user's
  * main model is, OpenCode Go included
  * (pen-editor-backend docs/specs/2026-10-14-browse-subagent-design.md).
+ *
+ * The control flow (deadline, abort, request cap, step count, allowlist,
+ * status, result JSON) lives in `@sideform/browser-agent/agent/session`
+ * (`createBrowseAgentSession`; the zod-free entry, so the editor's main chunk
+ * carries no schemas or tool descriptions); this file only plugs in the nested `Chat`.
  *
  * Execution stays on the client: the nested session's tool calls go through
  * the normal `executeToolCall` with the PARENT chat's sessionId, so the same
@@ -21,107 +34,59 @@ import { safeParseObject } from "./shared";
  * would deadlock behind their own parent.
  */
 
-/** Chat-side (useDesignChat) timeout for a browse_agent call. */
-export const BROWSE_AGENT_OUTER_TIMEOUT_MS = 15 * 60_000;
-/** How far below the outer timeout the handler's own deadline sits, so the
- * handler returns a partial result before the chat discards everything. */
-export const BROWSE_AGENT_DEADLINE_MARGIN_MS = 60_000;
-/** The handler's own deadline (derived, so the two cannot drift). */
-export const BROWSE_AGENT_DEADLINE_MS =
-  BROWSE_AGENT_OUTER_TIMEOUT_MS - BROWSE_AGENT_DEADLINE_MARGIN_MS;
-/** Max model requests (first send + automatic continuations) per run. */
-export const BROWSE_AGENT_MAX_REQUESTS = 60;
-const ANSWER_MAX_CHARS = 8000;
-const ERROR_MAX_CHARS = 300;
-const NESTED_ID_MAX_CHARS = 200;
+// Re-exported: useDesignChat and tests import the limits from here.
+export {
+  BROWSE_AGENT_OUTER_TIMEOUT_MS,
+  BROWSE_AGENT_DEADLINE_MARGIN_MS,
+  BROWSE_AGENT_DEADLINE_MS,
+  BROWSE_AGENT_MAX_REQUESTS,
+};
+export type { BrowseAgentStatus } from "@sideform/browser-agent/agent/session";
 
-const BASE_BROWSE_AGENT_TOOLS = [
-  "browse_open",
-  "browse_snapshot",
-  "browse_screenshot",
-  "browse_act",
-  "browse_tabs",
-  "browse_find_images",
-  "browse_read",
-] as const;
+const NESTED_ID_MAX_CHARS = 200;
 /** Allowed only when the caller passed `capture: true` (the user's direct ask). */
 const CAPTURE_TOOL = "browse_capture";
-
-export type BrowseAgentStatus = "done" | "error" | "aborted" | "step_limit" | "timeout";
 
 export function nestedChatId(sessionId: string | undefined, toolCallId: string | undefined): string {
   const raw = `browse.${sessionId ?? "no-session"}.${toolCallId ?? Date.now()}`;
   return raw.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, NESTED_ID_MAX_CHARS);
 }
 
-function textOf(parts: UIMessage["parts"]): string {
-  return parts.map((p) => (p.type === "text" ? p.text : "")).join("");
-}
-
-/**
- * The report. For a finished run: the last assistant message's text after its
- * last tool part. For any other status the run was cut short, so the report
- * may not exist yet: return all assistant text of the session, in order,
- * keeping the END when over the cap.
- */
-function finalAnswer(messages: UIMessage[], status: BrowseAgentStatus): string {
-  if (status !== "done") {
-    const all = messages
-      .filter((m) => m.role === "assistant")
-      .flatMap((m) => m.parts.map((p) => (p.type === "text" ? p.text.trim() : "")))
-      .filter(Boolean)
-      .join("\n\n");
-    return all.length > ANSWER_MAX_CHARS ? all.slice(-ANSWER_MAX_CHARS) : all;
-  }
-  const last = [...messages].reverse().find((m) => m.role === "assistant");
-  if (!last) return "";
-  let lastToolIdx = -1;
-  last.parts.forEach((p, i) => {
-    if (p.type.startsWith("tool-") || p.type === "dynamic-tool") lastToolIdx = i;
-  });
-  return textOf(last.parts.slice(lastToolIdx + 1)).trim().slice(0, ANSWER_MAX_CHARS);
-}
-
-function errorMessage(err: unknown): string {
-  const text = err instanceof Error ? err.message : String(err);
-  return text.slice(0, ERROR_MAX_CHARS);
-}
-
 export const browseAgent: ToolHandler = async (args, context) => {
   const goal = typeof args.goal === "string" ? args.goal.trim() : "";
-  if (!goal) {
-    return JSON.stringify({ status: "error", answer: "", steps: 0, error: "goal is required" });
-  }
+  if (!goal) return JSON.stringify(goalRequiredResult());
   const url = typeof args.url === "string" ? args.url.trim() : "";
   // The gate: browse_capture reaches the subagent only on the main agent's
   // explicit `capture: true` (spec 2026-10-15-browse-capture-design.md).
   const captureAllowed = args.capture === true;
-  const allowedTools: ReadonlySet<string> = new Set<string>(
-    captureAllowed ? [...BASE_BROWSE_AGENT_TOOLS, CAPTURE_TOOL] : BASE_BROWSE_AGENT_TOOLS,
-  );
-  let captureState: "idle" | "in-flight" | "done" = "idle";
-  let captured: Record<string, unknown> | undefined;
-  let capturedNodeId = "";
 
   // Lazy: useDesignChat imports toolRegistry, which imports this module.
   const { executeToolCall } = await import("@/hooks/useDesignChat");
-
   const parentSessionId = context?.sessionId;
-  const parentSignal = context?.signal;
 
-  // Fresh loop-guard ring: nested calls share the parent's sessionId.
-  resetLoopGuard(parentSessionId);
-
-  const deadline = new AbortController();
-  const toolSignal = parentSignal ? AbortSignal.any([parentSignal, deadline.signal]) : deadline.signal;
-  let timedOut = false;
-
-  let requests = 1;
-  let steps = 0;
-  let stopped = false;
-  let stepLimit = false;
-  let streamError: unknown;
-  const pending = new Set<Promise<void>>();
+  const session = createBrowseAgentSession({
+    signal: context?.signal,
+    extraTools: captureAllowed
+      ? {
+          [CAPTURE_TOOL]: singleUseTool({
+            name: CAPTURE_TOOL,
+            isSuccess: (p) => typeof p.nodeId === "string",
+            fields: (p) => ({
+              captured: { nodeId: p.nodeId, width: p.width, height: p.height, url: p.url, title: p.title },
+            }),
+            doneMessage: (p) =>
+              `browse_capture already ran in this task; the page is on the canvas as ${String(p.nodeId) || "an existing node"}.`,
+          }),
+        }
+      : {},
+    executeTool: (call, { signal }) =>
+      executeToolCall(
+        call.toolName,
+        call.input,
+        { sessionId: parentSessionId, toolCallId: call.toolCallId, signal },
+        "browse_agent",
+      ),
+  });
 
   const chat: Chat<UIMessage> = new Chat<UIMessage>({
     id: nestedChatId(parentSessionId, context?.toolCallId),
@@ -136,132 +101,32 @@ export const browseAgent: ToolHandler = async (args, context) => {
         clientCapabilities: CLIENT_CAPABILITIES,
       }),
     }),
-    sendAutomaticallyWhen: (options) => {
-      if (stopped || !lastAssistantMessageIsCompleteWithToolCalls(options)) return false;
-      if (requests >= BROWSE_AGENT_MAX_REQUESTS) {
-        stepLimit = true;
-        return false;
-      }
-      requests += 1;
-      return true;
-    },
-    onError: (err) => {
-      streamError = err;
-    },
-    onToolCall: ({ toolCall }) => {
-      const run = (async () => {
-        let output: string;
-        if (!allowedTools.has(toolCall.toolName)) {
-          output = JSON.stringify({
-            error: `Tool ${toolCall.toolName} is not available to the browse agent. Use only: ${[...allowedTools].join(", ")}.`,
-          });
-        } else if (toolCall.toolName === CAPTURE_TOOL && captureState === "in-flight") {
-          output = JSON.stringify({
-            error: "browse_capture is already running in this task; wait for its result.",
-          });
-        } else if (toolCall.toolName === CAPTURE_TOOL && captureState === "done") {
-          output = JSON.stringify({
-            error: `browse_capture already ran in this task; the page is on the canvas as ${capturedNodeId || "an existing node"}.`,
-          });
-        } else {
-          if (toolCall.toolName === CAPTURE_TOOL) captureState = "in-flight";
-          steps += 1;
-          try {
-            output = await executeToolCall(
-              toolCall.toolName,
-              toolCall.input,
-              { sessionId: parentSessionId, toolCallId: toolCall.toolCallId, signal: toolSignal },
-              "browse_agent",
-            );
-          } catch (err) {
-            output = JSON.stringify({ error: errorMessage(err) });
-          }
-          if (toolCall.toolName === CAPTURE_TOOL) {
-            const done = safeParseObject(output);
-            // A failed (or timed-out/aborted) capture placed nothing, so the
-            // one allowed try is not spent.
-            if (typeof done.nodeId !== "string") captureState = "idle";
-            else {
-              captureState = "done";
-              capturedNodeId = done.nodeId;
-              captured = {
-                nodeId: done.nodeId,
-                width: done.width,
-                height: done.height,
-                url: done.url,
-                title: done.title,
-              };
-            }
-          }
-        }
-        // Always written, even after a stop: an input-available part with no
-        // output would poison later requests (same rule as useDesignChat).
-        chat.addToolOutput({ tool: toolCall.toolName, toolCallId: toolCall.toolCallId, output });
-      })();
-      pending.add(run);
-      void run.finally(() => pending.delete(run));
-      // Awaited like the main chat's onToolCall so the stream stays open
-      // until the result is in.
-      return run;
-    },
-  });
-
-  const stop = () => {
-    stopped = true;
-    void chat.stop();
-  };
-  if (parentSignal?.aborted) stopped = true;
-  else parentSignal?.addEventListener("abort", stop, { once: true });
-
-  let onDeadline!: () => void;
-  const deadlineHit = new Promise<void>((resolve) => {
-    onDeadline = resolve;
-  });
-  const timer = setTimeout(() => {
-    timedOut = true;
-    deadline.abort();
-    stop();
-    onDeadline();
-  }, BROWSE_AGENT_DEADLINE_MS);
-
-  const result = (status: BrowseAgentStatus, extra?: { error?: string }) =>
-    JSON.stringify({ status, answer: finalAnswer(chat.messages, status), steps, ...(captured ? { captured } : {}), ...extra });
-
-  try {
-    if (stopped) return result("aborted");
-    // Open the start page before the first model request: the subagent starts
-    // on its snapshot instead of spending a whole request on browse_open.
-    let text = goal;
-    if (url) {
-      steps += 1;
-      const opened = await executeToolCall(
-        "browse_open",
-        { url },
-        { sessionId: parentSessionId, toolCallId: `${context?.toolCallId ?? "browse_agent"}:open`, signal: toolSignal },
-        "browse_agent",
+    sendAutomaticallyWhen: (options) => lastAssistantMessageIsCompleteWithToolCalls(options) && session.continueRequest(),
+    onError: (err) => session.recordError(err),
+    // Awaited like the main chat's onToolCall so the stream stays open until
+    // the result is in. The output is always written, even after a stop: an
+    // input-available part with no output would poison later requests (same
+    // rule as useDesignChat).
+    onToolCall: async ({ toolCall }) => {
+      await session.runTool(
+        { toolName: toolCall.toolName, input: toolCall.input, toolCallId: toolCall.toolCallId },
+        (output) => chat.addToolOutput({ tool: toolCall.toolName, toolCallId: toolCall.toolCallId, output }),
       );
-      if (stopped || timedOut) return result(timedOut ? "timeout" : "aborted");
-      text = `${goal}\n\nThe browser already opened ${url} for you (browse_open). Its result, with a snapshot of the page:\n${opened}`;
-    }
-    // sendMessage resolves after the whole auto-continuation chain; the
-    // deadline race is the backstop for a hung stream.
-    await Promise.race([
-      chat.sendMessage({ text }).catch((err) => {
-        streamError ??= err;
-      }),
-      deadlineHit,
-    ]);
-    if (timedOut) return result("timeout");
-    await Promise.allSettled([...pending]);
-    if (timedOut) return result("timeout");
-    if (stopped || parentSignal?.aborted) return result("aborted");
-    if (streamError ?? chat.error) {
-      return result("error", { error: errorMessage(streamError ?? chat.error) });
-    }
-    if (stepLimit) return result("step_limit");
-    return result("done");
-  } finally {
-    clearTimeout(timer);
-    parentSignal?.removeEventListener("abort", stop);
-  }
+    },
+  });
+
+  // Fresh loop-guard ring: nested calls share the parent's sessionId.
+  resetLoopGuard(parentSessionId);
+
+  const result = await session.run(
+    goal,
+    {
+      send: (text) => chat.sendMessage({ text }),
+      stop: () => void chat.stop(),
+      messages: () => chat.messages,
+      error: () => chat.error,
+    },
+    { url: url || undefined, toolCallId: context?.toolCallId },
+  );
+  return JSON.stringify(result);
 };

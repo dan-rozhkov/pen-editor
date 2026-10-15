@@ -179,6 +179,19 @@ describe("browse_agent", () => {
     });
   });
 
+  it("a failing pre-open reaches the model as an error text instead of throwing", async () => {
+    toolHandlers.browse_open = vi.fn(async () => {
+      throw new Error("no browser");
+    });
+    const captured = stubFetch([() => textTurn("ok")]);
+    const result = JSON.parse(
+      await browseAgent({ goal: "go", url: "https://example.com" }, { sessionId: "chat-1", toolCallId: "tc-2" }),
+    );
+    expect(result).toEqual({ status: "done", answer: "ok", steps: 1 });
+    const first = (captured[0].body.messages as Array<{ parts: Array<{ text?: string }> }>)[0];
+    expect(first.parts[0].text).toContain('{"error":"no browser"}');
+  });
+
   it.each([
     ["an opencode-go chat model with a stored key", () => { setOpenCodeKey("sk-test"); setChatModel("opencode-go/glm-5"); }],
     ["an OpenRouter chat model with a stored key", () => { setOpenCodeKey("sk-test"); setChatModel("google/gemini-2.5-flash"); }],
