@@ -1,17 +1,12 @@
 import type { ToolHandler } from "../../toolRegistry";
+import { executeBrowseTool } from "@sideform/browser-agent/agent/execute";
 import { getBrowserBridge } from "./bridge";
-import { callBrowserBridge } from "./shared";
+import { peBase } from "./shared";
 
 /**
- * browse_read — a readable digest of the built-in browser tab's current
- * page: headings, visible text (capped), and links. Added in Addendum 2
- * (docs/superpowers/specs/2026-09-18-browse-task-jev-loop-design.md §2) to
- * give text-shaped tasks something to read — browse_find_images was
- * previously the only tool that read page content at all. Thin forwarder
- * onto the desktop shell's `BrowserController`, same conventions as its
- * browse_* siblings.
+ * browse_read — a readable digest (headings, visible text, links) of the current page.
+ * The mapping onto the bridge lives in the package (`executeBrowseTool`);
+ * this handler only supplies the bridge and this app's texts.
  */
-export const browseRead: ToolHandler = async (args, context) => {
-  const browser = getBrowserBridge(context?.sessionId);
-  return callBrowserBridge(browser ? (a) => browser.read(a) : undefined, args);
-};
+export const browseRead: ToolHandler = (args, context) =>
+  executeBrowseTool(getBrowserBridge(context?.sessionId), "browse_read", args, peBase);

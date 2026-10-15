@@ -1,15 +1,12 @@
 import type { ToolHandler } from "../../toolRegistry";
+import { executeBrowseTool } from "@sideform/browser-agent/agent/execute";
 import { getBrowserBridge } from "./bridge";
-import { callBrowserBridge } from "./shared";
+import { peBase } from "./shared";
 
 /**
- * browse_find_images — collects images (`<img>` + background-image
- * elements) from the built-in browser tab's current page, filtered by
- * minWidth/minHeight and capped at `limit`. Returned URLs go straight onto
- * the canvas via `imageFill.url` — no new image plumbing needed (design doc
- * §4). This handler is a thin forwarder onto the preload bridge.
+ * browse_find_images — images (`<img>` + background-image) of the current page.
+ * The mapping onto the bridge lives in the package (`executeBrowseTool`);
+ * this handler only supplies the bridge and this app's texts.
  */
-export const browseFindImages: ToolHandler = async (args, context) => {
-  const browser = getBrowserBridge(context?.sessionId);
-  return callBrowserBridge(browser ? (a) => browser.findImages(a) : undefined, args);
-};
+export const browseFindImages: ToolHandler = (args, context) =>
+  executeBrowseTool(getBrowserBridge(context?.sessionId), "browse_find_images", args, peBase);

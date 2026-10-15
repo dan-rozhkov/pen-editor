@@ -303,7 +303,8 @@ const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
   // runActionsBatch's own internal BATCH_DEADLINE_MS was 100s, which left
   // only ~20s of margin against a single entry's own ~61.5s worst case (an
   // entry starting at t=99s could finish around t=160s). BATCH_DEADLINE_MS
-  // is now tightened to 60s (browseAct.ts), and the trailing attachSnapshot
+  // is now tightened to 60s (BATCH_DEADLINE_MS in
+  // @sideform/browser-agent/agent/execute, run by its runActionsBatch), and the trailing snapshot
   // call is skipped once that internal deadline has passed, so this 120s
   // client-side budget stays a real ceiling rather than an aspirational one.
   browse_act: 120_000,

@@ -1,4 +1,9 @@
-import { takeSnapshot } from "@sideform/browser-agent/loop";
+import {
+  attachSnapshot as packageAttachSnapshot,
+  callBridge,
+  parseResultObject,
+  type ExecuteBrowseToolOptions,
+} from "@sideform/browser-agent/agent/execute";
 
 /**
  * Shared plumbing for the browse_* forwarding tools (browse_open, browse_act,
@@ -46,24 +51,10 @@ export async function callBrowserBridge(
   args: Record<string, unknown>,
   unavailableMessage: string = BROWSER_NOT_AVAILABLE_ERROR
 ): Promise<string> {
-  if (!call) {
-    return JSON.stringify({ error: unavailableMessage });
-  }
-  try {
-    const result = await call(args);
-    // `call`'s declared return type is `Promise<unknown>`, which permits
-    // `undefined` — JSON.stringify(undefined) yields the value `undefined`,
-    // not a string, violating ToolHandler's `Promise<string>` contract.
-    // `executeToolCall` then calls `result.startsWith('{"error"')` on that
-    // non-string and throws a TypeError, surfacing a bogus error to the
-    // model instead of the (empty) result. Coalesce to `{}` so this always
-    // returns a real JSON string.
-    return JSON.stringify(result ?? {});
-  } catch (err) {
-    return JSON.stringify({
-      error: err instanceof Error ? err.message : "Built-in browser command failed.",
-    });
-  }
+  if (!call) return JSON.stringify({ error: unavailableMessage });
+  // The package's `callBridge` does the rest: `undefined` becomes `{}` (so the
+  // result is always a string) and a throw becomes `{ error }`.
+  return callBridge(() => call(args), { texts: peBase.texts });
 }
 
 /**
@@ -81,17 +72,7 @@ export type PenDesktopBrowser = NonNullable<NonNullable<typeof window.penDesktop
  * real JSON object string — this only guards the theoretical case where
  * that contract is somehow violated, so it never throws.
  */
-export function safeParseObject(value: string): Record<string, unknown> {
-  try {
-    const parsed: unknown = JSON.parse(value);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    // fall through
-  }
-  return { error: "browse_act: malformed result from the browser bridge." };
-}
+export const safeParseObject = parseResultObject;
 
 /**
  * Full browser use follow-up (browse-speed-contract.md, "Frontend" items
@@ -101,11 +82,20 @@ export function safeParseObject(value: string): Record<string, unknown> {
  * successful open/act into an error, so this silently returns `resultObj`
  * unchanged when the snapshot itself fails.
  */
-export async function attachSnapshot(
+export const attachSnapshot = (
   browser: PenDesktopBrowser,
   resultObj: Record<string, unknown>
-): Promise<Record<string, unknown>> {
-  const snap = await takeSnapshot(browser);
-  if ("error" in snap) return resultObj;
-  return { ...resultObj, snapshot: snap };
-}
+): Promise<Record<string, unknown>> => packageAttachSnapshot(browser, resultObj);
+
+/**
+ * What every browse_* handler passes to the package executor
+ * (`@sideform/browser-agent/agent/execute`): this app's own texts for "no
+ * bridge", "bridge lacks the method" and "bridge threw a non-Error".
+ */
+export const peBase: ExecuteBrowseToolOptions = {
+  texts: {
+    notAvailable: BROWSER_NOT_AVAILABLE_ERROR,
+    methodMissing: () => BROWSER_BRIDGE_METHOD_MISSING_ERROR,
+    commandFailed: "Built-in browser command failed.",
+  },
+};

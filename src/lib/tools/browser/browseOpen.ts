@@ -1,32 +1,12 @@
 import type { ToolHandler } from "../../toolRegistry";
+import { executeBrowseTool } from "@sideform/browser-agent/agent/execute";
 import { getBrowserBridge } from "./bridge";
-import { resultError } from "@sideform/browser-agent/loop";
-import { attachSnapshot, callBrowserBridge, safeParseObject } from "./shared";
+import { peBase } from "./shared";
 
 /**
- * browse_open — opens (creating if needed) the desktop shell's built-in
- * browser tab, navigates to `url`, and returns `{ url, title }` for the
- * final URL after any redirects. See the design doc's §4 for the argument
- * shape (owned by the backend zod schema) and §5 for the preload call this
- * forwards to.
- *
- * Full browser use follow-up (browse-speed-contract.md, "Frontend" item 2):
- * a successful open also attaches a fresh `snapshot` — the model usually
- * doesn't need a separate browse_snapshot call right after navigating. Only
- * on success: attaching a snapshot to an `{ error }` result would bury the
- * failure under an unrelated field and imply the open landed something to
- * act on when it didn't.
+ * browse_open — opens the built-in browser tab at `url`; a success carries a fresh `snapshot`.
+ * The mapping onto the bridge lives in the package (`executeBrowseTool`);
+ * this handler only supplies the bridge and this app's texts.
  */
-export const browseOpen: ToolHandler = async (args, context) => {
-  const browser = getBrowserBridge(context?.sessionId);
-  const resultStr = await callBrowserBridge(
-    browser ? (a) => browser.open(a as { url: string }) : undefined,
-    args
-  );
-  if (!browser) return resultStr;
-
-  const parsed = safeParseObject(resultStr);
-  if (resultError(parsed)) return resultStr;
-
-  return JSON.stringify(await attachSnapshot(browser, parsed));
-};
+export const browseOpen: ToolHandler = (args, context) =>
+  executeBrowseTool(getBrowserBridge(context?.sessionId), "browse_open", args, peBase);

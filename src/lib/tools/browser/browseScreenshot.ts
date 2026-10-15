@@ -2,13 +2,13 @@ import type { ToolHandler } from "../../toolRegistry";
 import { createImagePaint, clearLegacyFillProps } from "@/utils/fillUtils";
 import { generateId, type RectNode } from "@/types/scene";
 import { loadImageSize } from "@/components/canvas/imageImport";
+import {
+  executeBrowseTool,
+  type ExecuteBrowseToolOptions,
+} from "@sideform/browser-agent/agent/execute";
 import { getBrowserBridge } from "./bridge";
 import { FALLBACK_SIZE, isPositive, pageNodeName, placeNodeOnCanvas } from "./placeOnCanvas";
-import {
-  BROWSER_BRIDGE_METHOD_MISSING_ERROR,
-  callBrowserBridge,
-  safeParseObject,
-} from "./shared";
+import { peBase, safeParseObject } from "./shared";
 
 /**
  * browse_screenshot — a viewport capture of the built-in browser tab
@@ -32,6 +32,8 @@ import {
  * bridge call. With `annotate`, the placed image is a second, plain capture
  * so the numbered labels don't end up in the design. `x`/`y` apply only as a
  * pair. The scene write goes through `runSerialized`; the capture does not.
+ * The capture itself is the package's (`executeBrowseTool`); the placement is
+ * the `afterScreenshot` step below.
  */
 async function screenshotSize(shot: Record<string, unknown>, dataUrl: string) {
   if (isPositive(shot.width) && isPositive(shot.height)) {
@@ -46,19 +48,13 @@ async function screenshotSize(shot: Record<string, unknown>, dataUrl: string) {
   return FALLBACK_SIZE;
 }
 
-export const browseScreenshot: ToolHandler = async (args, context) => {
-  const browser = getBrowserBridge(context?.sessionId);
-  const call = browser?.screenshot
-    ? (a: Record<string, unknown>) => browser.screenshot!(a)
-    : undefined;
-  const unavailableMessage =
-    browser && !browser.screenshot ? BROWSER_BRIDGE_METHOD_MISSING_ERROR : undefined;
-
-  const { placeOnCanvas, x, y, ...bridgeArgs } = args;
-  const raw = await callBrowserBridge(call, bridgeArgs, unavailableMessage);
-  if (placeOnCanvas !== true) return raw;
-
-  const result = safeParseObject(raw);
+const placeOnCanvasStep: NonNullable<ExecuteBrowseToolOptions["afterScreenshot"]> = async ({
+  raw,
+  result,
+  args,
+  bridgeArgs,
+  capture,
+}) => {
   if ("error" in result) return raw;
   if (typeof result.imageData !== "string") {
     return JSON.stringify({ ...result, placeError: "The capture returned no image data." });
@@ -67,9 +63,7 @@ export const browseScreenshot: ToolHandler = async (args, context) => {
   // Labels must not end up in the design: re-capture without annotation.
   let shot: Record<string, unknown> = result;
   if (bridgeArgs.annotate === true) {
-    const plain = safeParseObject(
-      await callBrowserBridge(call, { ...bridgeArgs, annotate: false }, unavailableMessage)
-    );
+    const plain = safeParseObject(await capture({ annotate: false }));
     if (typeof plain.imageData !== "string" || "error" in plain) {
       const reason = typeof plain.error === "string" ? plain.error : "no image data";
       return JSON.stringify({ ...result, placeError: `Plain capture for the canvas failed: ${reason}` });
@@ -80,7 +74,7 @@ export const browseScreenshot: ToolHandler = async (args, context) => {
   const { width, height } = await screenshotSize(shot, dataUrl);
   const name = pageNodeName(shot, "Screenshot");
 
-  const placedAt = await placeNodeOnCanvas(x, y, { width, height }, (pos) => ({
+  const placedAt = await placeNodeOnCanvas(args.x, args.y, { width, height }, (pos) => ({
     id: generateId(),
     type: "rect",
     name,
@@ -96,3 +90,8 @@ export const browseScreenshot: ToolHandler = async (args, context) => {
 
   return JSON.stringify({ ...result, placedNodeId: placedAt.id, placedAt: placedRect });
 };
+
+const screenshotOptions: ExecuteBrowseToolOptions = { ...peBase, afterScreenshot: placeOnCanvasStep };
+
+export const browseScreenshot: ToolHandler = (args, context) =>
+  executeBrowseTool(getBrowserBridge(context?.sessionId), "browse_screenshot", args, screenshotOptions);
