@@ -83,7 +83,7 @@ describe("browse_agent", () => {
     const open = vi.fn(async () => JSON.stringify({ ok: true }));
     toolHandlers.browse_open = open;
     const captured = stubFetch([
-      () => toolTurn("browse_open", { url: "https://example.com" }),
+      () => toolTurn("browse_open", { url: "https://example.com/p" }),
       () => textTurn("  The price is 5 USD. https://example.com/p  "),
     ]);
 
@@ -95,12 +95,17 @@ describe("browse_agent", () => {
     expect(JSON.parse(raw)).toEqual({
       status: "done",
       answer: "The price is 5 USD. https://example.com/p",
-      steps: 1,
+      steps: 2,
     });
-    expect(open).toHaveBeenCalledTimes(1);
-    // The executed tool is bound to the PARENT session (same browser + loop guard).
+    expect(open).toHaveBeenCalledTimes(2);
+    // The start page opens before the first request; every executed tool is
+    // bound to the PARENT session (same browser + loop guard).
     expect(open.mock.calls[0]).toEqual([
       { url: "https://example.com" },
+      expect.objectContaining({ sessionId: "chat-1", toolCallId: "tc-9:open" }),
+    ]);
+    expect(open.mock.calls[1]).toEqual([
+      { url: "https://example.com/p" },
       expect.objectContaining({ sessionId: "chat-1", toolCallId: "call-1" }),
     ]);
     expect(captured).toHaveLength(2);
@@ -115,6 +120,8 @@ describe("browse_agent", () => {
     const first = (captured[0].body.messages as Array<{ parts: Array<{ text?: string }> }>)[0];
     expect(first.parts[0].text).toContain("Find the price");
     expect(first.parts[0].text).toContain("https://example.com");
+    // The pre-open result rides in the first message.
+    expect(first.parts[0].text).toContain('{"ok":true}');
   });
 
   it("pins the OpenCode model and sends the key header for an opencode-go chat model with a key", async () => {

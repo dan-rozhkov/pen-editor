@@ -94,7 +94,6 @@ export const browseAgent: ToolHandler = async (args, context) => {
     return JSON.stringify({ status: "error", answer: "", steps: 0, error: "goal is required" });
   }
   const url = typeof args.url === "string" ? args.url.trim() : "";
-  const text = url ? `${goal}\n\nStart by opening this URL: ${url}` : goal;
 
   // Lazy: useDesignChat imports toolRegistry, which imports this module.
   const { executeToolCall, resolveSessionModel } = await import("@/hooks/useDesignChat");
@@ -201,6 +200,20 @@ export const browseAgent: ToolHandler = async (args, context) => {
 
   try {
     if (stopped) return result("aborted");
+    // Open the start page before the first model request: the subagent starts
+    // on its snapshot instead of spending a whole request on browse_open.
+    let text = goal;
+    if (url) {
+      steps += 1;
+      const opened = await executeToolCall(
+        "browse_open",
+        { url },
+        { sessionId: parentSessionId, toolCallId: `${context?.toolCallId ?? "browse_agent"}:open`, signal: toolSignal },
+        "browse_agent",
+      );
+      if (stopped || timedOut) return result(timedOut ? "timeout" : "aborted");
+      text = `${goal}\n\nThe browser already opened ${url} for you (browse_open). Its result, with a snapshot of the page:\n${opened}`;
+    }
     // sendMessage resolves after the whole auto-continuation chain; the
     // deadline race is the backstop for a hung stream.
     await Promise.race([
