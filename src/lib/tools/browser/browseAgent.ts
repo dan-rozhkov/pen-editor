@@ -8,7 +8,7 @@ import {
   goalRequiredResult,
   SetupError,
   createFixtureSetup,
-  createCheckpointRecorder,
+  createRunCheckpoint,
   singleUseTool,
   type BrowseAgentResult,
 } from "@sideform/browser-agent/agent/session";
@@ -57,14 +57,6 @@ const CAPTURE_TOOL = "browse_capture";
 /** A normal tool (callable repeatedly: two-step sign-in), allowed only when the desktop bridge has it. */
 const FILL_LOGIN_TOOL = "browse_fill_login";
 /**
- * The result waits at most this long for the journal to stop; the stop goes on
- * in the background (bounded by the recorder). Mirrors CHECKPOINT_STOP_WAIT_MS
- * of the package's runBrowseAgent, which the package does not export.
- */
-const CHECKPOINT_STOP_WAIT_MS = 2_000;
-/** The run waits at most this long for the journal to start; later it runs without a checkpoint. */
-const CHECKPOINT_START_WAIT_MS = 5_000;
-/**
  * Bound of one recorder journal call (default 15 s). Raised so a capture queued
  * behind a slow in-flight act at the deadline still has a chance; the cloud
  * capture fetch (25 s, cloudBrowser.ts) stays under it. A capture behind an act
@@ -80,6 +72,13 @@ const CHECKPOINT_CALL_TIMEOUT_MS = 30_000;
  */
 const recordingKeys = new Set<string>();
 const DESKTOP_RECORDING_KEY = "desktop";
+/**
+ * Stand-in for a missing bridge. The package wants a bridge object even when the
+ * helper is disabled (`enabled: false` creates no recorder and never calls it),
+ * and a fixture setup only runs once a bridge exists. It is one cast in one
+ * place; nothing may call it.
+ */
+const INERT_BRIDGE = {} as BrowserBridge;
 
 export function nestedChatId(sessionId: string | undefined, toolCallId: string | undefined): string {
   const raw = `browse.${sessionId ?? "no-session"}.${toolCallId ?? Date.now()}`;
@@ -176,98 +175,69 @@ export const browseAgent: ToolHandler = async (args, context) => {
   const checkpointChat = parentSessionId;
   const recordingKey = isDesktopBrowserAvailable() ? DESKTOP_RECORDING_KEY : checkpointChat;
 
-  // Checkpoint (spec 2026-10-16-checkpoint-design.md): record the run on the
-  // same bridge and take the checkpoint when it ends. The fixture stays in
+  // Checkpoint (spec 2026-10-16-checkpoint-design.md): the package's
+  // createRunCheckpoint owns the lifecycle (bounded start, capture conditions,
+  // release before stop, bounded stop wait). The fixture stays in
   // browseCheckpointStore; the model only gets id, complete, summary, gap.
-  // The recorder starts only once the input is valid (beginRecording), and
-  // only when no other run of this chat records.
-  let recorder: ReturnType<typeof createCheckpointRecorder> | undefined;
-  let startGeneration = 0;
+  // The journal starts only once the input is valid (`valid`), and only when no
+  // other run of this browser records; otherwise the helper is disabled, so
+  // there is still one cleanup path.
   const signal = context?.signal;
-  /** Frees the browser's recording slot once its journal calls have settled. */
-  const releaseSlot = (key: string, ...pending: Promise<unknown>[]) => {
-    void Promise.allSettled(pending).then(() => recordingKeys.delete(key));
-  };
-  const beginRecording = async (): Promise<void> => {
-    if (!bridge || !checkpointChat || !recordingKey || recordingKeys.has(recordingKey)) return;
-    const key = recordingKey;
-    recordingKeys.add(key);
-    const rec = createCheckpointRecorder(bridge as BrowserBridge, { timeoutMs: CHECKPOINT_CALL_TIMEOUT_MS });
-    startGeneration = useBrowseCheckpointStore.getState().generation(checkpointChat);
-    const starting = rec.start();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let onAbort: (() => void) | undefined;
-    const outcome = await Promise.race([
-      starting.then(() => "started" as const),
-      new Promise<"timeout">((resolve) => {
-        timer = setTimeout(() => resolve("timeout"), CHECKPOINT_START_WAIT_MS);
-      }),
-      new Promise<"abort">((resolve) => {
-        if (!signal) return;
-        if (signal.aborted) return resolve("abort");
-        onAbort = () => resolve("abort");
-        signal.addEventListener("abort", onAbort, { once: true });
-      }),
-    ]);
-    clearTimeout(timer);
-    if (onAbort) signal?.removeEventListener("abort", onAbort);
-    if (outcome === "started") {
-      recorder = rec;
-      return;
-    }
-    // No checkpoint for this run: the base would miss the first actions. A late
-    // start is stopped by its token (the recorder does it); the slot stays taken
-    // until the start and the stop have settled.
-    releaseSlot(key, starting, rec.stop());
-  };
-  const endRecording = async (): Promise<void> => {
-    const rec = recorder;
-    if (!rec || !recordingKey) return;
-    const stopping = rec.stop().catch(() => undefined);
-    // Slot released when the stop has really settled, not after the 2 s wait.
-    releaseSlot(recordingKey, stopping);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      await Promise.race([
-        stopping,
-        new Promise<void>((resolve) => {
-          timer = setTimeout(resolve, CHECKPOINT_STOP_WAIT_MS);
-        }),
-      ]);
-    } finally {
-      clearTimeout(timer);
-    }
-  };
+  let startGeneration = 0;
   let network: FixtureNetworkRule[] | undefined;
-  const finish = async (result: BrowseAgentResult, extra: Record<string, unknown>): Promise<string> => {
-    let checkpoint: ReturnType<typeof checkpointForModel> | undefined;
-    if (recorder && checkpointChat && result.status !== "setup_failed" && result.status !== "aborted" && result.steps > 0) {
-      const taken = await recorder.capture();
-      // Skip when the run was aborted or the chat cleared/deleted meanwhile:
-      // the fixture holds secrets and must not recreate the chat's entry.
-      const stale = signal?.aborted || useBrowseCheckpointStore.getState().generation(checkpointChat) !== startGeneration;
-      if (taken.ok && !stale) {
-        checkpoint = checkpointForModel(
-          useBrowseCheckpointStore.getState().add(checkpointChat, {
-            fixture: taken.fixture,
-            ...(network && network.length > 0 ? { network } : {}),
-            complete: taken.complete,
-            ...(taken.gap !== undefined ? { gap: taken.gap } : {}),
-            summary: taken.summary,
-          }),
-        );
-      }
+  const openCheckpoint = (valid: boolean) => {
+    const key = recordingKey;
+    const enabled = valid && !!bridge && !!checkpointChat && !!key && !recordingKeys.has(key);
+    if (enabled && key && checkpointChat) {
+      recordingKeys.add(key);
+      startGeneration = useBrowseCheckpointStore.getState().generation(checkpointChat);
     }
-    return JSON.stringify({ ...result, ...extra, ...(checkpoint ? { checkpoint } : {}) });
+    const cp = createRunCheckpoint(bridge ?? INERT_BRIDGE, { enabled: enabled && !!bridge, signal, timeoutMs: CHECKPOINT_CALL_TIMEOUT_MS });
+    // The slot frees once the journal calls have really settled. The package caps
+    // `settled` at 2 x timeoutMs (60 s here): a stop that hangs longer may overlap
+    // the next run's journal (the owner tokens protect on current bridges).
+    if (enabled && key) void cp.settled.then(() => recordingKeys.delete(key));
+    return cp;
   };
+  // `cp.finish` (and so the fixture release in `beforeStop`) must run exactly
+  // once per run: the host guards it, the package's disabled mode does not memoize.
+  let finished = false;
+  /** Ends the run: capture, `beforeStop` (fixture release), stop. NOT idempotent: call once (see `finished`). Returns the model-safe checkpoint. */
+  const finishCheckpoint = async (
+    cp: ReturnType<typeof openCheckpoint>,
+    result: Pick<BrowseAgentResult, "status" | "steps">,
+    beforeStop?: () => Promise<unknown>,
+  ): Promise<ReturnType<typeof checkpointForModel> | undefined> => {
+    finished = true;
+    const taken = await cp.finish(result, { beforeStop });
+    if (!taken?.ok || !checkpointChat) return undefined;
+    // Skip when the chat was cleared/deleted meanwhile (closeChat/clearChat bump
+    // the generation): the fixture holds secrets and must not recreate the chat's
+    // entry. A Stop alone keeps the capture: it is useful for resume.
+    if (useBrowseCheckpointStore.getState().generation(checkpointChat) !== startGeneration) return undefined;
+    return checkpointForModel(
+      useBrowseCheckpointStore.getState().add(checkpointChat, {
+        fixture: taken.fixture,
+        ...(network && network.length > 0 ? { network } : {}),
+        complete: taken.complete,
+        ...(taken.gap !== undefined ? { gap: taken.gap } : {}),
+        summary: taken.summary,
+      }),
+    );
+  };
+  // Only used when the run threw before finishing: no capture by design (aborted, 0 steps).
+  const THREW_RESULT: Pick<BrowseAgentResult, "status" | "steps"> = { status: "aborted", steps: 0 };
+  const toJson = (result: BrowseAgentResult, extra: Record<string, unknown>, checkpoint: unknown): string =>
+    JSON.stringify({ ...result, ...extra, ...(checkpoint ? { checkpoint } : {}) });
 
   if (!hasSetup && !hasResume) {
+    const cp = openCheckpoint(true);
     try {
-      await beginRecording();
+      await cp.begin();
       const result = await session.run(goal, driver, { url: url || undefined, toolCallId });
-      return await finish(result, {});
+      return toJson(result, {}, await finishCheckpoint(cp, result));
     } finally {
-      await endRecording();
+      if (!finished) await cp.finish(THREW_RESULT);
     }
   }
 
@@ -310,7 +280,7 @@ export const browseAgent: ToolHandler = async (args, context) => {
   if (parsed.ok) network = parsed.value.network;
   let setupApplied = false;
   const fs = parsed.ok
-    ? createFixtureSetup((bridge ?? {}) as BrowserBridge, parsed.value, {
+    ? createFixtureSetup(bridge ?? INERT_BRIDGE, parsed.value, {
         allowNetworkMocks: true,
         snapshot: () =>
           executeToolCall(
@@ -327,8 +297,10 @@ export const browseAgent: ToolHandler = async (args, context) => {
       })
     : undefined;
   setPhase("setup");
+  const cp = openCheckpoint(parsed.ok);
+  const releaseFixture = async () => void (await fs?.release());
   try {
-    if (parsed.ok) await beginRecording();
+    await cp.begin();
     const result = await session.run(goal, driver, {
       toolCallId,
       setup:
@@ -337,12 +309,12 @@ export const browseAgent: ToolHandler = async (args, context) => {
           throw new SetupError("validate", parsed.ok ? "" : parsed.error);
         }),
     });
-    return await finish(result, setupApplied ? { setupApplied: true } : {});
+    return toJson(result, setupApplied ? { setupApplied: true } : {}, await finishCheckpoint(cp, result, releaseFixture));
   } finally {
-    // Same order as the package's runBrowseAgent: fixture first, then the journal.
+    // On the normal path finishCheckpoint already ran. Otherwise (a throw) this
+    // still releases the fixture (before the journal stop) and stops the journal.
     // The mocks live until the task ends, whatever the outcome.
-    await fs?.release();
-    await endRecording();
+    if (!finished) await cp.finish(THREW_RESULT, { beforeStop: releaseFixture });
     if (toolCallId) useBrowseAgentPhaseStore.getState().clearPhase(toolCallId);
   }
 };

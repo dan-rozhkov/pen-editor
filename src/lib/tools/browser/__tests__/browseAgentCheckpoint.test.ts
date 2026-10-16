@@ -213,6 +213,8 @@ describe("browse_agent recorder lifecycle", () => {
     startJournal.mockImplementationOnce(() => new Promise<string>((r) => (lateStart = r)));
     const ac = new AbortController();
     const run = browseAgent({ goal: "g", url: "https://a.test" }, { ...ctx, signal: ac.signal });
+    // Abort once the start is really pending (a signal aborted before begin() starts nothing: the package skips the browser call).
+    await vi.waitFor(() => expect(startJournal).toHaveBeenCalled());
     ac.abort();
     expect(JSON.parse(await run).checkpoint).toBeUndefined();
     expect(captureCheckpoint).not.toHaveBeenCalled();
@@ -263,15 +265,38 @@ describe("browse_agent recorder lifecycle", () => {
     expect(useBrowseCheckpointStore.getState().byChat["chat-1"]).toBeUndefined();
   });
 
-  it("an abort during the capture stores nothing", async () => {
+  it("an abort (Stop) during the capture keeps the checkpoint for resume", async () => {
     const ac = new AbortController();
     captureCheckpoint.mockImplementation(async () => {
       ac.abort();
       return { ok: true, fixture: CAPTURED, complete: true, summary: "s" };
     });
     const result = JSON.parse(await browseAgent({ goal: "g", url: "https://a.test" }, { ...ctx, signal: ac.signal }));
-    expect(result.checkpoint).toBeUndefined();
-    expect(useBrowseCheckpointStore.getState().byChat["chat-1"]).toBeUndefined();
+    expect(result.checkpoint).toMatchObject({ id: "cp_1" });
+    expect(stored()).toHaveLength(1);
+  });
+
+  it("a setup run that cannot record (slot taken) releases the fixture exactly once", async () => {
+    let release: (v: string) => void = () => {};
+    startJournal.mockImplementationOnce(() => new Promise<string>((r) => (release = r)));
+    const first = browseAgent({ goal: "g", url: "https://a.test" }, ctx);
+    await vi.waitFor(() => expect(startJournal).toHaveBeenCalled());
+    releaseFixture.mockClear();
+    const second = JSON.parse(await browseAgent({ goal: "g", url: "https://a.test", setup: { steps: [] } }, { ...ctx, toolCallId: "tc-2" }));
+    expect(second.checkpoint).toBeUndefined();
+    expect(releaseFixture).toHaveBeenCalledTimes(1);
+    release("jt");
+    await first;
+  });
+
+  it("a signal aborted before the journal start never starts it and frees the slot", async () => {
+    const ac = new AbortController();
+    ac.abort();
+    await browseAgent({ goal: "g", url: "https://a.test" }, { ...ctx, signal: ac.signal });
+    expect(startJournal).not.toHaveBeenCalled();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(JSON.parse(await browseAgent({ goal: "g", url: "https://a.test" }, { ...ctx, toolCallId: "tc-2" })).checkpoint).toMatchObject({ id: "cp_1" });
+    expect(startJournal).toHaveBeenCalledTimes(1);
   });
 });
 
