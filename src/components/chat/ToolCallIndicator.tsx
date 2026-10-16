@@ -130,7 +130,7 @@ export function ToolCallIndicator({ part, statusLabel, statusError, extraPanes, 
         ) : (
           <span className="truncate">{displayName}</span>
         )}
-        {shownHint && <span className="truncate min-w-0 text-text-disabled">{shownHint}</span>}
+        {shownHint && <span className="truncate min-w-0 shrink-[999] text-text-disabled">{shownHint}</span>}
         <span
           className={`shrink-0 ${isError ? "text-red-500" : "text-text-disabled"}`}
         >
