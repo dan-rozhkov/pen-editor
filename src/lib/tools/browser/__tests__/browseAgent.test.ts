@@ -22,7 +22,14 @@ interface Captured {
 /** Stubs global fetch with one scripted response per call; records requests. */
 function stubFetch(script: Array<() => Response | Promise<Response>>) {
   const captured: Captured[] = [];
-  const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    // The checkpoint journal talks to the cloud browser: not a chat request, no script entry.
+    if (String(input).includes("/api/browser/")) {
+      return new Response(JSON.stringify({ result: { error: "no cloud browser in this test" } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
     captured.push({ body: JSON.parse(String(init?.body)), headers: new Headers(init?.headers) });
     const next = script[captured.length - 1];
     if (!next) throw new Error("unexpected extra request");

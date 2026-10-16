@@ -3,6 +3,7 @@ import { reconcileModels, useChatStore, type ChatSummary } from "@/store/chatSto
 import { getDefaultModel, getModelOptions } from "@/lib/chatModels";
 import { clearOpenCodeKey, setOpenCodeKey } from "@/lib/opencodeKey";
 import { assertDefined } from "@/test/assertions";
+import { resetBrowseCheckpoints, useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
 
 function makeChat(overrides: Partial<ChatSummary> & { id: string }): ChatSummary {
   return {
@@ -112,6 +113,22 @@ describe("chatStore — message queue", () => {
   });
 
   describe("closeChat cleanup", () => {
+    it("drops the chat's browser checkpoints", () => {
+      useChatStore.setState({
+        chats: [makeChat({ id: "tab-A" }), makeChat({ id: "tab-B" })],
+        activeChatId: "tab-A",
+      });
+      const cp = { fixture: { version: 1, url: "https://a.test" } as never, complete: true, summary: "s" };
+      useBrowseCheckpointStore.getState().add("tab-A", cp);
+      useBrowseCheckpointStore.getState().add("tab-B", cp);
+
+      useChatStore.getState().closeChat("tab-A");
+
+      expect(useBrowseCheckpointStore.getState().byChat["tab-A"]).toBeUndefined();
+      expect(useBrowseCheckpointStore.getState().byChat["tab-B"]).toHaveLength(1);
+      resetBrowseCheckpoints();
+    });
+
     it("clears the message queue when closing one of several chats", () => {
       useChatStore.setState({
         chats: [makeChat({ id: "tab-A" }), makeChat({ id: "tab-B" })],

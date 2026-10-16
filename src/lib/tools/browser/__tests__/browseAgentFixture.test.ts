@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { toolHandlers, type ToolHandler } from "@/lib/toolRegistry";
+import { toolHandlers } from "@/lib/toolRegistry";
 import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
-import { textTurn } from "./helpers";
+import { cleanupBrowseAgentTest, fixtureBridgeMocks, stubBrowseOpenSnapshot, textTurn } from "./helpers";
 import { browseAgent } from "../browseAgent";
 
 function stubFetch() {
@@ -21,8 +21,7 @@ const SETUP = { steps: [{ action: "click", selector: "#go" }], expect: { text: "
 
 let applyFixture: ReturnType<typeof vi.fn>;
 let releaseFixture: ReturnType<typeof vi.fn>;
-let savedHandlers: Record<string, ToolHandler | undefined>;
-const stubbed = ["browse_open", "browse_snapshot"];
+let restoreHandlers: () => void;
 
 function installBridge(extra: Record<string, unknown> = {}) {
   window.penDesktop = {
@@ -32,22 +31,13 @@ function installBridge(extra: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
-  applyFixture = vi.fn(async () => ({ ok: true, summary: "1 step run", fixtureToken: "tok-1" }));
-  releaseFixture = vi.fn(async () => ({ ok: true }));
-  savedHandlers = Object.fromEntries(stubbed.map((n) => [n, toolHandlers[n]]));
-  toolHandlers.browse_open = vi.fn(async () => "{}");
-  toolHandlers.browse_snapshot = vi.fn(async () => '{"snapshot":"SNAP"}');
+  ({ applyFixture, releaseFixture } = fixtureBridgeMocks());
+  restoreHandlers = stubBrowseOpenSnapshot();
   installBridge();
 });
 
 afterEach(() => {
-  for (const n of stubbed) {
-    if (savedHandlers[n]) toolHandlers[n] = savedHandlers[n];
-    else delete toolHandlers[n];
-  }
-  delete window.penDesktop;
-  vi.unstubAllGlobals();
-  useBrowseAgentPhaseStore.setState({ phases: {} });
+  cleanupBrowseAgentTest(restoreHandlers);
 });
 
 describe("browse_agent setup (page fixture)", () => {

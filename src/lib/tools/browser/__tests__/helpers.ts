@@ -1,4 +1,6 @@
 import { vi } from "vitest";
+import { toolHandlers, type ToolHandler } from "@/lib/toolRegistry";
+import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
 
 // Shared arrange helpers for the browser-tool unit tests
 // (browseTask.test.ts, browserTools.test.ts). Extracted to keep
@@ -89,3 +91,36 @@ export const textTurn = (text: string): Response =>
     { type: "finish-step" },
     { type: "finish" },
   ]);
+
+// Shared arrange for the browse_agent fixture/checkpoint suites
+// (browseAgentFixture.test.ts, browseAgentCheckpoint.test.ts).
+
+/** applyFixture/releaseFixture mocks that succeed with token `tok` (default `tok-1`). */
+export function fixtureBridgeMocks(token = "tok-1") {
+  return {
+    applyFixture: vi.fn(async () => ({ ok: true, summary: "1 step run", fixtureToken: token })),
+    releaseFixture: vi.fn(async () => ({ ok: true })),
+  };
+}
+
+/** Stubs browse_open / browse_snapshot; the returned function restores the originals. */
+export function stubBrowseOpenSnapshot(): () => void {
+  const names = ["browse_open", "browse_snapshot"];
+  const saved: Record<string, ToolHandler | undefined> = Object.fromEntries(names.map((n) => [n, toolHandlers[n]]));
+  toolHandlers.browse_open = vi.fn(async () => "{}");
+  toolHandlers.browse_snapshot = vi.fn(async () => '{"snapshot":"SNAP"}');
+  return () => {
+    for (const n of names) {
+      if (saved[n]) toolHandlers[n] = saved[n];
+      else delete toolHandlers[n];
+    }
+  };
+}
+
+/** Undoes what the fixture/checkpoint suites install: bridge, fetch stubs, phase store. */
+export function cleanupBrowseAgentTest(restoreHandlers: () => void): void {
+  restoreHandlers();
+  delete window.penDesktop;
+  vi.unstubAllGlobals();
+  useBrowseAgentPhaseStore.setState({ phases: {} });
+}

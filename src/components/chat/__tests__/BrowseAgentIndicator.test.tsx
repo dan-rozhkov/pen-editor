@@ -172,3 +172,37 @@ describe("<BrowseAgentIndicator />", () => {
     expect(screen.queryByText("Setup")).toBeNull();
   });
 });
+
+describe("<BrowseAgentIndicator /> checkpoints", () => {
+  it("shows Resumed from and the saved checkpoint, ids only", () => {
+    const out = JSON.stringify({ status: "done", answer: "", steps: 2, setupApplied: true, checkpoint: { id: "cp_3", complete: false, summary: "SUMMARY-X", gap: "g" } });
+    render(
+      <BrowseAgentIndicator
+        part={part({ state: "output-available", input: { goal: "g", resume: "cp_2" }, output: out })}
+      />,
+    );
+    fireEvent.click(screen.getByText("Browse Agent"));
+    expect(screen.getByText("Resumed from cp_2")).toBeTruthy();
+    expect(screen.getByText("Checkpoint cp_3 saved (partial)")).toBeTruthy();
+  });
+
+  it("does not claim a resume that failed", () => {
+    const out = JSON.stringify({ status: "setup_failed", setupStage: "validate", error: "checkpoint cp_9 not found" });
+    render(<BrowseAgentIndicator part={part({ state: "output-available", input: { goal: "g", resume: "cp_9" }, output: out })} />);
+    fireEvent.click(screen.getByText("Browse Agent"));
+    expect(screen.queryByText(/Resumed from/)).toBeNull();
+  });
+
+  it("a resume shows Preparing page... in the setup phase", () => {
+    useBrowseAgentPhaseStore.getState().setPhase("tc-1", "setup");
+    render(<BrowseAgentIndicator part={part({ input: { goal: "g", resume: "cp_2" } })} />);
+    expect(screen.getByText("Preparing page...")).toBeTruthy();
+  });
+
+  it("a complete checkpoint has no partial note", () => {
+    const out = JSON.stringify({ status: "done", answer: "", steps: 2, checkpoint: { id: "cp_1", complete: true, summary: "s" } });
+    render(<BrowseAgentIndicator part={part({ state: "output-available", input: { goal: "g" }, output: out })} />);
+    fireEvent.click(screen.getByText("Browse Agent"));
+    expect(screen.getByText("Checkpoint cp_1 saved")).toBeTruthy();
+  });
+});

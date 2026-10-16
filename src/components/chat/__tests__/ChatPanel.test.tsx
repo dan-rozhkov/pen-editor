@@ -48,6 +48,7 @@ import { ChatPanelContent } from "../ChatPanel";
 import { useChatStore } from "@/store/chatStore";
 import type { ChatSummary } from "@/store/chatStore";
 import { clearOpenCodeKey, setOpenCodeKey } from "@/lib/opencodeKey";
+import { resetBrowseCheckpoints, useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
 
 afterEach(() => cleanup());
 
@@ -161,6 +162,14 @@ describe("<ChatPanelContent />", () => {
 
     expect(setMessages).toHaveBeenCalledWith([]);
     expect(useChatStore.getState().messageQueue["tab-1"]).toBeUndefined();
+  });
+
+  it("drops the chat's browser checkpoints when Clear chat is used", () => {
+    useBrowseCheckpointStore.getState().add("tab-1", { fixture: { version: 1, url: "https://a.test" } as never, complete: true, summary: "s" });
+    render(<ChatPanelContent />);
+    useChatStore.getState().sessionActions["tab-1"]?.clearChat();
+    expect(useBrowseCheckpointStore.getState().byChat["tab-1"]).toBeUndefined();
+    resetBrowseCheckpoints();
   });
 
   // Regression: markChatUnread's "active chat" branch used to be dead code —

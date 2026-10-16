@@ -80,9 +80,11 @@ export function BrowseAgentIndicator({ part }: { part: AnyPart }) {
   // aborted or timed-out run may never have got past "Preparing page...".
   const setupRan = out !== undefined && !setupFailed && out.setupApplied === true;
   const setup = describeSetup(part.input, setupRan);
+  const resumedFrom = asRecord(part.input)?.resume;
+  const hasResume = typeof resumedFrom === "string" && resumedFrom !== "";
 
   let statusLabel: string | undefined;
-  if (running && phase === "setup" && setup !== undefined) statusLabel = "Preparing page...";
+  if (running && phase === "setup" && (setup !== undefined || hasResume)) statusLabel = "Preparing page...";
   else if (setupFailed) statusLabel = "Setup failed";
 
   const extraPanes: Array<{ label: string; content: string }> = [];
@@ -91,6 +93,20 @@ export function BrowseAgentIndicator({ part }: { part: AnyPart }) {
     const stage = typeof out?.setupStage === "string" ? out.setupStage : "unknown";
     const error = typeof out?.error === "string" ? out.error : "The page could not be prepared.";
     extraPanes.push({ label: "Stage", content: `${stage} — ${error}\nThe agent did not run.` });
+  }
+
+  // Counts and ids only: the checkpoint fixture never reaches the chat.
+  // Only when the checkpoint really landed (not on setup_failed or an aborted run).
+  if (hasResume && setupRan) {
+    extraPanes.push({ label: "Resume", content: `Resumed from ${resumedFrom}` });
+  }
+  const checkpoint = asRecord(out?.checkpoint);
+  if (checkpoint && typeof checkpoint.id === "string") {
+    const partial = checkpoint.complete === false;
+    extraPanes.push({
+      label: "Checkpoint",
+      content: `Checkpoint ${checkpoint.id} saved${partial ? " (partial)" : ""}`,
+    });
   }
 
   return (

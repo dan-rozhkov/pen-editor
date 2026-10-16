@@ -28,6 +28,15 @@ const COMMAND_TIMEOUT_MS: Record<string, number> = {
   // browser-agent/src/fixture/apply.ts); this must outlast it (+30s margin),
   // or the fetch aborts a setup that is still legitimately running.
   applyFixture: 330_000,
+  // Checkpoint journal (browser-agent v0.2.16). start/stop create no session
+  // and are quick. The capture reads cookies, storage and the tab list, and
+  // may queue behind an in-flight act; its fetch stays under the recorder's
+  // 30 s bound (browseAgent.ts, CHECKPOINT_CALL_TIMEOUT_MS) so the recorder's
+  // clean {error} wins over a generic timeout. Trade-off: a capture behind an
+  // act longer than 25 s still fails, and the run then has no checkpoint.
+  startJournal: 15_000,
+  stopJournal: 15_000,
+  captureCheckpoint: 25_000,
 };
 const DEFAULT_COMMAND_TIMEOUT_MS = 85_000;
 const TIMEOUT_ERROR = "Cloud browser timed out — try again.";
@@ -228,6 +237,18 @@ export function releaseCloudBrowser(chatId: string): Promise<boolean> {
   });
 }
 
+/**
+ * `startJournal` answers `{ token }`; the package's recorder wants the bare
+ * owner-token string. An `{ error }` (or any other shape) throws, so the
+ * recorder reports a start failure instead of running without a journal.
+ * Kept in one place so a change in the backend's response shape is a one-line fix.
+ */
+export function unwrapJournalToken(result: unknown): string {
+  const r = (result ?? {}) as { token?: unknown; error?: unknown };
+  if (typeof r.token === "string" && r.token !== "") return r.token;
+  throw new Error(typeof r.error === "string" ? r.error : "the cloud browser returned no journal token");
+}
+
 function makeBridge(resolveChat: () => string): CloudBrowserBridge {
   const call = (name: string, args?: Record<string, unknown>) => {
     const chatId = resolveChat();
@@ -249,6 +270,11 @@ function makeBridge(resolveChat: () => string): CloudBrowserBridge {
     // bounds the request.
     applyFixture: (fixture) => call("applyFixture", { fixture }),
     releaseFixture: (token) => call("releaseFixture", { token }),
+    // Checkpoint journal. captureCheckpoint's answer ({ ok, fixture, ... } or
+    // { error }) goes to the package's normalizeCheckpoint as is.
+    startJournal: async (opts) => unwrapJournalToken(await call("startJournal", { ...(opts?.origins ? { origins: opts.origins } : {}) })),
+    stopJournal: (token) => call("stopJournal", token ? { token } : {}),
+    captureCheckpoint: (token) => call("captureCheckpoint", token ? { token } : {}),
   };
 }
 

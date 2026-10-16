@@ -32,6 +32,7 @@ import { ChatList } from "./ChatList";
 import { QueuedMessagePanel } from "./QueuedMessagePanel";
 import { CloudBrowserPanel } from "./CloudBrowserPanel";
 import { releaseCloudBrowser } from "@/lib/cloudBrowser";
+import { useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
 import { SkillsPanel } from "./SkillsPanel";
 import { ContextMeter } from "./ContextMeter";
 import { OpenCodeKeyDialog } from "./OpenCodeKeyDialog";
@@ -308,6 +309,8 @@ function ChatSession({
         useChatStore.getState().clearLikedReferences(sessionId);
         // A cleared chat starts over, so its cloud browser does too.
         void releaseCloudBrowser(sessionId);
+        // Its browser checkpoints (cookies, storage) go with the transcript.
+        useBrowseCheckpointStore.getState().clearChat(sessionId);
       },
     });
     return () => unregisterSessionActions(sessionId);
