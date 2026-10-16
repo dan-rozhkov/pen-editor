@@ -39,6 +39,9 @@ test("browse_agent setup that fails shows Setup failed and 'The agent did not ru
   await page.route("**/api/browser/cmd/*", async (route) => {
     const name = new URL(route.request().url()).pathname.split("/").pop() ?? "";
     commands.push(name);
+    // Every run records a checkpoint journal around the setup; only applyFixture touches the page.
+    if (name === "startJournal") return route.fulfill({ json: { result: { ok: true, token: "cj_e2e" }, handle: null } });
+    if (name === "stopJournal") return route.fulfill({ json: { result: { ok: true }, handle: null } });
     await route.fulfill({
       json: { result: { ok: false, stage: "expect", error: 'text "3 items" not found' }, handle: "h1" },
     });
@@ -54,7 +57,10 @@ test("browse_agent setup that fails shows Setup failed and 'The agent did not ru
   await expect(page.getByText(/expect — text "3 items" not found/)).toBeVisible();
   await expect(page.getByText(/The agent did not run\./)).toBeVisible();
   await expect(page.getByText("The page could not be prepared.")).toBeVisible({ timeout: 15_000 });
-  expect(commands).toEqual(["applyFixture"]);
+  expect(commands.filter((c) => c !== "startJournal" && c !== "stopJournal")).toEqual(["applyFixture"]);
+  // The journal started for the run is stopped again (in the background), and no checkpoint is taken after a failed setup.
+  await expect.poll(() => commands.includes("stopJournal")).toBe(commands.includes("startJournal"));
+  expect(commands).not.toContain("captureCheckpoint");
   // Only the two main-chat turns: the nested browse session never started.
   expect(chatRequests).toHaveLength(2);
 });
