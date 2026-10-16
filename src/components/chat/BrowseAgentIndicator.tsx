@@ -1,6 +1,7 @@
 import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
 import { ToolCallIndicator } from "./ToolCallIndicator";
 import { redactBrowseSetupInput } from "@/lib/tools/browser/redactBrowseSetupInput";
+import { urlSummary } from "@/lib/tools/browser/browseToolHint";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyPart = any;
@@ -25,17 +26,6 @@ function parseOutput(output: unknown): Rec | undefined {
 const countOf = (v: unknown): number => (Array.isArray(v) ? v.length : 0);
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
 
-/** Origin + pathname: no query, no hash. */
-function pathPart(url: unknown): string | undefined {
-  if (typeof url !== "string" || url === "") return undefined;
-  try {
-    const u = new URL(url);
-    return u.origin + u.pathname;
-  } catch {
-    return undefined;
-  }
-}
-
 function expectPart(expectRaw: unknown): string | undefined {
   const e = asRecord(expectRaw);
   if (!e) return undefined;
@@ -51,12 +41,12 @@ function expectPart(expectRaw: unknown): string | undefined {
  * The one-line summary of a `setup` input. Counts only for cookies and
  * storage: never a cookie or storage value, a mock body or a header.
  */
-function describeSetup(input: unknown, succeeded: boolean): { line: string; mocked: boolean } | undefined {
+function describeSetup(input: unknown, succeeded: boolean): string | undefined {
   const root = asRecord(input);
   const setup = asRecord(root?.setup);
   if (!setup) return undefined;
   const parts: string[] = [];
-  const path = pathPart(root?.url);
+  const path = urlSummary(root?.url);
   if (path) parts.push(path);
   const steps = countOf(setup.steps);
   if (steps > 0) parts.push(plural(steps, "step", "steps"));
@@ -72,12 +62,12 @@ function describeSetup(input: unknown, succeeded: boolean): { line: string; mock
   if (tabs > 0) parts.push(plural(tabs, "tab", "tabs"));
   const expectText = expectPart(setup.expect);
   if (expectText) parts.push(succeeded ? "expect ✓" : expectText);
-  return { line: `Setup: ${parts.join(" · ")}`, mocked: mocks > 0 };
+  return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
 /**
- * Chat chip for `browse_agent`: ToolCallIndicator plus the setup line, the
- * preparing phase, the mocked-data warning and the setup failure. Output it
+ * Chat chip for `browse_agent`: ToolCallIndicator plus the Setup and Stage
+ * panes (under the collapse), the preparing phase and the setup failure. Output it
  * cannot parse leaves the plain ToolCallIndicator.
  */
 export function BrowseAgentIndicator({ part }: { part: AnyPart }) {
@@ -92,35 +82,23 @@ export function BrowseAgentIndicator({ part }: { part: AnyPart }) {
   const setup = describeSetup(part.input, setupRan);
 
   let statusLabel: string | undefined;
-  if (running && phase === "setup" && setup) statusLabel = "Preparing page...";
+  if (running && phase === "setup" && setup !== undefined) statusLabel = "Preparing page...";
   else if (setupFailed) statusLabel = "Setup failed";
 
-  const detail =
-    setup || setupFailed ? (
-      <div className="space-y-0.5 pb-0.5 pl-5 text-[12px] leading-relaxed text-text-muted">
-        {setup && <div className="break-words">{setup.line}</div>}
-        {setupRan && setup?.mocked && (
-          <div className="text-amber-500">⚠ API responses were mocked. Data on these pages is not real.</div>
-        )}
-        {setupFailed && (
-          <>
-            <div className="break-words text-amber-500">
-              {`Stage: ${typeof out?.setupStage === "string" ? out.setupStage : "unknown"} — ${
-                typeof out?.error === "string" ? out.error : "The page could not be prepared."
-              }`}
-            </div>
-            <div className="text-amber-500">The agent did not run.</div>
-          </>
-        )}
-      </div>
-    ) : undefined;
+  const extraPanes: Array<{ label: string; content: string }> = [];
+  if (setup !== undefined) extraPanes.push({ label: "Setup", content: setup });
+  if (setupFailed) {
+    const stage = typeof out?.setupStage === "string" ? out.setupStage : "unknown";
+    const error = typeof out?.error === "string" ? out.error : "The page could not be prepared.";
+    extraPanes.push({ label: "Stage", content: `${stage} — ${error}\nThe agent did not run.` });
+  }
 
   return (
     <ToolCallIndicator
       part={part}
       statusLabel={statusLabel}
-      statusWarning={setupFailed}
-      detail={detail}
+      statusError={setupFailed}
+      extraPanes={extraPanes}
       inputForDisplay={redactBrowseSetupInput(part.input)}
     />
   );

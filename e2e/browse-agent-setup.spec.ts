@@ -49,8 +49,10 @@ test("browse_agent setup that fails shows Setup failed and 'The agent did not ru
   await sendChatMessage(page, "Check the cart page");
 
   await expect(page.getByText("Setup failed")).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText('Stage: expect — text "3 items" not found')).toBeVisible();
-  await expect(page.getByText("The agent did not run.")).toBeVisible();
+  // Setup details live under the chip's collapse.
+  await page.getByRole("button", { name: /Browse Agent/ }).click();
+  await expect(page.getByText(/expect — text "3 items" not found/)).toBeVisible();
+  await expect(page.getByText(/The agent did not run\./)).toBeVisible();
   await expect(page.getByText("The page could not be prepared.")).toBeVisible({ timeout: 15_000 });
   expect(commands).toEqual(["applyFixture"]);
   // Only the two main-chat turns: the nested browse session never started.

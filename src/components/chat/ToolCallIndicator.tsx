@@ -1,4 +1,4 @@
-import { createElement, useMemo, useState, type ReactNode } from "react";
+import { createElement, useMemo, useState } from "react";
 import {
   CaretDownIcon,
   DownloadSimpleIcon,
@@ -7,6 +7,7 @@ import { Shimmer } from "@/components/ai-elements/shimmer";
 import { getToolName } from "ai";
 import { getToolDisplayName } from "@/lib/toolDisplayNames";
 import { getToolIcon } from "@/lib/toolIcons";
+import { browseToolHint } from "@/lib/tools/browser/browseToolHint";
 import { downloadFile, filenameFromUrl } from "@/lib/downloadFile";
 import { extractImageRefs } from "./extractImageUrls";
 import { LikeReferenceButton, type LikeMeta } from "./LikeReferenceButton";
@@ -67,20 +68,24 @@ interface ToolCallIndicatorProps {
   part: any;
   /** Replaces the status word ("Running...", "Done", "Error"). Used by BrowseAgentIndicator. */
   statusLabel?: string;
-  /** Amber instead of the muted status color. */
-  statusWarning?: boolean;
-  /** Lines shown under the chip, above the expandable Input/Output. */
-  detail?: ReactNode;
+  /** Status word and tool icon use the error color even when the call completed. */
+  statusError?: boolean;
+  /** Panes shown in the expanded block, before Input. */
+  extraPanes?: Array<{ label: string; content: string }>;
+  /** Short muted text between the name and the status. Defaults to browseToolHint. */
+  hint?: string;
   /** Replaces the raw tool input in the expandable Input pane (e.g. a redacted copy). */
   inputForDisplay?: unknown;
 }
 
-export function ToolCallIndicator({ part, statusLabel, statusWarning, detail, inputForDisplay }: ToolCallIndicatorProps) {
+export function ToolCallIndicator({ part, statusLabel, statusError, extraPanes, hint, inputForDisplay }: ToolCallIndicatorProps) {
   const [open, setOpen] = useState(false);
   const toolPart = part as AnyToolPart;
   const status = getToolStatus(toolPart);
   const toolName = getToolName(part as Parameters<typeof getToolName>[0]);
   const displayName = getToolDisplayName(toolName);
+  const isError = status === "error" || statusError === true;
+  const shownHint = hint ?? browseToolHint(toolName, toolPart.input);
   const output = toolPart.output;
   const imageRefs = useMemo(
     () => (status === "completed" ? extractImageRefs(output) : []),
@@ -116,7 +121,7 @@ export function ToolCallIndicator({ part, statusLabel, statusWarning, detail, in
             it in words, and on an error this icon turns red. */}
         <ToolIcon
           name={toolName}
-          className={`shrink-0 ${status === "error" ? "text-red-500" : ""}`}
+          className={`shrink-0 ${isError ? "text-red-500" : ""}`}
         />
         {status === "running" ? (
           <Shimmer as="span" className="truncate">
@@ -125,8 +130,9 @@ export function ToolCallIndicator({ part, statusLabel, statusWarning, detail, in
         ) : (
           <span className="truncate">{displayName}</span>
         )}
+        {shownHint && <span className="truncate min-w-0 text-text-disabled">{shownHint}</span>}
         <span
-          className={`shrink-0 ${status === "error" ? "text-red-500" : statusWarning ? "text-amber-500" : "text-text-disabled"}`}
+          className={`shrink-0 ${isError ? "text-red-500" : "text-text-disabled"}`}
         >
           {status === "running" ? (
             <Shimmer as="span">{statusLabel ?? statusText(status)}</Shimmer>
@@ -139,7 +145,6 @@ export function ToolCallIndicator({ part, statusLabel, statusWarning, detail, in
           className={`transition-transform duration-250 ease-smooth-out shrink-0 ${open ? "" : "-rotate-90"}`}
         />
       </button>
-      {detail}
       {status === "completed" && imageUrls.length > 0 && (
         <div className="mt-1.5 mb-1.5">
           {imageUrls.length >= 2 && (
@@ -180,6 +185,16 @@ export function ToolCallIndicator({ part, statusLabel, statusWarning, detail, in
       )}
       {open && (
         <div className="mt-1 mb-1.5 space-y-1.5 text-[13px]">
+          {extraPanes?.map((pane) => (
+            <div key={pane.label}>
+              <div className="text-text-disabled text-[10px] uppercase tracking-wider mb-0.5">
+                {pane.label}
+              </div>
+              <pre className="p-2 rounded bg-surface-elevated font-mono text-[11px] text-text-muted max-h-40 overflow-auto whitespace-pre-wrap break-all">
+                {pane.content}
+              </pre>
+            </div>
+          ))}
           <div>
             <div className="text-text-disabled text-[10px] uppercase tracking-wider mb-0.5">
               Input

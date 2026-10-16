@@ -19,15 +19,6 @@ export interface CloudBrowserSession {
 
 interface CloudBrowserState {
   sessions: Record<string, CloudBrowserSession>;
-  /**
-   * Active API mock rules per chat (page fixture `network`); transient, not
-   * persisted. `owner` is the browse_agent run that installed them, so an
-   * overlapping run's cleanup cannot clear another run's banner.
-   */
-  mocks: Record<string, { count: number; owner: string }>;
-  setMockCount: (chatId: string, count: number, owner: string) => void;
-  /** Clears the count only while `owner` still owns it. */
-  clearMockCount: (chatId: string, owner: string) => void;
   setSession: (chatId: string, session: CloudBrowserSession) => void;
   clearSession: (chatId: string) => void;
 }
@@ -87,20 +78,6 @@ export function readPersistedSessions(): Record<string, CloudBrowserSession> {
 
 export const useCloudBrowserStore = create<CloudBrowserState>((set) => ({
   sessions: readPersistedSessions(),
-  mocks: {},
-  setMockCount: (chatId, count, owner) =>
-    set((s) => {
-      const cur = s.mocks[chatId];
-      if (count <= 0) {
-        if (!cur || cur.owner !== owner) return s;
-        const mocks = { ...s.mocks };
-        delete mocks[chatId];
-        return { mocks };
-      }
-      if (cur && cur.count === count && cur.owner === owner) return s;
-      return { mocks: { ...s.mocks, [chatId]: { count, owner } } };
-    }),
-  clearMockCount: (chatId, owner) => useCloudBrowserStore.getState().setMockCount(chatId, 0, owner),
   setSession: (chatId, session) => {
     persist(chatId, session);
     set((s) => ({ sessions: { ...s.sessions, [chatId]: session } }));
@@ -108,13 +85,10 @@ export const useCloudBrowserStore = create<CloudBrowserState>((set) => ({
   clearSession: (chatId) => {
     persist(chatId, null);
     set((s) => {
-      // The remote browser is gone, and so are the mocks installed in it.
-      if (!(chatId in s.sessions) && !(chatId in s.mocks)) return s;
+      if (!(chatId in s.sessions)) return s;
       const sessions = { ...s.sessions };
       delete sessions[chatId];
-      const mocks = { ...s.mocks };
-      delete mocks[chatId];
-      return { sessions, mocks };
+      return { sessions };
     });
   },
 }));

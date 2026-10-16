@@ -31,19 +31,27 @@ function part(over: Record<string, unknown> = {}) {
 }
 
 describe("<BrowseAgentIndicator />", () => {
-  it("running + setup: Setup line without secrets, query or hash", () => {
+  it("running + setup: collapsed chip hides Setup, shows host+path hint; expanded Setup pane has no secrets", () => {
     const { container } = render(<BrowseAgentIndicator part={part()} />);
     expect(screen.getByText("Browse Agent")).toBeTruthy();
     expect(screen.getByText("Running...")).toBeTruthy();
+    expect(screen.getByText("shop.test/cart")).toBeTruthy();
+    expect(screen.queryByText("Setup")).toBeNull();
+    fireEvent.click(screen.getByText("Browse Agent"));
+    expect(screen.getByText("Setup")).toBeTruthy();
     expect(
       screen.getByText(
-        'Setup: https://shop.test/cart · 2 steps · 1 API mock · fresh session · 1 cookie · storage for 1 origin · 1 tab · expect "3 items"',
+        "shop.test/cart · 2 steps · 1 API mock · fresh session · 1 cookie · storage for 1 origin · 1 tab · expect \"3 items\"",
       ),
     ).toBeTruthy();
     const html = container.innerHTML;
-    for (const secret of ["SECRET-BODY", "SECRET-HEADER", "SECRET-COOKIE", "SECRET-STORAGE", "token=abc", "frag"]) {
+    for (const secret of ["SECRET-BODY", "SECRET-HEADER", "SECRET-COOKIE", "SECRET-STORAGE"]) {
       expect(html).not.toContain(secret);
     }
+    // The Setup summary and the hint drop the query and hash (the raw Input pane keeps the url as given).
+    const pane = screen.getByText("Setup").nextElementSibling;
+    expect(pane?.textContent).not.toMatch(/token=abc|frag/);
+    expect(screen.getByText("shop.test/cart").textContent).not.toMatch(/token=abc|frag/);
   });
 
   it("setup phase shows Preparing page...", () => {
@@ -53,34 +61,25 @@ describe("<BrowseAgentIndicator />", () => {
     expect(screen.queryByText("Running...")).toBeNull();
   });
 
-  it("done with mocks: expect check mark and the mocked-data warning", () => {
-    render(
+  it.each(["done", "step_limit"])("%s with an applied fixture: expect check mark, no mock warning or amber", (status) => {
+    const { container } = render(
       <BrowseAgentIndicator
-        part={part({ state: "output-available", output: JSON.stringify({ status: "done", answer: "ok", steps: 3, setupApplied: true }) })}
+        part={part({ state: "output-available", output: JSON.stringify({ status, answer: "", steps: 3, setupApplied: true }) })}
       />,
     );
-    expect(screen.getByText("Done")).toBeTruthy();
+    fireEvent.click(screen.getByText("Browse Agent"));
     expect(screen.getByText(/· expect ✓$/)).toBeTruthy();
-    expect(screen.getByText("⚠ API responses were mocked. Data on these pages is not real.")).toBeTruthy();
+    expect(screen.queryByText(/API responses were mocked/)).toBeNull();
+    expect(container.innerHTML).not.toContain("amber");
   });
 
-  it("step_limit with mocks still warns and shows expect check mark", () => {
-    render(
-      <BrowseAgentIndicator
-        part={part({ state: "output-available", output: JSON.stringify({ status: "step_limit", answer: "", steps: 20, setupApplied: true }) })}
-      />,
-    );
-    expect(screen.getByText(/· expect ✓$/)).toBeTruthy();
-    expect(screen.getByText("⚠ API responses were mocked. Data on these pages is not real.")).toBeTruthy();
-  });
-
-  it("aborted without an applied fixture: no warning, no expect check mark", () => {
+  it("aborted without an applied fixture: no expect check mark", () => {
     render(
       <BrowseAgentIndicator
         part={part({ state: "output-available", output: JSON.stringify({ status: "aborted", answer: "", steps: 0 }) })}
       />,
     );
-    expect(screen.queryByText(/mocked/)).toBeNull();
+    fireEvent.click(screen.getByText("Browse Agent"));
     expect(screen.queryByText(/expect ✓/)).toBeNull();
     expect(screen.getByText(/expect "3 items"$/)).toBeTruthy();
   });
@@ -111,7 +110,7 @@ describe("<BrowseAgentIndicator />", () => {
     expect(html).toContain("[hidden]");
   });
 
-  it("done without mocks has no warning; object output works", () => {
+  it("object output works and the Setup pane has no prefix", () => {
     render(
       <BrowseAgentIndicator
         part={part({
@@ -121,12 +120,12 @@ describe("<BrowseAgentIndicator />", () => {
         })}
       />,
     );
-    expect(screen.getByText("Setup: 1 step")).toBeTruthy();
-    expect(screen.queryByText(/mocked/)).toBeNull();
+    fireEvent.click(screen.getByText("Browse Agent"));
+    expect(screen.getByText("1 step")).toBeTruthy();
   });
 
-  it("setup_failed: amber label, stage and not-run line", () => {
-    render(
+  it("setup_failed: red label, no amber; Stage pane only after expanding", () => {
+    const { container } = render(
       <BrowseAgentIndicator
         part={part({
           state: "output-available",
@@ -141,22 +140,35 @@ describe("<BrowseAgentIndicator />", () => {
       />,
     );
     const label = screen.getByText("Setup failed");
-    expect(label.className).toContain("text-amber-500");
-    expect(screen.getByText('Stage: expect — text "3 items" not found')).toBeTruthy();
-    expect(screen.getByText("The agent did not run.")).toBeTruthy();
+    expect(label.className).toContain("text-red-500");
+    expect(container.innerHTML).not.toContain("amber");
+    expect(screen.queryByText("Stage")).toBeNull();
+    fireEvent.click(screen.getByText("Browse Agent"));
+    expect(screen.getByText("Stage")).toBeTruthy();
+    expect(
+      screen.getByText((_, el) => el?.tagName === "PRE" && el.textContent === 'expect — text "3 items" not found\nThe agent did not run.'),
+    ).toBeTruthy();
     expect(screen.queryByText("Done")).toBeNull();
   });
 
   it("unparsable output falls back to the plain indicator; Input/Output still opens", () => {
     render(<BrowseAgentIndicator part={part({ input: { goal: "g" }, state: "output-available", output: "not json" })} />);
     expect(screen.getByText("Done")).toBeTruthy();
-    expect(screen.queryByText(/^Setup:/)).toBeNull();
     fireEvent.click(screen.getByText("Browse Agent"));
+    expect(screen.queryByText("Setup")).toBeNull();
     expect(screen.getByText("Output")).toBeTruthy();
   });
 
   it("error state keeps the Error label", () => {
     render(<BrowseAgentIndicator part={part({ state: "output-error", errorText: "x" })} />);
     expect(screen.getByText("Error")).toBeTruthy();
+  });
+
+  it("an empty setup summary counts as no setup: no pane, no Preparing label", () => {
+    useBrowseAgentPhaseStore.getState().setPhase("tc-1", "setup");
+    render(<BrowseAgentIndicator part={part({ input: { goal: "g", setup: {} } })} />);
+    expect(screen.queryByText("Preparing page...")).toBeNull();
+    fireEvent.click(screen.getByText("Browse Agent"));
+    expect(screen.queryByText("Setup")).toBeNull();
   });
 });

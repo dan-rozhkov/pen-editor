@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toolHandlers, type ToolHandler } from "@/lib/toolRegistry";
 import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
-import { useCloudBrowserStore } from "@/store/cloudBrowserStore";
 import { textTurn } from "./helpers";
 import { browseAgent } from "../browseAgent";
 
@@ -49,7 +48,6 @@ afterEach(() => {
   delete window.penDesktop;
   vi.unstubAllGlobals();
   useBrowseAgentPhaseStore.setState({ phases: {} });
-  useCloudBrowserStore.setState({ mocks: {} });
 });
 
 describe("browse_agent setup (page fixture)", () => {
@@ -137,12 +135,10 @@ describe("browse_agent setup (page fixture)", () => {
     expect(useBrowseAgentPhaseStore.getState().phases["tc-1"]).toBeUndefined();
   });
 
-  it("abort while the apply is in flight: aborted, then the late token is released and the banner stays 0", async () => {
+  it("abort while the apply is in flight: aborted, then the late token is released", async () => {
     stubFetch();
     let resolveApply: (v: unknown) => void = () => {};
     applyFixture.mockImplementation(() => new Promise((r) => { resolveApply = r; }));
-    const counts: number[] = [];
-    const unsub = useCloudBrowserStore.subscribe((s) => counts.push(s.mocks["chat-1"]?.count ?? 0));
     const ac = new AbortController();
     const pending = browseAgent(
       { goal: "g", url: "https://a.test", setup: { network: [{ url: "https://api.test/*" }] } },
@@ -154,16 +150,12 @@ describe("browse_agent setup (page fixture)", () => {
     expect(releaseFixture).not.toHaveBeenCalled();
     resolveApply({ ok: true, summary: "late", fixtureToken: "late-tok" });
     await vi.waitFor(() => expect(releaseFixture).toHaveBeenCalledWith("late-tok"));
-    unsub();
-    expect(counts.every((c) => c === 0)).toBe(true);
-    expect(useCloudBrowserStore.getState().mocks).toEqual({});
     expect(useBrowseAgentPhaseStore.getState().phases).toEqual({});
   });
 
-  it("cloud bridge: forwards both commands and drives the mock banner count", async () => {
+  it("cloud bridge: forwards both commands", async () => {
     delete window.penDesktop;
     const urls: string[] = [];
-    const counts: number[] = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -181,16 +173,12 @@ describe("browse_agent setup (page fixture)", () => {
         });
       }),
     );
-    const unsub = useCloudBrowserStore.subscribe((s) => counts.push(s.mocks["chat-cloud"]?.count ?? 0));
     const setup = { network: [{ url: "https://api.test/a" }, { url: "https://api.test/b" }] };
     await browseAgent({ goal: "g", url: "https://a.test", setup }, { sessionId: "chat-cloud", toolCallId: "tc-c" });
-    unsub();
     expect(urls.filter((u) => u.includes("Fixture"))).toEqual([
       "/api/browser/cmd/applyFixture",
       "/api/browser/cmd/releaseFixture",
     ]);
-    expect(counts).toEqual([2, 0]);
-    expect(useCloudBrowserStore.getState().mocks).toEqual({});
   });
 
   it("aborted before the apply landed: no setupApplied", async () => {
@@ -212,43 +200,5 @@ describe("browse_agent setup (page fixture)", () => {
       ctx,
     );
     expect(applyFixture.mock.calls[0][0]).toMatchObject({ version: 1, url: "https://real.test" });
-  });
-
-  it("cloud: run B's mock count survives run A's cleanup", async () => {
-    delete window.penDesktop;
-    let releaseA: () => void = () => {};
-    let releaseB: () => void = () => {};
-    const gateA = new Promise<void>((r) => { releaseA = r; });
-    const gateB = new Promise<void>((r) => { releaseB = r; });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input instanceof Request ? input.url : input);
-        if (url.includes("/api/chat")) {
-          await (String(init?.body).includes("tc-b") ? gateB : gateA);
-          return textTurn("fine");
-        }
-        const cmd = JSON.parse(String(init?.body)).args;
-        const result = url.includes("applyFixture")
-          ? { ok: true, summary: "ok", fixtureToken: `t${cmd.fixture.network.length}`, received: cmd.fixture.network.length }
-          : { ok: true };
-        return new Response(JSON.stringify({ result, handle: "h" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      }),
-    );
-    const mk = (n: number) => ({ network: Array.from({ length: n }, (_, i) => ({ url: `https://api.test/${i}` })) });
-    const a = browseAgent({ goal: "g", url: "https://a.test", setup: mk(1) }, { sessionId: "chat-x", toolCallId: "tc-a" });
-    await vi.waitFor(() => expect(useCloudBrowserStore.getState().mocks["chat-x"]?.count).toBe(1));
-    const b = browseAgent({ goal: "g", url: "https://a.test", setup: mk(3) }, { sessionId: "chat-x", toolCallId: "tc-b" });
-    await vi.waitFor(() => expect(useCloudBrowserStore.getState().mocks["chat-x"]?.count).toBe(3));
-    releaseA();
-    await a;
-    // A finished and ran its finally; B still owns the count.
-    expect(useCloudBrowserStore.getState().mocks["chat-x"]?.count).toBe(3);
-    releaseB();
-    await b;
-    expect(useCloudBrowserStore.getState().mocks).toEqual({});
   });
 });

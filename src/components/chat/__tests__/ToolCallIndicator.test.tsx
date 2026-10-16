@@ -198,4 +198,41 @@ describe("<ToolCallIndicator />", () => {
     const inputPre = pres[0];
     expect(within(inputPre as HTMLElement).getByText(/"hello": "world"/)).toBeTruthy();
   });
+
+  it("shows a default hint for browse tools, none for other tools", () => {
+    const { rerender } = render(
+      <ToolCallIndicator part={toolPart({ type: "tool-browse_open", input: { url: "https://a.test/x?q=1#h" } })} />,
+    );
+    expect(screen.getByText("a.test/x")).toBeTruthy();
+    rerender(<ToolCallIndicator part={toolPart({ input: { url: "https://a.test/x" } })} />);
+    expect(screen.queryByText("a.test/x")).toBeNull();
+  });
+
+  it("an explicit hint wins and statusError turns the status and icon red", () => {
+    const { container } = render(
+      <ToolCallIndicator
+        part={toolPart({ state: "output-available", output: {} })}
+        hint="my hint"
+        statusLabel="Failed"
+        statusError
+      />,
+    );
+    expect(screen.getByText("my hint").className).toContain("truncate");
+    expect(screen.getByText("Failed").className).toContain("text-red-500");
+    expect(container.querySelector("svg")?.getAttribute("class")).toContain("text-red-500");
+  });
+
+  it("renders extraPanes before Input, only when expanded", () => {
+    const { container } = render(
+      <ToolCallIndicator
+        part={toolPart({ input: { a: 1 } })}
+        extraPanes={[{ label: "Setup", content: "pane-one" }, { label: "Stage", content: "pane-two" }]}
+      />,
+    );
+    expect(screen.queryByText("pane-one")).toBeNull();
+    fireEvent.click(screen.getByText("Get Variables"));
+    const labels = Array.from(container.querySelectorAll("div.uppercase")).map((el) => el.textContent);
+    expect(labels).toEqual(["Setup", "Stage", "Input", "Output"]);
+    expect(screen.getByText("pane-two")).toBeTruthy();
+  });
 });

@@ -15,7 +15,7 @@ vi.mock("@/lib/cloudBrowser", () => ({
 beforeEach(() => {
   release.mockClear();
   expire.mockClear();
-  useCloudBrowserStore.setState({ sessions: {}, mocks: {} });
+  useCloudBrowserStore.setState({ sessions: {} });
 });
 
 afterEach(() => {
@@ -30,18 +30,6 @@ describe("<CloudBrowserPanel />", () => {
     useCloudBrowserStore.getState().setSession("other", SESSION);
     const { container } = render(<CloudBrowserPanel chatId="chat-1" />);
     expect(container.firstChild).toBeNull();
-  });
-
-  it("shows the API mock banner while mocks are active (singular and plural)", () => {
-    useCloudBrowserStore.getState().setSession("chat-1", SESSION);
-    render(<CloudBrowserPanel chatId="chat-1" />);
-    expect(screen.queryByText(/API mock/)).toBeNull();
-    act(() => useCloudBrowserStore.getState().setMockCount("chat-1", 1, "o1"));
-    expect(screen.getByText("⚠ 1 API mock active")).toBeTruthy();
-    act(() => useCloudBrowserStore.getState().setMockCount("chat-1", 3, "o1"));
-    expect(screen.getByText("⚠ 3 API mocks active")).toBeTruthy();
-    act(() => useCloudBrowserStore.getState().setMockCount("chat-1", 0, "o1"));
-    expect(screen.queryByText(/API mock/)).toBeNull();
   });
 
   it("renders nothing in the desktop shell", () => {

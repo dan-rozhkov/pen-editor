@@ -16,9 +16,8 @@ import { lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai"
 import { getRequestUserId } from "@/lib/auth/authState";
 import { createChatTransport, CLIENT_CAPABILITIES } from "@/lib/chatTransport";
 import type { ToolHandler } from "../../toolRegistry";
-import { getBrowserBridge, isDesktopBrowserAvailable, type BrowserBridge } from "./bridge";
+import { getBrowserBridge, type BrowserBridge } from "./bridge";
 import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
-import { useCloudBrowserStore } from "@/store/cloudBrowserStore";
 
 /**
  * browse_agent — runs a browse-only sub-agent as a nested, headless chat
@@ -143,17 +142,8 @@ export const browseAgent: ToolHandler = async (args, context) => {
   // createFixtureSetup owns apply + release (incl. a late apply after abort).
   // Never `url` together with `setup`: the fixture carries the start URL.
   const bridge = getBrowserBridge(parentSessionId);
-  const cloud = !isDesktopBrowserAvailable();
   const setPhase = (phase: "setup" | "running") => {
     if (toolCallId) useBrowseAgentPhaseStore.getState().setPhase(toolCallId, phase);
-  };
-  // Unique per run: the banner count belongs to the run that installed it.
-  const mockOwner = toolCallId ?? `browse-agent-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const setMocks = (count: number) => {
-    if (!cloud || !parentSessionId) return;
-    const store = useCloudBrowserStore.getState();
-    if (count > 0) store.setMockCount(parentSessionId, count, mockOwner);
-    else store.clearMockCount(parentSessionId, mockOwner);
   };
   // The tool's `url` is the only start URL; the model-supplied `version` and
   // `url` inside `setup` never win.
@@ -176,11 +166,10 @@ export const browseAgent: ToolHandler = async (args, context) => {
             { sessionId: parentSessionId, toolCallId: `${toolCallId ?? "browse_agent"}:setup`, signal: context?.signal },
             "browse_agent",
           ),
-        // Not called after fs.release(), so a late apply never sets the banner.
-        onApplied: ({ mockCount }) => {
+        // Not called after fs.release(), so a late apply never flips the phase.
+        onApplied: () => {
           setupApplied = true;
           setPhase("running");
-          setMocks(mockCount);
         },
       })
     : undefined;
@@ -198,7 +187,6 @@ export const browseAgent: ToolHandler = async (args, context) => {
   } finally {
     // The mocks live until the task ends, whatever the outcome.
     await fs?.release();
-    setMocks(0);
     if (toolCallId) useBrowseAgentPhaseStore.getState().clearPhase(toolCallId);
   }
 };
