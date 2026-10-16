@@ -3,11 +3,11 @@ import { getBrowserBridge } from "./bridge";
 import { callBrowserBridge } from "./shared";
 
 /**
- * browse_fill_login — fills the saved login for the current page's host in the
+ * browse_fill_login — fills the saved login for the current page's origin in the
  * desktop built-in browser (pen-editor-desktop docs/superpowers/specs/
  * 2026-10-16-browser-saved-logins-design.md). The secret never passes through
  * here: the shell reads it and types it into the page; the result is
- * `{ ok, host, label, filled, submitted }`. Only `{ label, submit }` reach the
+ * `{ ok, origin, label, filled, submitted }`. Only `{ label, submit }` reach the
  * bridge. Args and result are never logged.
  */
 export const FILL_LOGIN_UNAVAILABLE_ERROR = "Saved logins are available only in the desktop app.";
