@@ -118,17 +118,17 @@ export function ToolCallIndicator({ part, statusLabel, statusError, extraPanes, 
       >
         {/* Per-tool icon, so a chip is recognisable before its label is read.
             There is no separate status icon: "Running..."/"Done"/"Error" says
-            it in words, and on an error this icon turns red. */}
+            it in words, and on an error the icon and the name turn red. */}
         <ToolIcon
           name={toolName}
           className={`shrink-0 ${isError ? "text-red-500" : ""}`}
         />
         {status === "running" ? (
-          <Shimmer as="span" className="truncate">
+          <Shimmer as="span" className={`truncate ${isError ? "text-red-500" : ""}`}>
             {displayName}
           </Shimmer>
         ) : (
-          <span className="truncate">{displayName}</span>
+          <span className={`truncate ${isError ? "text-red-500" : ""}`}>{displayName}</span>
         )}
         {shownHint && <span className="truncate min-w-0 shrink-[999] text-text-disabled">{shownHint}</span>}
         <span

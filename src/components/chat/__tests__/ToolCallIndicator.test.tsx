@@ -208,7 +208,7 @@ describe("<ToolCallIndicator />", () => {
     expect(screen.queryByText("a.test/x")).toBeNull();
   });
 
-  it("an explicit hint wins and statusError turns the status and icon red", () => {
+  it("an explicit hint wins and statusError turns the status, name and icon red", () => {
     const { container } = render(
       <ToolCallIndicator
         part={toolPart({ state: "output-available", output: {} })}
@@ -219,6 +219,7 @@ describe("<ToolCallIndicator />", () => {
     );
     expect(screen.getByText("my hint").className).toContain("truncate");
     expect(screen.getByText("Failed").className).toContain("text-red-500");
+    expect(screen.getByText("my hint").previousElementSibling?.className).toContain("text-red-500");
     expect(container.querySelector("svg")?.getAttribute("class")).toContain("text-red-500");
   });
 
