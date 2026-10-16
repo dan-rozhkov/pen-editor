@@ -2,6 +2,7 @@ import { createElement, useMemo, useState } from "react";
 import {
   CaretDownIcon,
   DownloadSimpleIcon,
+  XIcon,
 } from "@phosphor-icons/react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { getToolName } from "ai";
@@ -68,7 +69,7 @@ interface ToolCallIndicatorProps {
   part: any;
   /** Replaces the status word ("Running...", "Done", "Error"). Used by BrowseAgentIndicator. */
   statusLabel?: string;
-  /** Status word and tool icon use the error color even when the call completed. */
+  /** Shows the error cross instead of the tool icon even when the call completed. */
   statusError?: boolean;
   /** Panes shown in the expanded block, before Input. */
   extraPanes?: Array<{ label: string; content: string }>;
@@ -118,21 +119,23 @@ export function ToolCallIndicator({ part, statusLabel, statusError, extraPanes, 
       >
         {/* Per-tool icon, so a chip is recognisable before its label is read.
             There is no separate status icon: "Running..."/"Done"/"Error" says
-            it in words, and on an error the icon and the name turn red. */}
-        <ToolIcon
-          name={toolName}
-          className={`shrink-0 ${isError ? "text-red-500" : ""}`}
-        />
+            it in words. On an error the row stays muted and the icon becomes
+            a cross. */}
+        {isError ? (
+          <XIcon size={14} className="shrink-0" data-testid="tool-error-icon" />
+        ) : (
+          <ToolIcon name={toolName} className="shrink-0" />
+        )}
         {status === "running" ? (
-          <Shimmer as="span" className={`truncate ${isError ? "text-red-500" : ""}`}>
+          <Shimmer as="span" className="truncate">
             {displayName}
           </Shimmer>
         ) : (
-          <span className={`truncate ${isError ? "text-red-500" : ""}`}>{displayName}</span>
+          <span className="truncate">{displayName}</span>
         )}
         {shownHint && <span className="truncate min-w-0 shrink-[999] text-text-disabled">{shownHint}</span>}
         <span
-          className={`shrink-0 ${isError ? "text-red-500" : "text-text-disabled"}`}
+          className="shrink-0 text-text-disabled"
         >
           {status === "running" ? (
             <Shimmer as="span">{statusLabel ?? statusText(status)}</Shimmer>

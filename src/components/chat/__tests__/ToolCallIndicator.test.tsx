@@ -208,7 +208,7 @@ describe("<ToolCallIndicator />", () => {
     expect(screen.queryByText("a.test/x")).toBeNull();
   });
 
-  it("an explicit hint wins and statusError turns the status, name and icon red", () => {
+  it("an explicit hint wins and statusError swaps the icon for a cross, no red", () => {
     const { container } = render(
       <ToolCallIndicator
         part={toolPart({ state: "output-available", output: {} })}
@@ -218,9 +218,8 @@ describe("<ToolCallIndicator />", () => {
       />,
     );
     expect(screen.getByText("my hint").className).toContain("truncate");
-    expect(screen.getByText("Failed").className).toContain("text-red-500");
-    expect(screen.getByText("my hint").previousElementSibling?.className).toContain("text-red-500");
-    expect(container.querySelector("svg")?.getAttribute("class")).toContain("text-red-500");
+    expect(screen.getByTestId("tool-error-icon")).toBeTruthy();
+    expect(container.querySelector("button")?.innerHTML).not.toContain("text-red-500");
   });
 
   it("renders extraPanes before Input, only when expanded", () => {

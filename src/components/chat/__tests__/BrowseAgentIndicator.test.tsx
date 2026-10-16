@@ -139,8 +139,8 @@ describe("<BrowseAgentIndicator />", () => {
         })}
       />,
     );
-    const label = screen.getByText("Setup failed");
-    expect(label.className).toContain("text-red-500");
+    expect(screen.getByText("Setup failed").className).not.toContain("text-red-500");
+    expect(screen.getByTestId("tool-error-icon")).toBeTruthy();
     expect(container.innerHTML).not.toContain("amber");
     expect(screen.queryByText("Stage")).toBeNull();
     fireEvent.click(screen.getByText("Browse Agent"));
