@@ -47,6 +47,7 @@ import { browseAct } from "./tools/browser/browseAct";
 import { browseFindImages } from "./tools/browser/browseFindImages";
 import { browseRead } from "./tools/browser/browseRead";
 import { browseCapture } from "./tools/browser/browseCapture";
+import { browseFillLogin } from "./tools/browser/browseFillLogin";
 import { browseSnapshot } from "./tools/browser/browseSnapshot";
 import { browseScreenshot } from "./tools/browser/browseScreenshot";
 import { browseTabs } from "./tools/browser/browseTabs";
@@ -169,6 +170,9 @@ export const toolHandlers: Record<string, ToolHandler> = {
   // browse_capture: the page as one editable embed on the canvas (pen-editor-backend
   // docs/specs/2026-10-15-browse-capture-design.md).
   browse_capture: withBrowseLoopGuard("browse_capture", browseCapture),
+  // browse_fill_login: desktop-only saved logins (docs/superpowers/specs/
+  // 2026-10-16-browser-saved-logins-design.md in pen-editor-desktop).
+  browse_fill_login: withBrowseLoopGuard("browse_fill_login", browseFillLogin),
   // Jev-driven browsing loop (docs/superpowers/specs/
   // 2026-09-18-browse-task-jev-loop-design.md) — a client-side loop, not a
   // single forwarded call. See browseTask.ts's header comment.

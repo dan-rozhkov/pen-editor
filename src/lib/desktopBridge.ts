@@ -48,7 +48,16 @@ export interface PenDesktopApi {
    * shell always provides it. `capture` (browse_capture) stays optional:
    * desktop builds older than that tool lack it.
    */
-  browser?: BrowserBridge & Required<Pick<BrowserBridge, "findImages">>;
+  browser?: BrowserBridge &
+    Required<Pick<BrowserBridge, "findImages">> & {
+      /**
+       * browse_fill_login: fills the saved login for the current page's host
+       * (docs/superpowers/specs/2026-10-16-browser-saved-logins-design.md).
+       * Optional: desktop builds older than that feature lack it, and the
+       * cloud (Steel) bridge never has it. The result holds no secret.
+       */
+      fillLogin?(args: { label?: string; submit?: boolean }): Promise<unknown>;
+    };
 }
 
 declare global {

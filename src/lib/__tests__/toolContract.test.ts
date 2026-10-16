@@ -70,6 +70,7 @@ const EXPECTED_CLIENT_TOOLS = [
   "browse_screenshot",
   "browse_tabs",
   "browse_capture",
+  "browse_fill_login",
   "browse_task",
   "browse_agent",
 ];

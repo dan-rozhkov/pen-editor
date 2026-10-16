@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toolHandlers, type ToolHandler } from "@/lib/toolRegistry";
 import { clearOpenCodeKey, setOpenCodeKey } from "@/lib/opencodeKey";
 import { useChatStore } from "@/store/chatStore";
-import { sse, textTurn } from "./helpers";
+import { sse, textTurn, setPenDesktop, stubBrowser, type PenDesktopBrowser } from "./helpers";
 import { BROWSE_AGENT_DEADLINE_MS, browseAgent, nestedChatId } from "../browseAgent";
 
 const toolTurn = (toolName: string, input: unknown, toolCallId = "call-1"): Response =>
@@ -39,7 +39,7 @@ function setChatModel(model: string) {
 }
 
 let saved: Record<string, ToolHandler | undefined>;
-const stubbed = ["browse_open", "browse_capture", "batch_design"];
+const stubbed = ["browse_open", "browse_capture", "browse_fill_login", "batch_design"];
 
 beforeEach(() => {
   setChatModel("google/gemini-2.5-flash");
@@ -154,6 +154,44 @@ describe("browse_agent", () => {
       const result = JSON.parse(await run(true));
       expect(capture).toHaveBeenCalledTimes(2);
       expect(result.captured).toEqual(info);
+    });
+  });
+
+  describe("browse_fill_login gate", () => {
+    const run = () => browseAgent({ goal: "sign in" }, { sessionId: "chat-1", toolCallId: "tc-1" });
+
+    afterEach(() => {
+      delete window.penDesktop;
+    });
+
+    it("desktop bridge without fillLogin: no browseLogin, the tool is refused", async () => {
+      setPenDesktop(stubBrowser());
+      const fill = vi.fn(async () => "{}");
+      toolHandlers.browse_fill_login = fill;
+      const captured = stubFetch([() => toolTurn("browse_fill_login", {}), () => textTurn("done")]);
+      await run();
+      expect(captured[0].body).not.toHaveProperty("browseLogin");
+      expect(fill).not.toHaveBeenCalled();
+    });
+
+    it("web (no desktop bridge): no browseLogin", async () => {
+      const captured = stubFetch([() => textTurn("done")]);
+      await run();
+      expect(captured[0].body).not.toHaveProperty("browseLogin");
+    });
+
+    it("desktop bridge with fillLogin: body carries browseLogin and the tool may be called repeatedly", async () => {
+      setPenDesktop(stubBrowser({ fillLogin: async () => ({ ok: true }) } as Partial<PenDesktopBrowser>));
+      const fill = vi.fn(async () => JSON.stringify({ ok: true }));
+      toolHandlers.browse_fill_login = fill;
+      const captured = stubFetch([
+        () => toolTurn("browse_fill_login", {}, "l1"),
+        () => toolTurn("browse_fill_login", {}, "l2"),
+        () => textTurn("signed in"),
+      ]);
+      await run();
+      expect(captured.every((c) => c.body.browseLogin === true)).toBe(true);
+      expect(fill).toHaveBeenCalledTimes(2);
     });
   });
 

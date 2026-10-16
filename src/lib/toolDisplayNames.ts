@@ -82,6 +82,7 @@ export const toolDisplayNames: Record<string, string> = {
   browse_screenshot: "Screenshot Browser",
   browse_tabs: "Manage Browser Tabs",
   browse_capture: "Copy Page to Canvas",
+  browse_fill_login: "Fill Saved Login",
   browse_task: "Browse Task",
   browse_agent: "Browse Agent",
   web_search: "Search the Web",

@@ -83,6 +83,9 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   // placeOnCanvas: the DOM serialization can take seconds, so only its final
   // position-and-addNode step is queued through `runSerialized`.
   "browse_capture",
+  // browse_fill_login only forwards to the desktop browser (snapshot + typing
+  // + optional submit); like browse_act it never touches the scene graph.
+  "browse_fill_login",
   // browse_task (docs/superpowers/specs/2026-09-18-browse-task-jev-loop-
   // design.md) runs a whole snapshot/step/perform loop bounded by a 90s
   // deadline — it holds its connection far longer than the other three

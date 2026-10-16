@@ -51,6 +51,8 @@ export type { BrowseAgentStatus } from "@sideform/browser-agent/agent/session";
 const NESTED_ID_MAX_CHARS = 200;
 /** Allowed only when the caller passed `capture: true` (the user's direct ask). */
 const CAPTURE_TOOL = "browse_capture";
+/** A normal tool (callable repeatedly: two-step sign-in), allowed only when the desktop bridge has it. */
+const FILL_LOGIN_TOOL = "browse_fill_login";
 
 export function nestedChatId(sessionId: string | undefined, toolCallId: string | undefined): string {
   const raw = `browse.${sessionId ?? "no-session"}.${toolCallId ?? Date.now()}`;
@@ -65,13 +67,19 @@ export const browseAgent: ToolHandler = async (args, context) => {
   // explicit `capture: true` (spec 2026-10-15-browse-capture-design.md).
   const captureAllowed = args.capture === true;
 
+  // Saved logins: desktop only, and only when the shell has `fillLogin`
+  // (an older shell, or the cloud bridge, keeps today's behavior).
+  const loginAllowed = typeof getBrowserBridge(context?.sessionId)?.fillLogin === "function";
+
   // Lazy: useDesignChat imports toolRegistry, which imports this module.
   const { executeToolCall } = await import("@/hooks/useDesignChat");
   const parentSessionId = context?.sessionId;
 
   const session = createBrowseAgentSession({
     signal: context?.signal,
-    extraTools: captureAllowed
+    extraTools: {
+      ...(loginAllowed ? { [FILL_LOGIN_TOOL]: {} } : {}),
+      ...(captureAllowed
       ? {
           [CAPTURE_TOOL]: singleUseTool({
             name: CAPTURE_TOOL,
@@ -83,7 +91,8 @@ export const browseAgent: ToolHandler = async (args, context) => {
               `browse_capture already ran in this task; the page is on the canvas as ${String(p.nodeId) || "an existing node"}.`,
           }),
         }
-      : {},
+      : {}),
+    },
     executeTool: (call, { signal }) =>
       executeToolCall(
         call.toolName,
@@ -102,6 +111,7 @@ export const browseAgent: ToolHandler = async (args, context) => {
       body: () => ({
         agentMode: "browse",
         ...(captureAllowed ? { browseCapture: true } : {}),
+        ...(loginAllowed ? { browseLogin: true } : {}),
         userId: getRequestUserId(),
         clientCapabilities: CLIENT_CAPABILITIES,
       }),

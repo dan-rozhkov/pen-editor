@@ -6,6 +6,7 @@ import { browseRead } from "@/lib/tools/browser/browseRead";
 import { browseSnapshot } from "@/lib/tools/browser/browseSnapshot";
 import { runSerialized } from "@/lib/toolCallQueue";
 import { browseCapture } from "@/lib/tools/browser/browseCapture";
+import { browseFillLogin } from "@/lib/tools/browser/browseFillLogin";
 import { browseScreenshot } from "@/lib/tools/browser/browseScreenshot";
 import { browseTabs } from "@/lib/tools/browser/browseTabs";
 import {
@@ -1302,5 +1303,38 @@ describe("browse_capture", () => {
   it("returns the 'needs a newer desktop app' error when the bridge lacks .capture", async () => {
     setPenDesktop(stubBrowser());
     expect(JSON.parse(await browseCapture({}))).toEqual({ error: BROWSER_BRIDGE_METHOD_MISSING_ERROR });
+  });
+});
+
+describe("browse_fill_login", () => {
+  it("returns an error when the bridge has no fillLogin (older desktop / cloud)", async () => {
+    setPenDesktop(stubBrowser());
+    const out = JSON.parse(await browseFillLogin({ label: "work" }));
+    expect(out).toEqual({ error: "Saved logins are available only in the desktop app." });
+  });
+
+  it("returns the same error with no bridge at all", async () => {
+    expect(JSON.parse(await browseFillLogin({}))).toEqual({ error: "Saved logins are available only in the desktop app." });
+  });
+
+  it("passes only label and submit, trimmed and type-checked, and returns the result as-is", async () => {
+    const received: unknown[] = [];
+    const result = { ok: true, host: "e.com", label: "work", filled: ["username", "password"], submitted: true };
+    setPenDesktop(
+      stubBrowser({ fillLogin: async (a) => (received.push(a), result) } as Partial<PenDesktopBrowser>)
+    );
+    const raw = await browseFillLogin({ label: "  work ", submit: true, password: "x", url: "y" });
+    expect(received).toEqual([{ label: "work", submit: true }]);
+    expect(JSON.parse(raw)).toEqual(result);
+  });
+
+  it("omits blank label and non-boolean submit", async () => {
+    const received: unknown[] = [];
+    setPenDesktop(
+      stubBrowser({ fillLogin: async (a) => (received.push(a), { ok: true }) } as Partial<PenDesktopBrowser>)
+    );
+    await browseFillLogin({ label: "   ", submit: "yes" });
+    await browseFillLogin({ label: 5 });
+    expect(received).toEqual([{}, {}]);
   });
 });

@@ -316,6 +316,11 @@ const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
   // HTML back). The desktop command budget is 20s; 60s sits well above it, and
   // cloud mode adds its usual +60s.
   browse_capture: 60_000,
+  // browse_fill_login: the desktop chains a snapshot, 2x TYPE_TEXT and an
+  // optional press, each bounded by the 20s command budget (cursor-move
+  // budget included). Like browse_act's reasoning, worst case is a few
+  // sequential 20s commands; 90s leaves margin without being unbounded.
+  browse_fill_login: 90_000,
   // generate_vector hands the prompt to QuiverAI's arrow-2, which draws the
   // SVG token by token: measured 20s for a simple icon and ~90s for a
   // detailed illustration, against the backend's own QUIVER_TIMEOUT_MS =
