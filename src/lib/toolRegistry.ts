@@ -183,4 +183,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
   // browse_* calls already pass through the guarded handlers above, under the
   // parent's sessionId, so loops inside the sub-agent are still caught.
   browse_agent: browseAgent,
+  // qa_verdict: browseAgent answers it locally inside a QA run. This entry
+  // keeps the tool-name contract whole and refuses a call from the main chat.
+  qa_verdict: async () => JSON.stringify({ error: "qa_verdict is only available inside a browse_agent QA run" }),
 };

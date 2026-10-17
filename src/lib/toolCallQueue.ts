@@ -97,6 +97,9 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   // same queue's funnel; they are unserialized, but a serialized parent would
   // still hold every scene-mutating call behind it for minutes.
   "browse_agent",
+  // qa_verdict is pure (validates its input and returns JSON); it never
+  // touches the scene, so it must not wait behind scene writes.
+  "qa_verdict",
 ];
 
 const unserialized = new Set(UNSERIALIZED_TOOL_NAMES);

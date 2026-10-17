@@ -10,6 +10,12 @@ import {
   createFixtureSetup,
   createRunCheckpoint,
   singleUseTool,
+  QA_VERDICT_TOOL,
+  QA_VERDICT_FIELD,
+  qaVerdictHooks,
+  executeQaVerdict,
+  qaResultOf,
+  createStepRecorder,
   type BrowseAgentResult,
 } from "@sideform/browser-agent/agent/session";
 import { parsePageFixture, type FixtureNetworkRule } from "@sideform/browser-agent/fixture";
@@ -95,6 +101,17 @@ export const browseAgent: ToolHandler = async (args, context) => {
 
   // Saved logins: desktop only, and only when the shell has `fillLogin`
   // (an older shell, or the cloud bridge, keeps today's behavior).
+  // QA mode: the nested run gets the QA prompt and `qa_verdict`; the verdict ends it.
+  const qaOn = args.qa === true;
+  if (qaOn && args.resume !== undefined && args.resume !== null) {
+    return JSON.stringify({
+      status: "error",
+      steps: 0,
+      error: "`resume` cannot be combined with `qa: true`: a QA run is a fresh scenario.",
+    });
+  }
+  const recorder = qaOn ? createStepRecorder() : undefined;
+
   const loginAllowed = typeof getBrowserBridge(context?.sessionId)?.fillLogin === "function";
 
   // Lazy: useDesignChat imports toolRegistry, which imports this module.
@@ -105,6 +122,7 @@ export const browseAgent: ToolHandler = async (args, context) => {
     signal: context?.signal,
     extraTools: {
       ...(loginAllowed ? { [FILL_LOGIN_TOOL]: {} } : {}),
+      ...(qaOn ? { [QA_VERDICT_TOOL]: { ...qaVerdictHooks() } } : {}),
       ...(captureAllowed
       ? {
           [CAPTURE_TOOL]: singleUseTool({
@@ -119,13 +137,31 @@ export const browseAgent: ToolHandler = async (args, context) => {
         }
       : {}),
     },
-    executeTool: (call, { signal }) =>
-      executeToolCall(
-        call.toolName,
-        call.input,
-        { sessionId: parentSessionId, toolCallId: call.toolCallId, signal },
-        "browse_agent",
-      ),
+    executeTool: async (call, { signal }) => {
+      // Guard-refused calls never reach here, so the trail holds model calls that ran.
+      let end: ReturnType<NonNullable<typeof recorder>["onToolCall"]> | undefined;
+      try {
+        end = recorder?.onToolCall(call);
+      } catch {
+        // An observer must not change the run.
+      }
+      try {
+        const output =
+          qaOn && call.toolName === QA_VERDICT_TOOL
+            ? executeQaVerdict(call.input)
+            : await executeToolCall(
+                call.toolName,
+                call.input,
+                { sessionId: parentSessionId, toolCallId: call.toolCallId, signal },
+                "browse_agent",
+              );
+        end?.({ output });
+        return output;
+      } catch (err) {
+        end?.({ error: err });
+        throw err;
+      }
+    },
   });
 
   const chat: Chat<UIMessage> = new Chat<UIMessage>({
@@ -137,6 +173,7 @@ export const browseAgent: ToolHandler = async (args, context) => {
       body: () => ({
         agentMode: "browse",
         ...(captureAllowed ? { browseCapture: true } : {}),
+        ...(qaOn ? { browseQa: true } : {}),
         ...(loginAllowed ? { browseLogin: true } : {}),
         userId: getRequestUserId(),
         clientCapabilities: CLIENT_CAPABILITIES,
@@ -227,8 +264,19 @@ export const browseAgent: ToolHandler = async (args, context) => {
   };
   // Only used when the run threw before finishing: no capture by design (aborted, 0 steps).
   const THREW_RESULT: Pick<BrowseAgentResult, "status" | "steps"> = { status: "aborted", steps: 0 };
-  const toJson = (result: BrowseAgentResult, extra: Record<string, unknown>, checkpoint: unknown): string =>
-    JSON.stringify({ ...result, ...extra, ...(checkpoint ? { checkpoint } : {}) });
+  const toJson = (result: BrowseAgentResult, extra: Record<string, unknown>, checkpoint: unknown): string => {
+    if (!recorder) return JSON.stringify({ ...result, ...extra, ...(checkpoint ? { checkpoint } : {}) });
+    // Key order as the package's runBrowseAgent: `qa` before `error` and `setupStage`; the verdict field is folded into `qa`.
+    const { error, setupStage, [QA_VERDICT_FIELD]: _verdict, ...rest } = result as BrowseAgentResult & Record<string, unknown>;
+    return JSON.stringify({
+      ...rest,
+      ...extra,
+      ...(checkpoint ? { checkpoint } : {}),
+      qa: qaResultOf(result, recorder.steps()),
+      ...(error !== undefined ? { error } : {}),
+      ...(setupStage !== undefined ? { setupStage } : {}),
+    });
+  };
 
   if (!hasSetup && !hasResume) {
     const cp = openCheckpoint(true);

@@ -27,6 +27,9 @@ const DESKTOP_BROWSER = isDesktopBrowserAvailable();
 export const CLIENT_CAPABILITIES = {
   desktopBrowser: DESKTOP_BROWSER,
   browser: DESKTOP_BROWSER ? "desktop" : "cloud",
+  // browse_agent can run in QA mode (`qa: true`): the backend then offers the
+  // model the `qa` param (pen-editor-backend QA suite spec).
+  browseQa: true,
 } as const;
 
 // Whether `model` is an OpenCode BYOK route (pen-editor-backend

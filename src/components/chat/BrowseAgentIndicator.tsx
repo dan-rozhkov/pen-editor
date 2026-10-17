@@ -65,6 +65,14 @@ function describeSetup(input: unknown, succeeded: boolean): string | undefined {
   return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
+const QA_LABELS: Record<string, string> = {
+  passed: "Passed ✓",
+  failed: "Failed ✗",
+  inconclusive: "No verdict",
+  error: "Error",
+  aborted: "Stopped",
+};
+
 /**
  * Chat chip for `browse_agent`: ToolCallIndicator plus the Setup and Stage
  * panes (under the collapse), the preparing phase and the setup failure. Output it
@@ -87,12 +95,25 @@ export function BrowseAgentIndicator({ part }: { part: AnyPart }) {
   if (running && phase === "setup" && (setup !== undefined || hasResume)) statusLabel = "Preparing page...";
   else if (setupFailed) statusLabel = "Setup failed";
 
+  // QA mode: the package puts `qa.outcome` in the result (passed / failed /
+  // anything else = no verdict reached).
+  const qa = asRecord(out?.qa);
+  const qaOutcome = !setupFailed && typeof qa?.outcome === "string" ? qa.outcome : undefined;
+  const qaFailed = qaOutcome === "failed" || qaOutcome === "error";
+  if (qaOutcome !== undefined) {
+    statusLabel = QA_LABELS[qaOutcome] ?? "No verdict";
+  }
+
   const extraPanes: Array<{ label: string; content: string }> = [];
   if (setup !== undefined) extraPanes.push({ label: "Setup", content: setup });
   if (setupFailed) {
     const stage = typeof out?.setupStage === "string" ? out.setupStage : "unknown";
     const error = typeof out?.error === "string" ? out.error : "The page could not be prepared.";
     extraPanes.push({ label: "Stage", content: `${stage} — ${error}\nThe agent did not run.` });
+  }
+
+  if (qaOutcome !== undefined && typeof qa?.reason === "string" && qa.reason !== "") {
+    extraPanes.push({ label: qa.verdict === "pass" || qa.verdict === "fail" ? "Verdict" : "Reason", content: qa.reason });
   }
 
   // Counts and ids only: the checkpoint fixture never reaches the chat.
@@ -113,7 +134,7 @@ export function BrowseAgentIndicator({ part }: { part: AnyPart }) {
     <ToolCallIndicator
       part={part}
       statusLabel={statusLabel}
-      statusError={setupFailed}
+      statusError={setupFailed || qaFailed}
       extraPanes={extraPanes}
       inputForDisplay={redactBrowseSetupInput(part.input)}
     />

@@ -205,4 +205,39 @@ describe("<BrowseAgentIndicator /> checkpoints", () => {
     fireEvent.click(screen.getByText("Browse Agent"));
     expect(screen.getByText("Checkpoint cp_1 saved")).toBeTruthy();
   });
+
+  it("shows the QA outcome as a badge", () => {
+    const res = (qa: Record<string, unknown>) =>
+      JSON.stringify({ status: "done", answer: "", steps: 2, qa: { steps: [], ...qa } });
+    const view = (qa: Record<string, unknown>) =>
+      render(<BrowseAgentIndicator part={part({ state: "output-available", input: { goal: "g", qa: true }, output: res(qa) })} />);
+    view({ outcome: "passed", verdict: "pass", reason: "all good" });
+    expect(screen.getByText("Passed ✓")).toBeTruthy();
+    cleanup();
+    view({ outcome: "failed", verdict: "fail", reason: "cart empty" });
+    expect(screen.getByText("Failed ✗")).toBeTruthy();
+    expect(screen.getByTestId("tool-error-icon")).toBeTruthy();
+    fireEvent.click(screen.getByText("Browse Agent"));
+    expect(screen.getByText("cart empty")).toBeTruthy();
+    cleanup();
+    view({ outcome: "inconclusive" });
+    expect(screen.getByText("No verdict")).toBeTruthy();
+    cleanup();
+    view({ outcome: "error", reason: "deadline reached" });
+    expect(screen.getByText("Error")).toBeTruthy();
+    expect(screen.getByTestId("tool-error-icon")).toBeTruthy();
+    fireEvent.click(screen.getByText("Browse Agent"));
+    expect(screen.getByText("Reason")).toBeTruthy();
+    expect(screen.queryByText("Verdict")).toBeNull();
+    cleanup();
+    view({ outcome: "aborted" });
+    expect(screen.getByText("Stopped")).toBeTruthy();
+    expect(screen.queryByTestId("tool-error-icon")).toBeNull();
+  });
+
+  it("a run without qa keeps the plain Done label", () => {
+    const out = JSON.stringify({ status: "done", answer: "x", steps: 1 });
+    render(<BrowseAgentIndicator part={part({ state: "output-available", input: { goal: "g" }, output: out })} />);
+    expect(screen.getByText("Done")).toBeTruthy();
+  });
 });

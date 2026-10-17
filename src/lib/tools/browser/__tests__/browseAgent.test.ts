@@ -63,6 +63,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** The output the nested chat sent back for one tool call, read from request `turn`. */
+function outputOf(captured: Captured[], turn: number, toolCallId: string): string {
+  const msgs = captured[turn].body.messages as Array<{ parts: Array<Record<string, unknown>> }>;
+  return msgs.flatMap((m) => m.parts).find((p) => p.toolCallId === toolCallId)?.output as string;
+}
+
 describe("browse_agent", () => {
   it("runs a nested browse session under the parent session id", async () => {
     const open = vi.fn(async () => JSON.stringify({ ok: true }));
@@ -112,10 +118,6 @@ describe("browse_agent", () => {
   describe("browse_capture gate", () => {
     const run = (capture?: boolean) =>
       browseAgent({ goal: "copy it", ...(capture === undefined ? {} : { capture }) }, { sessionId: "chat-1", toolCallId: "tc-1" });
-    const outputOf = (captured: Captured[], turn: number, toolCallId: string) => {
-      const msgs = captured[turn].body.messages as Array<{ parts: Array<Record<string, unknown>> }>;
-      return msgs.flatMap((m) => m.parts).find((p) => p.toolCallId === toolCallId)?.output as string;
-    };
 
     it("flag off: no browseCapture in the body and the tool is refused", async () => {
       const capture = vi.fn(async () => JSON.stringify({ nodeId: "n1" }));
@@ -350,6 +352,89 @@ describe("browse_agent", () => {
     const raw = await browseAgent({}, { sessionId: "chat-1" });
     expect(JSON.parse(raw).status).toBe("error");
     expect(captured).toHaveLength(0);
+  });
+});
+
+describe("browse_agent QA mode", () => {
+  const run = (qa?: boolean) =>
+    browseAgent({ goal: "Check the cart", ...(qa === undefined ? {} : { qa }) }, { sessionId: "chat-1", toolCallId: "tc-q" });
+
+  it("qa on: browseQa in the body, the verdict ends the run, qa folded into the result", async () => {
+    const open = vi.fn(async () => JSON.stringify({ ok: true }));
+    toolHandlers.browse_open = open;
+    // A handler for qa_verdict must NOT be needed: the verdict runs locally.
+    const verdictHandler = vi.fn(async () => "bridge");
+    const savedVerdict = toolHandlers.qa_verdict;
+    toolHandlers.qa_verdict = verdictHandler;
+    const captured = stubFetch([
+      () => toolTurn("browse_open", { url: "https://shop.test/cart" }, "c1"),
+      () => toolTurn("qa_verdict", { verdict: "pass", reason: "cart shows 3 items" }, "c2"),
+      // A third request would throw "unexpected extra request".
+    ]);
+    try {
+      const out = JSON.parse(await run(true));
+      expect(captured).toHaveLength(2);
+      for (const { body } of captured) expect(body.browseQa).toBe(true);
+      expect(verdictHandler).not.toHaveBeenCalled();
+      expect(out).not.toHaveProperty("qaVerdict");
+      expect(out.status).toBe("done");
+      expect(out.qa).toMatchObject({ outcome: "passed", verdict: "pass", reason: "cart shows 3 items" });
+      expect(out.qa.steps.map((st: { tool: string }) => st.tool)).toEqual(["browse_open", "qa_verdict"]);
+      expect(out.qa.steps[0]).toMatchObject({ index: 1, ok: true });
+      expect(Object.keys(out).indexOf("qa")).toBeGreaterThan(Object.keys(out).indexOf("steps"));
+    } finally {
+      if (savedVerdict) toolHandlers.qa_verdict = savedVerdict;
+    }
+  });
+
+  it("qa on: a verdict with bad input is an error and does not end the run", async () => {
+    toolHandlers.browse_open = vi.fn(async () => JSON.stringify({ ok: true }));
+    const captured = stubFetch([
+      () => toolTurn("qa_verdict", { verdict: "maybe", reason: "" }, "c1"),
+      () => toolTurn("qa_verdict", { verdict: "fail", reason: "no items" }, "c2"),
+    ]);
+    const out = JSON.parse(await run(true));
+    expect(captured).toHaveLength(2);
+    expect(JSON.parse(outputOf(captured, 1, "c1")).error).toContain("qa_verdict");
+    expect(out.qa).toMatchObject({ outcome: "failed", verdict: "fail", reason: "no items" });
+    expect(out.qa.steps[0]).toMatchObject({ tool: "qa_verdict", ok: false });
+  });
+
+  it("qa on, no verdict: outcome is inconclusive", async () => {
+    stubFetch([() => textTurn("blocked by a captcha")]);
+    const out = JSON.parse(await run(true));
+    expect(out.status).toBe("done");
+    expect(out.qa).toMatchObject({ outcome: "inconclusive", steps: [] });
+  });
+
+  it("qa with resume: error result, no request", async () => {
+    const captured = stubFetch([]);
+    const out = JSON.parse(await browseAgent({ goal: "g", qa: true, resume: "cp_1" }, { sessionId: "chat-1" }));
+    expect(out.status).toBe("error");
+    expect(out.error).toContain("resume");
+    expect(captured).toHaveLength(0);
+  });
+
+  it("the registry qa_verdict (main chat path) refuses", async () => {
+    const out = JSON.parse(await toolHandlers.qa_verdict({ verdict: "pass", reason: "x" }));
+    expect(out.error).toContain("only available inside a browse_agent QA run");
+  });
+
+  it("qa off: no browseQa, no qa field, output unchanged", async () => {
+    const captured = stubFetch([() => textTurn("done")]);
+    const out = JSON.parse(await run());
+    expect(captured[0].body).not.toHaveProperty("browseQa");
+    expect(out).toEqual({ status: "done", answer: "done", steps: 0 });
+  });
+
+  it("qa off: qa_verdict is refused by the allowlist", async () => {
+    const captured = stubFetch([
+      () => toolTurn("qa_verdict", { verdict: "pass", reason: "x" }, "c1"),
+      () => textTurn("ok"),
+    ]);
+    const out = JSON.parse(await run(false));
+    expect(JSON.parse(outputOf(captured, 1, "c1")).error).toBeDefined();
+    expect(out).not.toHaveProperty("qa");
   });
 });
 

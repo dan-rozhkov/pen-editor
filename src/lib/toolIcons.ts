@@ -1,6 +1,7 @@
 import {
   ArticleIcon,
   CopyIcon,
+  FlagCheckeredIcon,
   BezierCurveIcon,
   BinocularsIcon,
   BookOpenIcon,
@@ -128,6 +129,7 @@ const toolIcons: Record<string, Icon> = {
   browse_fill_login: KeyIcon,
   browse_task: CompassIcon,
   browse_agent: CompassIcon,
+  qa_verdict: FlagCheckeredIcon,
   web_search: GlobeIcon,
   fetch_url: LinkIcon,
   // Every Mobbin-served tool carries the Mobbin mark instead of a
