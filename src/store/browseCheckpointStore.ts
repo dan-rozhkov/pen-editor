@@ -11,7 +11,7 @@ import type { FixtureNetworkRule, PageFixture } from "@sideform/browser-agent/fi
  * `summary` and `gap` ever leave it (see `checkpointForModel`). A reload loses
  * every checkpoint on purpose.
  */
-export const MAX_CHECKPOINTS_PER_CHAT = 5;
+export const MAX_CHECKPOINTS_PER_CHAT = 12;
 
 export interface BrowseCheckpoint {
   id: string;
@@ -21,6 +21,11 @@ export interface BrowseCheckpoint {
   complete: boolean;
   gap?: string;
   summary: string;
+  /**
+   * Recorded in an isolated QA run: the fixture holds the test account's cookies,
+   * so only another isolated run may resume it. Never sent to the model.
+   */
+  isolated?: true;
   createdAt: number;
 }
 

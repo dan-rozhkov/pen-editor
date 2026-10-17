@@ -370,11 +370,11 @@ describe("browseCheckpointStore", () => {
     expect(add().id).toBe("cp_1");
   });
 
-  it("keeps the newest 5 per chat, ids never reused", () => {
+  it("keeps the newest MAX_CHECKPOINTS_PER_CHAT per chat, ids never reused", () => {
     const add = () => useBrowseCheckpointStore.getState().add("c", { fixture: CAPTURED as never, complete: true, summary: "s" });
     for (let i = 0; i < MAX_CHECKPOINTS_PER_CHAT + 2; i++) add();
     const ids = useBrowseCheckpointStore.getState().byChat.c.map((c) => c.id);
-    expect(ids).toEqual(["cp_3", "cp_4", "cp_5", "cp_6", "cp_7"]);
+    expect(ids).toEqual(Array.from({ length: MAX_CHECKPOINTS_PER_CHAT }, (_, i) => `cp_${i + 3}`));
     expect(useBrowseCheckpointStore.getState().get("c", "cp_1")).toBeUndefined();
   });
 

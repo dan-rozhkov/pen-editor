@@ -31,7 +31,7 @@ vi.mock("@sideform/browser-agent/loop", async (importOriginal) => {
 import { browseAgent } from "../browseAgent";
 import { BROWSE_AGENT_DEADLINE_MS } from "@sideform/browser-agent/agent/session";
 import { CLOSE_SESSION_TIMEOUT_MS, getBrowserBridge, closeBrowserSession } from "../bridge";
-import { useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
+import { resetBrowseCheckpoints, useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
 import { runSessionId } from "../isolation";
 import { MAX_PARALLEL_BROWSE_RUNS, browseRunCounts } from "@/lib/browseRunLimiter";
 
@@ -179,9 +179,9 @@ describe("browse_agent isolated QA run", () => {
   });
 
   it.each([
-    ["an isolated QA run", true, undefined],
-    ["a shared QA run", false, true],
-  ])("%s: browseLogin in the nested body is %s", async (_l, withIsolated, expected) => {
+    ["an isolated QA run", true],
+    ["a shared QA run", false],
+  ])("%s: browseLogin in the nested body is true when its bridge has fillLogin", async (_l, withIsolated) => {
     const bodies: Array<Record<string, unknown>> = [];
     vi.stubGlobal("fetch", vi.fn(async (_i: unknown, init?: RequestInit) => {
       bodies.push(JSON.parse(String(init?.body)));
@@ -193,17 +193,92 @@ describe("browse_agent isolated QA run", () => {
       browser: { ...shared, fillLogin, ...(withIsolated ? { isolated: () => ({ ...iso, fillLogin }), closeSession } : {}) },
     } as never;
     await browseAgent({ goal: "g", url: "https://a.test", qa: true }, ctx);
-    expect(bodies[0].browseLogin).toBe(expected);
+    expect(bodies[0].browseLogin).toBe(true);
     expect(bodies[0].browseQa).toBe(true);
   });
 
-  it("never records a checkpoint: no journal, no store entry, no checkpoint field", async () => {
-    const startJournal = vi.fn(async () => "tok");
-    Object.assign(iso, { startJournal, stopJournal: vi.fn(async () => ({})), captureCheckpoint: vi.fn(async () => ({ ok: true })) });
-    const raw = await browseAgent({ goal: "g", url: "https://a.test", qa: true, setup: SETUP }, ctx);
-    expect(JSON.parse(raw).checkpoint).toBeUndefined();
-    expect(startJournal).not.toHaveBeenCalled();
-    expect(useBrowseCheckpointStore.getState().get("chat-1", "cp_1")).toBeUndefined();
+  it("an isolated run whose session bridge has no fillLogin sends no browseLogin, even if the shared one has it", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    vi.stubGlobal("fetch", vi.fn(async (_i: unknown, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return textTurn("ok");
+    }));
+    window.penDesktop = {
+      onMenuCommand: () => () => {},
+      browser: { ...shared, fillLogin: vi.fn(async () => ({})), isolated, closeSession },
+    } as never;
+    await browseAgent({ goal: "g", url: "https://a.test", qa: true }, ctx);
+    expect(bodies[0]).not.toHaveProperty("browseLogin");
+  });
+
+  describe("checkpoints and resume", () => {
+    const CAPTURED = { version: 1, url: "https://shop.test/cart", storage: { cookies: [{ name: "sid", value: "C", domain: "shop.test" }] } };
+    const journalOn = (b: ReturnType<typeof bridgeOf>) =>
+      Object.assign(b, {
+        startJournal: vi.fn(async () => "jt"),
+        stopJournal: vi.fn(async () => true),
+        captureCheckpoint: vi.fn(async () => ({ ok: true, fixture: CAPTURED, complete: true, summary: "cart" })),
+      });
+    const stored = () => useBrowseCheckpointStore.getState().byChat["chat-1"] ?? [];
+    beforeEach(() => resetBrowseCheckpoints());
+
+    it("records on the session bridge, flags the entry isolated and captures before the session closes", async () => {
+      const j = journalOn(iso);
+      const raw = await browseAgent({ goal: "g", url: "https://a.test", qa: true, setup: SETUP }, ctx);
+      expect(JSON.parse(raw).checkpoint).toEqual({ id: "cp_1", complete: true, summary: "cart" });
+      expect(j.startJournal).toHaveBeenCalledTimes(1);
+      expect(j.captureCheckpoint).toHaveBeenCalledWith("jt");
+      expect(j.stopJournal).toHaveBeenCalledWith("jt");
+      expect(stored()[0].isolated).toBe(true);
+      expect(raw).not.toContain("isolated");
+      expect(j.captureCheckpoint.mock.invocationCallOrder[0]).toBeLessThan(closeSession.mock.invocationCallOrder[0]);
+      expect(j.stopJournal.mock.invocationCallOrder[0]).toBeLessThan(closeSession.mock.invocationCallOrder[0]);
+    });
+
+    it("two parallel isolated runs both record", async () => {
+      const buses = [journalOn(bridgeOf()), journalOn(bridgeOf())];
+      isolated.mockImplementation(() => buses[isolated.mock.calls.length - 1]);
+      const outs = await Promise.all(
+        ["p1", "p2"].map((id) => browseAgent({ goal: "g", url: "https://a.test", qa: true }, { sessionId: "chat-1", toolCallId: id })),
+      );
+      for (const o of outs) expect(JSON.parse(o).checkpoint).toMatchObject({ complete: true });
+      for (const b of buses) expect(b.startJournal).toHaveBeenCalledTimes(1);
+      expect(stored()).toHaveLength(2);
+    });
+
+    it("qa + resume on an isolating shell runs isolated and applies the fixture into the session bridge", async () => {
+      useBrowseCheckpointStore.getState().add("chat-1", { fixture: CAPTURED as never, complete: true, summary: "s", isolated: true });
+      const out = JSON.parse(await browseAgent({ goal: "g", qa: true, resume: "cp_1" }, ctx));
+      expect(out).toMatchObject({ status: "done", setupApplied: true });
+      expect(isolated).toHaveBeenCalledWith(runId());
+      expect(iso.applyFixture).toHaveBeenCalledTimes(1);
+      expect(shared.applyFixture).not.toHaveBeenCalled();
+      expect(closeSession).toHaveBeenCalledWith(runId());
+    });
+
+    it("a shared-browser checkpoint may be resumed in an isolated run", async () => {
+      useBrowseCheckpointStore.getState().add("chat-1", { fixture: CAPTURED as never, complete: true, summary: "s" });
+      const out = JSON.parse(await browseAgent({ goal: "g", qa: true, resume: "cp_1" }, ctx));
+      expect(out).toMatchObject({ status: "done", setupApplied: true });
+    });
+
+    it("qa + resume without isolation still errors with the old text", async () => {
+      install(false);
+      const out = JSON.parse(await browseAgent({ goal: "g", qa: true, resume: "cp_1" }, ctx));
+      expect(out).toMatchObject({
+        status: "error",
+        error: "`resume` cannot be combined with `qa: true`: a QA run is a fresh scenario.",
+      });
+    });
+
+    it("resuming an isolated checkpoint in a shared run fails with a fixed error", async () => {
+      useBrowseCheckpointStore.getState().add("chat-1", { fixture: CAPTURED as never, complete: true, summary: "s", isolated: true });
+      const out = JSON.parse(await browseAgent({ goal: "g", resume: "cp_1" }, ctx));
+      expect(out).toMatchObject({ status: "setup_failed", setupStage: "validate" });
+      expect(out.error).toContain("checkpoint cp_1 was recorded in an isolated QA run and can be resumed only by another QA run (qa: true); for a plain task, start again with url or setup");
+      expect(shared.applyFixture).not.toHaveBeenCalled();
+      expect(isolated).not.toHaveBeenCalled();
+    });
   });
 
   it("closes the session even when the setup is malformed", async () => {
@@ -277,7 +352,8 @@ describe("browse_agent isolated QA run", () => {
         gate();
         await Promise.all([...first, late]);
         const deadlines = createSessionSpy.mock.calls.map((c) => (c[0] as { deadlineMs?: number }).deadlineMs);
-        const full = BROWSE_AGENT_DEADLINE_MS - CLOSE_SESSION_TIMEOUT_MS;
+        const CHECKPOINT_CALL_TIMEOUT_MS = 30_000; // browseAgent.ts, not exported
+        const full = BROWSE_AGENT_DEADLINE_MS - CHECKPOINT_CALL_TIMEOUT_MS - CLOSE_SESSION_TIMEOUT_MS;
         expect(deadlines.filter((d) => d !== undefined && d > full - 1000).length).toBe(4);
         const shrunk = deadlines.find((d) => d !== undefined && d <= full - 1000);
         expect(shrunk).toBeLessThanOrEqual(full - 5 * 60_000);

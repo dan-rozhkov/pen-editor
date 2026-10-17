@@ -90,6 +90,15 @@ describe("parallel isolated QA browse_agent calls", () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
   });
 
+  it("starts QA calls that carry a resume checkpoint in parallel too", async () => {
+    stubTurns(callsTurn([{ id: "a", input: { goal: "g1", qa: true, resume: "cp_1" } }, { id: "b", input: { goal: "g2", qa: true, resume: "cp_2" } }]));
+    const { result } = renderHook(() => useDesignChat({ sessionId: "resume-session" }));
+    await send(result);
+    await waitFor(() => expect(runs.map((r) => r.id)).toEqual(["a", "b"]));
+    await act(async () => runs.forEach((r) => r.finish('{"status":"done"}')));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), { timeout: 3000 });
+  });
+
   it("Stop aborts every running run and does not continue the turn", async () => {
     stubTurns(callsTurn([{ id: "a", input: { goal: "g1", qa: true } }, { id: "b", input: { goal: "g2", qa: true } }]));
     const { result } = renderHook(() => useDesignChat({ sessionId: "stop-session" }));

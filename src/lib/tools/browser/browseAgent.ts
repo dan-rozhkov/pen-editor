@@ -53,7 +53,10 @@ import { checkpointForModel, useBrowseCheckpointStore } from "@/store/browseChec
  * browser (the cloud browser has no isolation; its QA runs stay sequential in
  * the shared session): the nested context carries
  * `browserSession`, which `getBrowserBridge` and the loop guard honour, and the
- * session is closed in `finally`. Spec: pen-editor-desktop
+ * session is closed in `finally`, AFTER the checkpoint capture. An isolated run
+ * may use saved logins (`browse_fill_login`, routed to its session), may record
+ * checkpoints (flagged `isolated`: resumable only by another isolated run, as
+ * they hold the test account's cookies), and may `resume` one. Spec: pen-editor-desktop
  * docs/superpowers/specs/2026-10-17-isolated-parallel-browse-design.md.
  */
 
@@ -69,7 +72,7 @@ export type { BrowseAgentStatus } from "@sideform/browser-agent/agent/session";
 const NESTED_ID_MAX_CHARS = 200;
 /** Allowed only when the caller passed `capture: true` (the user's direct ask). */
 const CAPTURE_TOOL = "browse_capture";
-/** A normal tool (callable repeatedly: two-step sign-in), allowed only when the desktop bridge has it. */
+/** A normal tool (callable repeatedly: two-step sign-in), allowed only when the bridge the run uses has it. */
 const FILL_LOGIN_TOOL = "browse_fill_login";
 /**
  * Bound of one recorder journal call (default 15 s). Raised so a capture queued
@@ -82,8 +85,9 @@ const CHECKPOINT_CALL_TIMEOUT_MS = 30_000;
  * Browsers with a browse_agent run that records right now. Runs sharing one
  * browser share one journal, so only the first records; the others run without
  * a checkpoint instead of replacing its journal. The key is the bridge
- * identity: the desktop shell has ONE browser for all chats ("desktop"); the
- * cloud has one session per chat (the chat id).
+ * identity: the desktop shell has ONE shared browser for all chats ("desktop");
+ * the cloud has one session per chat (the chat id); an isolated run has its own
+ * browser, keyed by its session id.
  */
 const recordingKeys = new Set<string>();
 const DESKTOP_RECORDING_KEY = "desktop";
@@ -115,8 +119,10 @@ export const browseAgent: ToolHandler = async (args, context) => {
   try {
     // The tool's outer timeout started when the handler did, so the wait for a
     // slot is spent: the run's own deadline shrinks by it.
-    // The close (bounded by CLOSE_SESSION_TIMEOUT_MS) runs after the run, inside the same outer timeout.
-    const deadlineMs = BROWSE_AGENT_DEADLINE_MS - (Date.now() - waitStart) - CLOSE_SESSION_TIMEOUT_MS;
+    // After the run, inside the same outer timeout, comes the tail: the checkpoint
+    // capture (bounded by CHECKPOINT_CALL_TIMEOUT_MS), the journal stop, then the
+    // session close (bounded by CLOSE_SESSION_TIMEOUT_MS).
+    const deadlineMs = BROWSE_AGENT_DEADLINE_MS - (Date.now() - waitStart) - CHECKPOINT_CALL_TIMEOUT_MS - CLOSE_SESSION_TIMEOUT_MS;
     if (deadlineMs < MIN_ISOLATED_RUN_MS) {
       return JSON.stringify({
         status: "error",
@@ -160,11 +166,11 @@ const runBrowseAgent = async (
   // explicit `capture: true` (spec 2026-10-15-browse-capture-design.md).
   const captureAllowed = args.capture === true;
 
-  // Saved logins: desktop only, and only when the shell has `fillLogin`
-  // (an older shell, or the cloud bridge, keeps today's behavior).
   // QA mode: the nested run gets the QA prompt and `qa_verdict`; the verdict ends it.
+  // A QA run with `resume` is allowed only when it is isolated (it continues a
+  // scenario in its own browser); in the shared browser it stays a fresh scenario.
   const qaOn = args.qa === true;
-  if (qaOn && args.resume !== undefined && args.resume !== null) {
+  if (qaOn && !runSession && args.resume !== undefined && args.resume !== null) {
     return JSON.stringify({
       status: "error",
       steps: 0,
@@ -179,8 +185,12 @@ const runBrowseAgent = async (
   // client without isolation, keeps the shared browser exactly as before.
   const browserContext = runSession ? { browserSession: runSession } : {};
 
-  // Saved logins are the user's real ones: never in an isolated session.
-  const loginAllowed = !runSession && typeof getBrowserBridge(parentSessionId)?.fillLogin === "function";
+  // Saved logins: desktop only, and only when the bridge this run really uses
+  // (the isolated session's, or the shared one) has `fillLogin`. An older shell
+  // or the cloud bridge keeps today's behavior. The nested `browse_fill_login`
+  // call carries `browserSession` (browserContext), so it fills in the same browser.
+  const bridge = getBrowserBridge(parentSessionId, runSession);
+  const loginAllowed = typeof bridge?.fillLogin === "function";
 
   // Lazy: useDesignChat imports toolRegistry, which imports this module.
   const { executeToolCall } = await import("@/hooks/useDesignChat");
@@ -276,10 +286,11 @@ const runBrowseAgent = async (
   const hasSetup = setup !== undefined && setup !== null;
   const resumeId = typeof args.resume === "string" ? args.resume.trim() : "";
   const hasResume = args.resume !== undefined && args.resume !== null;
-  const bridge = getBrowserBridge(parentSessionId, runSession);
   // Without a chat id checkpoints are OFF (no safe place to keep or clear them).
   const checkpointChat = parentSessionId;
-  const recordingKey = isDesktopBrowserAvailable() ? DESKTOP_RECORDING_KEY : checkpointChat;
+  // An isolated run has its own browser and journal: its session id is the key,
+  // so parallel isolated runs each record.
+  const recordingKey = runSession ?? (isDesktopBrowserAvailable() ? DESKTOP_RECORDING_KEY : checkpointChat);
 
   // Checkpoint (spec 2026-10-16-checkpoint-design.md): the package's
   // createRunCheckpoint owns the lifecycle (bounded start, capture conditions,
@@ -293,8 +304,7 @@ const runBrowseAgent = async (
   let network: FixtureNetworkRule[] | undefined;
   const openCheckpoint = (valid: boolean) => {
     const key = recordingKey;
-    // An isolated run never records: its fixture would later be resumed into the shared browser.
-    const enabled = valid && !runSession && !!bridge && !!checkpointChat && !!key && !recordingKeys.has(key);
+    const enabled = valid && !!bridge && !!checkpointChat && !!key && !recordingKeys.has(key);
     if (enabled && key && checkpointChat) {
       recordingKeys.add(key);
       startGeneration = useBrowseCheckpointStore.getState().generation(checkpointChat);
@@ -325,6 +335,8 @@ const runBrowseAgent = async (
     return checkpointForModel(
       useBrowseCheckpointStore.getState().add(checkpointChat, {
         fixture: taken.fixture,
+        // Holds the test account's cookies: resumable only in an isolated run.
+        ...(runSession ? { isolated: true as const } : {}),
         ...(network && network.length > 0 ? { network } : {}),
         complete: taken.complete,
         ...(taken.gap !== undefined ? { gap: taken.gap } : {}),
@@ -376,12 +388,19 @@ const runBrowseAgent = async (
       parsed = { ok: false, error: "resume must be a checkpoint id such as cp_1" };
     } else {
       const entry = useBrowseCheckpointStore.getState().get(checkpointChat, resumeId);
-      parsed = entry
-        ? parsePageFixture({ ...entry.fixture, ...(entry.network ? { network: entry.network } : {}) })
-        : {
-            ok: false,
-            error: `checkpoint ${resumeId} not found — checkpoints live in the editor's memory and are lost when it reloads; start again with url or setup`,
-          };
+      if (!entry) {
+        parsed = {
+          ok: false,
+          error: `checkpoint ${resumeId} not found — older checkpoints are dropped when newer ones arrive, and all checkpoints are lost when the editor reloads; start again with url or setup`,
+        };
+      } else if (entry.isolated && !runSession) {
+        parsed = {
+          ok: false,
+          error: `checkpoint ${resumeId} was recorded in an isolated QA run and can be resumed only by another QA run (qa: true); for a plain task, start again with url or setup`,
+        };
+      } else {
+        parsed = parsePageFixture({ ...entry.fixture, ...(entry.network ? { network: entry.network } : {}) });
+      }
     }
   } else {
     // The tool's `url` is the only start URL; the model-supplied `version` and

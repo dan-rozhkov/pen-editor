@@ -22,15 +22,14 @@ const nonce = () => Math.random().toString(36).slice(2, 2 + NONCE_CHARS).padEnd(
 
 /**
  * The single predicate for "this browse_agent call is an isolated QA run": QA
- * mode, a goal, no `resume` (a QA run is a fresh scenario) and a shell that can
- * isolate. The hook (do not await) and the handler (take a slot) both use it.
+ * mode, a goal and a shell that can isolate. `resume` does not matter: a QA call
+ * with `resume` on an isolating shell continues a scenario in its own session. The hook (do not await) and the handler (take a slot) both use it.
  */
 export function isIsolatedQaCall(args: Record<string, unknown>): boolean {
   return (
     args.qa === true &&
     typeof args.goal === "string" &&
     args.goal.trim() !== "" &&
-    (args.resume === undefined || args.resume === null) &&
     isolatedBrowseAvailable()
   );
 }
