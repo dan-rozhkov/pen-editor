@@ -128,7 +128,7 @@ Write guard (variant attributes `data-v-*` are instance data and never count as 
 | `detach_instance` | `{nodeId, selector}` | Remove the markers from one region. The look stays: the master CSS is re-scoped into a static `<style data-d-style>` block. |
 | `delete_component` | `{key}` | Detach every instance, then delete the master. Never erases instance markup. |
 
-`get_editor_state` gains `components: [{key, name, status, variants, slots, usedBy: count}]`. `get_design_system` (roadmap Phase 4) includes the same list. The master is readable with `read_embed_html`.
+`get_editor_state` gains `components: [{key, name, status, variants, slots, usedBy: count}]`. The master is readable with `read_embed_html`.
 
 Each tool name must be added in the seven known places (`penTools`, two backend contract lists, `EXPECTED_CLIENT_TOOLS`, `toolRegistry`, `toolIcons`, `toolDisplayNames`, and a timeout override only if it can run over 30 s).
 

@@ -1,76 +1,7 @@
 import type { FrameNode, FlatSceneNode, Paint, SceneNode } from "@/types/scene";
 import { useSceneStore } from "@/store/sceneStore";
-import { flushNumberBindings } from "@/store/numberBindingSync";
 import { useLayoutStore } from "@/store/layoutStore";
-import { useVariableStore } from "@/store/variableStore";
-import { getFrameModeOverrides } from "@/lib/variables/modeContext";
-import { NUMBER_BINDING_SPECS, isKeyActive } from "@/lib/variables/numberBindings";
-import type { NumberBindingKey } from "@/types/scene";
 import { getNodeAbsolutePositionWithLayout, getNodeEffectiveSize } from "@/utils/nodeUtils";
-
-/**
- * Replace number-bound literals with `"$<variable name>"` (the syntax
- * `batch_design` accepts), so a read followed by a write round-trips the
- * binding instead of flattening it to a number. The raw `numberBindings` map is
- * dropped from the output — the `$` strings are the single representation.
- */
-function substituteNumberBindingRefs(
-  result: Record<string, unknown>,
-  node: FlatSceneNode,
-  resolveVars: boolean,
-): void {
-  const bindings = node.numberBindings;
-  if (!bindings) return;
-  delete result.numberBindings;
-  // `resolveVariables` asks for values, not references: the literal already holds
-  // the resolved number (it is what the layout and renderers read), so keep it.
-  if (resolveVars) return;
-  const { variables } = useVariableStore.getState();
-  let layout: Record<string, unknown> | undefined;
-  for (const key of Object.keys(bindings) as NumberBindingKey[]) {
-    const binding = bindings[key];
-    const spec = NUMBER_BINDING_SPECS[key];
-    const variable = binding && spec ? variables.find((v) => v.id === binding.variableId) : undefined;
-    // An inactive binding (width/height while the sizing is not fixed) has no
-    // effect: the layout owns the size, so a "$name" there would be a lie.
-    if (!variable || !isKeyActive(node, key)) continue;
-    const ref = `$${variable.name}`;
-    if (spec.where === "layout") {
-      layout ??= { ...(result.layout as Record<string, unknown> | undefined) };
-      layout[key] = ref;
-    } else {
-      result[key] = ref;
-    }
-  }
-  if (layout) result.layout = layout;
-}
-
-/**
- * Frame mode overrides keyed by collection NAME (`{"Theme": "dark"}`), the form
- * `batch_design` accepts back. A name shared by several collections would
- * collide (and be refused on the way in), so those use the collection id. The
- * legacy `themeOverride` is folded into it. Ids stay as the key when a
- * collection no longer exists.
- */
-function serializeModeOverrides(result: Record<string, unknown>, node: FlatSceneNode): void {
-  const overrides = getFrameModeOverrides(node);
-  delete result.themeOverride;
-  delete result.modeOverrides;
-  const keys = Object.keys(overrides);
-  if (keys.length === 0) return;
-  const { collections } = useVariableStore.getState();
-  const named: Record<string, string> = {};
-  for (const collectionId of keys) {
-    const modeId = overrides[collectionId];
-    if (modeId === undefined) continue;
-    const collection = collections.find((c) => c.id === collectionId);
-    const nameIsUnique =
-      collection != null &&
-      collections.filter((c) => c.name.trim().toLowerCase() === collection.name.trim().toLowerCase()).length === 1;
-    named[collection && nameIsUnique ? collection.name : collectionId] = collection?.modes.find((m) => m.id === modeId)?.name ?? modeId;
-  }
-  if (Object.keys(named).length > 0) result.modeOverrides = named;
-}
 
 type SerializeOptions = {
   resolveVars?: boolean;
@@ -100,8 +31,6 @@ export function serializeNodeToDepth(
   depth: number,
   options?: SerializeOptions,
 ): Record<string, unknown> | null {
-  // Bound-number literals are patched in a microtask; settle them before reading.
-  flushNumberBindings();
   const state = useSceneStore.getState();
   const ctx: SerializeContext = {
     state,
@@ -213,9 +142,6 @@ function serializeNodeInternal(
       }
     }
   }
-
-  substituteNumberBindingRefs(result, node, !!options?.resolveVars);
-  serializeModeOverrides(result, node);
 
   // Resolve variable bindings if requested
   if (options?.resolveVars && options.variableLookup) {

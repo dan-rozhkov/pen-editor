@@ -3,11 +3,9 @@
 // same conversation. Sandboxed iframes may deny storage outright (reads and
 // writes throw): every touch is guarded, and the widget works without it.
 import { collectDocumentData } from "@/lib/commands/fileCommands";
-import { deserializeDocument, serializeDocumentData } from "@/utils/fileUtils";
+import { deserializeDocument, serializeDocument } from "@/utils/fileUtils";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
 import { useSceneStore } from "@/store/sceneStore";
-import { useVariableStore } from "@/store/variableStore";
-import { useDesignSystemScopeStore } from "@/store/designSystemScopeStore";
 
 export const EMBED_DOC_KEY = "sideform.embed.doc";
 const AUTOSAVE_DEBOUNCE_MS = 1_000;
@@ -27,7 +25,11 @@ export function restoreEmbedDocument(widgetKey: string, viewport = { width: wind
 
 export function saveEmbedDocument(widgetKey: string): boolean {
   try {
-    localStorage.setItem(embedDocKey(widgetKey), serializeDocumentData(collectDocumentData()));
+    const doc = collectDocumentData();
+    localStorage.setItem(
+      embedDocKey(widgetKey),
+      serializeDocument(doc.pages, doc.variables, doc.activeTheme, doc.textStyles, doc.fillStyles, doc.effectStyles),
+    );
     return true;
   } catch {
     // Storage denied or full — keep working, just without persistence.
@@ -37,17 +39,15 @@ export function saveEmbedDocument(widgetKey: string): boolean {
 
 export function startEmbedAutosave(widgetKey: string, debounceMs = AUTOSAVE_DEBOUNCE_MS): () => void {
   let timer: ReturnType<typeof setTimeout> | null = null;
-  const schedule = () => {
+  const unsubscribe = useSceneStore.subscribe(() => {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;
       saveEmbedDocument(widgetKey);
     }, debounceMs);
-  };
-  // Scene, variables/collections and saved scopes all live in the saved document.
-  const unsubscribes = [useSceneStore, useVariableStore, useDesignSystemScopeStore].map((store) => store.subscribe(schedule));
+  });
   return () => {
-    for (const unsubscribe of unsubscribes) unsubscribe();
+    unsubscribe();
     if (timer) clearTimeout(timer);
   };
 }

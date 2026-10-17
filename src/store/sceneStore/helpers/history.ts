@@ -31,7 +31,6 @@ export function createSnapshot(state: {
     useStyleStore.getState().effectStyles,
     state.slideOrder ?? [],
     useMeasurementsStore.getState().measurements,
-    useVariableStore.getState().collections,
   );
 }
 

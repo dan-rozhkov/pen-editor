@@ -5,7 +5,8 @@ import { type CodegenOptions, convertPxToRem } from "./css";
 import { nodeDeclarations } from "./declarations";
 import {
   declarationsToTailwind,
-  buildSubtreeTokens,
+  collectSubtreeVariableIds,
+  tokensBlockForIds,
   UNSUPPORTED_NODE_TYPES,
   unsupportedNodeWarning,
   videoFillWarning,
@@ -256,8 +257,7 @@ export function buildReactCode(
   const element = buildJsxElement(nodeId, nodesById, childrenById, undefined, true, 2, options, warnings) ?? "";
   const componentCode = `export function ${componentName}() {\n  return (\n${element}\n  );\n}\n`;
 
-  const { block: tokensBlock, warnings: modeWarnings } = buildSubtreeTokens(nodeId, nodesById, childrenById);
-  warnings.push(...modeWarnings);
+  const tokensBlock = tokensBlockForIds(collectSubtreeVariableIds(nodeId, nodesById, childrenById));
   const code = tokensBlock ? `/* Requires CSS variables:\n${tokensBlock}\n*/\n${componentCode}` : componentCode;
   return { code, warnings };
 }

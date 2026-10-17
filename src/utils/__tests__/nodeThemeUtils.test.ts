@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { getEffectiveThemeForNode, getEffectiveModeContextForNode } from "@/utils/nodeThemeUtils";
+import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
 import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
 import { resetStores } from "@/test/fixtures";
@@ -35,50 +35,5 @@ describe("getEffectiveThemeForNode", () => {
       _cachedTree: null,
     });
     expect(getEffectiveThemeForNode("e1")).toBe("dark");
-  });
-});
-
-describe("getEffectiveThemeForNode with modeOverrides", () => {
-  beforeEach(() => resetStores());
-
-  it.each([
-    ["reads the Theme pick of an ancestor's modeOverrides", { theme: "dark", brand: "x" }, "light", "dark"],
-    ["ignores overrides that pick no Theme mode", { brand: "x" }, "dark", "dark"],
-  ])("%s", (_name, modeOverrides, globalTheme, expected) => {
-    useThemeStore.getState().setActiveTheme(globalTheme as "light" | "dark");
-    const box = { x: 0, y: 0, width: 10, height: 10 };
-    useSceneStore.setState({
-      nodesById: {
-        f1: { id: "f1", type: "frame", modeOverrides, ...box } as unknown as FlatSceneNode,
-        e1: { id: "e1", type: "embed", htmlContent: "", ...box } as unknown as FlatSceneNode,
-      },
-      parentById: { f1: null, e1: "f1" },
-      childrenById: { f1: ["e1"] },
-      rootIds: ["f1"],
-      _cachedTree: null,
-    });
-    expect(getEffectiveThemeForNode("e1")).toBe(expected);
-  });
-});
-
-describe("getEffectiveModeContextForNode", () => {
-  beforeEach(() => resetStores());
-
-  it("merges the document context with ancestor modeOverrides (inner wins, self excluded)", () => {
-    useThemeStore.getState().setModeContext({ theme: "dark", brand: "zen" });
-    useSceneStore.setState({
-      nodesById: {
-        outer: { id: "outer", type: "frame", modeOverrides: { brand: "acme", theme: "light" }, x: 0, y: 0, width: 1, height: 1 } as unknown as FlatSceneNode,
-        inner: { id: "inner", type: "frame", themeOverride: "dark", x: 0, y: 0, width: 1, height: 1 } as unknown as FlatSceneNode,
-        e1: { id: "e1", type: "embed", htmlContent: "", x: 0, y: 0, width: 10, height: 10 } as unknown as FlatSceneNode,
-      },
-      parentById: { outer: null, inner: "outer", e1: "inner" },
-      childrenById: { outer: ["inner"], inner: ["e1"] },
-      rootIds: ["outer"],
-      _cachedTree: null,
-    });
-    expect(getEffectiveModeContextForNode("e1")).toEqual({ theme: "dark", brand: "acme" });
-    expect(getEffectiveModeContextForNode("inner")).toEqual({ theme: "light", brand: "acme" });
-    expect(getEffectiveModeContextForNode("outer")).toEqual({ theme: "dark", brand: "zen" });
   });
 });

@@ -1,9 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import type { Variable, ModeInput } from "../../types/variable";
-import { getVariableValueAt } from "../../lib/variables/resolve";
-import { getVariableIndex } from "../../lib/variables/variableIndex";
-import { useVariableStore } from "../../store/variableStore";
-import { useThemeStore } from "../../store/themeStore";
+import type { Variable, ThemeName } from "../../types/variable";
+import { getVariableValue } from "../../types/variable";
 import { Input } from "./input";
 import { Label } from "./label";
 import { SelectWithOptions } from "./select";
@@ -242,7 +239,7 @@ interface ColorInputProps {
   variableId?: string;
   onVariableChange?: (variableId: string | undefined) => void;
   availableVariables?: Variable[];
-  activeTheme?: ModeInput;
+  activeTheme?: ThemeName;
   isMixed?: boolean;
 }
 
@@ -252,24 +249,19 @@ export function ColorInput({
   variableId,
   onVariableChange,
   availableVariables = [],
-  activeTheme,
+  activeTheme = "light",
   isMixed = false,
 }: ColorInputProps) {
   const readOnly = useReadOnly();
 
   // Find bound variable
-  const storeVariables = useVariableStore((s) => s.variables);
-  const storeCollections = useVariableStore((s) => s.collections);
-  const docModes = useThemeStore((s) => s.modeContext);
-  const themeInput = activeTheme ?? docModes;
-  const variableValueIndex = getVariableIndex(storeVariables, storeCollections);
   const boundVariable = variableId
     ? availableVariables.find((v) => v.id === variableId)
     : undefined;
 
   // Get display color (from variable or direct value)
   const displayColor = boundVariable
-    ? getVariableValueAt(boundVariable, themeInput, variableValueIndex)
+    ? getVariableValue(boundVariable, activeTheme)
     : value || "#000000";
 
   const handleVariableSelect = (varId: string | undefined) => {
@@ -377,7 +369,7 @@ export function ColorInput({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" side="bottom">
             {availableVariables.map((variable) => {
-              const varColor = getVariableValueAt(variable, themeInput, variableValueIndex);
+              const varColor = getVariableValue(variable, activeTheme);
               return (
                 <DropdownMenuItem
                   key={variable.id}
@@ -435,8 +427,6 @@ interface SelectInputProps {
   labelOutside?: boolean;
   labelClassName?: string;
   isMixed?: boolean;
-  /** Accessible name for the trigger; defaults to nothing, so pass it when there is no visible `label`. */
-  ariaLabel?: string;
 }
 
 export function SelectInput({
@@ -448,7 +438,6 @@ export function SelectInput({
   labelOutside = false,
   labelClassName,
   isMixed = false,
-  ariaLabel,
 }: SelectInputProps) {
   const readOnly = useReadOnly();
   const handleChange = (val: string | null) => {
@@ -473,7 +462,6 @@ export function SelectInput({
           options={selectOptions}
           triggerPrefix={prefix}
           size="sm"
-          ariaLabel={ariaLabel}
           className="w-full"
         />
       </div>
@@ -490,7 +478,6 @@ export function SelectInput({
           options={selectOptions}
           triggerPrefix={prefix}
           size="sm"
-          ariaLabel={ariaLabel}
           className="w-full"
         />
       </div>
@@ -505,7 +492,6 @@ export function SelectInput({
         options={selectOptions}
         triggerPrefix={prefix}
         size="sm"
-          ariaLabel={ariaLabel}
         className="w-full"
       />
     </div>

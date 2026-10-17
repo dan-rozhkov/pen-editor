@@ -3,7 +3,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useLayoutStore } from "@/store/layoutStore";
 import { useStyleStore } from "@/store/styleStore";
 import { useVariableStore } from "@/store/variableStore";
-import { getEffectiveModeContextForNode } from "@/utils/nodeThemeUtils";
+import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
 import { resolveColor } from "@/utils/colorUtils";
 import { getFills, getRenderableStrokes, resolveFillStylePaint, resolveEffectStack } from "@/utils/fillUtils";
 import { getTopLevelFramesFlat } from "@/utils/nodeUtils";
@@ -55,9 +55,9 @@ export async function exportSlidesToPptx(pixiRefs: PixiExportRefs): Promise<bool
       return resolveEffectStack(node, effectStyles);
     },
     resolveColor: (lookup, node) => {
-      const { variables, collections } = useVariableStore.getState();
-      const theme = getEffectiveModeContextForNode(node.id);
-      return resolveColor(lookup.color, lookup.binding, variables, theme, collections);
+      const { variables } = useVariableStore.getState();
+      const theme = getEffectiveThemeForNode(node.id);
+      return resolveColor(lookup.color, lookup.binding, variables, theme);
     },
     // `container` missing is a benign "node vanished from the canvas mid-export"
     // case — skip the shape. An `extractImageBytes` failure whose node is an

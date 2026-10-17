@@ -29,11 +29,6 @@ export const guidelines: Record<string, string> = {
     "- Form fields: vertical frame with `gap: 16`, inputs with `width: \"fill_container\"`.\n\n" +
     "## Design Tokens\n" +
     "- Reference colors, fonts and radii through `$--variable` tokens so a theme change propagates, using only names that `get_variables` actually returns.\n" +
-    "- Prefer semantic tokens over primitive tokens. Never bind a primitive token when a semantic token exists for that role.\n" +
-    "- Read a slice of the tokens with `get_variables` and its `names` or `collection` argument.\n" +
-    "- In embed HTML, reference a token as `var(--name)` with its `cssName`.\n" +
-    "- Call `get_design_system` once before you design. It returns the tokens and the registered components together, with values resolved per mode.\n" +
-    "- Call `lint_design` after you edit. It reports raw values, low contrast, deprecated tokens and components, and component drift. Fix each finding, then run it again.\n" +
     "- If the document has no suitable tokens yet, create them with `set_variables` (e.g. background/foreground/primary/border colors, heading/body fonts, a radius scale) before referencing them.\n\n" +
     "## Spacing Reference\n" +
     "- Screen sections gap: 24-32. Card grid gap: 16-24. Form fields gap: 16.\n" +

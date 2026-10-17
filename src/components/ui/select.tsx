@@ -197,8 +197,6 @@ interface SelectWithOptionsProps {
   triggerPrefix?: React.ReactNode;
   className?: string;
   size?: "sm" | "default";
-  /** Accessible name for the trigger when no visible label points at it. */
-  ariaLabel?: string;
 }
 
 function SelectWithOptions({
@@ -209,7 +207,6 @@ function SelectWithOptions({
   triggerPrefix,
   className,
   size = "default",
-  ariaLabel,
   ...props
 }: SelectWithOptionsProps) {
   // Find the label for the current value
@@ -218,7 +215,7 @@ function SelectWithOptions({
 
   return (
     <Select value={value} onValueChange={onValueChange} {...props}>
-      <SelectTrigger size={size} className={className} aria-label={ariaLabel}>
+      <SelectTrigger size={size} className={className}>
         {triggerPrefix}
         <SelectValue>{currentLabel}</SelectValue>
       </SelectTrigger>

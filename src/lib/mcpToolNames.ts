@@ -13,11 +13,10 @@
 // (BRIDGED_TOOL_NAMES, re-exported by server.ts): the original 7 canvas/design
 // tools, 4 comment tools (read_comments, reply_comment, resolve_comment,
 // leave_comment), read_embed_html/edit_embed_html/rename_layers/
-// find_empty_space_on_canvas, get_design_system, the 7 style tools
+// find_empty_space_on_canvas, the 7 style tools
 // (get_styles, get_text_styles, set_styles, set_text_styles, apply_fill_style,
 // apply_text_style, apply_effect_style) and the 4 component tools
-// (define_component, extract_component, detach_instance, delete_component)
-// and lint_design (28 names in all).
+// (define_component, extract_component, detach_instance, delete_component).
 // This one still has to be hand-copied across the repo boundary —
 // pen-editor-backend/test/mcp-tools-contract.test.ts pins the same list on
 // the backend side — but every consumer *inside this repo* must import this
@@ -38,7 +37,6 @@ export const BRIDGED_MCP_TOOL_NAMES = [
   "edit_embed_html",
   "rename_layers",
   "find_empty_space_on_canvas",
-  "get_design_system",
   "get_styles",
   "get_text_styles",
   "set_styles",
@@ -50,7 +48,6 @@ export const BRIDGED_MCP_TOOL_NAMES = [
   "extract_component",
   "detach_instance",
   "delete_component",
-  "lint_design",
 ] as const;
 
 // The 3 client-side static guideline tools (src/lib/tools/staticTools.ts).

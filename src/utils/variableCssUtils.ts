@@ -1,8 +1,7 @@
-import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
-import { getVariableCssName } from "@/types/variable";
-import type { ModeInput } from "@/types/variable";
-import { getVariableIndex, getVariableValueAt } from "@/lib/variables";
+import { useThemeStore } from "@/store/themeStore";
+import { getVariableCssName, getVariableValue } from "@/types/variable";
+import type { ThemeName } from "@/types/variable";
 
 /**
  * Resolve current variable values to a `name -> CSS value` map, for the
@@ -13,19 +12,18 @@ import { getVariableIndex, getVariableValueAt } from "@/lib/variables";
  *
  * @param variableIds - If provided, only include variables with these IDs.
  *                      If omitted, include all variables.
- * @param theme - The mode input to resolve under; defaults to the document-level mode context.
+ * @param theme - If provided, use this theme instead of the global active theme.
  */
-export function collectVariableValues(variableIds?: Set<string>, theme?: ModeInput): Map<string, string> {
-  const { variables, collections } = useVariableStore.getState();
-  const index = getVariableIndex(variables, collections);
-  const activeTheme = theme ?? useThemeStore.getState().modeContext;
+export function collectVariableValues(variableIds?: Set<string>, theme?: ThemeName): Map<string, string> {
+  const { variables } = useVariableStore.getState();
+  const activeTheme = theme ?? useThemeStore.getState().activeTheme;
   const values = new Map<string, string>();
   for (const v of variables) {
     if (variableIds && !variableIds.has(v.id)) continue;
     // Keyed by the CANONICAL CSS name, not `v.name` — `v.name` is a
     // free-form label ("Color 1") and setting it directly on `root.style`
     // would be a silent no-op. See `getVariableCssName`'s doc comment.
-    values.set(getVariableCssName(v), getVariableValueAt(v, activeTheme, index));
+    values.set(getVariableCssName(v), getVariableValue(v, activeTheme));
   }
   return values;
 }
@@ -35,9 +33,9 @@ export function collectVariableValues(variableIds?: Set<string>, theme?: ModeInp
  *
  * @param variableIds - If provided, only include variables with these IDs.
  *                      If omitted, include all variables.
- * @param theme - The mode input to resolve under; defaults to the document-level mode context.
+ * @param theme - If provided, use this theme instead of the global active theme.
  */
-export function buildVariableStyleBlock(variableIds?: Set<string>, theme?: ModeInput): string {
+export function buildVariableStyleBlock(variableIds?: Set<string>, theme?: ThemeName): string {
   const values = collectVariableValues(variableIds, theme);
   if (values.size === 0) return "";
 

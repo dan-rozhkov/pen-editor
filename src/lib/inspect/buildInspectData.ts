@@ -8,8 +8,7 @@ import type {
   NoiseEffect,
   PathStroke,
 } from "@/types/scene";
-import type { ModeInput, Variable, VariableCollection } from "@/types/variable";
-import { getVariableIndex, getVariableValueAt } from "@/lib/variables";
+import type { Variable, ThemeName } from "@/types/variable";
 import type { FillStyle, EffectStyle } from "@/types/style";
 import type { TextStyle } from "@/types/textStyle";
 import type { InspectUnits } from "@/store/devModeStore";
@@ -28,14 +27,7 @@ export interface InspectValue {
   label: string;
   value: string;
   copyValue?: string;
-  token?: {
-    name: string;
-    /** Every mode of the variable's collection, resolved (aliases followed). */
-    modes?: { name: string; value: string }[];
-    /** Legacy Theme-collection mirrors; same as the "Light"/"Dark" entries of `modes`. */
-    light: string;
-    dark: string;
-  };
+  token?: { name: string; light: string; dark: string };
   /** CSS background used for a compact color or gradient preview. */
   swatchBackground?: string;
 }
@@ -80,20 +72,18 @@ export interface BuildInspectDataInput {
   nodesById: Record<string, FlatSceneNode>;
   rect: { x: number; y: number; width: number; height: number };
   variables: Variable[];
-  /** Variable collections; absent = Theme only. */
-  collections?: VariableCollection[];
   fillStyles: FillStyle[];
   effectStyles: EffectStyle[];
   textStyles: TextStyle[];
   units: InspectUnits;
   remBase: number;
   /**
-   * The node's effective theme mode context (document-level picks plus every
-   * ancestor frame's overrides) — used to resolve variable-bound color values to
+   * The node's effective theme (innermost ancestor `themeOverride`, or the
+   * global active theme) — used to resolve variable-bound color values to
    * the theme actually rendered for this node, instead of hardcoding
-   * "light". See `getEffectiveModeContextForNode` (src/utils/nodeThemeUtils.ts).
+   * "light". See `getEffectiveThemeForNode` (src/utils/nodeThemeUtils.ts).
    */
-  effectiveTheme: ModeInput;
+  effectiveTheme: ThemeName;
 }
 
 function fmt(px: number, units: InspectUnits, remBase: number): string {
@@ -242,21 +232,10 @@ function buildTypographySection(
   return { title: "Typography", rows };
 }
 
-/** Build the per-mode token summary shown on an expandable variable-bound row. */
-function buildToken(
-  variable: Variable,
-  variables: Variable[],
-  collections: VariableCollection[] | undefined,
-): NonNullable<InspectValue["token"]> {
-  const index = getVariableIndex(variables, collections);
-  const collection = index.collections.get(variable.collectionId ?? "theme");
-  const modes = (collection?.modes ?? []).map((mode) => ({
-    name: mode.name,
-    value: getVariableValueAt(variable, { [collection?.id ?? "theme"]: mode.id }, index),
-  }));
+/** Build the light/dark token summary shown on an expandable variable-bound row. */
+function buildToken(variable: Variable): { name: string; light: string; dark: string } {
   return {
     name: variable.name,
-    modes,
     light: variable.themeValues?.light ?? variable.value,
     dark: variable.themeValues?.dark ?? variable.value,
   };
@@ -281,9 +260,8 @@ function describePaint(
   paint: ReturnType<typeof getFills>[number],
   variables: Variable[],
   fillStyles: FillStyle[],
-  effectiveTheme: ModeInput,
+  effectiveTheme: ThemeName,
   label: string,
-  collections?: VariableCollection[],
 ): InspectValue {
   if (paint.styleId) {
     const style = fillStyles.find((s) => s.id === paint.styleId);
@@ -300,14 +278,14 @@ function describePaint(
   }
 
   if (paint.type === "solid") {
-    const displayValue = resolveVariableValue(paint.color, paint.colorBinding, variables, effectiveTheme, collections) ?? paint.color;
+    const displayValue = resolveVariableValue(paint.color, paint.colorBinding, variables, effectiveTheme) ?? paint.color;
     if (paint.colorBinding) {
       const variable = variables.find((v) => v.id === paint.colorBinding!.variableId);
       if (variable) {
         return {
           label,
           value: displayValue,
-          token: buildToken(variable, variables, collections),
+          token: buildToken(variable),
           swatchBackground: displayValue,
         };
       }
@@ -331,13 +309,12 @@ function buildFillsSection(
   node: FlatSceneNode,
   variables: Variable[],
   fillStyles: FillStyle[],
-  effectiveTheme: ModeInput,
-  collections?: VariableCollection[],
+  effectiveTheme: ThemeName,
 ): InspectSection | undefined {
   const fills = getRenderableFills(node);
   if (!fills.length) return undefined;
   const rows = fills.map((paint, i) => {
-    const row = describePaint(paint, variables, fillStyles, effectiveTheme, "Fill", collections);
+    const row = describePaint(paint, variables, fillStyles, effectiveTheme, "Fill");
     if (fills.length > 1) row.label = `Fill ${i + 1}`;
     return row;
   });
@@ -350,8 +327,7 @@ function buildStrokesSection(
   fillStyles: FillStyle[],
   units: InspectUnits,
   remBase: number,
-  effectiveTheme: ModeInput,
-  collections?: VariableCollection[],
+  effectiveTheme: ThemeName,
 ): InspectSection | undefined {
   const pathStroke: PathStroke | undefined = node.type === "path" ? node.pathStroke : undefined;
   const strokes = getRenderableStrokes(node);
@@ -364,7 +340,7 @@ function buildStrokesSection(
   const rows: InspectValue[] = [];
 
   const colorRows = strokes.map((paint, i) => {
-    const row = describePaint(paint, variables, fillStyles, effectiveTheme, "Color", collections);
+    const row = describePaint(paint, variables, fillStyles, effectiveTheme, "Color");
     if (strokes.length > 1) row.label = `Color ${i + 1}`;
     return row;
   });
@@ -438,7 +414,7 @@ function buildRadiusSection(node: FlatSceneNode, units: InspectUnits, remBase: n
 }
 
 export function buildInspectData(input: BuildInspectDataInput): InspectData | null {
-  const { nodeId, nodesById, rect, variables, collections, fillStyles, effectStyles, textStyles, units, remBase, effectiveTheme } = input;
+  const { nodeId, nodesById, rect, variables, fillStyles, effectStyles, textStyles, units, remBase, effectiveTheme } = input;
   const node = nodesById[nodeId];
   if (!node) return null;
 
@@ -458,10 +434,10 @@ export function buildInspectData(input: BuildInspectDataInput): InspectData | nu
   const typographySection = buildTypographySection(node, textStyles, units, remBase);
   if (typographySection) sections.push(typographySection);
 
-  const fillsSection = buildFillsSection(node, variables, fillStyles, effectiveTheme, collections);
+  const fillsSection = buildFillsSection(node, variables, fillStyles, effectiveTheme);
   if (fillsSection) sections.push(fillsSection);
 
-  const strokesSection = buildStrokesSection(node, variables, fillStyles, units, remBase, effectiveTheme, collections);
+  const strokesSection = buildStrokesSection(node, variables, fillStyles, units, remBase, effectiveTheme);
   if (strokesSection) sections.push(strokesSection);
 
   const effectsSection = buildEffectsSection(node, effectStyles, units, remBase);

@@ -11,7 +11,6 @@ import {
 import { duplicateKeyWarnings, selectComponentRegistry } from "@/store/componentRegistry";
 import { reconcileConsumers } from "@/store/componentSync";
 import { upsertMasterNode } from "@/store/componentOps";
-import { libraryComponentError } from "@/lib/designSystem/ownership";
 import type { ToolHandler } from "../../toolRegistry";
 import { KEY_RULE, readKey, toolError } from "./shared";
 
@@ -69,8 +68,6 @@ export const defineComponent: ToolHandler = async (args) => {
 
   const registry = selectComponentRegistry();
   const existing = registry.get(key);
-  const libraryRefusal = libraryComponentError(key, existing?.meta);
-  if (libraryRefusal) return toolError(libraryRefusal);
   const effectiveMetaVariants = variants ?? existing?.meta.variants;
 
   const expandedMaster = expandMasterHtml(args.html, key, registry);
@@ -88,7 +85,7 @@ export const defineComponent: ToolHandler = async (args) => {
     deprecated === undefined
       ? oldDeprecated
       : deprecated
-        ? { ...(oldDeprecated?.since ? { since: oldDeprecated.since } : {}), ...deprecated }
+        ? deprecated
         : undefined;
   const meta: EmbedComponentMeta = {
     ...kept,

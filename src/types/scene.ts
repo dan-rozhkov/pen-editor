@@ -1,4 +1,4 @@
-import type { ThemeName, ModeOverrides, Variable, VariableCollection } from './variable'
+import type { ThemeName, Variable } from './variable'
 import type { Guide } from '../store/guidesStore'
 import type { PersistedMeasurement } from '../store/measurementsStore'
 import type { TextStyle } from './textStyle'
@@ -11,29 +11,6 @@ export interface VariableBinding {
 
 // Color binding (alias for backward compatibility)
 export type ColorBinding = VariableBinding
-
-/**
- * Node fields that can be bound to a number variable (`BaseNode.numberBindings`).
- * `strokeWidth`/`opacity`/`width`/`height`/`cornerRadius`/`fontSize` live on the node;
- * `padding*`/`gap`/`rowGap`/`columnGap` live in `node.layout`.
- * See `src/lib/variables/numberBindings.ts`.
- */
-export type NumberBindingKey =
-  | 'cornerRadius'
-  | 'paddingTop'
-  | 'paddingRight'
-  | 'paddingBottom'
-  | 'paddingLeft'
-  | 'gap'
-  | 'rowGap'
-  | 'columnGap'
-  | 'width'
-  | 'height'
-  | 'fontSize'
-  | 'strokeWidth'
-  | 'opacity'
-
-export type NumberBindings = Partial<Record<NumberBindingKey, VariableBinding>>
 
 // Image fill for shapes
 export type ImageFillMode = 'fill' | 'fit' | 'stretch'
@@ -437,13 +414,6 @@ export interface BaseNode {
   // Variable bindings for colors
   fillBinding?: ColorBinding
   strokeBinding?: ColorBinding
-  /**
-   * Number-variable bindings. The literal field (e.g. `cornerRadius`) ALWAYS holds
-   * the resolved value (materialized by `numberBindingSync`), so layout, text
-   * measurement and renderers never read this. A manual write to a bound field
-   * drops its binding (see `guardNumberBindings`).
-   */
-  numberBindings?: NumberBindings
   // Rotation in degrees (0-360)
   rotation?: number
   // Opacity (0-1, defaults to 1)
@@ -630,10 +600,6 @@ export interface FrameNode extends BaseNode {
   layout?: LayoutProperties
   // Theme override (light/dark) - if set, overrides global theme for this frame
   themeOverride?: ThemeName
-  // Per-collection mode overrides for this frame's descendants (Tokens v2).
-  // Supersedes `themeOverride`, which is migrated into `{ theme: x }` on open
-  // and still dual-written on save. Read through `getFrameModeOverrides`.
-  modeOverrides?: ModeOverrides
   // Layout grid overlays (visual design aid, not part of exported design)
   layoutGrids?: LayoutGridConfig[]
   /**
@@ -940,18 +906,7 @@ export interface EmbedComponentMeta {
   /** axis -> allowed values. */
   variants?: Record<string, string[]>
   status?: 'draft' | 'stable' | 'deprecated'
-  deprecated?: {
-    /** Library version that deprecated it; filled at publish time. */
-    since?: string
-    replacedBy?: string
-    note?: string
-  }
-  /**
-   * Set when a linked design-system library owns this master. Library masters
-   * are read-only here: define_component, edit_embed_html and batch_design
-   * refuse them ("edit it in the library document").
-   */
-  library?: { id: string; version: string }
+  deprecated?: { replacedBy?: string; note?: string }
 }
 
 export interface EmbedNode extends BaseNode {
@@ -1121,8 +1076,6 @@ export interface FlatSnapshot {
   childrenById: Record<string, string[]>
   rootIds: string[]
   variables?: Variable[]
-  /** Variable collections (modes) at the time of the snapshot; absent in older snapshots. */
-  collections?: VariableCollection[]
   /** Persistent ruler guides for the current page, at the time of the snapshot. */
   guides?: Guide[]
   /** Named reusable text styles, at the time of the snapshot. */

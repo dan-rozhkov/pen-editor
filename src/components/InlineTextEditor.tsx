@@ -7,8 +7,7 @@ import { useSelectionStore } from '../store/selectionStore'
 import { useViewportStore } from '../store/viewportStore'
 import { useVariableStore } from '../store/variableStore'
 import { resolveColor } from '../utils/colorUtils'
-import type { ModeInput } from '../types/variable'
-import { useThemeStore } from '../store/themeStore'
+import type { ThemeName } from '../types/variable'
 import {
   LIST_INDENT_WIDTH,
   LIST_MARKER_GAP,
@@ -27,7 +26,7 @@ interface InlineTextEditorProps {
   node: TextNode
   absoluteX: number
   absoluteY: number
-  effectiveTheme?: ModeInput
+  effectiveTheme?: ThemeName
   onUpdateText?: (text: string, paragraphs?: ParagraphAttrs[]) => void
   isInsideAutoLayoutParent?: boolean
 }
@@ -339,7 +338,6 @@ export function InlineTextEditor({
   const x = useViewportStore((s) => s.x)
   const y = useViewportStore((s) => s.y)
   const variables = useVariableStore((state) => state.variables)
-  const collections = useVariableStore((state) => state.collections)
 
   // Resolve the fill color. An explicit color always wins; a linked node with
   // no resolvable color of its own falls back to the link accent color — same
@@ -348,8 +346,7 @@ export function InlineTextEditor({
     node.fill,
     node.fillBinding,
     variables,
-    effectiveTheme ?? useThemeStore.getState().modeContext,
-    collections,
+    effectiveTheme ?? 'light',
   )
   const fillColor = resolvedFill ?? (node.link ? TEXT_LINK_COLOR : '#000000')
 

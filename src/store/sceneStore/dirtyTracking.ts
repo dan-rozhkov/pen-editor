@@ -20,35 +20,9 @@ export function markNodesDirty(ids: Iterable<string>): void {
   armed = true;
 }
 
-// Structural-change hints: a separate, subscriber-only channel for mutators that
-// add/remove subtrees. It deliberately does NOT arm the dirty channel above —
-// pixiSync's dirty path cannot handle subtree adds (see the note on
-// markNodesDirty), so those sets keep poisoning `complete`. A subscriber that
-// only cares about WHICH ids changed structurally (mode scopes) reads the hint
-// for the set it is being notified about instead of falling back to a full scan.
-const structuralPending = new Set<string>();
-let structuralArmed = false;
-let lastSetUnmarked = false;
-let lastStructural: ReadonlySet<string> | null = null;
-
-/** Declares the ids a structural mutation (add / remove) touched. Call inside the `set` updater, right before returning the changed state. */
-export function markStructuralChange(ids: Iterable<string>): void {
-  for (const id of ids) structuralPending.add(id);
-  structuralArmed = true;
-}
-
 export function noteSceneSetState(): void {
-  lastSetUnmarked = !armed;
-  lastStructural = structuralArmed ? new Set(structuralPending) : null;
-  structuralPending.clear();
-  structuralArmed = false;
   if (!armed) complete = false;
   armed = false;
-}
-
-/** Per-notification view of the set being notified: was it unmarked, and which structural ids did it declare. */
-export function peekSetCoverage(): { unmarked: boolean; structural: ReadonlySet<string> | null } {
-  return { unmarked: lastSetUnmarked, structural: lastStructural };
 }
 
 export function consumeDirty(): { ids: Set<string>; complete: boolean } {
@@ -57,16 +31,4 @@ export function consumeDirty(): { ids: Set<string>; complete: boolean } {
   complete = true;
   armed = false;
   return out;
-}
-
-/**
- * Non-consuming view of the dirty channel for other store subscribers (the
- * number-binding sync). `ids` is a superset of what the latest mutation touched
- * (it accumulates until pixiSync's flush consumes it); when `complete` is false
- * some mutation since the last flush was unmarked and the caller must full-scan.
- * Relies on `noteSceneSetState` having run first (it is subscribed in
- * sceneStore/index.ts, before any later subscriber).
- */
-export function peekDirty(): { ids: ReadonlySet<string>; complete: boolean } {
-  return { ids: pending, complete };
 }

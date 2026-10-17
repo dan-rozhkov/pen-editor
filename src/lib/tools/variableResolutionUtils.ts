@@ -1,6 +1,6 @@
 import { useVariableStore } from "@/store/variableStore";
-import type { ModeInput } from "@/types/variable";
-import { getVariableIndex, getVariableValueAt } from "@/lib/variables";
+import { getVariableValue } from "@/types/variable";
+import type { ThemeName } from "@/types/variable";
 
 export function normalizeVariableRefName(name: string): string {
   return name.trim().replace(/^\$/, "");
@@ -17,7 +17,7 @@ function canonicalizeVariableToken(name: string): string {
 
 export function resolveVariableReference(
   value: unknown,
-  theme?: ModeInput,
+  theme?: ThemeName,
 ): { variableId: string; variableValue: string } | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -27,7 +27,7 @@ export function resolveVariableReference(
   const referenceCanonical = canonicalizeVariableToken(trimmed);
   if (!referenceName) return null;
 
-  const { variables, collections } = useVariableStore.getState();
+  const { variables } = useVariableStore.getState();
   const effectiveTheme = theme ?? 'light';
 
   const variable = variables.find((v) => {
@@ -50,6 +50,6 @@ export function resolveVariableReference(
 
   return {
     variableId: variable.id,
-    variableValue: getVariableValueAt(variable, effectiveTheme, getVariableIndex(variables, collections)),
+    variableValue: getVariableValue(variable, effectiveTheme),
   };
 }

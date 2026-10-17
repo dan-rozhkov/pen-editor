@@ -4,7 +4,6 @@ import type {
   HistorySnapshot,
   SceneNode,
 } from "../../types/scene";
-import { guardLibraryMasterWrite } from "@/lib/designSystem/ownership";
 import {
   isContainerNode,
   toFlatNode,
@@ -17,8 +16,6 @@ import { saveHistory } from "./helpers/history";
 import { useGuidesStore } from "../guidesStore";
 import { useSelectionStore } from "../selectionStore";
 import { useVariableStore } from "../variableStore";
-import { getVariableCssName } from "../../types/variable";
-import { rewriteEmbedRefsOnInactivePages } from "../embedVarRefs";
 import { useTextStyleStore } from "../textStyleStore";
 import { useStyleStore } from "../styleStore";
 import { useMeasurementsStore } from "../measurementsStore";
@@ -34,8 +31,7 @@ import {
   removeOrphanedConnectors,
 } from "./helpers/flatStoreHelpers";
 import { flattenRefNodes } from "../migrations/flattenRefNodes";
-import { markNodesDirty, markStructuralChange } from "./dirtyTracking";
-import { guardNumberBindings } from "../../lib/variables/numberBindings";
+import { markNodesDirty } from "./dirtyTracking";
 import type { SceneState } from "./types";
 import type { StoreApi } from "zustand";
 
@@ -46,7 +42,6 @@ function computeUpdatedNode(
   existing: FlatSceneNode,
   updates: Partial<SceneNode>,
   deepMergeKeys?: readonly string[],
-  keepBindings = false,
 ): FlatSceneNode {
   let updated = { ...existing, ...updates } as FlatSceneNode;
   if (deepMergeKeys) {
@@ -66,9 +61,6 @@ function computeUpdatedNode(
       }
     }
   }
-  // Unbind invariant (T1.5): a manual write to a number-bound field drops its
-  // binding. `keepBindings` is the materializer's own write path.
-  if (!keepBindings) updated = guardNumberBindings(existing, updated, updates);
   if (updated.type === "text" && hasTextMeasureProps(updates)) {
     updated = syncTextDimensions(updated);
   }
@@ -112,21 +104,11 @@ function applySameUpdateToNodes(
   }
 }
 
-/** Ids of a scene-node tree: the node and all its descendants. */
-function subtreeIds(node: SceneNode): string[] {
-  const out: string[] = [];
-  const walk = (n: SceneNode) => {
-    out.push(n.id);
-    if ("children" in n && Array.isArray(n.children)) for (const c of n.children as SceneNode[]) walk(c);
-  };
-  walk(node);
-  return out;
-}
-
 export function createBasicMutations(set: SetState, get: GetState) {
   return {
     addNode: (node: SceneNode) => {
       set((state) => {
+        saveHistory(state);
         const flat = node.type === "text" ? syncTextDimensions(toFlatNode(node)) : toFlatNode(node);
         const newNodesById = { ...state.nodesById, [node.id]: flat };
         const newParentById = { ...state.parentById, [node.id]: null };
@@ -141,9 +123,6 @@ export function createBasicMutations(set: SetState, get: GetState) {
           }
         }
 
-        if (!guardLibraryMasterWrite(state.nodesById, newNodesById, subtreeIds(node))) return state;
-        saveHistory(state);
-        markStructuralChange([node.id]);
         return {
           nodesById: newNodesById,
           parentById: newParentById,
@@ -157,20 +136,18 @@ export function createBasicMutations(set: SetState, get: GetState) {
 
     addChildToFrame: (frameId: string, child: SceneNode) => {
       set((state) => {
+        saveHistory(state);
         const newNodesById = { ...state.nodesById };
         const newParentById = { ...state.parentById };
         const newChildrenById = { ...state.childrenById };
 
         // Insert the child (and its subtree) into flat storage
         insertTreeIntoFlat(child, frameId, newNodesById, newParentById, newChildrenById);
-        if (!guardLibraryMasterWrite(state.nodesById, newNodesById, subtreeIds(child))) return state;
-        saveHistory(state);
 
         // Update parent's children list
         const existingChildren = newChildrenById[frameId] ?? [];
         newChildrenById[frameId] = [...existingChildren, child.id];
 
-        markStructuralChange([child.id]);
         return {
           nodesById: newNodesById,
           parentById: newParentById,
@@ -260,19 +237,6 @@ export function createBasicMutations(set: SetState, get: GetState) {
         return { nodesById: newNodesById, _cachedTree: null };
       }),
 
-    applyBoundNumberPatches: (patches: Record<string, Partial<SceneNode>>) =>
-      set((state) => {
-        const ids = Object.keys(patches).filter((id) => state.nodesById[id]);
-        if (ids.length === 0) return state;
-        // Derived write: no history, bindings kept (see numberBindingSync).
-        const newNodesById = { ...state.nodesById };
-        for (const id of ids) {
-          newNodesById[id] = computeUpdatedNode(state.nodesById[id], patches[id], undefined, true);
-        }
-        markNodesDirty(ids);
-        return { nodesById: newNodesById, _cachedTree: null };
-      }),
-
     updateNodesById: (updatesById: Record<string, Partial<SceneNode>>) =>
       set((state) => {
         const ids = Object.keys(updatesById).filter((id) => state.nodesById[id]);
@@ -292,7 +256,6 @@ export function createBasicMutations(set: SetState, get: GetState) {
     deleteNode: (id: string) =>
       set((state) => {
         if (!state.nodesById[id]) return state;
-        if (!guardLibraryMasterWrite(state.nodesById, {}, [id, ...collectDescendantIds(id, state.childrenById)])) return state;
         saveHistory(state);
 
         const parentId = state.parentById[id];
@@ -340,7 +303,6 @@ export function createBasicMutations(set: SetState, get: GetState) {
               ? state.rootIds.filter((rid) => !removedIds.has(rid))
               : state.rootIds);
 
-        markStructuralChange([id]);
         return {
           nodesById: newNodesById,
           parentById: newParentById,
@@ -408,23 +370,7 @@ export function createBasicMutations(set: SetState, get: GetState) {
       // snapshots do), so undo/redo of variable edits round-trips. Snapshots that
       // omit variables (unknown sources) leave the variable store untouched.
       if (snapshot.variables) {
-        const before = useVariableStore.getState().variables;
-        useVariableStore.getState().replaceAll(snapshot.variables, snapshot.collections);
-        // A variable rename rewrites `var(--old)` in the embeds of EVERY page,
-        // but a snapshot holds the active page only. If this restore flips a
-        // variable's CSS name, carry the same rename over to the other pages
-        // so their embeds keep resolving (the active page comes from the
-        // snapshot itself).
-        const after = new Map(useVariableStore.getState().variables.map((v) => [v.id, v]));
-        const refMap: Record<string, string> = {};
-        for (const v of before) {
-          const restored = after.get(v.id);
-          if (!restored) continue;
-          const from = getVariableCssName(v);
-          const to = getVariableCssName(restored);
-          if (from !== to) refMap[from] = to;
-        }
-        rewriteEmbedRefsOnInactivePages(refMap);
+        useVariableStore.setState({ variables: snapshot.variables });
       }
       // Restore persistent ruler guides when the snapshot carries them (all
       // createSnapshot-based snapshots do), mirroring the variables restore

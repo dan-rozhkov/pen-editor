@@ -4,7 +4,6 @@ import { Navigate, useLocation, useNavigate } from "react-router";
 import { ApiKeysSection } from "@/components/auth/ApiKeysSection";
 import { AuthButton, AuthShell } from "@/components/auth/authUi";
 import { ConnectedAgentsSection } from "@/components/auth/ConnectedAgentsSection";
-import { OrganizationsSection } from "@/components/auth/OrganizationsSection";
 import { authClient } from "@/lib/auth/authClient";
 import { signInPath } from "@/lib/auth/paths";
 import { signOut, useSession } from "@/lib/auth/session";
@@ -71,7 +70,6 @@ export default function AccountPage() {
                 : providers.map((p) => PROVIDER_LABELS[p] ?? p).join(", ")}
           </p>
         </section>
-        <OrganizationsSection userId={user.id} />
         <ApiKeysSection />
         <ConnectedAgentsSection />
         <div className="flex flex-wrap gap-2">

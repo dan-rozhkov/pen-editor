@@ -10,7 +10,7 @@ import { useDevModeStore } from "@/store/devModeStore";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { createOverlayHelpers } from "@/pixi/selectionOverlay/helpers";
 import { buildInspectData } from "@/lib/inspect/buildInspectData";
-import { useEffectiveModeContext } from "@/hooks/useEffectiveModeContext";
+import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
 import { formatShortcut } from "@/lib/commands/shortcutFormat";
 import type { FlatSceneNode } from "@/types/scene";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -90,7 +90,6 @@ export function InspectPanel() {
   // memo below rather than subscribed to here.
   const node = useSceneStore((s) => (nodeId ? s.nodesById[nodeId] : undefined));
   const variables = useVariableStore((s) => s.variables);
-  const collections = useVariableStore((s) => s.collections);
   const fillStyles = useStyleStore((s) => s.fillStyles);
   const effectStyles = useStyleStore((s) => s.effectStyles);
   const textStyles = useTextStyleStore((s) => s.textStyles);
@@ -99,26 +98,24 @@ export function InspectPanel() {
   const setUnits = useDevModeStore((s) => s.setUnits);
   const [mode, setMode] = useState<"list" | "code">("list");
 
-  const effectiveModes = useEffectiveModeContext(nodeId);
-
   const data = useMemo(() => {
     if (!nodeId || !node) return null;
     const rect = resolveRect(nodeId, node);
+    const effectiveTheme = getEffectiveThemeForNode(nodeId);
     const nodesById = useSceneStore.getState().nodesById;
     return buildInspectData({
       nodeId,
       nodesById,
       rect,
       variables,
-      collections,
       fillStyles,
       effectStyles,
       textStyles,
       units,
       remBase,
-      effectiveTheme: effectiveModes,
+      effectiveTheme,
     });
-  }, [nodeId, node, effectiveModes, variables, collections, fillStyles, effectStyles, textStyles, units, remBase]);
+  }, [nodeId, node, variables, fillStyles, effectStyles, textStyles, units, remBase]);
 
   return (
     <div className="w-[300px] h-full flex flex-col bg-surface-panel border-l border-border-default overflow-hidden">

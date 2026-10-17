@@ -88,19 +88,6 @@ const NODE_TYPES = [
   "connector",
 ] as const;
 
-// Must equal LINT_RULE_IDS (src/lib/designLint/types.ts). Not imported: this
-// file is also loaded by the Vite manifest plugin, outside the `@/` alias.
-// webmcpContract.test.ts pins the two lists together.
-const LINT_RULE_IDS = [
-  "hardcoded-value",
-  "off-scale-value",
-  "contrast",
-  "deprecated-token",
-  "deprecated-component",
-  "embed-literal",
-  "component-drift",
-] as const;
-
 const readOnly: ToolAnnotationHints = {
   readOnlyHint: true,
   // Everything these tools return is authored inside the user's document —
@@ -225,159 +212,10 @@ export const WEBMCP_TOOL_SPECS: readonly WebMcpToolSpec[] = [
   },
   {
     name: "get_variables",
-    description:
-      "Read the design variables (tokens) in the .pen file. Variables are colors, numbers, or strings. " +
-      "Each variable has one value per mode. A collection groups variables and defines their modes. The Theme collection has the modes light and dark. " +
-      "Each variable returns its `name` (use it as `$--name` in native nodes), its `cssName` (use it as `var(--name)` in embed HTML), its raw and resolved value per mode, and optional `description`, `scopes`, and `deprecated`. " +
-      "A raw value that starts with `$` is an alias to another variable. " +
-      "Call it with no arguments to read everything. " +
-      "Pass `names` or `collection` to read a slice. " +
-      "A filter that matches nothing returns an empty list and a hint, not an error.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        collection: {
-          type: "string",
-          description: "Collection name or id. Returns only the variables of that collection.",
-        },
-        names: {
-          type: "array",
-          items: { type: "string" },
-          description:
-            'Variable names to read. Each name may have a leading "--" or "$". Returns only these variables.',
-        },
-      },
-      additionalProperties: false,
-    },
+    description: "Read all design variables (tokens) and themes defined in the .pen file.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: readOnly,
     mutating: false,
-  },
-  {
-    name: "get_design_system",
-    description:
-      "Read the design system of the .pen file: the design tokens (variables) with their collections, modes, scopes, and deprecation, and the registered components with their variants, slots, status, usage, and the tokens each one uses. " +
-      "Call it with no arguments to read everything. Pass `scope` to read a slice, `mode` to resolve values in one Theme mode (for example \"dark\"), `include` to choose the parts, and `limit` to cap the count. " +
-      "A filter that matches nothing returns empty lists and a hint, not an error. " +
-      "Prefer a semantic token over a primitive token. Do not bind a deprecated token or component.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        scope: {
-          type: "object",
-          description: "Filters. Omit it to read the whole design system.",
-          properties: {
-            saved: {
-              type: "string",
-              description:
-                "Name or id of a saved scope. Its filters apply first. The other fields in this object narrow it further.",
-            },
-            collections: {
-              type: "array",
-              items: { type: "string" },
-              description: "Collection names or ids. Returns only the tokens of these collections.",
-            },
-            components: {
-              type: "array",
-              items: { type: "string" },
-              description: "Component keys. Returns only these components.",
-            },
-            componentStatus: {
-              type: "array",
-              items: { type: "string", enum: ["draft", "stable", "deprecated"] },
-              description: "Component lifecycle statuses. Returns only components with one of these statuses.",
-            },
-            tokenScopes: {
-              type: "array",
-              items: { type: "string" },
-              description: 'Token scopes, for example "fill" or "radius". Returns only tokens that carry one of these scopes.',
-            },
-            names: {
-              type: "array",
-              items: { type: "string" },
-              description: 'Name globs, for example "--color-*". Each glob matches token names and component keys.',
-            },
-          },
-          additionalProperties: false,
-        },
-        // The backend also accepts an object that maps collection names to
-        // mode names. The validator subset has no union type, so this surface
-        // publishes the string form alone (tighter, never looser).
-        mode: {
-          type: "string",
-          description:
-            'Limits the returned values to one mode of the Theme collection, for example "dark". Omit it to use the mode context of the document.',
-        },
-        include: {
-          type: "array",
-          items: { type: "string", enum: ["tokens", "components", "lint"] },
-          description:
-            'Parts of the result to return. Omit it to get "tokens" and "components". Add "lint" to get the lint rule catalog and, when available, finding counts.',
-        },
-        limit: {
-          type: "integer",
-          minimum: 1,
-          maximum: 2000,
-          description:
-            "Maximum number of tokens and of components to return. Default 400. The result sets `truncated` when it cuts items.",
-        },
-      },
-      additionalProperties: false,
-    },
-    annotations: readOnly,
-    mutating: false,
-    // The result carries data read out of component master HTML (the tokens
-    // each component uses, their descriptions). sharedViewRedaction.ts cannot
-    // walk that shape, so a shared canvas gets no design-system tool at all —
-    // the same reasoning as read_embed_html.
-    withheldOnSharedView: true,
-  },
-  {
-    name: "lint_design",
-    description:
-      "Check the design against its design system and report findings: raw colors and numbers that should be tokens, values near a token, text contrast below WCAG AA, deprecated tokens and components, raw values in embed HTML, and component instances that are out of date. " +
-      "Read-only: it changes nothing. Each finding names the node, the rule, the severity, and a fix hint. Call it with no arguments to check the active page in the current mode. " +
-      "Pass `nodeIds` to check part of the page, `rules` or `severity` to narrow the check, and `limit` to cap the findings. " +
-      "Pass `mode` to check one Theme mode (for example \"dark\") or \"all\" to check every mode context of the document.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        nodeIds: {
-          type: "array",
-          items: { type: "string" },
-          description: "Node ids to check, with their descendants. Omit it to check the active page.",
-        },
-        rules: {
-          type: "array",
-          items: { type: "string", enum: [...LINT_RULE_IDS] },
-          description: "Rule ids to run. Omit it to run all rules.",
-        },
-        // The backend also accepts an object that maps collection names to
-        // mode names. The validator subset has no union type, so this surface
-        // publishes the string form alone ("all" or a Theme mode name).
-        mode: {
-          type: "string",
-          description:
-            'The string "all" checks every mode context of the document (at most 8). Any other string is a mode name of the Theme collection, for example "dark". Omit it to check only the current mode context of the document.',
-        },
-        severity: {
-          type: "string",
-          enum: ["error", "warning", "info"],
-          description: "Minimum severity to return. Omit it to return all findings.",
-        },
-        limit: {
-          type: "integer",
-          minimum: 1,
-          maximum: 1000,
-          description: "Maximum number of findings to return. Default 100. The result sets `truncated` when it cuts findings.",
-        },
-      },
-      additionalProperties: false,
-    },
-    annotations: readOnly,
-    mutating: false,
-    // Findings quote node text and embed HTML values. sharedViewRedaction.ts
-    // cannot walk that shape, so a shared canvas gets no lint tool at all.
-    withheldOnSharedView: true,
   },
   {
     name: "get_styles",
@@ -436,31 +274,14 @@ export const WEBMCP_TOOL_SPECS: readonly WebMcpToolSpec[] = [
   {
     name: "set_variables",
     description:
-      "Add or update design variables, collections, and modes. " +
-      "Use `collections` to define a collection and its modes. Use `collection` to set the default collection for the call. " +
-      "In `variables`, give one value per mode with `valuesByMode`, for example {light: \"#fff\", dark: \"$--ink\"}. " +
-      "A value that starts with `$` is an alias to another variable. Alias order inside one call does not matter. " +
-      "Add `description`, `scopes`, and `deprecated` {since, replacedBy, note} when they help. " +
-      "Create primitive variables first, then create semantic variables that alias them. " +
-      "The call is atomic. If any collection, mode, alias target, or type is wrong, the call returns an error and changes nothing. " +
-      "By default the call merges with existing variables (matched by id or name). Set replace=true to overwrite all.",
+      "Add or update design variables and themes in the open document. Merges by default; replace=true overwrites all.",
     inputSchema: {
       type: "object",
       properties: {
         variables: {
           type: "object",
           description:
-            'Variable definitions, as an object keyed by variable name. Every old form stays valid. Simplest form: a plain hex string per name: {"--brand-primary": "#3b82f6"}. Full form: an object per name with `type` ("color" | "number" | "string", default "color") and `value`. Per-theme values use `themeValues`. Names may be given with or without a leading `--`/`$`. New fields per variable: `valuesByMode` maps a mode name to a value; a string value that starts with `$` is an alias to another variable; `collection` is the collection name; `description`; `scopes`; `deprecated` {since?, replacedBy?, note?}.',
-        },
-        collections: {
-          type: "object",
-          description:
-            'Collections to create or update, keyed by collection name. Each collection lists its mode names: {"Brand": {"modes": ["acme", "globex"], "defaultMode": "acme"}}. Define a collection here before a variable uses its modes.',
-        },
-        collection: {
-          type: "string",
-          description:
-            "Default collection name for the variables in this call. The collection is created if it does not exist. A `collection` field on one variable overrides it.",
+            'Variable definitions, as an object keyed by variable name. Simplest form — a plain hex string per name: {"--brand-primary": "#3b82f6"}. Full form — an object per name with `type` ("color" | "number" | "string", default "color") and `value`. Per-theme values use `themeValues`. Names may be given with or without a leading `--`/`$`.',
         },
         replace: {
           type: "boolean",

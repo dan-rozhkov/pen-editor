@@ -6,8 +6,7 @@ import type {
   FlatGroupNode,
   FlatSceneNode,
 } from "../types/scene";
-import { THEME_COLLECTION_ID, type ModeOverrides, type ThemeName } from "../types/variable";
-import { getFrameModeOverrides } from "@/lib/variables/modeContext";
+import type { ThemeName } from "../types/variable";
 import { isContainerNode } from "../types/scene";
 import { getPreparedNodeEffectiveSize, prepareFrameNode } from "@/utils/instanceUtils";
 import { rectsIntersect } from "@/utils/dragUtils";
@@ -285,7 +284,7 @@ export function findHiddenSelfOrAncestor(
  */
 export function getThemeFromAncestorFrames(
   parentById: Record<string, string | null>,
-  nodesById: Record<string, { type: string; themeOverride?: ThemeName; modeOverrides?: ModeOverrides }>,
+  nodesById: Record<string, { type: string; themeOverride?: ThemeName }>,
   nodeId: string,
   fallbackTheme: ThemeName,
 ): ThemeName {
@@ -294,8 +293,10 @@ export function getThemeFromAncestorFrames(
 
   // Apply from root ancestor down to immediate parent.
   for (let i = ancestors.length - 1; i >= 0; i--) {
-    const picked = getFrameModeOverrides(nodesById[ancestors[i]])[THEME_COLLECTION_ID];
-    if (picked) theme = picked as ThemeName;
+    const ancestor = nodesById[ancestors[i]];
+    if (ancestor?.type === "frame" && ancestor.themeOverride) {
+      theme = ancestor.themeOverride;
+    }
   }
 
   return theme;
@@ -315,8 +316,10 @@ export function findEffectiveThemeInTree(
         return inheritedTheme;
       }
       if (isContainerNode(node)) {
-        const picked = getFrameModeOverrides(node)[THEME_COLLECTION_ID];
-        const childTheme = picked ? (picked as ThemeName) : inheritedTheme;
+        const childTheme =
+          node.type === "frame" && node.themeOverride
+            ? node.themeOverride
+            : inheritedTheme;
         const found = search(node.children, childTheme);
         if (found) return found;
       }

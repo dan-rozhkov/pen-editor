@@ -10,14 +10,7 @@ import type {
   ShaderConfig,
   TextNode,
 } from "@/types/scene";
-import { THEME_COLLECTION_ID, type ThemeName, type Variable, type VariableCollection } from "@/types/variable";
-import {
-  buildVariableIndex,
-  collectionIdOf,
-  getFrameModeOverrides,
-  getVariableValueAt,
-  modeValuesOf,
-} from "@/lib/variables";
+import type { ThemeName, Variable } from "@/types/variable";
 import { getEffects, getFills, getRenderableStrokes } from "@/utils/fillUtils";
 import { anchorsToSVGPath } from "@/utils/pathAnchors";
 
@@ -227,13 +220,6 @@ interface ExportContext {
    * `serializePublicPenDocumentWithWarnings` — never silently dropped.
    */
   warnings: string[];
-  /**
-   * How a frame's mode picks are written: the axis (a key of the file's
-   * `themes`) of each collection and the label of each of its modes. Built
-   * from the same rules as the variable values so a frame's `theme:` always
-   * names an axis and mode the file declares.
-   */
-  frameAxes: { axisByCollection: Map<string, string>; collections: Map<string, VariableCollection> };
 }
 
 const THEME_AXIS = "mode";
@@ -289,105 +275,37 @@ function parseVariableValue(type: Variable["type"], raw: string): string | numbe
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-/** The export axis (a key of the file's `themes`) each collection maps to. */
-function buildAxisNames(collections: VariableCollection[]): Map<string, string> {
-  const axes = new Map<string, string>();
-  const taken = new Set<string>([THEME_AXIS]);
-  for (const c of collections) {
-    if (c.id === THEME_COLLECTION_ID) {
-      // The Theme collection keeps the historical axis, so a Theme-only
-      // document exports byte-identically to before collections existed.
-      axes.set(c.id, THEME_AXIS);
-      continue;
-    }
-    let name = c.name.trim() || c.id;
-    for (let n = 2; taken.has(name); n++) name = `${c.name.trim() || c.id} (${n})`;
-    taken.add(name);
-    axes.set(c.id, name);
-  }
-  return axes;
-}
-
-/**
- * A frame's `theme: { axis: modeLabel }`. Legacy `themeOverride` frames come
- * out exactly as before (`{ mode: "dark" }`); other collections write their
- * mode name. Picks naming an unknown collection or mode are skipped.
- */
-function exportFrameTheme(node: SceneNode, context: ExportContext): { theme?: Record<string, string> } {
-  const picks = Object.entries(getFrameModeOverrides(node));
-  const theme: Record<string, string> = {};
-  for (const [collectionId, modeId] of picks) {
-    if (modeId === undefined) continue;
-    const axis = context.frameAxes.axisByCollection.get(collectionId) ?? (collectionId === THEME_COLLECTION_ID ? THEME_AXIS : undefined);
-    if (axis === undefined) continue;
-    if (collectionId === THEME_COLLECTION_ID) {
-      theme[axis] = modeId;
-      continue;
-    }
-    const mode = context.frameAxes.collections.get(collectionId)?.modes.find((m) => m.id === modeId);
-    if (mode) theme[axis] = mode.name;
-  }
-  return Object.keys(theme).length > 0 ? { theme } : {};
-}
-
-function exportVariables(
-  variables: Variable[],
-  variableNamesById: Map<string, string>,
-  collections: VariableCollection[],
-  warnings: string[],
-): { definitions: Record<string, PenVariableDefinition>; axes: Record<string, string[]> } | undefined {
+function exportVariables(variables: Variable[], variableNamesById: Map<string, string>) {
   if (variables.length === 0) return undefined;
 
-  const index = buildVariableIndex(variables, collections);
-  const axisNames = buildAxisNames([...index.collections.values()]);
-  const usedAxes = new Set<string>();
   const exported: Record<string, PenVariableDefinition> = {};
 
   for (const variable of variables) {
     const variableName = variableNamesById.get(variable.id);
     if (!variableName) continue;
 
-    const collectionId = collectionIdOf(variable);
-    const collection = index.collections.get(collectionId);
-    const axis = axisNames.get(collectionId) ?? THEME_AXIS;
-    // Theme exports its mode ids (`light`/`dark`); other collections export
-    // mode names, since their ids are generated and mean nothing to a reader.
-    const modes =
-      collectionId === THEME_COLLECTION_ID
-        ? [{ id: "light", label: "light" }, { id: "dark", label: "dark" }]
-        : (collection?.modes ?? []).map((m) => ({ id: m.id, label: m.name }));
-    if (modes.length === 0) continue;
+    const lightValue = parseVariableValue(
+      variable.type,
+      variable.themeValues?.light ?? variable.value,
+    );
+    const darkValue = parseVariableValue(
+      variable.type,
+      variable.themeValues?.dark ?? variable.value,
+    );
 
-    if (Object.values(modeValuesOf(variable)).some((entry) => typeof entry !== "string")) {
-      warnings.push(
-        `Variable "${variable.name}" aliases another variable; it is exported as its resolved value in each mode.`,
-      );
-    }
-
-    const values = modes.map((mode) => ({
-      label: mode.label,
-      value: parseVariableValue(
-        variable.type,
-        getVariableValueAt(variable, { [collectionId]: mode.id }, index),
-      ),
-    }));
-    usedAxes.add(collectionId);
-
-    exported[variableName] = values.every((entry) => entry.value === values[0].value)
-      ? { type: variable.type, value: values[0].value }
-      : {
-          type: variable.type,
-          value: values.map((entry) => ({ value: entry.value, theme: { [axis]: entry.label } })),
-        };
+    exported[variableName] =
+      lightValue === darkValue
+        ? { type: variable.type, value: lightValue }
+        : {
+            type: variable.type,
+            value: [
+              { value: lightValue, theme: { [THEME_AXIS]: "light" } },
+              { value: darkValue, theme: { [THEME_AXIS]: "dark" } },
+            ],
+          };
   }
 
-  const axes: Record<string, string[]> = { [THEME_AXIS]: ["light", "dark"] };
-  for (const collectionId of usedAxes) {
-    const collection = index.collections.get(collectionId);
-    if (collectionId === THEME_COLLECTION_ID || !collection) continue;
-    axes[axisNames.get(collectionId) as string] = collection.modes.map((m) => m.name);
-  }
-  return { definitions: exported, axes };
+  return exported;
 }
 
 function applyOpacityToHex(color: string, opacity = 1): string {
@@ -650,7 +568,9 @@ function exportNodeBase(node: SceneNode, context: ExportContext, parentUsesLayou
     ...(node.rotation != null && node.rotation !== 0 ? { rotation: node.rotation } : {}),
     ...(node.flipX ? { flipX: true } : {}),
     ...(node.flipY ? { flipY: true } : {}),
-    ...exportFrameTheme(node, context),
+    ...(node.type === "frame" && node.themeOverride
+      ? { theme: { [THEME_AXIS]: node.themeOverride } }
+      : {}),
     ...(node.shader ? { shader: node.shader } : {}),
     ...(node.isMask ? { isMask: true } : {}),
     ...(node.sizing?.minWidth != null ? { minWidth: node.sizing.minWidth } : {}),
@@ -844,23 +764,15 @@ export function serializePublicPenDocumentWithWarnings(
   nodes: SceneNode[],
   variables: Variable[],
   _activeTheme: ThemeName,
-  collections: VariableCollection[] = [],
 ): { json: string; warnings: string[] } {
   const variableNamesById = buildVariableNameMap(variables);
-  const warnings: string[] = [];
-  const exportedVariables = exportVariables(variables, variableNamesById, collections, warnings);
-  const index = buildVariableIndex(variables, collections);
-  const frameCollections = [...index.collections.values()];
-  const context: ExportContext = {
-    variableNamesById,
-    warnings,
-    frameAxes: { axisByCollection: buildAxisNames(frameCollections), collections: index.collections },
-  };
+  const exportedVariables = exportVariables(variables, variableNamesById);
+  const context: ExportContext = { variableNamesById, warnings: [] };
 
   const document: PenDocument = {
     version: PUBLIC_PEN_VERSION,
-    ...(exportedVariables ? { themes: exportedVariables.axes } : {}),
-    ...(exportedVariables ? { variables: exportedVariables.definitions } : {}),
+    ...(exportedVariables ? { themes: { [THEME_AXIS]: ["light", "dark"] } } : {}),
+    ...(exportedVariables ? { variables: exportedVariables } : {}),
     children: nodes
       .filter((node) => !isComponentMaster(node))
       .map((node) => exportNode(node, context, false)),
@@ -873,9 +785,8 @@ export function serializePublicPenDocument(
   nodes: SceneNode[],
   variables: Variable[],
   activeTheme: ThemeName,
-  collections: VariableCollection[] = [],
 ): string {
-  const { json, warnings } = serializePublicPenDocumentWithWarnings(nodes, variables, activeTheme, collections);
+  const { json, warnings } = serializePublicPenDocumentWithWarnings(nodes, variables, activeTheme);
   for (const warning of warnings) {
     console.warn(`[publicPenExport] ${warning}`);
   }

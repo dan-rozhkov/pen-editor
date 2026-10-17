@@ -5,7 +5,6 @@ import {
   fireEvent,
   cleanup,
   within,
-  act,
 } from "@testing-library/react";
 import { VariablesPanelContent } from "../VariablesPanel";
 import { useVariableStore } from "@/store/variableStore";
@@ -75,67 +74,6 @@ describe("<VariablesPanelContent />", () => {
     expect(findVariable("var-primary")?.name).toBe("--accent");
   });
 
-  it("a refused rename keeps the old name and announces the error in a status region", () => {
-    render(<VariablesPanelContent />);
-    fireEvent.click(screen.getByText("--primary"));
-    const input = screen.getByDisplayValue("--primary") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "--radius-m" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-
-    expect(findVariable("var-primary")?.name).toBe("--primary");
-    expect(screen.getByText("--primary")).toBeTruthy();
-    const status = screen.getAllByRole("status").find((el) => /already uses/.test(el.textContent ?? ""));
-    expect(status?.textContent).toMatch(/Another variable already uses --radius-m/);
-  });
-
-  it("clears the rename error after a successful rename", () => {
-    render(<VariablesPanelContent />);
-    fireEvent.click(screen.getByText("--primary"));
-    let input = screen.getByDisplayValue("--primary") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "--radius-m" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-    fireEvent.click(screen.getByText("--primary"));
-    input = screen.getByDisplayValue("--primary") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "--accent" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-    expect(screen.queryByText(/already uses/)).toBeNull();
-    expect(findVariable("var-primary")?.name).toBe("--accent");
-  });
-
-  it("drops a stale rename error once the colliding variable is renamed elsewhere", () => {
-    render(<VariablesPanelContent />);
-    fireEvent.click(screen.getByText("--primary"));
-    const input = screen.getByDisplayValue("--primary") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "--radius-m" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-    expect(screen.queryByText(/already uses --radius-m/)).not.toBeNull();
-    act(() => {
-      useVariableStore.getState().renameVariable("var-radius", "--radius-l");
-    });
-    expect(screen.queryByText(/already uses/)).toBeNull();
-  });
-
-  it("renaming rewrites var(--old) in embed HTML (renameVariable, not a bare name write)", async () => {
-    const { useSceneStore } = await import("@/store/sceneStore");
-    useSceneStore.setState({
-      nodesById: {
-        e1: { id: "e1", type: "embed", x: 0, y: 0, width: 10, height: 10, htmlContent: "<i style='color:var(--primary)'></i>" } as never,
-      },
-      parentById: { e1: null },
-      childrenById: {},
-      rootIds: ["e1"],
-    });
-    render(<VariablesPanelContent />);
-    fireEvent.click(screen.getByText("--primary"));
-    const input = screen.getByDisplayValue("--primary") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "--accent" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-
-    expect((useSceneStore.getState().nodesById.e1 as unknown as { htmlContent: string }).htmlContent).toBe(
-      "<i style='color:var(--accent)'></i>",
-    );
-  });
-
   it("edits a number variable's theme value via the editable cell", () => {
     render(<VariablesPanelContent />);
 
@@ -200,22 +138,5 @@ describe("<VariablesPanelContent />", () => {
     // numbered after the existing color count.
     expect(added.name).toBe("Color 2");
     expect(added.themeValues).toEqual({ light: "#4a90d9", dark: "#4a90d9" });
-  });
-
-  it("picks a free name when the next default clashes with a library or local token", () => {
-    useVariableStore.getState().replaceAll(
-      [
-        ...variables(),
-        { id: "lib-c2", name: "Color 2", type: "color", collectionId: "theme", valuesByMode: { light: "#111111", dark: "#111111" }, value: "#111111", libraryId: "lib_x" },
-        { id: "loc-c3", name: "color 3", type: "color", collectionId: "theme", valuesByMode: { light: "#222222", dark: "#222222" }, value: "#222222" },
-      ],
-      useVariableStore.getState().collections,
-    );
-    render(<VariablesPanelContent />);
-    fireEvent.click(screen.getByLabelText("Add variable"));
-    fireEvent.click(screen.getByText("Color"));
-    const names = variables().map((v) => v.name);
-    expect(names).toContain("Color 4");
-    expect(screen.queryByText(/already used by a library token/)).toBeNull();
   });
 });

@@ -174,12 +174,8 @@ describe("registerWebMcpTools", () => {
       expect(spec.withheldOnSharedView).toBe(true);
     });
 
-    it("withholds get_design_system in the shared viewer, but publishes the style readers", () => {
+    it("publishes the style readers in the shared viewer", () => {
       const byName = (n: string) => WEBMCP_TOOL_SPECS.find((s) => s.name === n)!;
-      expect(byName("get_design_system").mutating).toBe(false);
-      expect(byName("get_design_system").withheldOnSharedView).toBe(true);
-      expect(byName("lint_design").mutating).toBe(false);
-      expect(byName("lint_design").withheldOnSharedView).toBe(true);
       expect(byName("get_styles").withheldOnSharedView).toBeFalsy();
       expect(byName("get_text_styles").withheldOnSharedView).toBeFalsy();
     });

@@ -3,20 +3,17 @@ import { buildTree } from "@/types/scene";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
 import { useTextStyleStore } from "@/store/textStyleStore";
-import { useDesignSystemScopeStore } from "@/store/designSystemScopeStore";
 import { useStyleStore } from "@/store/styleStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { usePageStore } from "@/store/pageStore";
 import { downloadDocument, downloadPublicPen, openFilePicker } from "@/utils/fileUtils";
-import type { DocumentData, DocumentLibraryMeta } from "@/utils/fileUtils";
+import type { DocumentData } from "@/utils/fileUtils";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
 import { getCanvasViewportMetrics } from "@/utils/canvasViewport";
-import { toDtcg, fromDtcg, toCss, toTailwindTheme, type ImportResult } from "@/lib/designTokens";
-import { THEME_COLLECTION_ID, getVariableCssName } from "@/types/variable";
+import { toDtcg, fromDtcg, type ImportResult } from "@/lib/designTokens";
 import type { DtcgDocument } from "@/lib/designTokens";
 import { useHistoryStore } from "@/store/historyStore";
-import { isLibraryOwned } from "@/lib/designSystem/ownership";
 import { saveShareCredentials } from "@/lib/shareCanvas";
 import type { PaletteCommand } from "./types";
 
@@ -48,29 +45,15 @@ export function collectDocumentData(): DocumentData {
       comments: page.comments,
     })),
     variables: useVariableStore.getState().variables,
-    variableCollections: useVariableStore.getState().collections,
     textStyles: useTextStyleStore.getState().textStyles,
     fillStyles: useStyleStore.getState().fillStyles,
     effectStyles: useStyleStore.getState().effectStyles,
     activeTheme: useThemeStore.getState().activeTheme,
-    modeContext: { ...useThemeStore.getState().modeContext },
-    designSystemScopes: useDesignSystemScopeStore.getState().scopes,
-    ...libraryMeta(),
-  };
-}
-
-/** The file-level library state; mints the document id on first use (first save). */
-function libraryMeta(): DocumentLibraryMeta {
-  const doc = useDocumentStore.getState();
-  return {
-    documentId: doc.ensureDocumentId(),
-    ...(doc.libraries.length > 0 ? { libraries: doc.libraries } : {}),
-    ...(doc.libraryAuthor ? { libraryAuthor: doc.libraryAuthor } : {}),
   };
 }
 
 export function exportAsJson(): void {
-  const { pages, variables, variableCollections, textStyles, fillStyles, effectStyles, activeTheme, modeContext, designSystemScopes, ...library } =
+  const { pages, variables, textStyles, fillStyles, effectStyles, activeTheme } =
     collectDocumentData();
   const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
   downloadDocument(
@@ -81,10 +64,6 @@ export function exportAsJson(): void {
     textStyles,
     fillStyles,
     effectStyles,
-    variableCollections,
-    modeContext,
-    designSystemScopes,
-    library,
   );
 }
 
@@ -96,62 +75,32 @@ export function exportAsPen(): void {
     useVariableStore.getState().variables,
     useThemeStore.getState().activeTheme,
     `${name}.pen`,
-    useVariableStore.getState().collections,
   );
-}
-
-function documentBaseName(): string {
-  return useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
-}
-
-function downloadText(text: string, mime: string, fileName: string): void {
-  const blob = new Blob([text], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = fileName;
-  a.style.display = "none";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function exportDesignTokens(): void {
   const { document: tokensDoc, warnings } = toDtcg({
     variables: useVariableStore.getState().variables,
-    collections: useVariableStore.getState().collections,
     fillStyles: useStyleStore.getState().fillStyles,
     effectStyles: useStyleStore.getState().effectStyles,
     textStyles: useTextStyleStore.getState().textStyles,
   });
-  downloadText(JSON.stringify(tokensDoc, null, 2), "application/json", `${documentBaseName()}.tokens.json`);
+  const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
+  const blob = new Blob([JSON.stringify(tokensDoc, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${name}.tokens.json`;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
   toast(
     warnings.length
       ? `Exported design tokens. ${warnings.length} item(s) skipped or downgraded.`
       : "Exported design tokens.",
   );
-}
-
-function exportCssTokens(
-  build: typeof toCss,
-  suffix: string,
-  label: string,
-): void {
-  const { css, warnings } = build({
-    variables: useVariableStore.getState().variables,
-    collections: useVariableStore.getState().collections,
-  });
-  downloadText(css, "text/css", `${documentBaseName()}${suffix}`);
-  toast(warnings.length ? `Exported ${label}. ${warnings.length} item(s) renamed or downgraded.` : `Exported ${label}.`);
-}
-
-export function exportTokensCss(): void {
-  exportCssTokens(toCss, ".tokens.css", "tokens.css");
-}
-
-export function exportTailwindTheme(): void {
-  exportCssTokens(toTailwindTheme, ".tailwind.css", "Tailwind theme");
 }
 
 // Known limitation: foreign tokens (no com.peneditor extension) get a fresh generated id on
@@ -164,57 +113,16 @@ function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] 
   return Array.from(byId.values());
 }
 
-/**
- * Merges an imported token document into the open one. Returns the names of
- * the variables it skipped: those in a library collection, whose id is a
- * library item's, or whose CSS name a library token already holds, plus every
- * imported variable that aliases a skipped one (transitively).
- */
-export function applyImport(result: ImportResult): { skipped: string[] } {
+function applyImport(result: ImportResult): void {
   // One undo step for the whole import (the setX setters don't snapshot).
   useHistoryStore.getState().saveHistory(createSnapshot(useSceneStore.getState()));
   const varStore = useVariableStore.getState();
   const styleStore = useStyleStore.getState();
   const textStore = useTextStyleStore.getState();
-  // The existing Theme collection wins over an imported one: it may carry modes the file does not know.
-  const incoming = result.collections.filter(
-    (c) => c.id !== THEME_COLLECTION_ID || !varStore.collections.some((e) => e.id === THEME_COLLECTION_ID),
-  );
-  // Library-owned items are read-only: an import never overwrites them (their ids round-trip through an export).
-  const owned = new Set([...varStore.variables, ...varStore.collections].filter(isLibraryOwned).map((x) => x.id));
-  const libraryCssNames = new Set(varStore.variables.filter(isLibraryOwned).map((v) => getVariableCssName(v)));
-  const blockedIds = new Set<string>();
-  for (const v of result.variables) {
-    const blocked =
-      owned.has(v.id) ||
-      (v.collectionId !== undefined && owned.has(v.collectionId)) ||
-      libraryCssNames.has(getVariableCssName(v));
-    if (blocked) blockedIds.add(v.id);
-  }
-  // A variable aliasing a skipped one would dangle: skip it too, transitively.
-  for (let grew = true; grew; ) {
-    grew = false;
-    for (const v of result.variables) {
-      if (blockedIds.has(v.id)) continue;
-      const aliasesBlocked = Object.values(v.valuesByMode ?? {}).some(
-        (value) => typeof value === "object" && value !== null && blockedIds.has(value.alias),
-      );
-      if (aliasesBlocked) {
-        blockedIds.add(v.id);
-        grew = true;
-      }
-    }
-  }
-  const skipped = result.variables.filter((v) => blockedIds.has(v.id)).map((v) => v.name);
-  const importable = result.variables.filter((v) => !blockedIds.has(v.id));
-  varStore.replaceAll(
-    mergeById(varStore.variables, importable),
-    mergeById(varStore.collections, incoming.filter((c) => !owned.has(c.id))),
-  );
+  varStore.setVariables(mergeById(varStore.variables, result.variables));
   styleStore.setFillStyles(mergeById(styleStore.fillStyles, result.fillStyles));
   styleStore.setEffectStyles(mergeById(styleStore.effectStyles, result.effectStyles));
   textStore.setTextStyles(mergeById(textStore.textStyles, result.textStyles));
-  return { skipped };
 }
 
 export async function importDesignTokens(): Promise<void> {
@@ -232,13 +140,12 @@ export async function importDesignTokens(): Promise<void> {
     return;
   }
   const { result, warnings } = fromDtcg(doc);
-  const { skipped } = applyImport(result);
+  applyImport(result);
   const count =
-    result.variables.length - skipped.length + result.fillStyles.length + result.effectStyles.length + result.textStyles.length;
-  const problems = warnings.length + skipped.length;
+    result.variables.length + result.fillStyles.length + result.effectStyles.length + result.textStyles.length;
   toast(
-    problems
-      ? `Imported ${count} token(s). ${problems} skipped or downgraded${skipped.length ? ` (${skipped.length} clash with a library token or collection)` : ""}.`
+    warnings.length
+      ? `Imported ${count} token(s). ${warnings.length} skipped or downgraded.`
       : `Imported ${count} token(s).`,
   );
 }
@@ -283,7 +190,5 @@ export function getFileCommands(): PaletteCommand[] {
     { id: "file-export-pen", label: "Export as .pen", group: "File", keywords: ["save", "download"], run: exportAsPen },
     { id: "file-export-tokens", label: "Export tokens as .tokens.json", group: "File", keywords: ["dtcg", "tokens", "download", "export"], run: exportDesignTokens },
     { id: "file-import-tokens", label: "Import design tokens", group: "File", keywords: ["dtcg", "tokens", "upload", "import"], run: () => void importDesignTokens() },
-    { id: "file-export-tokens-css", label: "Export tokens as tokens.css", group: "File", keywords: ["css", "custom properties", "tokens", "download", "export"], run: exportTokensCss },
-    { id: "file-export-tailwind-theme", label: "Export tokens as Tailwind theme", group: "File", keywords: ["tailwind", "theme", "css", "tokens", "download", "export"], run: exportTailwindTheme },
   ];
 }

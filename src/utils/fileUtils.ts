@@ -1,33 +1,14 @@
 import type { SceneNode } from '../types/scene'
-import type { Variable, ThemeName, VariableCollection, ModeContext } from '../types/variable'
-import { upgradeVariablesV2, withThemeOverrideMirror } from '../lib/variables'
+import type { Variable, ThemeName } from '../types/variable'
+import { ensureThemeValues } from '../types/variable'
 import type { TextStyle } from '../types/textStyle'
 import type { FillStyle, EffectStyle } from '../types/style'
-import type { DesignSystemScope } from '../types/designSystemScope'
-import { sanitizeDesignSystemScopes } from '../lib/designSystem/savedScopes'
 import { generateId } from '../types/scene'
 import { serializePublicPenDocument } from "@/utils/publicPenExport";
 import { saveBlob } from "@/lib/downloadFile";
 import type { Guide } from "@/store/guidesStore";
 import type { PersistedMeasurement } from "@/store/measurementsStore";
 import type { CommentThread } from "@/store/commentsStore";
-import type { LibraryAuthor, LibraryPin } from "@/lib/designSystem/types";
-import { isRecord } from '@/lib/utils'
-
-/**
- * File-level design-system library state (v1.3+). All optional: a file without
- * it is a plain document. Library-owned variables, collections and component
- * masters carry their own `libraryId` / `component.library` flags inside the
- * document; this holds the document's identity and what it is linked to.
- */
-export interface DocumentLibraryMeta {
-  /** Random id of the document; minted on first save or open. */
-  documentId?: string
-  /** Libraries this document is linked to. */
-  libraries?: LibraryPin[]
-  /** Set when this document authors a library. */
-  libraryAuthor?: LibraryAuthor
-}
 
 export interface PenPage {
   id: string
@@ -42,23 +23,17 @@ export interface PenPage {
   comments?: CommentThread[]
 }
 
-export interface PenDocument extends DocumentLibraryMeta {
+export interface PenDocument {
   version: string
   // Legacy single-page format
   nodes?: SceneNode[]
   // Multi-page format
   pages?: PenPage[]
   variables?: Variable[]
-  /** v1.2+: variable collections and their modes. Absent in older files (read as just Theme). */
-  variableCollections?: VariableCollection[]
   textStyles?: TextStyle[]
   fillStyles?: FillStyle[]
   effectStyles?: EffectStyle[]
   activeTheme?: ThemeName
-  /** v1.2+: the mode each collection was showing. Absent = `{ theme: activeTheme }`. */
-  modeContext?: ModeContext
-  /** Saved design-system scopes (`get_design_system` scope presets). Absent = none. */
-  designSystemScopes?: DesignSystemScope[]
 }
 
 export interface DocumentPageData {
@@ -72,21 +47,16 @@ export interface DocumentPageData {
   comments: CommentThread[]
 }
 
-export interface DocumentData extends DocumentLibraryMeta {
+export interface DocumentData {
   pages: DocumentPageData[]
   variables: Variable[]
-  /** Optional so hand-built `DocumentData` (tests, tools) stays valid; absent = Theme only. */
-  variableCollections?: VariableCollection[]
   textStyles: TextStyle[]
   fillStyles: FillStyle[]
   effectStyles: EffectStyle[]
   activeTheme: ThemeName
-  modeContext?: ModeContext
-  /** Optional so hand-built `DocumentData` stays valid; absent = none. */
-  designSystemScopes?: DesignSystemScope[]
 }
 
-const CURRENT_VERSION = '1.3'
+const CURRENT_VERSION = '1.1'
 
 type PenPageInput = { id: string; name: string; nodes: SceneNode[]; pageBackground: string; guides?: Guide[]; slideOrder?: string[]; measurements?: PersistedMeasurement[]; comments?: CommentThread[] }
 
@@ -97,61 +67,48 @@ export function serializeDocument(
   textStyles: TextStyle[] = [],
   fillStyles: FillStyle[] = [],
   effectStyles: EffectStyle[] = [],
-  collections?: VariableCollection[],
-  modeContext?: ModeContext,
-  designSystemScopes?: DesignSystemScope[],
-  library?: DocumentLibraryMeta,
 ): string {
-  // Dual-write: each variable carries both the v2 fields and the legacy
-  // `value`/`themeValues` mirrors, so an older build can still open the file.
-  const upgraded = collections ? upgradeVariablesV2(variables, collections) : null
   const doc: PenDocument = {
     version: CURRENT_VERSION,
     pages: pages.map((p) => ({
       id: p.id,
       name: p.name,
-      // Dual-write frame mode picks: `modeOverrides` plus the `themeOverride` mirror.
-      nodes: withThemeOverrideMirror(p.nodes),
+      nodes: p.nodes,
       ...(p.pageBackground !== '#f5f5f5' ? { pageBackground: p.pageBackground } : {}),
       ...(p.guides && p.guides.length > 0 ? { guides: p.guides } : {}),
       ...(p.slideOrder && p.slideOrder.length > 0 ? { slideOrder: p.slideOrder } : {}),
       ...(p.measurements && p.measurements.length > 0 ? { measurements: p.measurements } : {}),
       ...(p.comments && p.comments.length > 0 ? { comments: p.comments } : {}),
     })),
-    variables: upgraded ? upgraded.variables : variables,
-    ...(upgraded ? { variableCollections: upgraded.collections } : {}),
+    variables,
     textStyles,
     fillStyles,
     effectStyles,
     activeTheme,
-    ...(modeContext && Object.keys(modeContext).length > 0 ? { modeContext } : {}),
-    ...(designSystemScopes && designSystemScopes.length > 0 ? { designSystemScopes } : {}),
-    ...(library?.documentId ? { documentId: library.documentId } : {}),
-    ...(library?.libraries && library.libraries.length > 0 ? { libraries: library.libraries } : {}),
-    ...(library?.libraryAuthor ? { libraryAuthor: library.libraryAuthor } : {}),
   }
   return JSON.stringify(doc, null, 2)
 }
 
-/** `serializeDocument` over a collected `DocumentData` (autosave, share links): one place that knows every field. */
-export function serializeDocumentData(doc: DocumentData, library: DocumentLibraryMeta = doc): string {
-  return serializeDocument(
-    doc.pages,
-    doc.variables,
-    doc.activeTheme,
-    doc.textStyles,
-    doc.fillStyles,
-    doc.effectStyles,
-    doc.variableCollections,
-    doc.modeContext,
-    doc.designSystemScopes,
-    library,
-  )
+/**
+ * Read one persisted variable. Documents written by the short-lived "tokens v2"
+ * build carry extra fields (`collectionId`, `valuesByMode`, `description`,
+ * `scopes`, `deprecated`); they are dropped here. That build always wrote the
+ * resolved `value` / `themeValues` next to them, which is all this model reads.
+ */
+function readVariable(raw: Variable): Variable {
+  const { id, name, type, value, themeValues } = raw
+  return ensureThemeValues({
+    id,
+    name,
+    type,
+    value: value == null ? '' : String(value),
+    ...(themeValues ? { themeValues } : {}),
+  })
 }
 
 export function deserializeDocument(json: string): DocumentData {
   const doc: PenDocument = JSON.parse(json)
-  const migrated = upgradeVariablesV2(doc.variables ?? [], doc.variableCollections)
+  const migratedVariables = (doc.variables ?? []).map(readVariable)
 
   let pages: DocumentPageData[]
   if (doc.pages && doc.pages.length > 0) {
@@ -182,41 +139,12 @@ export function deserializeDocument(json: string): DocumentData {
 
   return {
     pages,
-    variables: migrated.variables,
-    variableCollections: migrated.collections,
+    variables: migratedVariables,
     textStyles: doc.textStyles ?? [],
     fillStyles: doc.fillStyles ?? [],
     effectStyles: doc.effectStyles ?? [],
     activeTheme: doc.activeTheme ?? 'light',
-    ...(doc.modeContext ? { modeContext: doc.modeContext } : {}),
-    designSystemScopes: sanitizeDesignSystemScopes(doc.designSystemScopes),
-    ...(typeof doc.documentId === 'string' && doc.documentId ? { documentId: doc.documentId } : {}),
-    ...(Array.isArray(doc.libraries) ? { libraries: sanitizeLibraryPins(doc.libraries) } : {}),
-    ...(isLibraryAuthor(doc.libraryAuthor) ? { libraryAuthor: doc.libraryAuthor } : {}),
   }
-}
-
-/** Keep well-formed pins only (a hand-edited or corrupt file must not break the load). */
-function sanitizeLibraryPins(raw: unknown[]): LibraryPin[] {
-  const out: LibraryPin[] = []
-  const seen = new Set<string>()
-  for (const p of raw) {
-    if (!isRecord(p) || typeof p.id !== 'string' || !p.id || typeof p.version !== 'string' || seen.has(p.id)) continue
-    seen.add(p.id)
-    out.push({
-      id: p.id,
-      name: typeof p.name === 'string' ? p.name : p.id,
-      version: p.version,
-      ...(p.reportUsage === true ? { reportUsage: true } : {}),
-      ...(typeof p.dismissedVersion === 'string' ? { dismissedVersion: p.dismissedVersion } : {}),
-    })
-  }
-  return out
-}
-
-function isLibraryAuthor(x: unknown): x is LibraryAuthor {
-  return isRecord(x) && typeof x.libraryId === 'string' && typeof x.name === 'string' &&
-    (x.baseVersion === null || typeof x.baseVersion === 'string')
 }
 
 export function downloadDocument(
@@ -227,10 +155,6 @@ export function downloadDocument(
   textStyles: TextStyle[] = [],
   fillStyles: FillStyle[] = [],
   effectStyles: EffectStyle[] = [],
-  collections?: VariableCollection[],
-  modeContext?: ModeContext,
-  designSystemScopes?: DesignSystemScope[],
-  library?: DocumentLibraryMeta,
 ) {
   const json = serializeDocument(
     pages,
@@ -239,10 +163,6 @@ export function downloadDocument(
     textStyles,
     fillStyles,
     effectStyles,
-    collections,
-    modeContext,
-    designSystemScopes,
-    library,
   )
   downloadTextFile(json, filename)
 }
@@ -251,10 +171,9 @@ export function downloadPublicPen(
   nodes: SceneNode[],
   variables: Variable[],
   activeTheme: ThemeName,
-  filename = "document.pen",
-  collections?: VariableCollection[],
+  filename = "document.pen"
 ) {
-  const json = serializePublicPenDocument(nodes, variables, activeTheme, collections)
+  const json = serializePublicPenDocument(nodes, variables, activeTheme)
   downloadTextFile(json, filename)
 }
 

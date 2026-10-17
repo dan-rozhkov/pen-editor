@@ -10,7 +10,6 @@ import { useCanvasRefStore } from "../store/canvasRefStore";
 import { useMcpBridgeStore } from "../store/mcpBridgeStore";
 import { useRepoContextStore } from "../store/repoContextStore";
 import { AuthMenu } from "./auth/AuthMenu";
-import { ModeSwitcher } from "./ModeSwitcher";
 import { useSharedViewStore } from "../store/sharedViewStore";
 import { useShareDialogStore } from "../store/shareDialogStore";
 import { useMobbinAuthStore } from "../store/mobbinAuthStore";
@@ -353,8 +352,7 @@ export function Toolbar() {
 
       {/* Right side: "Sign in" / avatar menu; renders nothing when accounts
           are off on this deployment. */}
-      <div className="ml-auto flex items-center gap-2">
-        <ModeSwitcher />
+      <div className="ml-auto">
         <AuthMenu variant="toolbar" />
       </div>
 

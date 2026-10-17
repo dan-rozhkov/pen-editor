@@ -1,5 +1,4 @@
 import { browseTaskInnerBoundMs } from "@sideform/browser-agent/loop";
-import { flushNumberBindings } from "@/store/numberBindingSync";
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
@@ -16,7 +15,6 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useVariableStore } from "@/store/variableStore";
 import { getVariableCssName } from "@/types/variable";
-import { completeModeContext } from "@/lib/variables/modeContext";
 import { useRepoContextStore } from "@/store/repoContextStore";
 import { useChatStore, NO_QUEUED_MESSAGES } from "@/store/chatStore";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
@@ -58,8 +56,8 @@ export function resolveSessionModel(sessionId?: string): string {
 export function buildCanvasContext(sessionId?: string): object {
   const { selectedIds } = useSelectionStore.getState();
   const { rootIds, nodesById } = useSceneStore.getState();
-  const { activeTheme, modeContext } = useThemeStore.getState();
-  const { variables, collections } = useVariableStore.getState();
+  const { activeTheme } = useThemeStore.getState();
+  const { variables } = useVariableStore.getState();
 
   const roots = rootIds.map((id) => {
     const n = nodesById[id];
@@ -170,20 +168,6 @@ export function buildCanvasContext(sessionId?: string): object {
       // prefer them. Omitted when empty so canvasContext stays byte-identical
       // (prompt-cache invariant). Appended last for the same reason.
       ...(likedReferences.length > 0 ? { likedReferences } : {}),
-      // Collections and the mode each one shows. Omitted while the document
-      // has only the built-in Theme collection, so a legacy document's
-      // payload stays byte-identical. Appended last for the same reason.
-      ...(collections.length > 1
-        ? {
-            collections: collections.map((c) => ({
-              id: c.id,
-              name: c.name,
-              modes: c.modes.map((m) => ({ id: m.id, name: m.name })),
-              defaultModeId: c.defaultModeId,
-            })),
-            modeContext: completeModeContext(collections, modeContext),
-          }
-        : {}),
     }),
     model,
     userId: getRequestUserId(),
@@ -218,9 +202,6 @@ const BROWSE_TASK_OUTER_MARGIN_MS = 60_000;
 const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
   generate_image: 95_000,
   generate_frame_image: 95_000,
-  // lint_design stops its own scan at an 8 s budget, but parsing the embeds
-  // of a big document before that check can add up to ~30 s.
-  lint_design: 45_000,
   // remove-background/vectorize call out to their own upstream provider and
   // can run well past the default budget; 60s is generous headroom without
   // matching generate_image's 95s (these aren't racing a comparable backend
@@ -416,9 +397,6 @@ export async function executeToolCall(
     // it actually starts, or a busy editor would time out calls that never
     // ran.
     //
-    // Bound-number patches are applied in a microtask; flush before the handler
-    // reads literals and after it returns, so neither the handler nor whatever
-    // runs right after the result sees a stale literal.
     // Every handler gets a signal that fires on the caller's signal (Stop,
     // abandoned turn) AND on this timeout, so a long tool (browse_task)
     // stops instead of running on after the model was told it timed out.
@@ -428,7 +406,6 @@ export async function executeToolCall(
     const handlerContext: ToolExecutionContext = { ...context, signal };
     let timer: ReturnType<typeof setTimeout> | undefined;
     const result = await runToolCall(toolName, () => {
-      flushNumberBindings();
       return Promise.race([
         handler(args, handlerContext),
         new Promise<never>((_, reject) => {
@@ -439,7 +416,6 @@ export async function executeToolCall(
         }),
       ]).finally(() => {
         if (timer !== undefined) clearTimeout(timer);
-        flushNumberBindings();
       });
     });
     // Handlers report failure as a JSON `{"error": ...}` string rather than

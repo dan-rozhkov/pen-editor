@@ -1,7 +1,6 @@
 import { detachRegions } from "@/lib/embedComponents";
 import { selectComponentRegistry } from "@/store/componentRegistry";
 import { applyEmbedHtmlUpdates, listAllEmbeds, removeMasterNode, type EmbedHtmlUpdate } from "@/store/componentOps";
-import { libraryComponentError } from "@/lib/designSystem/ownership";
 import type { ToolHandler } from "../../toolRegistry";
 import { KEY_RULE, inOneHistoryStep, readKey, toolError } from "./shared";
 
@@ -14,8 +13,6 @@ export const deleteComponent: ToolHandler = async (args) => {
   if (!key) return toolError(`Invalid key: ${KEY_RULE}`);
   const registry = selectComponentRegistry();
   if (!registry.has(key)) return toolError(`Component "${key}" not found`);
-  const libraryRefusal = libraryComponentError(key, registry.get(key)?.meta);
-  if (libraryRefusal) return toolError(libraryRefusal);
 
   let detachedInstances = 0;
   let embedsUpdated = 0;

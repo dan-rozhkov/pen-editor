@@ -1,4 +1,4 @@
-import { THEME_COLLECTION_ID, type ThemeName } from "@/types/variable";
+import type { ThemeName } from "@/types/variable";
 import type { DocumentData } from "@/utils/fileUtils";
 import { flattenTree } from "@/types/scene";
 import { useHistoryStore } from "@/store/historyStore";
@@ -7,16 +7,13 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
 import { useVariableStore } from "@/store/variableStore";
-import { useDocumentStore } from "@/store/documentStore";
 import { useTextStyleStore } from "@/store/textStyleStore";
 import { useStyleStore } from "@/store/styleStore";
-import { useDesignSystemScopeStore } from "@/store/designSystemScopeStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { usePageStore } from "@/store/pageStore";
 import type { PageData } from "@/store/pageStore";
 import { catchUpStaleRegions } from "@/store/componentSync";
 import { flattenRefNodesAcrossPages } from "@/store/migrations/flattenRefNodes";
-import { migrateFrameModeOverrides, sanitizeModeContext } from "@/lib/variables";
 
 interface ApplyOpenedDocumentOptions {
   viewportWidth: number;
@@ -34,23 +31,6 @@ export function applyOpenedDocument(
   // Show loading overlay immediately
   useLoadingStore.getState().setCanvasLoading(true);
 
-  // File-level library state: the document's identity and its library pins. A
-  // file without them gets a fresh document id and no pins.
-  useDocumentStore.getState().setLibraryState({
-    documentId: data.documentId,
-    libraries: data.libraries,
-    libraryAuthor: data.libraryAuthor,
-  });
-
-  // Variables first: the mode migration below prunes picks against the
-  // document's (normalized) collections. One update for both: variables are
-  // normalized against the NEW collections (never the previous document's) and
-  // subscribers fire once. `replaceAll` upgrades legacy shapes, so a
-  // `DocumentData` built without going through `deserializeDocument` (tools,
-  // tests) is migrated here too — idempotent.
-  useVariableStore.getState().replaceAll(data.variables, data.variableCollections ?? []);
-  const collections = useVariableStore.getState().collections;
-
   // Convert document pages into PageData format (flat storage). Documents
   // written before components/instances were removed may still carry `ref`
   // nodes and `reusable`/`isSlot`/`properties` frames; migrate the WHOLE
@@ -60,14 +40,13 @@ export function applyOpenedDocument(
   const migrated = flattenRefNodesAcrossPages(
     data.pages.map((page) => flattenTree(page.nodes)),
   );
+  for (const flat of migrated) stripTokensV2NodeFields(flat.nodesById);
   const pageDataList: PageData[] = data.pages.map((page, index) => {
     const flat = migrated[index];
-    // `themeOverride` -> `modeOverrides: { theme }`, stale picks pruned.
-    const nodesById = migrateFrameModeOverrides(flat.nodesById, collections);
     return {
       id: page.id,
       name: page.name,
-      nodesById,
+      nodesById: flat.nodesById,
       parentById: flat.parentById,
       childrenById: flat.childrenById,
       rootIds: flat.rootIds,
@@ -83,18 +62,14 @@ export function applyOpenedDocument(
   });
 
   // Set up shared state
+  useVariableStore.getState().setVariables(data.variables);
   useTextStyleStore.getState().setTextStyles(data.textStyles ?? []);
   useStyleStore.getState().setFillStyles(data.fillStyles ?? []);
   useStyleStore.getState().setEffectStyles(data.effectStyles ?? []);
-  useDesignSystemScopeStore.getState().setScopes(data.designSystemScopes ?? []);
   // Apply the saved theme to BOTH the design-theme store (drives variable
   // resolution) and the editor-chrome theme store, so the document reopens in
   // the theme it was saved with instead of always falling back to light.
-  // A file without `modeContext` (v1.1 and older) shows `{ theme: activeTheme }`.
-  useThemeStore.getState().setModeContext({
-    [THEME_COLLECTION_ID]: themeToApply,
-    ...sanitizeModeContext(data.modeContext, collections),
-  });
+  useThemeStore.getState().setActiveTheme(themeToApply);
   useUIThemeStore.getState().setUITheme(themeToApply);
 
   // Clear selection and history before page init
@@ -122,4 +97,17 @@ export function applyOpenedDocument(
   useViewportStore
     .getState()
     .fitToContent(firstPageNodes, options.viewportWidth, options.viewportHeight);
+}
+
+/**
+ * Documents written by the short-lived "tokens v2" build can carry
+ * `modeOverrides` (frames) and `numberBindings` (any node). This model has no
+ * collections or number bindings, so drop them instead of saving them forever.
+ */
+function stripTokensV2NodeFields(nodesById: Record<string, object>): void {
+  for (const [id, node] of Object.entries(nodesById)) {
+    if (!("modeOverrides" in node) && !("numberBindings" in node)) continue;
+    const { modeOverrides: _m, numberBindings: _n, ...rest } = node as Record<string, unknown>;
+    nodesById[id] = rest;
+  }
 }

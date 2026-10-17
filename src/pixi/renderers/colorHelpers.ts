@@ -1,8 +1,7 @@
 import type { Effect, FlatSceneNode, Paint, ShadowEffect, SolidPaint } from "@/types/scene";
-import { THEME_COLLECTION_ID, type ModeContext, type ThemeName } from "@/types/variable";
-import { mergeModeContext, type ModeOverrides } from "@/lib/variables/modeContext";
-import { useThemeStore } from "@/store/themeStore";
+import type { ThemeName } from "@/types/variable";
 import { useVariableStore } from "@/store/variableStore";
+import { useThemeStore } from "@/store/themeStore";
 import { useStyleStore } from "@/store/styleStore";
 import { resolveColor, applyOpacity } from "@/utils/colorUtils";
 import {
@@ -12,49 +11,38 @@ import {
 } from "@/utils/fillUtils";
 
 /**
- * Render-time mode context stack.
- * Frames whose mode overrides are non-empty push the merged context before
- * rendering children and pop it afterwards. Each entry is the already-merged
- * context, so the top of the stack is the effective one. With an empty stack
- * the document-level `themeStore.modeContext` applies (never a hard-coded
- * "light": a dark document recolors bound nodes without any frame override).
+ * Render-time theme context stack.
+ * Frames with `themeOverride` push their override before rendering children
+ * and pop it afterwards, matching the Konva renderer's behaviour.
  */
-const modeStack: ModeContext[] = [];
+const themeStack: ThemeName[] = [];
 
-/** Push `current + overrides` (inner wins). Pair with {@link popRenderModes}. */
-export function pushRenderModes(overrides: ModeOverrides): void {
-  modeStack.push(mergeModeContext(getEffectiveModeContext(), overrides));
-}
-
-export function popRenderModes(): void {
-  modeStack.pop();
-}
-
-/** Shim: a bare theme name is a pick for the Theme collection. */
 export function pushRenderTheme(theme: ThemeName): void {
-  pushRenderModes({ [THEME_COLLECTION_ID]: theme });
+  themeStack.push(theme);
 }
 
-export const popRenderTheme = popRenderModes;
+export function popRenderTheme(): void {
+  themeStack.pop();
+}
 
 export function resetRenderThemeStack(): void {
-  modeStack.length = 0;
+  themeStack.length = 0;
 }
 
 export function getRenderThemeStackDepth(): number {
-  return modeStack.length;
+  return themeStack.length;
 }
 
-export function getEffectiveModeContext(): ModeContext {
-  return modeStack.length > 0
-    ? modeStack[modeStack.length - 1]
-    : useThemeStore.getState().modeContext;
+function getEffectiveTheme(): ThemeName {
+  return themeStack.length > 0
+    ? themeStack[themeStack.length - 1]
+    : useThemeStore.getState().activeTheme;
 }
 
 export function getResolvedFill(node: FlatSceneNode): string | undefined {
-  const { variables, collections } = useVariableStore.getState();
-  const theme = getEffectiveModeContext();
-  const raw = resolveColor(node.fill, node.fillBinding, variables, theme, collections);
+  const variables = useVariableStore.getState().variables;
+  const theme = getEffectiveTheme();
+  const raw = resolveColor(node.fill, node.fillBinding, variables, theme);
   return raw ? applyOpacity(raw, node.fillOpacity) : raw;
 }
 
@@ -65,9 +53,9 @@ export function getResolvedFill(node: FlatSceneNode): string | undefined {
  * for the multi-fill paint stack.
  */
 export function getResolvedSolidPaint(paint: SolidPaint): string | undefined {
-  const { variables, collections } = useVariableStore.getState();
-  const theme = getEffectiveModeContext();
-  const raw = resolveColor(paint.color, paint.colorBinding, variables, theme, collections);
+  const variables = useVariableStore.getState().variables;
+  const theme = getEffectiveTheme();
+  const raw = resolveColor(paint.color, paint.colorBinding, variables, theme);
   return raw ? applyOpacity(raw, paint.opacity) : raw;
 }
 
@@ -92,20 +80,20 @@ export function getResolvedRenderableFills(node: FlatSceneNode): Paint[] {
  */
 export function getResolvedRenderableEffects(node: FlatSceneNode): Effect[] {
   const { effectStyles } = useStyleStore.getState();
-  const { variables, collections } = useVariableStore.getState();
-  const theme = getEffectiveModeContext();
+  const { variables } = useVariableStore.getState();
+  const theme = getEffectiveTheme();
   return resolveEffectStack(node, effectStyles).map((effect) => {
     if (effect.type !== "shadow" || !(effect as ShadowEffect).colorBinding) return effect;
     const shadow = effect as ShadowEffect;
-    const resolved = resolveColor(shadow.color, shadow.colorBinding, variables, theme, collections);
+    const resolved = resolveColor(shadow.color, shadow.colorBinding, variables, theme);
     return resolved ? { ...shadow, color: resolved } : shadow;
   });
 }
 
 export function getResolvedStroke(node: FlatSceneNode): string | undefined {
-  const { variables, collections } = useVariableStore.getState();
-  const theme = getEffectiveModeContext();
-  const raw = resolveColor(node.stroke, node.strokeBinding, variables, theme, collections);
+  const variables = useVariableStore.getState().variables;
+  const theme = getEffectiveTheme();
+  const raw = resolveColor(node.stroke, node.strokeBinding, variables, theme);
   return raw ? applyOpacity(raw, node.strokeOpacity) : raw;
 }
 

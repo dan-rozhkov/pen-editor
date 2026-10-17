@@ -9,7 +9,6 @@ import { usePageStore } from "@/store/pageStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useReadOnly } from "@/hooks/useReadOnly";
 import { goToMaster, insertInstance, insertTargetEmbed } from "@/lib/componentPanelActions";
-import { isLibraryComponent, libraryLabel } from "@/lib/designSystem/ownership";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,7 +77,6 @@ function ComponentRowView({ row, otherKeys, insertTarget, readOnly }: ComponentR
   const { meta } = master;
   const [editing, setEditing] = useState(false);
   const detailsId = useId();
-  const isLibrary = isLibraryComponent(meta);
 
   async function handleInsert() {
     if (!insertTarget) return;
@@ -98,7 +96,6 @@ function ComponentRowView({ row, otherKeys, insertTarget, readOnly }: ComponentR
         <span className="min-w-0 truncate text-xs font-medium text-text-primary">{meta.name}</span>
         <code className="text-[10px] text-text-muted">{meta.key}</code>
         {meta.status && <Badge variant={STATUS_VARIANT[meta.status]}>{STATUS_LABEL[meta.status]}</Badge>}
-        {isLibrary && meta.library && <Badge variant="outline">Library: {libraryLabel(meta.library.id)}</Badge>}
       </div>
       {meta.description && <p className="text-[11px] text-text-muted">{meta.description}</p>}
       {meta.status === "deprecated" && (meta.deprecated?.replacedBy || meta.deprecated?.note) && (
@@ -140,17 +137,17 @@ function ComponentRowView({ row, otherKeys, insertTarget, readOnly }: ComponentR
           size="sm"
           aria-expanded={editing}
           aria-controls={detailsId}
-          aria-label={`${isLibrary ? "Details" : "Edit details"}, ${meta.name}`}
+          aria-label={`Edit details, ${meta.name}`}
           onClick={() => setEditing((v) => !v)}
         >
-          {isLibrary ? "Details" : "Edit details"}
+          Edit details
         </Button>
       </div>
       <div id={detailsId} hidden={!editing}>
         {editing &&
-          (isLibrary || readOnly ? (
+          (readOnly ? (
             <div className="flex flex-col gap-1 border-t border-border-default pt-2 text-[11px] text-text-muted">
-              <p>{isLibrary ? "Library component. Edit it in the library document." : "Read-only view."}</p>
+              <p>Read-only view.</p>
               {variants.length > 0 && (
                 <p>Variants: {variants.map(([axis, values]) => `${axis} (${values.join(", ")})`).join("; ")}</p>
               )}
@@ -165,9 +162,9 @@ function ComponentRowView({ row, otherKeys, insertTarget, readOnly }: ComponentR
 
 /**
  * Left-sidebar panel listing the document's registered embed components:
- * search, status and library badges, usage counts, duplicate-key warnings,
+ * search, status badges, usage counts, duplicate-key warnings,
  * "Go to master", "Insert instance" into the selected screen, and a meta
- * editor for local masters.
+ * editor.
  */
 export function ComponentsPanel() {
   const rows = useComponentRows();

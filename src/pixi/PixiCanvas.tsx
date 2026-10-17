@@ -18,7 +18,6 @@ import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 // policy.
 import "pixi.js/unsafe-eval";
 import { Application, Container } from "pixi.js";
-import { useEffectiveModeContext } from "@/hooks/useEffectiveModeContext";
 import { useShallow } from "zustand/react/shallow";
 import { InlineNameEditor} from "@/components/InlineNameEditor";
 import { InlineTextEditor } from "@/components/InlineTextEditor";
@@ -56,10 +55,10 @@ import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
 import {
   findParentFrame,
   getNodeAbsolutePositionWithLayout,
+  getThemeFromAncestorFrames,
 } from "@/utils/nodeUtils";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
 import { saveShareCredentials } from "@/lib/shareCanvas";
-import { startNumberBindingSync } from "@/store/numberBindingSync";
 import { createPixiSync } from "./pixiSync";
 import { setupPixiViewport } from "./pixiViewport";
 import { setupPixiInteraction } from "./interaction";
@@ -129,13 +128,14 @@ export function usePixiCanvasState({
     }),
   );
 
-  // The effective mode context of the edited text node. The hook selects a
-  // string key (`modeContextKey`) and derives the object with useMemo, so the
-  // canvas re-renders only when the resolved picks actually change.
-  const editingNodeModes = useEffectiveModeContext(
-    editingNodeId && editingMode === "text" ? editingNodeId : null,
-  );
-  const editingTextTheme = editingNodeId && editingMode === "text" ? editingNodeModes : null;
+  // Theme lookup returns a primitive ('light' | 'dark'), so subscribing with
+  // a selector that reads the ancestor chain is safe without useShallow —
+  // zustand's default equality check (Object.is) bails out unless the
+  // resolved theme itself actually changes.
+  const editingTextTheme = useSceneStore((s) => {
+    if (!editingNodeId || editingMode !== "text") return null;
+    return getThemeFromAncestorFrames(s.parentById, s.nodesById, editingNodeId, 'light');
+  });
 
   // Already imperative (getState()) — recomputes only on
   // editingMode/editingNodeId changes, not on unrelated scene mutations.
@@ -396,10 +396,6 @@ export function PixiCanvas() {
         // Set up store -> PixiJS sync
         const syncCleanup = createPixiSync(sceneRoot);
 
-        // Number-variable bindings -> literal node fields, through the normal
-        // store flush (no direct Pixi mutation).
-        const numberBindingCleanup = startNumberBindingSync();
-
         // Set up selection overlay
         const selectionCleanup = createSelectionOverlay(
           selectionContainer,
@@ -445,7 +441,6 @@ export function PixiCanvas() {
           // Scheduler cleanup must run while the app/ticker still exist.
           renderSchedulerCleanup();
           viewportCleanup();
-          numberBindingCleanup();
           syncCleanup();
           selectionCleanup();
           overlayCleanup();

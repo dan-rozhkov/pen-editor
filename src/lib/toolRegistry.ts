@@ -3,8 +3,6 @@ import { batchGet } from "./tools/batchGet";
 import { batchDesign } from "./tools/batchDesign";
 import { snapshotLayout } from "./tools/snapshotLayout";
 import { getVariables } from "./tools/getVariables";
-import { getDesignSystem } from "./tools/getDesignSystem";
-import { lintDesign } from "./tools/lintDesign";
 import { getScreenshot } from "./tools/getScreenshot";
 import { setVariables } from "./tools/setVariables";
 import { getTextStyles } from "./tools/getTextStyles";
@@ -105,8 +103,6 @@ export const toolHandlers: Record<string, ToolHandler> = {
   snapshot_layout: snapshotLayout,
   get_screenshot: getScreenshot,
   get_variables: getVariables,
-  get_design_system: getDesignSystem,
-  lint_design: lintDesign,
   batch_design: batchDesign,
   read_embed_html: readEmbedHtml,
   edit_embed_html: editEmbedHtml,

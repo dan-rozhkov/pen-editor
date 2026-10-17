@@ -6,93 +6,11 @@ export interface ThemeValues {
   dark: string
 }
 
-export type VariableId = string
-export type CollectionId = string
-export type ModeId = string
-
-export interface VariableMode {
-  id: ModeId
-  name: string
-}
-
-/** A set of variables that share one list of modes (Figma-style "collection"). */
-export interface VariableCollection {
-  id: CollectionId
-  name: string
-  /** At least one mode. */
-  modes: VariableMode[]
-  defaultModeId: ModeId
-  /**
-   * Set when a linked design-system library owns this collection (copied into
-   * the document by the link/update code). Read-only for every edit path.
-   */
-  libraryId?: string
-}
-
-/** A mode value that points at another variable of the same `type`. */
-export interface VariableAlias {
-  alias: VariableId
-}
-
-/** Literals stay strings, as before ("8", "#fff"); an alias is `{ alias }`. */
-export type VariableModeValue = string | VariableAlias
-
-export type VariableScope =
-  | 'fill' | 'stroke' | 'text' | 'radius' | 'spacing' | 'gap' | 'size'
-  | 'fontSize' | 'fontFamily' | 'fontWeight' | 'opacity' | 'strokeWidth'
-
-export interface VariableDeprecation {
-  since?: string
-  replacedBy?: VariableId
-  note?: string
-}
-
-/** The id of the built-in collection whose modes are `light` and `dark`. */
-export const THEME_COLLECTION_ID: CollectionId = 'theme'
-
-/** Which mode each collection is currently showing. Missing key = the collection default. */
-export type ModeContext = Record<CollectionId, ModeId>
-
-/** Per-collection mode picks a frame applies to its descendants (absent collection = inherit). */
-export type ModeOverrides = Partial<ModeContext>
-
-/**
- * A bare string means "a mode id of the Theme collection" (the legacy
- * meaning of a theme name); an object picks a mode per collection.
- */
-export type ModeInput = ThemeName | ModeContext
-
 export interface Variable {
-  id: VariableId
+  id: string
   name: string
   type: VariableType
-  /**
-   * v2 fields. Optional in the TYPE because a legacy-shaped variable can still
-   * be written to the store with a raw `setState` (tests, older call sites);
-   * `variableStore.setVariables` and `deserializeDocument` always upgrade them
-   * (`upgradeVariablesV2`) and the resolver treats an absent field as the
-   * legacy shape (Theme collection, light/dark from `themeValues`/`value`).
-   */
-  collectionId?: CollectionId
-  valuesByMode?: Record<ModeId, VariableModeValue>
-  description?: string
-  scopes?: VariableScope[]
-  deprecated?: VariableDeprecation
-  /**
-   * Set when a linked design-system library owns this variable. Library-owned
-   * variables are read-only (store, tools and panels refuse edits); only the
-   * link/update code writes them, through the bulk setters. Never published
-   * back: the snapshot builder leaves them out.
-   */
-  libraryId?: string
-  /**
-   * Compat mirror: the RESOLVED value in the collection's default mode.
-   * Maintained by the store (`finalizeVariables`); also what an older editor
-   * build reads from a document written by this one. Hex color "#RRGGBB" for
-   * colors.
-   */
-  value: string
-  /** Compat mirror: only for variables in the Theme collection; RESOLVED light/dark. */
+  value: string // hex color "#RRGGBB" - kept for backward compat
   themeValues?: ThemeValues
 }
 
@@ -135,13 +53,14 @@ export function getVariableValue(variable: Variable, theme: ThemeName): string {
  *   for the same variable and unique-ish across variables, and never empty
  *   or invalid.
  *
- * Embed bindings (`EmbedElementProperties.tsx`) store the result of THIS
- * function — a name — directly into `htmlContent` as `var(--name)`, unlike a
- * native node's fill/stroke, which stores `variableId` and resolves the name
- * lazily. Renaming a variable therefore changes what this function returns, so
- * `renameVariable` rewrites the `var(--old-name)` references in embed HTML to
- * the new name (see `embedVarRefs.ts`). A reference written by hand in a
- * place the store cannot see (outside the document) still stops resolving.
+ * KNOWN LIMITATION: embed bindings (`EmbedElementProperties.tsx`) store the
+ * result of THIS function — a name — directly into `htmlContent` as
+ * `var(--name)`, unlike a native node's fill/stroke, which stores
+ * `variableId` and resolves the name lazily. Renaming a variable changes
+ * what this function returns for it, but nothing migrates the
+ * `var(--old-name)` references already written into embed HTML — they just
+ * stop resolving. That's inherent to plain CSS custom properties, not a bug
+ * in this function.
  */
 export function getVariableCssName(variable: Pick<Variable, "id" | "name">): string {
   const trimmed = variable.name.trim();

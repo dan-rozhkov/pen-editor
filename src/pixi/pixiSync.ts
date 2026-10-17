@@ -3,8 +3,6 @@ import { useSceneStore, type SceneState } from "@/store/sceneStore";
 import { consumeDirty } from "@/store/sceneStore/dirtyTracking";
 import { useDragStore } from "@/store/dragStore";
 import { useVariableStore } from "@/store/variableStore";
-import { useThemeStore } from "@/store/themeStore";
-import { getFrameModeOverrides, modeOverridesEqual } from "@/lib/variables/modeContext";
 import { useStyleStore } from "@/store/styleStore";
 import { useViewportStore } from "@/store/viewportStore";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -92,13 +90,6 @@ const rasterCacheEnabled = localStorage.getItem("pen.rasterCache") !== "off";
  * NOTE: if a new `*Binding` field is added to scene nodes (see
  * `src/types/scene.ts`), it MUST be added here, or bound nodes will stop
  * live-updating on variable changes.
- *
- * DELIBERATE EXCEPTION: `numberBindings` is NOT checked here. Number bindings
- * are materialized into the literal fields (`cornerRadius`, `layout.gap`, ...)
- * by `numberBindingSync` through ordinary node updates, so a bound node
- * re-renders via its own changed literals. Adding it would put every
- * number-bound node into the THEME_SENTINEL recolor pass and make
- * `incrementalThemeUpdate` scale with number bindings instead of color ones.
  */
 export function isVariableDependent(node: FlatSceneNode): boolean {
   return (
@@ -390,7 +381,7 @@ export function createPixiSync(sceneRoot: Container): () => void {
         // a targeted THEME_SENTINEL pass below instead of a full scene rebuild.
         if (
           isFlatFrameNode(node) &&
-          !modeOverridesEqual(getFrameModeOverrides(node), getFrameModeOverrides(prevNode))
+          node.themeOverride !== (isFlatFrameNode(prevNode) ? prevNode.themeOverride : undefined)
         ) {
           themeChangedFrameIds.push(id);
         }
@@ -735,16 +726,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
     scheduleThemeUpdate();
   });
 
-  // The document-level mode context (the global theme and every other
-  // collection's pick) recolors every variable-dependent node. This goes
-  // through the same RAF-coalesced `incrementalThemeUpdate`, which calls
-  // `rasterCacheManager.onDirectContainerMutation` before recoloring and
-  // renders afterwards, so the raster-cache invariant holds with no new
-  // direct-mutation code.
-  const unsubModeContext = useThemeStore.subscribe((state, prev) => {
-    if (state.modeContext !== prev.modeContext) scheduleThemeUpdate();
-  });
-
   // Fill/effect style edits (color, gradient, shadow stack, etc.) must
   // re-resolve every referencing node the same way a variable edit does —
   // both `getResolvedRenderableFills`/`getResolvedRenderableEffects` read
@@ -841,7 +822,6 @@ export function createPixiSync(sceneRoot: Container): () => void {
     }
     unsubScene();
     unsubVariables();
-    unsubModeContext();
     unsubStyles();
     unsubSelection();
     unsubEditorMode();

@@ -16,8 +16,6 @@ const EXPECTED_CLIENT_TOOLS = [
   "snapshot_layout",
   "get_screenshot",
   "get_variables",
-  "get_design_system",
-  "lint_design",
   "batch_design",
   "read_embed_html",
   "edit_embed_html",

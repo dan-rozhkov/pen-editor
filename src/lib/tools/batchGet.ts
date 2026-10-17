@@ -1,7 +1,7 @@
-import { useThemeStore } from "@/store/themeStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";
-import { getVariableIndex, getVariableValueAt } from "@/lib/variables";
+import { useThemeStore } from "@/store/themeStore";
+import { getVariableValue } from "@/types/variable";
 import type { FlatSceneNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
 import { serializeNodeToDepth } from "./serializeUtils";
@@ -105,10 +105,10 @@ export const batchGet: ToolHandler = async (args) => {
   // Build variable lookup if resolving
   const variableLookup: Record<string, string> = {};
   if (resolveVariables) {
-    const { variables, collections } = useVariableStore.getState();
-    const index = getVariableIndex(variables, collections);
+    const { variables } = useVariableStore.getState();
+    const { activeTheme } = useThemeStore.getState();
     for (const v of variables) {
-      variableLookup[v.id] = getVariableValueAt(v, useThemeStore.getState().modeContext, index);
+      variableLookup[v.id] = getVariableValue(v, activeTheme);
     }
   }
 

@@ -1,14 +1,14 @@
 import type {
   FlatSceneNode,
   SceneNode,
+  FlatFrameNode,
   EmbedNode,
   ImageFill,
   Paint,
   ParagraphAttrs,
 } from "@/types/scene";
-import type { ModeContext } from "@/types/variable";
+import type { ThemeName } from "@/types/variable";
 import { useThemeStore } from "@/store/themeStore";
-import { getEffectiveModeContext } from "@/lib/variables/modeContext";
 import {
   toFlatNode,
   isContainerNode,
@@ -33,7 +33,6 @@ import {
 } from "@/utils/fillUtils";
 import { inspectEmbedHtml } from "@/lib/embedHtmlLint/inspectEmbedHtml";
 import { describeUnknownTags, finalizeEmbedHtml } from "@/lib/embedComponents/pipeline";
-import { libraryMasterTransitionError } from "@/lib/designSystem/ownership";
 import { selectComponentRegistry } from "@/store/componentRegistry";
 import { repairGeneratedImageUrls } from "../generateImage/repairImageUrls";
 import { getIssuedImageUrls } from "../generateImage/registry";
@@ -46,19 +45,28 @@ import { serializeNodeToDepth } from "../serializeUtils";
 
 const DOCUMENT_BINDING = "__document__";
 
-/**
- * The mode context new content under `parentId` inherits: the document-level
- * context plus the overrides of `parentId` and every ancestor frame (inner
- * wins). It starts from the global `modeContext`, not a hard-coded 'light'.
- */
-function resolveInheritedModeContext(
+function resolveInheritedTheme(
   parentId: string | null,
   nodesById: Record<string, FlatSceneNode>,
   parentById: Record<string, string | null>,
-): ModeContext {
-  const base = useThemeStore.getState().modeContext;
-  if (!parentId) return base;
-  return getEffectiveModeContext(parentById, nodesById, parentId, base, { includeSelf: true });
+): ThemeName {
+  let theme: ThemeName = useThemeStore.getState().activeTheme;
+  let current = parentId;
+
+  const chain: string[] = [];
+  while (current) {
+    chain.push(current);
+    current = parentById[current] ?? null;
+  }
+
+  for (let i = chain.length - 1; i >= 0; i--) {
+    const node = nodesById[chain[i]];
+    if (node?.type === "frame" && (node as FlatFrameNode).themeOverride) {
+      theme = (node as FlatFrameNode).themeOverride as ThemeName;
+    }
+  }
+
+  return theme;
 }
 
 /**
@@ -273,12 +281,12 @@ function executeInsert(op: ParsedOperation, ctx: ExecutionContext): void {
   const actualParentId = resolveParent(op.args[0], ctx);
   const nodeData = resolveJsonArg(op.args[1]);
 
-  const inheritedModes = resolveInheritedModeContext(
+  const inheritedTheme = resolveInheritedTheme(
     actualParentId,
     ctx.nodesById,
     ctx.parentById,
   );
-  const node = createNodeFromAiDataWithTheme(nodeData, inheritedModes, ctx.issues);
+  const node = createNodeFromAiDataWithTheme(nodeData, inheritedTheme, ctx.issues);
 
   // Repair generated-image urls / expand document component tags in embed HTML.
   // A fresh I() insert always supplies the embed's full htmlContent, and
@@ -350,7 +358,7 @@ function executeCopy(op: ParsedOperation, ctx: ExecutionContext): void {
 
   // Map direct overrides through nodeMapper
   if (Object.keys(directOverrides).length > 0) {
-    const inheritedModes = resolveInheritedModeContext(
+    const inheritedTheme = resolveInheritedTheme(
       actualParentId,
       ctx.nodesById,
       ctx.parentById,
@@ -359,7 +367,7 @@ function executeCopy(op: ParsedOperation, ctx: ExecutionContext): void {
       directOverrides as Record<string, unknown>,
       "update",
       toFlatNode(cloned),
-      { modes: inheritedModes },
+      { theme: inheritedTheme },
     );
     delete (mapped as Record<string, unknown>)._children;
     if (mapped._warnings) {
@@ -384,7 +392,7 @@ function executeCopy(op: ParsedOperation, ctx: ExecutionContext): void {
           "update",
           newNode,
           {
-            modes: resolveInheritedModeContext(
+            theme: resolveInheritedTheme(
               ctx.parentById[newPath] ?? null,
               ctx.nodesById,
               ctx.parentById,
@@ -588,7 +596,7 @@ function executeUpdate(op: ParsedOperation, ctx: ExecutionContext): void {
   }
 
   const mapped = mapNodeData(updateData, "update", node, {
-    modes: resolveInheritedModeContext(
+    theme: resolveInheritedTheme(
       ctx.parentById[path] ?? null,
       ctx.nodesById,
       ctx.parentById,
@@ -662,7 +670,7 @@ function executeReplace(op: ParsedOperation, ctx: ExecutionContext): void {
   const parentId = ctx.parentById[path];
   const newNode = createNodeFromAiDataWithTheme(
     nodeData,
-    resolveInheritedModeContext(parentId ?? null, ctx.nodesById, ctx.parentById),
+    resolveInheritedTheme(parentId ?? null, ctx.nodesById, ctx.parentById),
     ctx.issues,
     existingNode,
   );
@@ -966,17 +974,4 @@ function serializeNodeWithDepth(
 ): Record<string, unknown> {
   return serializeNodeToDepth(nodeId, ctx.nodesById, ctx.childrenById, depth)
     ?? { id: nodeId, error: "not found" };
-}
-
-/**
- * The one library-master write guard for batch_design, run at the commit
- * point: compares the scene from before the batch with the working copy, so
- * C(), R() of an ancestor, nested I() children and D() are all covered.
- * Returns the refusal text, or null when the batch may commit.
- */
-export function libraryCommitError(
-  before: Record<string, FlatSceneNode>,
-  ctx: Pick<ExecutionContext, "nodesById">,
-): string | null {
-  return libraryMasterTransitionError(before, ctx.nodesById);
 }

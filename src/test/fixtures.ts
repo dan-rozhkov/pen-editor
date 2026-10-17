@@ -3,9 +3,7 @@ import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { useVariableStore } from "@/store/variableStore";
-import { makeThemeCollection, makeThemeVariable } from "@/lib/variables";
 import { useTextStyleStore } from "@/store/textStyleStore";
-import { useDesignSystemScopeStore } from "@/store/designSystemScopeStore";
 import { useStyleStore } from "@/store/styleStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useViewportStore } from "@/store/viewportStore";
@@ -38,11 +36,10 @@ export function resetStores(): void {
     lastSelectedId: null,
   });
   useHistoryStore.setState({ past: [], future: [], batchMode: false, batchDepth: 0 });
-  useVariableStore.setState({ variables: [], collections: [makeThemeCollection()] });
+  useVariableStore.setState({ variables: [] });
   useTextStyleStore.setState({ textStyles: [] });
-  useDesignSystemScopeStore.setState({ scopes: [] });
   useStyleStore.setState({ fillStyles: [], effectStyles: [] });
-  useThemeStore.setState({ activeTheme: "light", modeContext: { theme: "light" } });
+  useThemeStore.setState({ activeTheme: "light" });
   useViewportStore.setState({ scale: 1, x: 0, y: 0 });
   useGuidesStore.setState({ guides: [] });
   useMeasurementsStore.setState({ measurements: [], selectedMeasurementId: null });
@@ -54,7 +51,7 @@ export function resetStores(): void {
   // tests in the same file.
   useDevExportStore.setState({ overrides: {} });
   useMcpBridgeStore.setState({ status: "off" });
-  useDocumentStore.setState({ fileName: null, documentId: null, libraries: [], libraryAuthor: null });
+  useDocumentStore.setState({ fileName: null });
   useEmbedPickerStore.getState().reset();
   useRepoContextStore.setState({ name: null, tree: [], filesByPath: new Map(), attachedAt: null });
 }
@@ -145,20 +142,6 @@ export function seedVariables(): void {
       },
     ],
   });
-}
-
-/** v2 variables: one Theme variable and one alias to it, plus a Brand collection variable. */
-export function seedVariablesV2(): void {
-  const base = { ...makeThemeVariable("--surface", "#ffffff", "#101010"), id: "var-surface" };
-  const alias = {
-    id: "var-card",
-    name: "--card",
-    type: "color" as const,
-    collectionId: "theme",
-    valuesByMode: { light: { alias: "var-surface" }, dark: { alias: "var-surface" } },
-    value: "",
-  };
-  useVariableStore.getState().replaceAll([base, alias]);
 }
 
 export function seedFillStyles(): void {

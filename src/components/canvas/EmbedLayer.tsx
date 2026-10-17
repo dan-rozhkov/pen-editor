@@ -13,8 +13,7 @@ import {
 } from "@/utils/embedHtmlUtils";
 import { collectVariableValues } from "@/utils/variableCssUtils";
 import { useVariableStore } from "@/store/variableStore";
-import { getEffectiveModeContextForNode } from "@/utils/nodeThemeUtils";
-import { subscribeEmbedModeKey } from "./embedModeKeys";
+import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
 import { findHiddenSelfOrAncestor } from "@/utils/nodeUtils";
 import type { EmbedNode } from "@/types/scene";
 import { topLevelAncestorId } from "@/utils/topLevelAncestor";
@@ -459,7 +458,7 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
     applyEditorVariableProperties(
       content,
       mountResult.root,
-      collectVariableValues(undefined, getEffectiveModeContextForNode(nodeId)),
+      collectVariableValues(undefined, getEffectiveThemeForNode(nodeId)),
     );
 
     // Position now that content exists (applies the current scale transform).
@@ -481,11 +480,10 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
   // decide for itself when to touch the DOM (mirrors `pixiSync.ts`'s own
   // `useVariableStore.subscribe` idiom for scene-wide theme updates).
   //
-  // Mode changes DO live-update (the document-level mode switcher makes them
-  // user-visible): a document-level context change (`themeStore.modeContext`)
-  // and a change to this embed's effective context (an ancestor frame's
-  // `modeOverrides`, or a reparent) both re-apply the properties in place.
-  // `subscribeEmbedModeKey` only fires for embeds whose key actually changed.
+  // Theme changes (a frame's `themeOverride`, or the global active theme)
+  // are NOT wired up here — this mirrors the existing mount effect, whose
+  // deps also don't include theme, so an embed already doesn't live-update
+  // on a theme change today. That gap is out of scope for this change.
   useEffect(() => {
     const applyVariables = () => {
       const container = contentRef.current;
@@ -494,17 +492,10 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
       applyEditorVariableProperties(
         container,
         root,
-        collectVariableValues(undefined, getEffectiveModeContextForNode(nodeId)),
+        collectVariableValues(undefined, getEffectiveThemeForNode(nodeId)),
       );
     };
-    const unsubVariables = useVariableStore.subscribe(applyVariables);
-    // One shared module-level subscriber (embedModeKeys.ts) tells us when THIS
-    // embed's effective mode key changed: no per-host scene subscription.
-    const unsubModes = subscribeEmbedModeKey(nodeId, applyVariables);
-    return () => {
-      unsubVariables();
-      unsubModes();
-    };
+    return useVariableStore.subscribe(applyVariables);
   }, [nodeId]);
 
   // Element-picking mode: hover highlights, click selects, and a drag past

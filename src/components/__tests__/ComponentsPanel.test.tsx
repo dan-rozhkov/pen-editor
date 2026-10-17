@@ -5,7 +5,7 @@ import { ComponentsPanel } from "../ComponentsPanel";
 import { ReadOnlyContext } from "@/hooks/useReadOnly";
 import { defineComponent } from "@/lib/tools/components";
 import { finalizeEmbedHtml } from "@/lib/embedComponents";
-import { BTN_HTML, CARD_HTML, makeRegistry } from "@/lib/embedComponents/__tests__/fixtures";
+import { BTN_HTML, CARD_HTML } from "@/lib/embedComponents/__tests__/fixtures";
 import { selectComponentRegistry } from "@/store/componentRegistry";
 import { usePageStore } from "@/store/pageStore";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -64,16 +64,6 @@ describe("<ComponentsPanel />", () => {
     expect(screen.getByTestId("component-row-card")).toBeTruthy();
     fireEvent.change(search, { target: { value: "zzz" } });
     expect(screen.getByText("No components found.")).toBeTruthy();
-  });
-
-  it("shows library badge and read-only details for a library master", async () => {
-    const btn = makeRegistry({ btn: BTN_HTML }, { btn: { name: "Button" } }).get("btn")!;
-    seedEmbed("libbtn", btn.html, { component: { ...btn.meta, library: { id: "lib1", version: "1.0.0" } } });
-    render(<ComponentsPanel />);
-    expect(within(row("btn")).getByText(/Library:/)).toBeTruthy();
-    fireEvent.click(within(row("btn")).getByRole("button", { name: /Details/ }));
-    expect(within(row("btn")).getByText(/Edit it in the library document/)).toBeTruthy();
-    expect(within(row("btn")).queryByRole("form")).toBeNull();
   });
 
   it("warns about duplicate keys", async () => {
