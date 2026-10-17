@@ -116,4 +116,4 @@ export function runActionsBatch(
 }
 
 export const browseAct: ToolHandler = (args, context) =>
-  executeBrowseTool(getBrowserBridge(context?.sessionId), "browse_act", args, actOptions);
+  executeBrowseTool(getBrowserBridge(context?.sessionId, context?.browserSession), "browse_act", args, actOptions);

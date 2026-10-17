@@ -29,6 +29,7 @@ import type { UIMessage } from "ai";
 import { hasPendingAskUser } from "@/components/chat/pendingAskUser";
 import { setCloudBrowserChat } from "@/lib/cloudBrowser";
 import { isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";
+import { isIsolatedQaCall } from "@/lib/tools/browser/isolation";
 import { BROWSE_AGENT_OUTER_TIMEOUT_MS } from "@/lib/tools/browser/browseAgent";
 import { extractStreamingToolInputs } from "@/hooks/streamingToolParts";
 import {
@@ -508,6 +509,16 @@ function cloneLaunchPayload(payload: ChatLaunchPayload): ChatLaunchPayload {
 // stable identity keeps it from re-rendering consumers that memo on `error`.
 const OFFLINE_SEND_ERROR = new Error(OFFLINE_MESSAGE);
 
+// A live isolated QA run: its tool call is answered later (not awaited in
+// onToolCall). `settle(output)` answers it once; `settle(null)` forgets it
+// without writing (its tool part is gone). Later calls are ignored.
+interface LiveRun {
+  controller: AbortController;
+  settle: (output: string | null) => void;
+}
+
+const ABORTED_RUN_OUTPUT = JSON.stringify({ status: "aborted", steps: 0 });
+
 export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const [input, setInput] = useState("");
   // Fallback chat for cloud-browser calls that carry no chat context; the
@@ -552,6 +563,18 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   // the gate is on the auto-send, not on `addToolOutput`.
   const turnStoppedRef = useRef(false);
 
+  // Isolated QA browse_agent runs started by this session and not yet settled.
+  // Their onToolCall returns at once (like ask_user) so several run together,
+  // which lets the stream finish and `chat.status` read "ready" while they work.
+  // The count keeps the session reading as busy: status/isLoading, Send (queues)
+  // and the queue drain all key off it, or a new request would go out with
+  // unresolved tool parts. Auto-continuation needs no gate: the SDK sends once
+  // every tool call of the step has an output (addToolOutput below).
+  // The ONE source of "tool work is open": toolCallId -> abort of each live run.
+  // `parallelBrowseRuns` mirrors its size for rendering; callbacks read the ref.
+  const livePendingRunsRef = useRef<Map<string, LiveRun>>(new Map());
+  const [parallelBrowseRuns, setParallelBrowseRuns] = useState(0);
+
   const chat = useChat({
     id: sessionId,
     transport,
@@ -577,6 +600,11 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       // paused (sendAutomaticallyWhen only fires once every tool call has an
       // output), which is exactly the desired human-in-the-loop behavior.
       if (toolCall.toolName === "ask_user") {
+        return;
+      }
+      // Isolated QA runs: start, do not await. Everything else stays awaited.
+      if (toolCall.toolName === "browse_agent" && isIsolatedQaCall((toolCall.input ?? {}) as Record<string, unknown>)) {
+        startParallelBrowseRun(toolCall);
         return;
       }
       // Every tool call gets the turn's abort signal (browse_task runs for
@@ -668,6 +696,64 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     },
   });
 
+  // Same timeout / error handling as the awaited path (executeToolCall owns
+  // both). The output is ALWAYS written, even after Stop (an input-available
+  // part with no output poisons later requests): Stop and Clear chat answer it
+  // "aborted" at once (see LiveRun). The concurrency cap lives in the browse_agent
+  // handler (browseAgent.ts), so a run waiting for a slot sits inside executeToolCall.
+  function startParallelBrowseRun(toolCall: { toolName: string; toolCallId: string; input: unknown }): void {
+    const toolAbort = new AbortController();
+    if (turnStoppedRef.current) toolAbort.abort();
+    const id = toolCall.toolCallId;
+    let settled = false;
+    const settle = (output: string | null) => {
+      if (settled) return;
+      settled = true;
+      void (async () => {
+        try {
+          // Awaited: the run stays "live" until the message update has landed, so
+          // busy never reads false while the part still lacks its output.
+          if (output !== null) await chat.addToolOutput({ tool: toolCall.toolName, toolCallId: id, output });
+        } catch {
+          // The transcript was cleared or replaced meanwhile: nothing to write to.
+        } finally {
+          livePendingRunsRef.current.delete(id);
+          setParallelBrowseRuns(livePendingRunsRef.current.size);
+        }
+      })();
+    };
+    livePendingRunsRef.current.set(id, { controller: toolAbort, settle });
+    setParallelBrowseRuns(livePendingRunsRef.current.size);
+    void executeToolCall(toolCall.toolName, toolCall.input, { sessionId, toolCallId: id, signal: toolAbort.signal }, "chat")
+      .catch((err: unknown) => JSON.stringify({ error: err instanceof Error ? err.message : "Tool call failed" }))
+      .then(settle);
+  }
+
+  // `setMessages` that drops the tool call of a live run (Clear chat, rollback)
+  // aborts that run and forgets it: its output has nowhere to go. Handles the
+  // updater form too (the next list is computed first).
+  const { setMessages: setChatMessages } = chat;
+  const setMessages = useCallback(
+    (update: UIMessage[] | ((prev: UIMessage[]) => UIMessage[])): void => {
+      // The SDK's own latest state feeds the updater; the abort is a side effect
+      // of computing the next list (idempotent, so a repeated call is harmless).
+      setChatMessages((prev) => {
+        const next = typeof update === "function" ? update(prev) : update;
+        if (livePendingRunsRef.current.size > 0) {
+          const kept = new Set<string>();
+          for (const m of next) for (const p of m.parts) if ("toolCallId" in p) kept.add(String(p.toolCallId));
+          for (const [id, run] of [...livePendingRunsRef.current]) {
+            if (kept.has(id)) continue;
+            run.controller.abort();
+            run.settle(null);
+          }
+        }
+        return next;
+      });
+    },
+    [setChatMessages]
+  );
+
   // Drives re-running the queued-payload effect below once connectivity
   // returns (see the effect for why offline must not consume the queue).
   const isOnline = useOnlineStatus();
@@ -691,6 +777,8 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   // answer (the composer itself is also disabled for typing/submitting while
   // this is true, via ChatInput's `awaitingAnswer` prop).
   const awaitingAnswer = hasPendingAskUser(chat.messages);
+  // Live isolated runs (render-time mirror of livePendingRunsRef).
+  const toolsBusy = parallelBrowseRuns > 0;
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // In-flight tool calls' AbortControllers (see onToolCall), aborted on the
@@ -764,6 +852,13 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     }
     for (const controller of pendingToolCallAbortsRef.current) {
       controller.abort();
+    }
+    // Live isolated runs answer "aborted" at once: the step is complete and busy
+    // ends now. The handler's cleanup (closeSession) goes on in the background and
+    // its late result is ignored.
+    for (const run of [...livePendingRunsRef.current.values()]) {
+      run.controller.abort();
+      run.settle(ABORTED_RUN_OUTPUT);
     }
     for (const [key, call] of seenStreamingCallsRef.current) {
       if (abandonedStreamingToolKeysRef.current.has(key)) continue;
@@ -906,6 +1001,11 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   // "ready" transition and abandon it (roll back / restore original HTML),
   // exactly like the abort/error/unmount paths.
   //
+  // Parallel isolated QA runs are the one exception to "ready means no handler
+  // is in flight", but they are not streaming-tool calls (no adapter owns
+  // browse_agent), so nothing here sweeps them; the hook-level `status` stays
+  // "streaming" for them (see the override near the return).
+  //
   // This can NEVER misfire on a call that is merely between
   // "tool-input-available" and its handler resolving: the stream reader
   // above `await`s `onToolCall` synchronously, in place, before it advances
@@ -983,6 +1083,13 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
         setOfflineSendRefused(true);
         return false;
       }
+      // Tool work still open (isolated QA runs, any tool part without an output)
+      // means the next request would carry unresolved tool parts: queue instead,
+      // even after a failed request.
+      if (livePendingRunsRef.current.size > 0) {
+        enqueueMessage(sessionId, payload);
+        return true;
+      }
       // A failed request leaves the chat in "error" status; clear it so the
       // user can retry instead of the chat being stuck.
       if (chat.status === "error") {
@@ -1026,6 +1133,11 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       return;
     }
 
+    if (toolsBusy) {
+      // Isolated QA runs still live: their tool parts have no output yet. Wait.
+      return;
+    }
+
     const queuedPayload = consumeLaunchPayload(sessionId);
     if (queuedPayload) {
       // `deliverPayload`, not `sendPayload`: every precondition sendPayload
@@ -1057,7 +1169,9 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     // safe to drain a queued message here. Skipping this tick when it's true
     // is not a lost send: once the SDK's follow-up request settles, status
     // returns to "ready" and reruns this effect with the predicate now false.
-    if (lastAssistantMessageIsCompleteWithToolCalls({ messages: chat.messages })) {
+    // Not after a Stop: `sendAutomaticallyWhen` is gated by `turnStoppedRef`, so
+    // no continuation is coming and a message held for the runs must go out now.
+    if (!turnStoppedRef.current && lastAssistantMessageIsCompleteWithToolCalls({ messages: chat.messages })) {
       return;
     }
 
@@ -1080,6 +1194,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     chat.messages,
     isOnline,
     awaitingAnswer,
+    toolsBusy,
     consumeLaunchPayload,
     peekNextMessage,
     removeQueuedMessage,
@@ -1126,18 +1241,23 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const offlineError =
     offlineSendRefused && !isOnline ? OFFLINE_SEND_ERROR : undefined;
 
+  // Invariant: while isolated QA runs are live the hook reports "streaming" even
+  // though `chat.status` is "ready" (the stream ended, the runs did not). Every
+  // consumer of `status`/`isLoading` therefore treats the turn as in flight.
+  const status = toolsBusy && chat.status === "ready" ? "streaming" : chat.status;
+
   return {
     messages: chat.messages,
     input,
     setInput,
     sendMessage,
     submitLaunchPayload,
-    status: chat.status,
-    isLoading: chat.status === "submitted" || chat.status === "streaming",
+    status,
+    isLoading: status === "submitted" || status === "streaming",
     stop,
     error: offlineError ?? chat.error,
     clearError,
-    setMessages: chat.setMessages,
+    setMessages,
     retryState,
     addToolOutput: chat.addToolOutput,
     queuedMessages,

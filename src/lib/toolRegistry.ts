@@ -68,6 +68,12 @@ export interface ToolExecutionContext {
   /** Aborts when the turn is stopped/abandoned or the call times out. Only
    * supplied for long-running cancellable tools (browse_task). */
   signal?: AbortSignal;
+  /**
+   * Isolated browser session of a browse_agent QA run. The browse_* handlers
+   * pass it to `getBrowserBridge` so every nested command reaches the run's own
+   * browser; the loop guard keys on it instead of `sessionId`.
+   */
+  browserSession?: string;
 }
 
 export type ToolHandler = (
@@ -89,7 +95,7 @@ export type ToolHandler = (
 function withBrowseLoopGuard(toolName: string, handler: ToolHandler): ToolHandler {
   return async (args, context) => {
     const result = await handler(args, context);
-    return applyLoopGuard(toolName, args, result, context?.sessionId);
+    return applyLoopGuard(toolName, args, result, context?.browserSession ?? context?.sessionId);
   };
 }
 

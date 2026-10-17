@@ -23,7 +23,7 @@ import {
 const ABORTED_ERROR = JSON.stringify({ error: "browse_capture was aborted or timed out; nothing was added." });
 
 export const browseCapture: ToolHandler = async (args, context) => {
-  const browser = getBrowserBridge(context?.sessionId);
+  const browser = getBrowserBridge(context?.sessionId, context?.browserSession);
   const call = browser?.capture ? (a: Record<string, unknown>) => browser.capture!(a) : undefined;
   const unavailableMessage =
     browser && !browser.capture ? BROWSER_BRIDGE_METHOD_MISSING_ERROR : undefined;

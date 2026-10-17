@@ -24,7 +24,9 @@ import { lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai"
 import { getRequestUserId } from "@/lib/auth/authState";
 import { createChatTransport, CLIENT_CAPABILITIES } from "@/lib/chatTransport";
 import type { ToolHandler } from "../../toolRegistry";
-import { getBrowserBridge, isDesktopBrowserAvailable, type BrowserBridge } from "./bridge";
+import { CLOSE_SESSION_TIMEOUT_MS, closeBrowserSession, getBrowserBridge, isDesktopBrowserAvailable, type BrowserBridge } from "./bridge";
+import { isIsolatedQaCall, runSessionId } from "./isolation";
+import { acquireBrowseSlot } from "@/lib/browseRunLimiter";
 import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
 import { checkpointForModel, useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
 
@@ -46,6 +48,13 @@ import { checkpointForModel, useBrowseCheckpointStore } from "@/store/browseChec
  * guard serve both. The browse_* tools are unserialized in the tool queue and
  * so is browse_agent itself (toolCallQueue.ts) — otherwise the nested calls
  * would deadlock behind their own parent.
+ *
+ * A `qa: true` run on a desktop shell with `browser.isolated` gets its own
+ * browser (the cloud browser has no isolation; its QA runs stay sequential in
+ * the shared session): the nested context carries
+ * `browserSession`, which `getBrowserBridge` and the loop guard honour, and the
+ * session is closed in `finally`. Spec: pen-editor-desktop
+ * docs/superpowers/specs/2026-10-17-isolated-parallel-browse-design.md.
  */
 
 // Re-exported: useDesignChat and tests import the limits from here.
@@ -91,7 +100,59 @@ export function nestedChatId(sessionId: string | undefined, toolCallId: string |
   return raw.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, NESTED_ID_MAX_CHARS);
 }
 
+/**
+ * The handler. An isolated QA run takes one of MAX_PARALLEL_BROWSE_RUNS slots
+ * BEFORE it opens its browser session and gives it back after the session is
+ * closed, so every caller (chat, the MCP bridges, WebMCP) is capped the same.
+ * The wait for a slot is inside the handler: the tool's outer timeout covers
+ * wait plus run, and an abort while waiting answers "aborted" with no browser.
+ */
 export const browseAgent: ToolHandler = async (args, context) => {
+  if (!isIsolatedQaCall(args)) return runBrowseAgent(args, context, undefined, undefined);
+  const waitStart = Date.now();
+  const slot = await acquireBrowseSlot(context?.signal ?? new AbortController().signal);
+  if (!slot) return JSON.stringify({ status: "aborted", steps: 0 });
+  try {
+    // The tool's outer timeout started when the handler did, so the wait for a
+    // slot is spent: the run's own deadline shrinks by it.
+    // The close (bounded by CLOSE_SESSION_TIMEOUT_MS) runs after the run, inside the same outer timeout.
+    const deadlineMs = BROWSE_AGENT_DEADLINE_MS - (Date.now() - waitStart) - CLOSE_SESSION_TIMEOUT_MS;
+    if (deadlineMs < MIN_ISOLATED_RUN_MS) {
+      return JSON.stringify({
+        status: "error",
+        steps: 0,
+        error: "Waited too long for a free parallel browser slot to run this scenario; call it again.",
+      });
+    }
+    const runSession = runSessionId(context?.sessionId, context?.toolCallId);
+    try {
+      return await runBrowseAgent(args, context, runSession, deadlineMs);
+    } finally {
+      // Whatever happened inside (a throw during setup parsing included), the
+      // session is closed, after the fixture release and before the slot is freed.
+      try {
+        await closeBrowserSession(runSession);
+      } finally {
+        // Empties the run's ring. TODO(debt): the package has no way to drop the
+        // ring's map KEY, so one empty entry stays per run; needs `dropLoopGuard`
+        // in @sideform/browser-agent/loop.
+        resetLoopGuard(runSession);
+      }
+    }
+  } finally {
+    slot.release();
+  }
+};
+
+/** Below this much deadline left after waiting for a slot, an isolated run is not worth starting. */
+const MIN_ISOLATED_RUN_MS = 60_000;
+
+const runBrowseAgent = async (
+  args: Record<string, unknown>,
+  context: Parameters<ToolHandler>[1],
+  runSession: string | undefined,
+  deadlineMs: number | undefined,
+): Promise<string> => {
   const goal = typeof args.goal === "string" ? args.goal.trim() : "";
   if (!goal) return JSON.stringify(goalRequiredResult());
   const url = typeof args.url === "string" ? args.url.trim() : "";
@@ -112,14 +173,21 @@ export const browseAgent: ToolHandler = async (args, context) => {
   }
   const recorder = qaOn ? createStepRecorder() : undefined;
 
-  const loginAllowed = typeof getBrowserBridge(context?.sessionId)?.fillLogin === "function";
+  const parentSessionId = context?.sessionId;
+  // Isolated QA run (spec 2026-10-17-isolated-parallel-browse-design.md): its own
+  // browser for every nested command, closed in `finally`. A plain run, or a
+  // client without isolation, keeps the shared browser exactly as before.
+  const browserContext = runSession ? { browserSession: runSession } : {};
+
+  // Saved logins are the user's real ones: never in an isolated session.
+  const loginAllowed = !runSession && typeof getBrowserBridge(parentSessionId)?.fillLogin === "function";
 
   // Lazy: useDesignChat imports toolRegistry, which imports this module.
   const { executeToolCall } = await import("@/hooks/useDesignChat");
-  const parentSessionId = context?.sessionId;
 
   const session = createBrowseAgentSession({
     signal: context?.signal,
+    ...(deadlineMs !== undefined ? { deadlineMs } : {}),
     extraTools: {
       ...(loginAllowed ? { [FILL_LOGIN_TOOL]: {} } : {}),
       ...(qaOn ? { [QA_VERDICT_TOOL]: { ...qaVerdictHooks() } } : {}),
@@ -152,7 +220,7 @@ export const browseAgent: ToolHandler = async (args, context) => {
             : await executeToolCall(
                 call.toolName,
                 call.input,
-                { sessionId: parentSessionId, toolCallId: call.toolCallId, signal },
+                { sessionId: parentSessionId, ...browserContext, toolCallId: call.toolCallId, signal },
                 "browse_agent",
               );
         end?.({ output });
@@ -193,8 +261,9 @@ export const browseAgent: ToolHandler = async (args, context) => {
     },
   });
 
-  // Fresh loop-guard ring: nested calls share the parent's sessionId.
-  resetLoopGuard(parentSessionId);
+  // Fresh loop-guard ring: nested calls share the parent's sessionId (an
+  // isolated run has its own ring, keyed by its session).
+  resetLoopGuard(runSession ?? parentSessionId);
 
   const driver = {
     send: (text: string) => chat.sendMessage({ text }),
@@ -207,7 +276,7 @@ export const browseAgent: ToolHandler = async (args, context) => {
   const hasSetup = setup !== undefined && setup !== null;
   const resumeId = typeof args.resume === "string" ? args.resume.trim() : "";
   const hasResume = args.resume !== undefined && args.resume !== null;
-  const bridge = getBrowserBridge(parentSessionId);
+  const bridge = getBrowserBridge(parentSessionId, runSession);
   // Without a chat id checkpoints are OFF (no safe place to keep or clear them).
   const checkpointChat = parentSessionId;
   const recordingKey = isDesktopBrowserAvailable() ? DESKTOP_RECORDING_KEY : checkpointChat;
@@ -224,7 +293,8 @@ export const browseAgent: ToolHandler = async (args, context) => {
   let network: FixtureNetworkRule[] | undefined;
   const openCheckpoint = (valid: boolean) => {
     const key = recordingKey;
-    const enabled = valid && !!bridge && !!checkpointChat && !!key && !recordingKeys.has(key);
+    // An isolated run never records: its fixture would later be resumed into the shared browser.
+    const enabled = valid && !runSession && !!bridge && !!checkpointChat && !!key && !recordingKeys.has(key);
     if (enabled && key && checkpointChat) {
       recordingKeys.add(key);
       startGeneration = useBrowseCheckpointStore.getState().generation(checkpointChat);
@@ -334,7 +404,7 @@ export const browseAgent: ToolHandler = async (args, context) => {
           executeToolCall(
             "browse_snapshot",
             {},
-            { sessionId: parentSessionId, toolCallId: `${toolCallId ?? "browse_agent"}:setup`, signal: context?.signal },
+            { sessionId: parentSessionId, ...browserContext, toolCallId: `${toolCallId ?? "browse_agent"}:setup`, signal: context?.signal },
             "browse_agent",
           ),
         // Not called after fs.release(), so a late apply never flips the phase.

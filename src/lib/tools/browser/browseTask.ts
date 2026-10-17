@@ -31,7 +31,7 @@ function safeLocalStorage(): Storage | undefined {
 const BROWSE_TASK_PERMISSIONS = { allowPasswordEntry: false, confirmIrreversible: true };
 
 export const browseTask: ToolHandler = async (args, context) => {
-  const browser = getBrowserBridge(context?.sessionId);
+  const browser = getBrowserBridge(context?.sessionId, context?.browserSession);
   if (!browser) {
     return JSON.stringify({ error: BROWSER_NOT_AVAILABLE_ERROR });
   }

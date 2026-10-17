@@ -8,6 +8,17 @@ import { useDocumentStore } from "@/store/documentStore";
  * (e.g. "file-open") which we dispatch through the existing registry.
  * On the web window.penDesktop is absent and this is a no-op.
  */
+export type DesktopBrowserBridge = BrowserBridge &
+  Required<Pick<BrowserBridge, "findImages">> & {
+    /**
+     * browse_fill_login: fills the saved login for the current page's host
+     * (docs/superpowers/specs/2026-10-16-browser-saved-logins-design.md).
+     * Optional: desktop builds older than that feature lack it, and the
+     * cloud (Steel) bridge never has it. The result holds no secret.
+     */
+    fillLogin?(args: { label?: string; submit?: boolean }): Promise<unknown>;
+  };
+
 export interface PenDesktopApi {
   setDocumentTitle?(title: string): void;
   onMenuCommand(cb: (commandId: string) => void): () => void;
@@ -48,15 +59,16 @@ export interface PenDesktopApi {
    * shell always provides it. `capture` (browse_capture) stays optional:
    * desktop builds older than that tool lack it.
    */
-  browser?: BrowserBridge &
-    Required<Pick<BrowserBridge, "findImages">> & {
+  browser?: DesktopBrowserBridge & {
       /**
-       * browse_fill_login: fills the saved login for the current page's host
-       * (docs/superpowers/specs/2026-10-16-browser-saved-logins-design.md).
-       * Optional: desktop builds older than that feature lack it, and the
-       * cloud (Steel) bridge never has it. The result holds no secret.
+       * Isolated browser session for one browse_agent QA run (pen-editor-desktop
+       * docs/superpowers/specs/2026-10-17-isolated-parallel-browse-design.md).
+       * Same methods as `browser`, each call targets the session. `sessionId`
+       * matches `^[A-Za-z0-9_-]{1,64}$`. Optional: older shells lack it.
        */
-      fillLogin?(args: { label?: string; submit?: boolean }): Promise<unknown>;
+      isolated?(sessionId: string): DesktopBrowserBridge;
+      /** Closes the isolated session (tabs, fixture, storage). Idempotent. */
+      closeSession?(sessionId: string): Promise<{ ok: true } | { error: string }>;
     };
 }
 

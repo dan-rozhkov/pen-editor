@@ -13,7 +13,7 @@ import { callBrowserBridge } from "./shared";
 export const FILL_LOGIN_UNAVAILABLE_ERROR = "Saved logins are available only in the desktop app.";
 
 export const browseFillLogin: ToolHandler = async (args, context) => {
-  const browser = getBrowserBridge(context?.sessionId);
+  const browser = getBrowserBridge(context?.sessionId, context?.browserSession);
   const fill = browser?.fillLogin;
 
   const bridgeArgs: { label?: string; submit?: boolean } = {};

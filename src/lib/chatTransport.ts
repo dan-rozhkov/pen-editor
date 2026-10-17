@@ -4,6 +4,7 @@ import { getOpenCodeKey } from "@/lib/opencodeKey";
 import { createRetryingFetch, type RetryState } from "@/lib/retryFetch";
 import { withMobbinAuthHeader } from "@/lib/mobbinAuth";
 import { isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";
+import { isolatedBrowseAvailable } from "@/lib/tools/browser/isolation";
 
 // Shared by the main chat (hooks/useDesignChat.ts) and the nested browse
 // sub-agent session (lib/tools/browser/browseAgent.ts) so both hit /api/chat
@@ -30,6 +31,10 @@ export const CLIENT_CAPABILITIES = {
   // browse_agent can run in QA mode (`qa: true`): the backend then offers the
   // model the `qa` param (pen-editor-backend QA suite spec).
   browseQa: true,
+  // Isolated QA runs are available (the shell's `browser.isolated`): the backend then tells the model to call several QA
+  // scenarios in one step. Desktop with `browser.isolated` only; static per page
+  // load, like `desktopBrowser` (a flip would break the prompt cache).
+  browseIsolation: isolatedBrowseAvailable(),
 } as const;
 
 // Whether `model` is an OpenCode BYOK route (pen-editor-backend

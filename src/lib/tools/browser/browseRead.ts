@@ -9,4 +9,4 @@ import { peBase } from "./shared";
  * this handler only supplies the bridge and this app's texts.
  */
 export const browseRead: ToolHandler = (args, context) =>
-  executeBrowseTool(getBrowserBridge(context?.sessionId), "browse_read", args, peBase);
+  executeBrowseTool(getBrowserBridge(context?.sessionId, context?.browserSession), "browse_read", args, peBase);

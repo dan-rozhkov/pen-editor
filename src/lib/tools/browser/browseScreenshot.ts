@@ -94,4 +94,4 @@ const placeOnCanvasStep: NonNullable<ExecuteBrowseToolOptions["afterScreenshot"]
 const screenshotOptions: ExecuteBrowseToolOptions = { ...peBase, afterScreenshot: placeOnCanvasStep };
 
 export const browseScreenshot: ToolHandler = (args, context) =>
-  executeBrowseTool(getBrowserBridge(context?.sessionId), "browse_screenshot", args, screenshotOptions);
+  executeBrowseTool(getBrowserBridge(context?.sessionId, context?.browserSession), "browse_screenshot", args, screenshotOptions);
