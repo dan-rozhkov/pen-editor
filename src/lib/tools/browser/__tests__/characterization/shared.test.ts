@@ -19,9 +19,9 @@ afterEach(() => {
 
 describe("constants", () => {
   it("pins the two documented error strings", () => {
-    expect(BROWSER_NOT_AVAILABLE_ERROR).toBe("The built-in browser is only available in the Pineapple Editor desktop app.");
+    expect(BROWSER_NOT_AVAILABLE_ERROR).toBe("The built-in browser is only available in the Sideform Desktop app.");
     expect(BROWSER_BRIDGE_METHOD_MISSING_ERROR).toBe(
-      "This browser command needs a newer version of the Pineapple Editor desktop app."
+      "This browser command needs a newer version of the Sideform Desktop app."
     );
   });
 });

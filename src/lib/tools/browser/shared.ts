@@ -20,7 +20,7 @@ import {
  * every other ToolHandler's "always resolves" contract.
  */
 export const BROWSER_NOT_AVAILABLE_ERROR =
-  "The built-in browser is only available in the Pineapple Editor desktop app.";
+  "The built-in browser is only available in the Sideform Desktop app.";
 
 /**
  * `window.penDesktop.browser` exists (an older desktop build is running) but
@@ -33,7 +33,7 @@ export const BROWSER_NOT_AVAILABLE_ERROR =
  * would suggest retrying is pointless for the wrong reason.
  */
 export const BROWSER_BRIDGE_METHOD_MISSING_ERROR =
-  "This browser command needs a newer version of the Pineapple Editor desktop app.";
+  "This browser command needs a newer version of the Sideform Desktop app.";
 
 /**
  * Runs `call` against the desktop's browser bridge and stringifies the
