@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getBrowserBridge, isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";
 import { isolatedBrowseAvailable } from "@/lib/tools/browser/isolation";
 import { useChatStore } from "@/store/chatStore";
@@ -253,6 +253,7 @@ describe("launch from a canvas tab", () => {
     await vi.waitFor(() => expect(acks(fake).length).toBeGreaterThanOrEqual(n));
   };
   const resetChats = () => useChatStore.setState({ chats: [], activeChatId: null, launchQueue: {} } as never);
+  beforeEach(resetChats);
 
   it("creates a chat, binds it to the sending tab, queues the text and images and acks", async () => {
     const fake = installPanel();
@@ -290,60 +291,131 @@ describe("launch from a canvas tab", () => {
     expect(window.penAgentPanel).toBeDefined();
   });
 
-  it("target active-chat reuses an idle active chat; a repeated launchId is ignored", async () => {
+  it("ignores a repeated launchId and never reuses or rebinds an existing chat", async () => {
     const fake = installPanel();
     attachScriptedCanvas(fake, { context: "{}" });
     fake.setTabs([tab(1), tab(2)]);
     useChatStore.getState().createChat();
-    const active = useChatStore.getState().activeChatId!;
-    launch(fake, 1, { text: "a", target: "active-chat" }, "l1");
+    const existing = useChatStore.getState().activeChatId!;
+    launch(fake, 1, { text: "a" }, "l1");
     await settleFor(fake);
-    launch(fake, 2, { text: "b", target: "active-chat" }, "l1");
-    await new Promise<void>((r) => setTimeout(r, 20));
-    expect(acks(fake)).toHaveLength(1);
-    expect(useChatStore.getState().activeChatId).toBe(active);
-    expect(useChatStore.getState().launchQueue[active]).toEqual({ text: "a" });
-    expect(getPanelClient()!.getBinding(active)).toEqual({ tabId: 1, registrationId: 1 });
+    launch(fake, 2, { text: "b" }, "l1");
+    await settleFor(fake, 2); // the repeat is re-acked, not handled
+    const { chats, activeChatId, launchQueue } = useChatStore.getState();
+    expect(chats).toHaveLength(2);
+    expect(activeChatId).not.toBe(existing);
+    expect(launchQueue[existing]).toBeUndefined();
+    expect(launchQueue[activeChatId!]).toEqual({ text: "a" });
+    expect(getPanelClient()!.getBinding(existing)).toBeNull();
   });
 
-  it("target active-chat creates a new chat when the active one is busy, has a pending launch, or is bound to another tab", async () => {
+  it("acks as soon as the chat is bound: a slow context prefetch is no false 'did not respond'", async () => {
     const fake = installPanel();
+    const contextRequests: Array<{ reqId: string; model: string }> = [];
+    fake.onPost(({ env }) => {
+      if (env.msg.kind === "context-request") contextRequests.push(env.msg);
+    });
+    resetChats();
+    launch(fake, 1, { text: "slow tab" }, "slow");
+    await settleFor(fake); // acked while the tab has NOT answered the context request
+    expect(contextRequests).toHaveLength(1);
+    const chatId = useChatStore.getState().activeChatId!;
+    expect(useChatStore.getState().launchQueue[chatId]).toBeUndefined(); // still priming
+    fake.emit(1, { kind: "context-response", reqId: contextRequests[0].reqId, canvasContext: "{\"roots\":[]}" });
+    await vi.waitFor(() => expect(useChatStore.getState().launchQueue[chatId]).toEqual({ text: "slow tab" }));
+  });
+
+  it("primes the context with the chat's own model, not an empty one", async () => {
+    const fake = installPanel();
+    const models: string[] = [];
+    fake.onPost(({ env }) => {
+      if (env.msg.kind === "context-request") models.push(env.msg.model);
+    });
     attachScriptedCanvas(fake, { context: "{}" });
+    resetChats();
+    launch(fake, 1, { text: "m" }, "model");
+    await vi.waitFor(() => expect(useChatStore.getState().launchQueue[useChatStore.getState().activeChatId!]).toBeDefined());
+    const chat = useChatStore.getState().chats.find((c) => c.id === useChatStore.getState().activeChatId)!;
+    expect(chat.model).toBeTruthy();
+    expect(models).toEqual([chat.model]);
+  });
+
+  it("a launch refused after the bind step keeps the user's active chat and leaves no extra chat", async () => {
+    const fake = installPanel();
     fake.setTabs([tab(1), tab(2)]);
     useChatStore.getState().createChat();
-    const first = useChatStore.getState().activeChatId!;
-    const markBusy = (isBusy: boolean) =>
-      useChatStore.setState((s) => ({ chats: s.chats.map((c) => (c.id === first ? { ...c, isBusy } : c)) }));
+    const mine = useChatStore.getState().activeChatId!;
+    const chatsBefore = useChatStore.getState().chats.map((c) => c.id);
+    const list = fake.bridge.listTabs;
+    let calls = 0;
+    // The probe sees tab 2; by the time of the bind it is gone.
+    fake.bridge.listTabs = async () => (++calls === 1 ? list() : [tab(1)]);
+    launch(fake, 2, { text: "late" }, "vanish");
+    await settleFor(fake);
+    expect(acks(fake)[0]).toMatchObject({ launchId: "vanish", error: expect.any(String) });
+    expect(useChatStore.getState().activeChatId).toBe(mine);
+    expect(useChatStore.getState().chats.map((c) => c.id)).toEqual(chatsBefore);
+    expect(useChatStore.getState().launchQueue).toEqual({});
+  });
 
-    // busy
-    markBusy(true);
-    launch(fake, 1, { text: "a", target: "active-chat" }, "b1");
-    await settleFor(fake, 1);
-    expect(useChatStore.getState().launchQueue[first]).toBeUndefined();
-    markBusy(false);
+  it("forgets a chat's client state when the chat is closed", async () => {
+    const fake = installPanel();
+    attachScriptedCanvas(fake, { context: "{}" });
+    const c = getPanelClient()!;
+    const spy = vi.spyOn(c, "forgetSession");
+    useChatStore.getState().createChat();
+    const keep = useChatStore.getState().activeChatId!;
+    useChatStore.getState().createChat();
+    const gone = useChatStore.getState().activeChatId!;
+    await c.bindTo(gone, 1);
+    expect(c.getBinding(gone)).not.toBeNull();
+    useChatStore.getState().closeChat(gone);
+    expect(spy).toHaveBeenCalledWith(gone);
+    expect(spy).not.toHaveBeenCalledWith(keep);
+    expect(c.getBinding(gone)).toBeNull();
+  });
 
-    // pending launch on the active chat
-    useChatStore.getState().openChat(first);
-    useChatStore.getState().queueLaunchPayload(first, { text: "pending" });
-    launch(fake, 1, { text: "b", target: "active-chat" }, "b2");
+  it("a retry with the same launchId (first ack late) creates no second chat and gets the same ack again", async () => {
+    const fake = installPanel();
+    attachScriptedCanvas(fake, { context: "{}" });
+    launch(fake, 1, { text: "once" }, "same");
+    await settleFor(fake);
+    fake.emit(1, { kind: "launch", launchId: "same", payload: { text: "once" } } as never); // the tab's retry
     await settleFor(fake, 2);
-    expect(useChatStore.getState().launchQueue[first]).toEqual({ text: "pending" });
-    useChatStore.getState().consumeLaunchPayload(first);
+    expect(acks(fake).map((a) => a.launchId)).toEqual(["same", "same"]);
+    expect(acks(fake).every((a) => !("error" in a))).toBe(true);
+    expect(useChatStore.getState().chats).toHaveLength(1);
+  });
 
-    // bound to another tab
-    useChatStore.getState().openChat(first);
-    await getPanelClient()!.bindTo(first, 1);
-    const chatsBefore = useChatStore.getState().chats.length;
-    launch(fake, 2, { text: "c", target: "active-chat" }, "b3");
-    await settleFor(fake, 3);
-    expect(useChatStore.getState().chats.length).toBe(chatsBefore + 1);
-    expect(getPanelClient()!.getBinding(first)).toEqual({ tabId: 1, registrationId: 1 });
+  it("a retry while the first launch is still priming its context is re-acked and not handled twice", async () => {
+    const fake = installPanel(); // no scripted canvas: the context prime stays pending
+    launch(fake, 1, { text: "slow" }, "busy");
+    await settleFor(fake);
+    fake.emit(1, { kind: "launch", launchId: "busy", payload: { text: "slow" } } as never);
+    await settleFor(fake, 2);
+    expect(useChatStore.getState().chats).toHaveLength(1);
+  });
 
-    // same tab, idle, no pending launch: reused
-    useChatStore.getState().openChat(first);
-    launch(fake, 1, { text: "d", target: "active-chat" }, "b4");
-    await settleFor(fake, 4);
-    expect(useChatStore.getState().launchQueue[first]).toEqual({ text: "d" });
+  it("a refused launch re-acks its error on a repeated launchId", async () => {
+    const fake = installPanel();
+    launch(fake, 9, { text: "lost" }, "refused");
+    await settleFor(fake);
+    fake.emit(9, { kind: "launch", launchId: "refused", payload: { text: "lost" } } as never);
+    await settleFor(fake, 2);
+    expect(acks(fake)).toHaveLength(2);
+    for (const a of acks(fake)) expect(a).toMatchObject({ launchId: "refused", error: expect.any(String) });
+    expect(useChatStore.getState().chats).toHaveLength(0);
+  });
+
+  it("keeps only the last 100 launch outcomes", async () => {
+    const fake = installPanel();
+    getPanelClient();
+    for (let i = 0; i < 101; i++) fake.emit(9, { kind: "launch", launchId: `n${i}`, payload: { text: "" } } as never);
+    await settleFor(fake, 101);
+    fake.emit(9, { kind: "launch", launchId: "n100", payload: { text: "" } } as never); // remembered: re-acked
+    fake.emit(9, { kind: "launch", launchId: "n0", payload: { text: "" } } as never); // forgotten: handled again
+    await settleFor(fake, 103);
+    expect(acks(fake)).toHaveLength(103);
   });
 
   it("a launch from an unlisted tab gets an error ack and shows nothing in the panel", async () => {
@@ -366,7 +438,7 @@ describe("launch from a canvas tab", () => {
     await getPanelClient()!.bindTo(active, 1);
     fake.emit(2, { kind: "tab-gone", registrationId: 1 });
     fake.setTabs([tab(1), tab(2)]);
-    launch(fake, 2, { text: "x", target: "active-chat" }, "latched");
+    launch(fake, 2, { text: "x" }, "latched");
     await settleFor(fake);
     expect(acks(fake)[0]).toMatchObject({ launchId: "latched", error: expect.any(String) });
     expect(useChatStore.getState().launchQueue[active]).toBeUndefined();

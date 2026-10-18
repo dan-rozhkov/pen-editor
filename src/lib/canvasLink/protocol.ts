@@ -59,7 +59,8 @@ export type ChatToCanvasMsg =
   /**
    * The panel handled (no `error`) or refused (`error`) a canvas tab's `launch`. The tab keeps
    * the launch's source (the showcase prompt) until this arrives and, with no ack within a few
-   * seconds, tells the user the agent panel did not respond.
+   * seconds (`LAUNCH_ACK_TIMEOUT_MS`), tells the user the agent panel did not respond. The panel
+   * acks as soon as the chat exists and is bound, before it prefetches that tab's context.
    */
   | { kind: "launch-ack"; launchId: string; error?: string };
 
@@ -67,14 +68,12 @@ export type ChatToCanvasMsg =
 export interface ChatLaunchMessagePayload {
   text: string;
   images?: Array<{ dataUrl: string; name: string }>;
-  /** Default "new-chat" (what every local launch helper does). */
-  target?: "new-chat" | "active-chat";
 }
 
 export type CanvasToChatMsg =
   /**
-   * An on-canvas agent entry point fired in this chatless tab: the panel creates (or reuses,
-   * per `payload.target`) a chat, binds it to the sending tab and sends the message. Main
+   * An on-canvas agent entry point fired in this chatless tab: the panel creates a NEW chat
+   * (like every local launch helper), binds it to the sending tab and sends the message. Main
    * forwards it untouched.
    */
   | { kind: "launch"; launchId: string; payload: ChatLaunchMessagePayload }

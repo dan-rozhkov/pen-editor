@@ -198,7 +198,7 @@ describe("a launch from a canvas tab in the agent panel", () => {
       })
     );
     getPanelClient();
-    fake.emit(2, { kind: "launch", launchId: "L", payload: { text: "make it blue", target: "new-chat" } });
+    fake.emit(2, { kind: "launch", launchId: "L", payload: { text: "make it blue" } });
     await waitFor(() => expect(useChatStore.getState().activeChatId).not.toBeNull());
     const sessionId = useChatStore.getState().activeChatId!;
     await waitFor(() => expect(getPanelClient()!.getBinding(sessionId)).toEqual({ tabId: 2, registrationId: 4 }));

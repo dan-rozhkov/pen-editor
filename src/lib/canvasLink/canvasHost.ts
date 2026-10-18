@@ -58,8 +58,9 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
   let counter = 0;
   let stopped = false;
 
-  const post = (msg: CanvasToChatMsg): void => {
-    if (stopped) return;
+  /** true = handed to the bridge; false = not sent (stopped, or the bridge threw). */
+  const post = (msg: CanvasToChatMsg): boolean => {
+    if (stopped) return false;
     try {
       const env: LinkEnvelope<CanvasToChatMsg> = {
         id: `c${++counter}-${Math.random().toString(36).slice(2, 8)}`,
@@ -67,8 +68,10 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
         msg,
       };
       bridge.post(env);
+      return true;
     } catch (err) {
       console.warn("[canvasHost] post failed", err);
+      return false;
     }
   };
 
@@ -299,10 +302,9 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
 
   // Entry points (deliverAgentLaunch) post through this host, but only once it IS registered:
   // `canLaunchAgent()` / `isCanvasHostRunning()` must not promise a delivery a failed register cannot make.
-  const launchPoster = (payload: ChatLaunchMessagePayload): string | null => {
-    const launchId = nextLaunchId();
-    post({ kind: "launch", launchId, payload });
-    return launchId;
+  const launchPoster = (payload: ChatLaunchMessagePayload, id?: string): string | null => {
+    const launchId = id ?? nextLaunchId();
+    return post({ kind: "launch", launchId, payload }) ? launchId : null;
   };
   if (registered) setCanvasHostLaunchPoster(launchPoster);
 

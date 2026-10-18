@@ -10,6 +10,7 @@ import { consumeFirstPromptTiming } from "@/lib/analytics/sessionTiming";
 import { isOffline, OFFLINE_MESSAGE } from "@/lib/apiBase";
 import { getRequestUserId } from "@/lib/auth/authState";
 import { createChatTransport, resolveChatApiUrl, CLIENT_CAPABILITIES } from "@/lib/chatTransport";
+import { resolveSessionModel } from "@/lib/sessionModel";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { buildSceneContext } from "@/lib/canvasLink/sceneContext";
 import { useChatStore, NO_QUEUED_MESSAGES } from "@/store/chatStore";
@@ -43,16 +44,9 @@ const STREAM_RENDER_THROTTLE_MS = 50;
 // Re-exported for tests (the implementation lives in lib/chatTransport.ts).
 export { resolveChatApiUrl };
 
-// A session must use ITS OWN chat's model rather than the global active-chat
-// value, which openChat overwrites on every switch. Without this, switching
-// chats while a background session streams hijacks that session's
-// auto-continuation request with the foreground chat's model.
-// Exported for tests.
-export function resolveSessionModel(sessionId?: string): string {
-  const { model, chats } = useChatStore.getState();
-  const chat = sessionId ? chats.find((c) => c.id === sessionId) : undefined;
-  return chat?.model ?? model;
-}
+// Re-exported for tests (the implementation lives in lib/sessionModel.ts: the canvas link needs the
+// same resolution and must not import this hook module).
+export { resolveSessionModel };
 
 // Exported for tests.
 export function buildCanvasContext(sessionId?: string): object {

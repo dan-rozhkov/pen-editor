@@ -149,7 +149,7 @@ describe("open_canvas_tab", () => {
     expect(getPanelClient()!.getBinding("chat")).toEqual({ tabId: 100, registrationId: 1 });
   });
 
-  it("two parallel open_canvas_tab(new) open ONE tab and report the same one", async () => {
+  it("two parallel open_canvas_tab(new) open TWO tabs: an explicit new never joins another bind", async () => {
     const fake = installPanel([]);
     const release = fake.holdOpen();
     const a = run({ target: "new" });
@@ -157,9 +157,10 @@ describe("open_canvas_tab", () => {
     await vi.waitFor(() => expect(fake.openTab).toHaveBeenCalledTimes(1));
     release();
     const [ra, rb] = await Promise.all([a, b]);
-    expect(fake.openTab).toHaveBeenCalledTimes(1);
-    expect(ra).toEqual(rb);
+    expect(fake.openTab).toHaveBeenCalledTimes(2);
     expect(ra).toMatchObject({ tabId: 100, opened: true });
+    expect(rb).toMatchObject({ tabId: 101, opened: true });
+    expect(getPanelClient()!.getBinding("chat")).toEqual({ tabId: 101, registrationId: 1 });
   });
 
   it("a later (not concurrent) new still opens a fresh tab", async () => {

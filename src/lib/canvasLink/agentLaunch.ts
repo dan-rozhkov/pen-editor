@@ -20,10 +20,14 @@ import type { ChatLaunchPayload } from "@/types/chat";
 import type { ChatLaunchMessagePayload } from "./protocol";
 
 /** Posts a `launch` through the running host; returns its `launchId`, or null when nothing was sent. */
-type Poster = (payload: ChatLaunchMessagePayload) => string | null;
+type Poster = (payload: ChatLaunchMessagePayload, launchId?: string) => string | null;
 
-/** How long a canvas tab waits for the panel's `launch-ack`. */
-export const LAUNCH_ACK_TIMEOUT_MS = 3000;
+/**
+ * How long a canvas tab waits for the panel's `launch-ack`. The panel acks once the chat exists and is
+ * bound (a tab probe plus a tab-list round trip, each an IPC hop that can be slow on a loaded machine),
+ * BEFORE it prefetches the tab's context (up to 2 s), so this only has to cover probe + bind.
+ */
+export const LAUNCH_ACK_TIMEOUT_MS = 8000;
 export const LAUNCH_NO_ACK_MESSAGE = "The agent panel did not respond.";
 
 let poster: Poster | null = null;
@@ -77,15 +81,15 @@ let launchCounter = 0;
  * Sends a launch to the agent panel and waits for its `launch-ack` (`LAUNCH_ACK_TIMEOUT_MS`).
  * Resolves true on a clean ack. False = nothing sent (no running host), or the panel refused / did
  * not answer; then a toast says so unless `opts.toast` is false (the caller keeps its source and retries).
- * The panel creates (or reuses) the chat, binds it to THIS tab and sends the message.
+ * The panel creates a new chat, binds it to THIS tab and sends the message.
  */
 export function deliverAgentLaunch(
   payload: ChatLaunchMessagePayload,
-  opts: { toast?: boolean } = {}
+  opts: { toast?: boolean; launchId?: string } = {}
 ): Promise<boolean> {
   const post = poster;
   if (!post) return Promise.resolve(false);
-  const launchId = post({ target: "new-chat", ...payload });
+  const launchId = post(payload, opts.launchId);
   if (!launchId) {
     if (opts.toast !== false) toast.error("Could not reach the agent panel.");
     return Promise.resolve(false);
@@ -112,7 +116,10 @@ export function deliverAgentLaunch(
  * entirely while collapsed, which would leave the queued message stranded with no session mounted to
  * auto-send it.
  */
-export async function launchAgentChat(payload: ChatLaunchPayload, opts: { toast?: boolean } = {}): Promise<boolean> {
+export async function launchAgentChat(
+  payload: ChatLaunchPayload,
+  opts: { toast?: boolean; launchId?: string } = {}
+): Promise<boolean> {
   if (isChatDisabled()) {
     if (!isCanvasHostRunning()) return false;
     const { text, images } = payload;

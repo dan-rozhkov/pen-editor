@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { ShowcasePage } from "@/components/showcase/ShowcasePage";
 import { ShowcaseLightbox } from "@/components/showcase/ShowcaseLightbox";
-import { consumeShowcaseAgentPrompt } from "@/lib/showcaseAgentHandoff";
+import { peekShowcaseAgentPrompt } from "@/lib/showcaseAgentHandoff";
 import type { ShowcaseCategory, ShowcaseScreen } from "@/lib/showcase";
 import {
   app,
@@ -154,7 +154,7 @@ describe("<ShowcasePage />", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await screen.findByText("Editor route");
-    expect(consumeShowcaseAgentPrompt()).toBe("Build a calm finance dashboard");
+    expect(peekShowcaseAgentPrompt()).toBe("Build a calm finance dashboard");
   });
 
   it("opens the editor from the header link", async () => {

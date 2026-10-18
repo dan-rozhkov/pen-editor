@@ -34,7 +34,7 @@ first canvas tool of a turn with no live binding:
 registers (a reloaded tab keeps its `tabId`, gets a new `registrationId`).
 A `tab-gone` (it carries `registrationId`) for the bound registration clears the binding (latch, see below) AND the chat's remembered `canvasContext` (the closed document's context is never sent again).
 A main `error` for a `call`/`context-request` whose bound tab is no longer in the tab list latches that registration the same way, so the next call rebinds.
-Binds of one chat are serialized (`open_canvas_tab` and a canvas tool frame, or two parallel "new", join one bind instead of opening two tabs).
+Binds of one chat are serialized. Only the implicit bind (a canvas tool frame) reuses a binding another bind just made, so `open_canvas_tab` plus a frame open one tab; an explicit bind honors its own target: `open_canvas_tab` "new" always opens a fresh tab (two parallel "new" open two), and `bindTo` (`launch`) yields exactly the sending tab or nothing.
 **Passive bind for context:** a chat with no live binding, asked for its `canvasContext`, binds to the first registered canvas tab WITHOUT opening one, so the first message of a new chat already carries that tab's context. With no canvas tab it stays unbound.
 
 ## Channels (desktop)
@@ -101,24 +101,28 @@ See `protocol.ts`. Rules:
   (node without position; `options` = `{x?, y?, size}`) to the bound canvas tab,
   which runs the real `placeNodeOnCanvas` and answers `result` with
   `{"id","x","y"}` or `{"error":...}`.
-- **`launch`** (canvas → chat, `{launchId, payload: {text, images?, target?}}`):
+- **`launch`** (canvas → chat, `{launchId, payload: {text, images?}}`):
   an on-canvas agent entry point fired in the chatless tab (frame/embed/element
   button, empty-embed composer, comment "Send to agent", the showcase prompt). Entry
   points are shown when `canLaunchAgent()` = chat enabled OR the canvas host runs;
   they call `launchAgentChat`, which posts this (`deliverAgentLaunch`) instead of launching locally.
-  Main forwards it untouched. The panel creates a new chat (`target` "new-chat",
-  default, as every local helper does) or reuses its active chat ("active-chat"),
-  binds that chat to the SENDING tab (`bindTo`: its `registrationId` is looked up in
-  the tab list), queues `{text, images}` for the normal auto-send and handles each
+  Main forwards it untouched. The panel creates a new chat (as every local helper does;
+  it only becomes the active chat once the bind worked, so a refused launch never takes
+  the user's chat away), binds that chat to the SENDING tab (`bindTo`: its `registrationId`
+  is looked up in the tab list, and the result must be exactly that tab), acks, primes the
+  tab's context, queues `{text, images}` for the normal auto-send and handles each
   `launchId` once. A local launch does not select a node or put it in the prompt, so
-  neither does a remote one (no `nodeIds`); the tab's own selection rides in `canvasContext`.
-  "active-chat" reuses the active chat only if it is idle and unbound or bound to the
-  sending tab. The panel answers every launch with `launch-ack`.
+  neither does a remote one; the tab's own selection rides in `canvasContext`.
+  The panel answers every launch with `launch-ack`.
 - **`launch-ack`** (chat → canvas, `{launchId, error?}`): the launch was handled, or
   (`error`) refused (the sending tab is not listed or its registration is latched; the
-  panel then shows nothing). The tab waits 3 s: no ack, or an error, shows a toast
-  ("The agent panel did not respond.") and the entry point returns false. The showcase
-  prompt stays in sessionStorage until the ack. The panel's client exists from the
+  panel then shows nothing). The panel acks as soon as the chat exists and is bound,
+  BEFORE it prefetches the tab's context (up to 2 s). The tab waits 8 s
+  (`LAUNCH_ACK_TIMEOUT_MS`, enough for a probe plus a bind over a slow IPC): no ack, or an
+  error, shows a toast ("The agent panel did not respond.") and the entry point returns false.
+  Nothing sent at all (host stopped, or `bridge.post` threw) fails at once with "Could not reach
+  the agent panel." The showcase prompt stays in sessionStorage until the ack and an unacked
+  launch is retried 3 times, 5 s apart, while the host runs. The panel's client exists from the
   moment `/agent` mounts, so a launch before the first message is received.
 - **`cancel`** aborts a running call (the canvas aborts the handler's signal and
   still answers `result` with an error, which the chat side ignores if it

@@ -6,9 +6,13 @@ import { launchEmbedAgentChat } from "@/lib/launchEmbedAgentChat";
 import { launchEmbedElementAgentChat } from "@/lib/launchEmbedElementAgentChat";
 import { launchFrameAgentChat } from "@/lib/launchFrameAgentChat";
 import { launchNodeAgentChat } from "@/lib/launchNodeAgentChat";
-import { launchShowcaseAgentChat } from "@/lib/launchShowcaseAgentChat";
+import {
+  SHOWCASE_LAUNCH_ATTEMPTS,
+  SHOWCASE_LAUNCH_RETRY_DELAY_MS,
+  launchShowcaseAgentChat,
+} from "@/lib/launchShowcaseAgentChat";
 import { sendCommentToAgent } from "@/lib/sendCommentToAgent";
-import { consumeShowcaseAgentPrompt, storeShowcaseAgentPrompt } from "@/lib/showcaseAgentHandoff";
+import { peekShowcaseAgentPrompt, storeShowcaseAgentPrompt } from "@/lib/showcaseAgentHandoff";
 import { AgentComposerButton } from "@/components/canvas/AgentComposerButton";
 import { EmbedLayer } from "@/components/canvas/EmbedLayer";
 import { seedEmbedNode } from "@/components/canvas/__tests__/embedLayerFixtures";
@@ -25,6 +29,7 @@ import {
   canLaunchAgent,
   deliverAgentLaunch,
   isCanvasHostRunning,
+  resolveLaunchAck,
 } from "../agentLaunch";
 import { startCanvasHost } from "../canvasHost";
 import type { CanvasHostBridge, CanvasToChatMsg, ChatToCanvasMsg } from "../protocol";
@@ -132,13 +137,13 @@ describe("entry points in chatless mode with a canvas host", () => {
       "launchEmbedElementAgentChat",
       () => launchEmbedElementAgentChat({ embedId: "n1" } as never, "go"),
     ],
-  ])("%s delivers a new-chat launch without selecting the node and launches nothing locally", async (_n, run) => {
+  ])("%s delivers a launch without selecting the node and launches nothing locally", async (_n, run) => {
     const h = startHost();
     const before = localChats();
     expect(await run()).toBe(true);
     expect(h.launches()).toHaveLength(1);
     expect(h.launches()[0].launchId).toEqual(expect.any(String));
-    expect(h.launches()[0].payload).toEqual({ text: "go", target: "new-chat" });
+    expect(h.launches()[0].payload).toEqual({ text: "go" });
     expect(useSelectionStore.getState().selectedIds).toEqual([]);
     expect(localChats()).toBe(before);
     expect(useChatStore.getState().launchQueue).toEqual({});
@@ -149,7 +154,6 @@ describe("entry points in chatless mode with a canvas host", () => {
     expect(await sendCommentToAgent("t1")).toBe(true);
     expect(h.launches()[0].payload).toEqual({
       text: "разберись с комментарием #3",
-      target: "new-chat",
     });
     expect(useChatStore.getState().launchQueue).toEqual({});
   });
@@ -178,8 +182,8 @@ describe("entry points in chatless mode with a canvas host", () => {
     expect(await launchShowcaseAgentChat()).toBe(true);
     expect(await launchShowcaseAgentChat()).toBe(false);
     expect(h.launches()).toHaveLength(1);
-    expect(h.launches()[0].payload).toEqual({ text: "make a travel app", target: "new-chat" });
-    expect(consumeShowcaseAgentPrompt()).toBeNull();
+    expect(h.launches()[0].payload).toEqual({ text: "make a travel app" });
+    expect(peekShowcaseAgentPrompt()).toBeNull();
     expect(useChatStore.getState().launchQueue).toEqual({});
   });
 });
@@ -190,7 +194,7 @@ describe("entry points in chatless mode without a host", () => {
     expect(await launchNodeAgentChat("n1", "go")).toBe(false);
     expect(await sendCommentToAgent("t1")).toBe(false);
     expect(await launchShowcaseAgentChat()).toBe(false);
-    expect(consumeShowcaseAgentPrompt()).toBe("keep me");
+    expect(peekShowcaseAgentPrompt()).toBe("keep me");
   });
 });
 
@@ -228,14 +232,17 @@ describe("launch acknowledgement", () => {
     expect(toast.error).toHaveBeenCalledWith("The agent panel could not reach this canvas tab.");
   });
 
-  it("keeps the showcase prompt without an ack (and shows no toast), removes it with one", async () => {
+  const totalRetryTime = (SHOWCASE_LAUNCH_ATTEMPTS - 1) * SHOWCASE_LAUNCH_RETRY_DELAY_MS + SHOWCASE_LAUNCH_ATTEMPTS * LAUNCH_ACK_TIMEOUT_MS;
+
+  it("keeps the showcase prompt without an ack (and shows no toast) after the last retry, removes it with one", async () => {
     vi.useFakeTimers();
     try {
-      startHost(false);
+      const h = startHost(false);
       storeShowcaseAgentPrompt("keep until ack");
       const p = launchShowcaseAgentChat();
-      await vi.advanceTimersByTimeAsync(LAUNCH_ACK_TIMEOUT_MS + 1);
+      await vi.advanceTimersByTimeAsync(totalRetryTime + 1);
       expect(await p).toBe(false);
+      expect(h.launches()).toHaveLength(SHOWCASE_LAUNCH_ATTEMPTS);
       expect(toast.error).not.toHaveBeenCalled();
       expect(sessionStorage.getItem("pen:showcase-agent-prompt:v1")).toBe("keep until ack");
     } finally {
@@ -247,6 +254,81 @@ describe("launch acknowledgement", () => {
     expect(sessionStorage.getItem("pen:showcase-agent-prompt:v1")).toBeNull();
   });
 
+  it("retries an unacked showcase launch with a delay and stops once the panel acks", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = hostBridge(false);
+      const post = h.bridge.post;
+      h.bridge.post = (env) => {
+        post(env);
+        // The panel is "still loading" for the first launch only.
+        if (env.msg.kind === "launch" && h.launches().length >= 2) {
+          const launchId = env.msg.launchId;
+          queueMicrotask(() => resolveLaunchAck(launchId));
+        }
+      };
+      stop = startCanvasHost(h.bridge);
+      storeShowcaseAgentPrompt("retry me");
+      const p = launchShowcaseAgentChat();
+      await vi.advanceTimersByTimeAsync(LAUNCH_ACK_TIMEOUT_MS + 1);
+      expect(h.launches()).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(SHOWCASE_LAUNCH_RETRY_DELAY_MS);
+      expect(await p).toBe(true);
+      expect(h.launches()).toHaveLength(2);
+      expect(h.launches()[1].launchId).toBe(h.launches()[0].launchId); // idempotent retry
+      expect(peekShowcaseAgentPrompt()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("releases the in-flight guard after a failed sequence, so the next host start can retry", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = startHost(false);
+      storeShowcaseAgentPrompt("again");
+      const p = launchShowcaseAgentChat();
+      await vi.advanceTimersByTimeAsync(totalRetryTime + 1);
+      await p;
+      const before = h.launches().length;
+      const second = launchShowcaseAgentChat(); // not blocked by a stuck guard
+      expect(h.launches().length).toBe(before + 1);
+      await vi.advanceTimersByTimeAsync(totalRetryTime + 1);
+      await second;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops retrying when the host stops during the pause", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = startHost(false);
+      storeShowcaseAgentPrompt("host leaves");
+      const p = launchShowcaseAgentChat();
+      await vi.advanceTimersByTimeAsync(LAUNCH_ACK_TIMEOUT_MS + 1);
+      stop?.();
+      stop = undefined;
+      await vi.advanceTimersByTimeAsync(SHOWCASE_LAUNCH_RETRY_DELAY_MS + 1);
+      expect(await p).toBe(false);
+      expect(h.launches()).toHaveLength(1);
+      expect(peekShowcaseAgentPrompt()).toBe("host leaves");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fails at once with a toast when the launch could not be posted (bridge.post throws)", async () => {
+    const h = hostBridge();
+    h.bridge.post = () => {
+      throw new Error("ipc down");
+    };
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    stop = startCanvasHost(h.bridge);
+    await expect(deliverAgentLaunch({ text: "x" })).resolves.toBe(false);
+    expect(toast.error).toHaveBeenCalledWith("Could not reach the agent panel.");
+  });
+
   it("does not send the same showcase prompt twice while the first launch waits for its ack", async () => {
     vi.useFakeTimers();
     try {
@@ -254,9 +336,11 @@ describe("launch acknowledgement", () => {
       storeShowcaseAgentPrompt("once");
       const first = launchShowcaseAgentChat();
       expect(await launchShowcaseAgentChat()).toBe(false);
-      await vi.advanceTimersByTimeAsync(LAUNCH_ACK_TIMEOUT_MS + 1);
-      await first;
       expect(h.launches()).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(totalRetryTime + 1);
+      await first;
+      // Only the retries of the FIRST sequence, never a second sequence beside it.
+      expect(h.launches()).toHaveLength(SHOWCASE_LAUNCH_ATTEMPTS);
     } finally {
       vi.useRealTimers();
     }

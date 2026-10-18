@@ -28,14 +28,3 @@ export function clearShowcaseAgentPrompt(): void {
     // Nothing to remove.
   }
 }
-
-export function consumeShowcaseAgentPrompt(): string | null {
-  try {
-    const prompt = sessionStorage.getItem(SHOWCASE_AGENT_PROMPT_KEY);
-    sessionStorage.removeItem(SHOWCASE_AGENT_PROMPT_KEY);
-    const trimmed = prompt?.trim() ?? "";
-    return trimmed || null;
-  } catch {
-    return null;
-  }
-}

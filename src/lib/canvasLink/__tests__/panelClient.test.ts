@@ -107,6 +107,69 @@ describe("binding", () => {
   });
 });
 
+describe("explicit binds honor their own target", () => {
+  it("bindExplicit('new') opens a fresh tab even when queued behind another bind", async () => {
+    setup([]);
+    const release = fake.holdOpen();
+    const first = client.bindExplicit("s", "new");
+    const second = client.bindExplicit("s", "new");
+    release();
+    const [a, b] = await Promise.all([first, second]);
+    expect(fake.openTab).toHaveBeenCalledTimes(2);
+    expect(a).toMatchObject({ opened: true });
+    expect(b).toMatchObject({ opened: true });
+    expect((a as { tabId: number }).tabId).not.toBe((b as { tabId: number }).tabId);
+    expect(client.getBinding("s")?.tabId).toBe((b as { tabId: number }).tabId);
+  });
+
+  it("bindTo returns null unless the binding is exactly that tab, even when queued behind an implicit bind", async () => {
+    setup([tab(7), tab(8)]);
+    attachScriptedCanvas(fake);
+    const call = client.callTool("s", "batch_design", {}, { toolCallId: "c1", timeoutMs: 1000 }); // implicit bind -> tab 7
+    const bound = await client.bindTo("s", 8);
+    await call;
+    expect(bound).toEqual({ tabId: 8, registrationId: 1 });
+    expect(client.getBinding("s")).toEqual({ tabId: 8, registrationId: 1 });
+    expect(await client.bindTo("s", 99)).toBeNull();
+    expect(client.getBinding("s")).toEqual({ tabId: 8, registrationId: 1 });
+  });
+
+  it("the implicit bind still reuses a binding that an earlier bind just made (one tab)", async () => {
+    setup([]);
+    attachScriptedCanvas(fake);
+    const release = fake.holdOpen();
+    const explicit = client.bindExplicit("s", "new");
+    const call = client.callTool("s", "batch_design", {}, { toolCallId: "c1", timeoutMs: 1000 });
+    release();
+    await Promise.all([explicit, call]);
+    expect(fake.openTab).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("forgetSession", () => {
+  it("drops the binding and the remembered context", async () => {
+    setup();
+    attachScriptedCanvas(fake, { context: '{"a":1}' });
+    await client.bindTo("s", 1);
+    await client.requestContext("s", "m");
+    client.forgetSession("s");
+    expect(client.getBinding("s")).toBeNull();
+    fake.setTabs([]);
+    expect(await client.requestContext("s", "m")).toBeNull(); // nothing remembered, nothing to bind
+  });
+});
+
+describe("primeSession", () => {
+  it("uses the model the host app resolves for the chat", async () => {
+    fake = createFakeCanvasBridge([tab(1)]);
+    client = new PanelClient({ bridge: fake.bridge, modelFor: (id) => `model-of-${id}` });
+    attachScriptedCanvas(fake, { context: "{}" });
+    await client.bindTo("s", 1);
+    await client.primeSession("s");
+    expect(fake.ofKind("context-request").map((m) => m.model)).toEqual(["model-of-s"]);
+  });
+});
+
 describe("calls", () => {
   it("round trip: posts the call with the tool budget and resolves the tab's result", async () => {
     setup();

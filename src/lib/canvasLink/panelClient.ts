@@ -36,6 +36,7 @@ export const PLACE_NODE_TIMEOUT_MS = 30_000;
  */
 export const PRE_START_TIMEOUT_MS = 10 * 60_000;
 const MAX_ENDED_STREAMS = 500;
+const MAX_LAUNCH_OUTCOMES = 100;
 
 const TAB_CLOSED_ERROR_OBJ = { error: "The canvas tab was closed." };
 export const TAB_CLOSED_ERROR = JSON.stringify(TAB_CLOSED_ERROR_OBJ);
@@ -66,6 +67,12 @@ export interface PanelClientDeps {
   onCallFailed?: (failure: CallFailure) => void;
   /** Epoch ms stamped on envelopes (`sentAt`). Default: `linkNow`. */
   now?: () => number;
+  /**
+   * The model a chat really uses (what `useDesignChat` sends for that session). Used when a context
+   * is prefetched at bind time, before the chat has made any request, so the selection hint matches.
+   * Default: the model the chat last asked a context with, else "".
+   */
+  modelFor?: (sessionId: string) => string;
   /** A canvas tab's `launch` (an on-canvas agent entry point). Each `launchId` is delivered once. */
   onLaunch?: (launch: { tabId: number; launchId: string; payload: ChatLaunchMessagePayload }) => void;
 }
@@ -82,9 +89,9 @@ type Outgoing = ChatToCanvasMsg;
 /** What the one binding path (`establish`) is asked to do. */
 interface EstablishSpec {
   /**
-   * Return the chat's live binding when it has one (the implicit bind), or, for an explicit bind,
-   * when a bind of this chat finished while this call waited its turn: concurrent binds JOIN
-   * the first one instead of opening a second tab.
+   * Return the chat's live binding when it has one. ONLY the implicit bind does this: an explicit
+   * bind (`bindExplicit`, `bindTo`) always honors its own target, even when it was queued behind
+   * another bind that established a different binding.
    */
   reuseLive: boolean;
   /** Choose a registered tab from the fresh list; undefined = none (open one, if `open`). */
@@ -95,7 +102,10 @@ interface EstablishSpec {
   activate?: boolean;
   /** A failing `listTabs()` is judged by the last known list instead of failing. */
   tolerateListFailure?: boolean;
-  /** Prefetch the new tab's context (so the request after a switch does not lose its `canvasContext`). */
+  /**
+   * Prefetch the new tab's context (so the request after a switch does not lose its `canvasContext`).
+   * `bindTo` leaves it to the caller (`primeSession`), which acks a launch first.
+   */
   prime?: boolean;
   /** Checked before anything with a side effect; NOT after `openTab()` resolved (the tab exists then). */
   signal?: AbortSignal;
@@ -135,14 +145,18 @@ export class PanelClient {
   private readonly now: () => number;
   private readonly onCallFailed?: (failure: CallFailure) => void;
   private readonly onLaunch?: PanelClientDeps["onLaunch"];
-  private readonly seenLaunches = new Set<string>();
+  private readonly modelFor?: PanelClientDeps["modelFor"];
+  /**
+   * Per `launchId`: the outcome of its first handling (null = acked ok, string = acked with that error,
+   * undefined = still being handled). A repeated launch (a canvas tab's retry) gets the same ack again
+   * and is never handled twice. Bounded to `MAX_LAUNCH_OUTCOMES`.
+   */
+  private readonly launchOutcomes = new Map<string, string | null | undefined>();
   private tabs: CanvasTabInfo[] = [];
   private readonly bindings = new Map<string, Binding>();
   /** Per chat: the tail of the queue of binds in flight (see `establish`). Present = a bind is running. */
   private readonly binding$ = new Map<string, Promise<void>>();
-  /** Per chat: how many bindings were set; a joining bind compares it to know one finished meanwhile. */
-  private readonly bindGeneration = new Map<string, number>();
-  /** Per chat: whether the last binding was made by opening a tab (reported to a joining bind). */
+  /** Per chat: whether the last binding was made by opening a tab (reported to a reusing implicit bind). */
   private readonly lastOpened = new Map<string, boolean>();
   /** The model each chat last asked for a context with (used when a context is prefetched). */
   private readonly models = new Map<string, string>();
@@ -162,6 +176,7 @@ export class PanelClient {
     this.now = deps.now ?? linkNow;
     this.onCallFailed = deps.onCallFailed;
     this.onLaunch = deps.onLaunch;
+    this.modelFor = deps.modelFor;
     this.unsubscribers = [
       deps.bridge.onTabsChanged((tabs) => {
         this.tabs = tabs;
@@ -198,29 +213,38 @@ export class PanelClient {
   }
 
   /**
-   * Binds a chat to a given canvas tab (the sender of a `launch`), replacing any binding, and
-   * primes the chat's context from it. Null = the tab is not listed or its registration is
-   * latched; the chat stays as it was.
+   * Binds a chat to a given canvas tab (the sender of a `launch`), replacing any binding. Null =
+   * the tab is not listed or its registration is latched, or the resulting binding is not exactly
+   * that tab; the chat stays as it was. Does NOT prime the context (`primeSession` does, so a
+   * caller can answer first: priming waits up to `CONTEXT_TIMEOUT_MS` on the tab).
    */
   async bindTo(sessionId: string, tabId: number): Promise<Binding | null> {
     const r = await this.establish(sessionId, {
       reuseLive: false,
       find: (tabs) => tabs.find((t) => t.tabId === tabId),
       tolerateListFailure: true,
-      prime: true,
     });
-    return r.ok ? r.binding : null;
+    return r.ok && r.binding.tabId === tabId ? r.binding : null;
+  }
+
+  /** Fills the chat's remembered context from its bound tab (see `primeContext`). Never rejects. */
+  async primeSession(sessionId: string): Promise<void> {
+    try {
+      await this.primeContext(sessionId);
+    } catch {
+      // The context stays as it was.
+    }
   }
 
   /** Tells a canvas tab its `launch` was handled (no `error`) or refused (`error`). */
   ackLaunch(tabId: number, launchId: string, error?: string): void {
+    if (this.launchOutcomes.has(launchId)) this.launchOutcomes.set(launchId, error ? error : null);
     this.post(tabId, { kind: "launch-ack", launchId, ...(error ? { error } : {}) });
   }
 
-  /** Forgets a chat's binding (not the tab). */
+  /** Forgets everything remembered about a chat (its binding, not the tab). Call when the chat is deleted. */
   forgetSession(sessionId: string): void {
     this.dropBinding(sessionId);
-    this.bindGeneration.delete(sessionId);
     this.models.delete(sessionId);
   }
 
@@ -279,8 +303,9 @@ export class PanelClient {
 
   /**
    * THE binding path: `bind` (implicit), `bindExplicit` and `bindTo` all go through here. Binds of one
-   * chat run one after another (`binding$` is the queue), so two concurrent binds never open two tabs
-   * or overwrite each other. Picks a listed tab (or opens one), checks abort / latch BEFORE any side effect,
+   * chat run one after another (`binding$` is the queue), so two concurrent binds never overwrite each
+   * other half-way; a queued implicit bind then finds the live binding and reuses it, while an explicit
+   * one runs in full (two parallel `open_canvas_tab` "new" open two tabs, as asked). Picks a listed tab (or opens one), checks abort / latch BEFORE any side effect,
    * sets the binding. Never rejects.
    *
    * `openTab()` answers with the registration it waited for: it is never looked up in the tab list,
@@ -288,10 +313,8 @@ export class PanelClient {
    * reload and latch the tab).
    */
   private establish(sessionId: string, spec: EstablishSpec): Promise<Established> {
-    const joined = this.binding$.has(sessionId);
-    const generation = this.bindGeneration.get(sessionId) ?? 0;
     const prev = this.binding$.get(sessionId) ?? Promise.resolve();
-    const run = prev.then(() => this.establishNow(sessionId, spec, joined, generation));
+    const run = prev.then(() => this.establishNow(sessionId, spec));
     const tail = run.then(
       () => undefined,
       () => undefined
@@ -303,17 +326,11 @@ export class PanelClient {
     return run;
   }
 
-  private async establishNow(
-    sessionId: string,
-    spec: EstablishSpec,
-    joined: boolean,
-    generationAtEntry: number
-  ): Promise<Established> {
+  private async establishNow(sessionId: string, spec: EstablishSpec): Promise<Established> {
     try {
       if (spec.signal?.aborted) return { ok: false, reason: "aborted" };
       const live = this.liveBinding(sessionId);
-      const bindFinishedMeanwhile = joined && (this.bindGeneration.get(sessionId) ?? 0) !== generationAtEntry;
-      if (live && (spec.reuseLive || bindFinishedMeanwhile)) {
+      if (live && spec.reuseLive) {
         if (spec.activate) this.bridge.activateTab(live.tabId);
         return { ok: true, binding: live, opened: this.lastOpened.get(sessionId) ?? false };
       }
@@ -347,7 +364,6 @@ export class PanelClient {
       const switched = !previous || keyOf(previous) !== keyOf(binding);
       if (switched) this.lastContext.delete(sessionId);
       this.bindings.set(sessionId, binding);
-      this.bindGeneration.set(sessionId, (this.bindGeneration.get(sessionId) ?? 0) + 1);
       this.lastOpened.set(sessionId, opened);
       if (spec.prime && (switched || !this.lastContext.has(sessionId))) await this.primeContext(sessionId);
       return { ok: true, binding, opened };
@@ -363,7 +379,7 @@ export class PanelClient {
    * never kept: its ids do not exist in the new document.
    */
   private async primeContext(sessionId: string): Promise<void> {
-    const fresh = await this.fetchContext(sessionId, this.models.get(sessionId) ?? "");
+    const fresh = await this.fetchContext(sessionId, this.modelFor?.(sessionId) ?? this.models.get(sessionId) ?? "");
     if (!this.liveBinding(sessionId)) return; // latched meanwhile: its context goes with it
     this.lastContext.set(sessionId, fresh ?? "{}");
   }
@@ -390,7 +406,7 @@ export class PanelClient {
    * listed tab (most recently active), opened if there is none, and activated. "new": a freshly
    * opened, activated tab. The chat's previous tab is released WITHOUT latching it (other chats may
    * still use it); its context goes and the new tab's is prefetched. Concurrent binds of the chat are
-   * serialized and joined (see `establish`). An abort stops the call before it opens or activates
+   * serialized, never merged: "new" always opens its own tab (see `establish`). An abort stops the call before it opens or activates
    * anything; once the tab was opened it is bound and reported as a success. Never rejects.
    */
   async bindExplicit(
@@ -701,9 +717,15 @@ export class PanelClient {
         this.pending.get(msg.callId)?.onStarted?.();
         break;
       case "launch":
-        if (!this.seenLaunches.has(msg.launchId)) {
-          this.seenLaunches.add(msg.launchId);
-          if (this.seenLaunches.size > MAX_ENDED_STREAMS) this.seenLaunches.delete(this.seenLaunches.values().next().value as string);
+        if (this.launchOutcomes.has(msg.launchId)) {
+          // A retry of a launch already handled (or being handled): repeat its ack, never handle it again.
+          const outcome = this.launchOutcomes.get(msg.launchId);
+          if (outcome !== undefined) this.ackLaunch(tabId, msg.launchId, outcome ?? undefined);
+        } else {
+          this.launchOutcomes.set(msg.launchId, undefined);
+          if (this.launchOutcomes.size > MAX_LAUNCH_OUTCOMES) {
+            this.launchOutcomes.delete(this.launchOutcomes.keys().next().value as string);
+          }
           try {
             this.onLaunch?.({ tabId, launchId: msg.launchId, payload: msg.payload });
           } catch {

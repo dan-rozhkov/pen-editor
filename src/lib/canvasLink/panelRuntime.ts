@@ -7,6 +7,7 @@
  */
 import { getAgentPanelCanvasBridge, isAgentPanelHost } from "@/lib/agentPanel";
 import { track } from "@/lib/analytics";
+import { resolveSessionModel } from "@/lib/sessionModel";
 import { useChatStore } from "@/store/chatStore";
 import { getLikedReferences } from "./likedReferences";
 import { setPlaceNodeRedirect } from "@/lib/tools/browser/placeOnCanvas";
@@ -16,6 +17,18 @@ import { PanelClient, type CallFailure, type CallOptions } from "./panelClient";
 
 let client: PanelClient | null = null;
 let clientBridge: unknown = null;
+let stopChatWatch: (() => void) | null = null;
+
+/** Tells the client to forget every chat that left the store (closed or deleted), or its maps grow forever. */
+function watchChatRemoval(c: PanelClient): () => void {
+  let known = new Set(useChatStore.getState().chats.map((chat) => chat.id));
+  return useChatStore.subscribe((state) => {
+    if (state.chats.length === known.size && state.chats.every((chat) => known.has(chat.id))) return;
+    const current = new Set(state.chats.map((chat) => chat.id));
+    for (const id of known) if (!current.has(id)) c.forgetSession(id);
+    known = current;
+  });
+}
 
 /** True in the desktop agent panel with a canvas bridge (panel version >= 2). */
 export function isPanelCanvasLinkActive(): boolean {
@@ -38,15 +51,16 @@ function trackCanvasCallFailed({ toolName, kind, durationMs }: CallFailure): voi
 }
 
 /**
- * A canvas tab's `launch` (an on-canvas agent entry point fired in a chatless tab): creates a
- * new chat (default, like every local launch helper) or reuses the active one, BINDS it to the
- * sending tab first (so the first request already carries that tab's `canvasContext`, which holds
- * the selection), then queues the payload; the chat session's auto-send effect delivers it.
+ * A canvas tab's `launch` (an on-canvas agent entry point fired in a chatless tab): creates a NEW
+ * chat (like every local launch helper), BINDS it to the sending tab, then queues the payload; the
+ * chat session's auto-send effect delivers it. The first request therefore already carries that
+ * tab's `canvasContext`, which holds the selection.
  *
- * Always answers the tab with a `launch-ack`. A tab that is unlisted or latched is refused with an
- * error ack and the panel shows nothing (no chat is created, no other chat is touched). "active-chat"
- * reuses the active chat only when it is idle (no turn, no pending launch) and unbound or bound to
- * the same tab; otherwise a new chat is created.
+ * Always answers the tab with a `launch-ack`, and as soon as the chat exists and is bound: priming
+ * the tab's context (up to 2 s) happens AFTER the ack, so a slow tab does not look like a silent panel.
+ * A tab that is unlisted or latched is refused with an error ack and nothing in the panel changes. The
+ * chat is created inactive and only becomes the active one once the bind worked, so a refused launch
+ * never takes the user's current chat away.
  */
 async function handleLaunch({
   tabId,
@@ -69,27 +83,28 @@ async function handleLaunch({
     c.ackLaunch(tabId, launchId, refused);
     return;
   }
-  const store = useChatStore.getState();
-  const active = store.activeChatId ? store.chats.find((chat) => chat.id === store.activeChatId) : undefined;
-  const bound = active ? c.getBinding(active.id) : null;
-  const reuse =
-    payload.target === "active-chat" &&
-    active !== undefined &&
-    !active.isBusy &&
-    !(active.id in store.launchQueue) &&
-    (bound === null || bound.tabId === tabId);
-  const chatId = reuse ? active!.id : store.createChat();
+  const chatId = useChatStore.getState().createChat({ activate: false });
   if (!(await c.bindTo(chatId, tabId))) {
-    // The tab went away between the probe and the bind.
-    if (!reuse) useChatStore.getState().closeChat(chatId);
+    // The tab went away between the probe and the bind. The active chat was never touched.
+    useChatStore.getState().closeChat(chatId);
     c.ackLaunch(tabId, launchId, refused);
     return;
   }
+  useChatStore.getState().openChat(chatId);
+  c.ackLaunch(tabId, launchId);
+  await c.primeSession(chatId);
+  if (!useChatStore.getState().chats.some((chat) => chat.id === chatId)) return; // closed meanwhile
   useChatStore.getState().queueLaunchPayload(chatId, {
     text,
     ...(Array.isArray(payload.images) && payload.images.length > 0 ? { images: payload.images } : {}),
   });
-  c.ackLaunch(tabId, launchId);
+}
+
+function disposeClient(): void {
+  stopChatWatch?.();
+  stopChatWatch = null;
+  client?.dispose();
+  client = null;
 }
 
 /** Creates the singleton (and installs the place-node redirect) on first use. */
@@ -97,9 +112,15 @@ export function getPanelClient(): PanelClient | null {
   const bridge = getAgentPanelCanvasBridge();
   if (!bridge || !isAgentPanelHost()) return null;
   if (client && clientBridge === bridge) return client;
-  client?.dispose();
-  client = new PanelClient({ bridge, onCallFailed: trackCanvasCallFailed, onLaunch: (l) => void handleLaunch(l) });
+  disposeClient();
+  client = new PanelClient({
+    bridge,
+    onCallFailed: trackCanvasCallFailed,
+    modelFor: resolveSessionModel,
+    onLaunch: (l) => void handleLaunch(l),
+  });
   clientBridge = bridge;
+  stopChatWatch = watchChatRemoval(client);
   // The browse handlers pass their chat's `sessionId`, so a background chat's capture goes to ITS
   // bound tab. Only a caller without one (none today) falls back to the active chat.
   setPlaceNodeRedirect(async (node, options, signal, sessionId) => {
@@ -128,8 +149,7 @@ export function startPanelRuntime(): void {
 
 /** Test seam: drops the singleton and the place-node redirect. */
 export function resetPanelRuntimeForTests(): void {
-  client?.dispose();
-  client = null;
+  disposeClient();
   clientBridge = null;
   setPlaceNodeRedirect(null);
 }

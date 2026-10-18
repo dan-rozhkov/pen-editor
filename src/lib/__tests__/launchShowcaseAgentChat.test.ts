@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { launchShowcaseAgentChat } from "@/lib/launchShowcaseAgentChat";
 import {
-  consumeShowcaseAgentPrompt,
+  peekShowcaseAgentPrompt,
   storeShowcaseAgentPrompt,
 } from "@/lib/showcaseAgentHandoff";
 import { useChatStore } from "@/store/chatStore";
@@ -44,7 +44,7 @@ describe("launchShowcaseAgentChat", () => {
     expect(chat.launchQueue[chat.activeChatId!]?.text).toBe("make a travel app");
     expect(useLeftSidebarStore.getState().activeSection).toBe("agents");
     expect(useLeftSidebarStore.getState().isPanelOpen).toBe(true);
-    expect(consumeShowcaseAgentPrompt()).toBeNull();
+    expect(peekShowcaseAgentPrompt()).toBeNull();
   });
 
   it("does nothing when there is no showcase handoff", async () => {
