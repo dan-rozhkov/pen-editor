@@ -71,6 +71,12 @@ export interface ToolExecutionContext extends HarnessToolExecutionContext {
    * browser; the loop guard keys on it instead of `sessionId`.
    */
   browserSession?: string;
+  /**
+   * Called once, inside the queued task, right before the handler runs (not
+   * when the call was already aborted: then it never runs). The canvas link
+   * host posts `started` from it.
+   */
+  onStart?: () => void;
 }
 
 export type ToolHandler = HarnessToolHandler<ToolExecutionContext>;

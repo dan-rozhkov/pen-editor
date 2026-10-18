@@ -59,6 +59,12 @@ export type ChatToCanvasMsg =
 
 export type CanvasToChatMsg =
   | { kind: "result"; callId: string; result: string }
+  /**
+   * The queued `call` just started its handler (the tab's serial queue reached
+   * it). The panel starts the call's `timeoutMs + 2 s` timer here, so time spent
+   * queued behind another call is not charged to the budget.
+   */
+  | { kind: "started"; callId: string }
   /** The receiver lost track of a stream: the next update must be "full". */
   | { kind: "resync"; toolCallId: string }
   | { kind: "context-response"; reqId: string; canvasContext: string };
@@ -73,7 +79,16 @@ export type MainToChatMsg =
    */
   | { kind: "tab-gone"; registrationId: number };
 
-export type LinkMsg = ChatToCanvasMsg | CanvasToChatMsg | MainToChatMsg;
+/**
+ * main -> canvas tab, made by main (never by the panel): the agent panel
+ * reloaded or crashed (sent to every registered canvas tab on `canvas:from-panel`).
+ * Whatever the old panel left behind is orphaned: the tab aborts every call (queued
+ * ones never run and roll their streams back), abandons every open stream and posts
+ * nothing for them.
+ */
+export type MainToCanvasMsg = { kind: "panel-gone" };
+
+export type LinkMsg = ChatToCanvasMsg | CanvasToChatMsg | MainToChatMsg | MainToCanvasMsg;
 
 /** `listTabs()` / `onTabsChanged` order: the most recently active canvas tab first. */
 export interface CanvasTabInfo {
@@ -104,10 +119,10 @@ export interface CanvasHostBridge {
   register(): void;
   /**
    * Called when the host stops (the editor unmounts, e.g. SPA navigation away,
-   * or the canvas stops being editable). Main treats it like `tab-gone` for the
+   * or the shared viewer takes over). Main treats it like `tab-gone` for the
    * current registration. Idempotent.
    */
   unregister(): void;
   post(env: LinkEnvelope<CanvasToChatMsg>): void;
-  onMessage(cb: (env: LinkEnvelope<ChatToCanvasMsg>) => void): () => void;
+  onMessage(cb: (env: LinkEnvelope<ChatToCanvasMsg | MainToCanvasMsg>) => void): () => void;
 }

@@ -153,13 +153,10 @@ function App() {
 
   // Canvas link (docs/canvas-link.md): in the desktop agent layout this chatless
   // tab registers as a canvas host so the agent panel can drive its document.
-  // Re-evaluated when editability changes: the host is stopped (and unregisters)
-  // on the shared viewer and in view/present mode, and starts when editing is allowed.
-  const canvasHostEditable = mode === "edit" && !isSharedView;
-  useEffect(() => {
-    if (!canvasHostEditable) return undefined;
-    return maybeStartCanvasHost() ?? undefined;
-  }, [canvasHostEditable]);
+  // Started on every canvas but the shared viewer and NOT restarted on edit <->
+  // view/present toggles (that would kill a running call): the host itself refuses
+  // mutating calls, frames and place-node while `canMutateScene()` is false.
+  useEffect(() => maybeStartCanvasHost() ?? undefined, [isSharedView]);
 
   // Embed HTML components: re-render consumers when a master changes (edit,
   // undo, redo) and catch stale regions up on page activation. See

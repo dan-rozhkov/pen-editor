@@ -11,7 +11,7 @@ import { executeToolCall } from "@/hooks/useDesignChat";
 import { getStreamingToolAdapter, streamingToolAdapters } from "@/lib/streamingTools";
 import { isSerializedTool } from "@/lib/toolCallQueue";
 import { toolHandlers } from "@/lib/toolRegistry";
-import { canEditScene, useEditorModeStore } from "@/store/editorModeStore";
+import { canMutateScene } from "@/lib/webmcp/registerTools";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSharedViewStore } from "@/store/sharedViewStore";
 import { generateId } from "@/types/scene";
@@ -24,6 +24,7 @@ import {
   type CanvasToChatMsg,
   type ChatToCanvasMsg,
   type LinkEnvelope,
+  type MainToCanvasMsg,
 } from "./protocol";
 import { buildSceneContext } from "./sceneContext";
 
@@ -34,15 +35,8 @@ const errorResult = (message: string): string => JSON.stringify({ error: message
 const NOT_EDITABLE_MESSAGE =
   "This canvas is not editable right now (read-only view or present mode); editing tools are unavailable.";
 
-/**
- * The same rule WebMCP applies (`canMutateScene` in lib/webmcp/registerTools.ts):
- * not the shared `/c/:shareId` viewer, and the editor mode allows scene edits.
- * The host starts only when this holds, and refuses mutating work if it stops.
- */
-export function isCanvasEditable(): boolean {
-  if (useSharedViewStore.getState().isSharedView) return false;
-  return canEditScene(useEditorModeStore.getState().mode);
-}
+/** One editability rule for WebMCP and the host: `canMutateScene` (lib/webmcp/registerTools.ts). */
+const isCanvasEditable = canMutateScene;
 
 interface StreamEntry {
   toolName: string;
@@ -50,9 +44,15 @@ interface StreamEntry {
   decoder: AppendDecoder | null;
 }
 
+interface CallEntry {
+  controller: AbortController;
+  /** `panel-gone`: the asker no longer exists, so nothing is posted for this call. */
+  silent: boolean;
+}
+
 export function startCanvasHost(bridge: CanvasHostBridge): () => void {
   const streams = new Map<string, StreamEntry>();
-  const calls = new Map<string, AbortController>();
+  const calls = new Map<string, CallEntry>();
   let counter = 0;
   let stopped = false;
 
@@ -79,22 +79,38 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
   };
 
   /**
-   * Runs `work` as call `callId`: exactly one `result` is posted. The timeout
-   * is NOT handled here: `executeToolCall` owns it and starts it inside the
-   * serial queue. A callId that is still running is ignored (the first call
-   * keeps running and answers once).
+   * Runs `work` as call `callId`: exactly one `result` is posted (none after
+   * `panel-gone`). The timeout is NOT handled here: `executeToolCall` owns it and
+   * starts it inside the serial queue. A callId that is still running is ignored
+   * (the first call keeps running and answers once). `work` calls `started()`
+   * when its handler really begins; `onEnd(started)` runs once the call is over.
    */
-  const runCall = (callId: string, work: (signal: AbortSignal) => Promise<string>): void => {
+  const runCall = (
+    callId: string,
+    work: (signal: AbortSignal, started: () => void) => Promise<string>,
+    onEnd?: (started: boolean) => void
+  ): void => {
     if (calls.has(callId)) return;
-    const controller = new AbortController();
-    calls.set(callId, controller);
+    const entry: CallEntry = { controller: new AbortController(), silent: false };
+    calls.set(callId, entry);
+    let didStart = false;
+    const started = (): void => {
+      if (didStart) return;
+      didStart = true;
+      if (!entry.silent) post({ kind: "started", callId });
+    };
     const settle = (result: string): void => {
-      if (calls.get(callId) === controller) calls.delete(callId);
-      post({ kind: "result", callId, result });
+      if (calls.get(callId) === entry) calls.delete(callId);
+      try {
+        onEnd?.(didStart);
+      } catch (err) {
+        console.warn("[canvasHost] call cleanup failed", err);
+      }
+      if (!entry.silent) post({ kind: "result", callId, result });
     };
     let promise: Promise<string>;
     try {
-      promise = work(controller.signal);
+      promise = work(entry.controller.signal, started);
     } catch (err) {
       promise = Promise.reject(err);
     }
@@ -163,7 +179,7 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
     });
   };
 
-  const handle = (msg: ChatToCanvasMsg): void => {
+  const handle = (msg: ChatToCanvasMsg | MainToCanvasMsg): void => {
     switch (msg.kind) {
       case "stream":
         handleStream(msg);
@@ -182,30 +198,61 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
         }
         break;
       }
-      case "call":
-        // The streamed state is handed over to the handler under the same id
-        // (callId === toolCallId), exactly like the local path.
-        streams.delete(msg.callId);
-        runCall(msg.callId, async (signal) => {
-          if (toolHandlers[msg.toolName] && isSerializedTool(msg.toolName) && !isCanvasEditable()) {
-            return errorResult(NOT_EDITABLE_MESSAGE);
+      case "call": {
+        // The streamed state stays registered until the handler really starts, then
+        // is handed over under the same id (callId === toolCallId), like the local
+        // path. A call that ends without running (aborted while queued, refused,
+        // unknown tool) rolls the stream back.
+        runCall(
+          msg.callId,
+          async (signal, started) => {
+            if (toolHandlers[msg.toolName] && isSerializedTool(msg.toolName) && !isCanvasEditable()) {
+              return errorResult(NOT_EDITABLE_MESSAGE);
+            }
+            // The budget counts from the start of the queued task (executeToolCall).
+            return executeToolCall(
+              msg.toolName,
+              msg.input,
+              {
+                sessionId: CANVAS_LINK_SESSION,
+                toolCallId: msg.callId,
+                signal,
+                onStart: () => {
+                  streams.delete(msg.callId);
+                  started();
+                },
+              },
+              "canvas-link",
+              { timeoutMs: msg.timeoutMs }
+            );
+          },
+          () => {
+            const left = streams.get(msg.callId);
+            if (!left) return;
+            streams.delete(msg.callId);
+            abandon(msg.callId, left.toolName);
           }
-          // The budget counts from the start of the queued task (executeToolCall).
-          return executeToolCall(
-            msg.toolName,
-            msg.input,
-            { sessionId: CANVAS_LINK_SESSION, toolCallId: msg.callId, signal },
-            "canvas-link",
-            { timeoutMs: msg.timeoutMs }
-          );
-        });
+        );
         break;
+      }
       case "cancel":
         // The handler still answers (with an error); the panel ignores it.
-        calls.get(msg.callId)?.abort();
+        calls.get(msg.callId)?.controller.abort();
         break;
       case "place-node":
         handlePlaceNode(msg);
+        break;
+      case "panel-gone":
+        // The agent panel reloaded or crashed: cancel everything it left behind.
+        // Running calls are aborted, queued ones never run (and roll their stream
+        // back), open streams are abandoned, and nobody is told.
+        for (const entry of calls.values()) {
+          entry.silent = true;
+          entry.controller.abort();
+        }
+        calls.clear();
+        for (const [toolCallId, { toolName }] of streams) abandon(toolCallId, toolName);
+        streams.clear();
         break;
       case "context-request":
         post({
@@ -257,7 +304,7 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
         console.warn("[canvasHost] session clear failed", err);
       }
     }
-    for (const controller of calls.values()) controller.abort();
+    for (const entry of calls.values()) entry.controller.abort();
     calls.clear();
     stopped = true;
     try {
@@ -269,12 +316,14 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
 }
 
 /**
- * App.tsx's one entry: starts the host only in a chatless tab that has the
- * desktop `canvasHost` bridge, on an editable canvas (not the shared viewer,
- * not view/present mode). Returns the stop function, or null.
+ * App.tsx's one entry: starts the host in a chatless tab that has the desktop
+ * `canvasHost` bridge, never on the shared viewer (someone else's document).
+ * View/present mode does not matter here: the host stays up across mode
+ * toggles (a call must not be stopped mid-run) and refuses mutating work itself
+ * while the canvas is not editable. Returns the stop function, or null.
  */
 export function maybeStartCanvasHost(): (() => void) | null {
   const bridge = typeof window === "undefined" ? undefined : window.penDesktop?.canvasHost;
-  if (!bridge || !isChatDisabled() || !isCanvasEditable()) return null;
+  if (!bridge || !isChatDisabled() || useSharedViewStore.getState().isSharedView) return null;
   return startCanvasHost(bridge);
 }

@@ -72,28 +72,44 @@ describe("panel seams", () => {
     expect(panelRunsInCanvas("analyze_image")).toBe(false);
   });
 
-  it("send no canvasContext when the chat is not bound, and never open a tab for it", async () => {
+  it("send no canvasContext when there is no canvas tab at all, and never open one for it", async () => {
     const fake = installPanel();
+    fake.setTabs([]);
     const body = await withPanelCanvasContext("s", { canvasContext: '{"roots":[]}', model: "m" });
     expect(body).toEqual({ model: "m" });
     expect(fake.openTab).not.toHaveBeenCalled();
+  });
+
+  it("send only the chat's likedReferences (read from the store) when no scene context is available", async () => {
+    const fake = installPanel();
+    fake.setTabs([]);
+    useChatStore.setState({
+      likedReferences: { s: [{ url: "https://r/1.png", sourceUrl: "https://src", tool: "browse_screenshot" }] },
+    } as never);
+    const body = (await withPanelCanvasContext("s", { canvasContext: "ignored", model: "m" })) as {
+      canvasContext: string;
+    };
+    expect(body.canvasContext).toBe(
+      JSON.stringify({ likedReferences: [{ url: "https://r/1.png", sourceUrl: "https://src", tool: "browse_screenshot" }] })
+    );
+    // Another chat without liked references gets no field.
+    expect(await withPanelCanvasContext("other", { model: "m" })).toEqual({ model: "m" });
+    useChatStore.setState({ likedReferences: {} } as never);
   });
 
   it("replace the local context by the tab's, with the chat's likedReferences last", async () => {
     const fake = installPanel();
     attachScriptedCanvas(fake, { context: '{"roots":[{"id":"a"}],"selectedIds":[]}' });
     await getPanelClient()!.callTool("s", "batch_get", {}, { toolCallId: "c1", timeoutMs: 1000 });
-    const local = {
-      canvasContext: JSON.stringify({ roots: [], likedReferences: [{ url: "https://r/1.png" }] }),
-      model: "m",
-      userId: "u",
-    };
+    useChatStore.setState({ likedReferences: { s: [{ url: "https://r/1.png" }] } } as never);
+    const local = { canvasContext: "local scene, replaced", model: "m", userId: "u" };
     const body = (await withPanelCanvasContext("s", local)) as { canvasContext: string; model: string };
     expect(body.model).toBe("m");
     expect(Object.keys(JSON.parse(body.canvasContext))).toEqual(["roots", "selectedIds", "likedReferences"]);
     expect(JSON.parse(body.canvasContext).roots).toEqual([{ id: "a" }]);
     expect(fake.ofKind("context-request")[0]).toMatchObject({ sessionId: "s", model: "m" });
     expect(((await withPanelCanvasContext("s", local)) as typeof body).canvasContext).toBe(body.canvasContext);
+    useChatStore.setState({ likedReferences: {} } as never);
   });
 });
 

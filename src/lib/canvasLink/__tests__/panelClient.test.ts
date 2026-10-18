@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PanelClient, TAB_CLOSED_ERROR, CALL_TIMEOUT_MARGIN_MS, CONTEXT_TIMEOUT_MS } from "../panelClient";
+import {
+  PanelClient,
+  TAB_CLOSED_ERROR,
+  CALL_TIMEOUT_MARGIN_MS,
+  CONTEXT_TIMEOUT_MS,
+  PRE_START_TIMEOUT_MS,
+  type CallFailure,
+} from "../panelClient";
 import { appendLikedReferences } from "../panelRuntime";
 import { attachScriptedCanvas, createFakeCanvasBridge, tab, type FakeCanvasBridge } from "./fakeCanvasBridge";
 
@@ -115,6 +122,8 @@ describe("calls", () => {
     const p = client.callTool("s", "batch_design", {}, { toolCallId: "c1", timeoutMs: 5000 });
     let settled = false;
     void p.then(() => (settled = true));
+    await vi.advanceTimersByTimeAsync(0);
+    fake.emit(1, { kind: "started", callId: "c1" });
     await vi.advanceTimersByTimeAsync(5000 + CALL_TIMEOUT_MARGIN_MS - 1);
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(2);
@@ -135,10 +144,42 @@ describe("calls", () => {
     release();
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.ofKind("call")).toHaveLength(1);
+    fake.emit(100, { kind: "started", callId: "c1" });
     await vi.advanceTimersByTimeAsync(5000 + CALL_TIMEOUT_MARGIN_MS - 1);
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(2);
     expect(errorOf(await p)).toMatch(/timed out/);
+  });
+
+  it("does not time out a call queued behind another for longer than its budget; the budget starts on started", async () => {
+    vi.useFakeTimers();
+    setup();
+    const p = client.callTool("s", "batch_design", {}, { toolCallId: "q1", timeoutMs: 5000 });
+    let settled = false;
+    void p.then(() => (settled = true));
+    await vi.advanceTimersByTimeAsync(5000 + CALL_TIMEOUT_MARGIN_MS + 60_000); // queued in the tab
+    expect(settled).toBe(false);
+    expect(fake.ofKind("cancel")).toHaveLength(0);
+    fake.emit(1, { kind: "started", callId: "q1" });
+    await vi.advanceTimersByTimeAsync(5000 + CALL_TIMEOUT_MARGIN_MS - 1);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(2);
+    expect(errorOf(await p)).toMatch(/timed out/);
+  });
+
+  it("a call that never starts is freed by the pre-start safety net, and abort still cancels at once", async () => {
+    vi.useFakeTimers();
+    setup();
+    const p = client.callTool("s", "batch_design", {}, { toolCallId: "n1", timeoutMs: 5000 });
+    await vi.advanceTimersByTimeAsync(PRE_START_TIMEOUT_MS - 1);
+    fake.emit(1, { kind: "result", callId: "other", result: "x" });
+    await vi.advanceTimersByTimeAsync(2);
+    expect(errorOf(await p)).toMatch(/timed out/);
+    const ac = new AbortController();
+    const p2 = client.callTool("s", "batch_design", {}, { toolCallId: "n2", timeoutMs: 5000, signal: ac.signal });
+    await vi.advanceTimersByTimeAsync(0);
+    ac.abort();
+    expect(errorOf(await p2)).toMatch(/abort/i);
   });
 
   it("abort resolves an error, posts cancel and ignores the late result", async () => {
@@ -164,6 +205,85 @@ describe("calls", () => {
     setup();
     fake.onPost(({ tabId, env }) => queueMicrotask(() => fake.emit(tabId, { kind: "error", refId: env.id, error: "no such tab" })));
     expect(errorOf(await client.callTool("s", "t", {}, { toolCallId: "c1", timeoutMs: 1000 }))).toBe("no such tab");
+  });
+
+  it("a main error for a tab missing from the list latches the binding, so the next call rebinds", async () => {
+    setup([tab(1), tab(2)]);
+    let fail = true;
+    fake.onPost(({ tabId, env }) => {
+      if (fail && env.msg.kind === "call") {
+        fake.setTabs([tab(2)]); // tab 1 vanished without a tab-gone
+        queueMicrotask(() => fake.emit(tabId, { kind: "error", refId: env.id, error: "unknown tab" }));
+      }
+    });
+    expect(errorOf(await client.callTool("s", "t", {}, { toolCallId: "e1", timeoutMs: 1000 }))).toBe("unknown tab");
+    await flush();
+    expect(client.getBinding("s")).toBeNull();
+    fail = false;
+    attachScriptedCanvas(fake);
+    await client.callTool("s", "t", {}, { toolCallId: "e2", timeoutMs: 1000 });
+    expect(client.getBinding("s")).toEqual({ tabId: 2, registrationId: 1 });
+  });
+
+  it("a main error for a tab that is still listed keeps the binding", async () => {
+    setup();
+    fake.onPost(({ tabId, env }) => queueMicrotask(() => fake.emit(tabId, { kind: "error", refId: env.id, error: "busy" })));
+    await client.callTool("s", "t", {}, { toolCallId: "e1", timeoutMs: 1000 });
+    await flush();
+    expect(client.getBinding("s")).toEqual({ tabId: 1, registrationId: 1 });
+  });
+});
+
+describe("failure reports (analytics seam)", () => {
+  const failures: CallFailure[] = [];
+  const setupReporting = (tabs = [tab(1)]) => {
+    failures.length = 0;
+    fake = createFakeCanvasBridge(tabs);
+    client = new PanelClient({ bridge: fake.bridge, now: () => 42, onCallFailed: (f) => failures.push(f) });
+  };
+
+  it("reports nothing when the tab answered, even with a tool error", async () => {
+    setupReporting();
+    attachScriptedCanvas(fake, { onCall: () => JSON.stringify({ error: "nodeId is required" }) });
+    await client.callTool("s", "t", {}, { toolCallId: "r1", timeoutMs: 1000 });
+    expect(failures).toEqual([]);
+  });
+
+  it("reports tab-gone, main error, timeout and bind failure once each; not aborts", async () => {
+    setupReporting();
+    const p1 = client.callTool("s", "a", {}, { toolCallId: "r1", timeoutMs: 1000 });
+    await flush();
+    fake.closeTab(1);
+    await p1;
+    expect(failures.map((f) => [f.toolName, f.kind])).toEqual([["a", "tab_gone"]]);
+
+    setupReporting();
+    fake.onPost(({ tabId, env }) => queueMicrotask(() => fake.emit(tabId, { kind: "error", refId: env.id, error: "x" })));
+    await client.callTool("s", "b", {}, { toolCallId: "r2", timeoutMs: 1000 });
+    expect(failures.map((f) => [f.toolName, f.kind])).toEqual([["b", "main_error"]]);
+
+    vi.useFakeTimers();
+    setupReporting();
+    const p3 = client.callTool("s", "c", {}, { toolCallId: "r3", timeoutMs: 1000 });
+    await vi.advanceTimersByTimeAsync(0);
+    fake.emit(1, { kind: "started", callId: "r3" });
+    await vi.advanceTimersByTimeAsync(1000 + CALL_TIMEOUT_MARGIN_MS);
+    await p3;
+    expect(failures.map((f) => [f.toolName, f.kind])).toEqual([["c", "timeout"]]);
+    vi.useRealTimers();
+
+    setupReporting([]);
+    fake.openTab.mockRejectedValueOnce(new Error("no tab"));
+    await client.callTool("s", "d", {}, { toolCallId: "r4", timeoutMs: 1000 });
+    expect(failures.map((f) => [f.toolName, f.kind])).toEqual([["d", "bind_failed"]]);
+
+    setupReporting();
+    const ac = new AbortController();
+    const p5 = client.callTool("s", "e", {}, { toolCallId: "r5", timeoutMs: 1000, signal: ac.signal });
+    await flush();
+    ac.abort();
+    await p5;
+    expect(failures).toEqual([]);
   });
 });
 
@@ -279,7 +399,7 @@ describe("requestContext", () => {
     expect(await p).toBeNull();
   });
 
-  it("keeps sending the last good context when a later request fails, and omits it only if there never was one", async () => {
+  it("keeps sending the last good context when a later request fails", async () => {
     setup();
     let answer = true;
     attachScriptedCanvas(fake); // answers the call; the context requests are scripted below
@@ -290,7 +410,6 @@ describe("requestContext", () => {
       }
     });
     await client.callTool("s", "t", {}, { toolCallId: "c1", timeoutMs: 1000 });
-    expect(await client.requestContext("other", "m")).toBeNull(); // never received one
     expect(await client.requestContext("s", "m")).toBe('{"roots":["v1"]}');
     answer = false;
     vi.useFakeTimers();
@@ -298,8 +417,25 @@ describe("requestContext", () => {
     await vi.advanceTimersByTimeAsync(CONTEXT_TIMEOUT_MS);
     expect(await timedOut).toBe('{"roots":["v1"]}');
     vi.useRealTimers();
-    fake.closeTab(1); // tab gone: unbound
+  });
+
+  it("tab-gone clears the remembered context (a closed document's context is never sent); a plain failure keeps it", async () => {
+    setup();
+    attachScriptedCanvas(fake, { context: '{"roots":["v1"]}' });
+    await client.callTool("s", "t", {}, { toolCallId: "c1", timeoutMs: 1000 });
     expect(await client.requestContext("s", "m")).toBe('{"roots":["v1"]}');
+    fake.closeTab(1);
+    expect(await client.requestContext("s", "m")).toBeNull();
+    expect(fake.openTab).not.toHaveBeenCalled();
+  });
+
+  it("a new chat binds passively to an existing tab for its first context, never opening one", async () => {
+    setup([tab(1), tab(2)]);
+    attachScriptedCanvas(fake, { context: '{"roots":["tab1"]}' });
+    expect(await client.requestContext("fresh", "m")).toBe('{"roots":["tab1"]}');
+    expect(client.getBinding("fresh")).toEqual({ tabId: 1, registrationId: 1 });
+    expect(fake.posted.every((p) => p.tabId === 1)).toBe(true);
+    expect(fake.openTab).not.toHaveBeenCalled();
   });
 
   it("is null when the tab goes away meanwhile", async () => {

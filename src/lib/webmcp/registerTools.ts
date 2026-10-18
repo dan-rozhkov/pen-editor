@@ -75,7 +75,7 @@ export const SHARED_VIEW_REFUSAL =
  * gating on it keeps the surface honest about what the page is right now, and
  * is not a defence against a caller that wants to edit.
  */
-function canMutateScene(): boolean {
+export function canMutateScene(): boolean {
   if (useSharedViewStore.getState().isSharedView) return false;
   return canEditScene(useEditorModeStore.getState().mode);
 }

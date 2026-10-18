@@ -23,6 +23,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** Sends one message in `sessionId` and returns the request bodies the backend saw. */
+async function sendHello(sessionId: string): Promise<Array<Record<string, unknown>>> {
+  const bodies: Array<Record<string, unknown>> = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url: unknown, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return textTurn();
+    })
+  );
+  const { result } = renderHook(() => useDesignChat({ sessionId }));
+  act(() => result.current.setInput("hi"));
+  await act(async () => void result.current.sendMessage());
+  await waitFor(() => expect(bodies).toHaveLength(1));
+  return bodies;
+}
+
 describe("useDesignChat in the agent panel", () => {
   beforeEach(() => {
     resetStores();
@@ -91,21 +108,19 @@ describe("useDesignChat in the agent panel", () => {
     expect(JSON.stringify(bodies[1].messages)).toContain("canvas tab");
   });
 
-  it("sends no canvasContext when the chat is not bound to a canvas tab, and opens no tab", async () => {
+  it("sends an existing canvas tab's context on the first message of a new chat (passive bind, no tab opened)", async () => {
     const fake = createFakeCanvasBridge([tab(1)]);
+    attachScriptedCanvas(fake, { context: '{"roots":[{"id":"existing"}]}' });
     window.penAgentPanel = { version: 2, canvas: fake.bridge };
-    const bodies: Array<Record<string, unknown>> = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (_url: unknown, init?: RequestInit) => {
-        bodies.push(JSON.parse(String(init?.body)));
-        return textTurn();
-      })
-    );
-    const { result } = renderHook(() => useDesignChat({ sessionId: "unbound" }));
-    act(() => result.current.setInput("hi"));
-    await act(async () => void result.current.sendMessage());
-    await waitFor(() => expect(bodies).toHaveLength(1));
+    const bodies = await sendHello("fresh-chat");
+    expect(JSON.parse(String(bodies[0].canvasContext)).roots).toEqual([{ id: "existing" }]);
+    expect(fake.openTab).not.toHaveBeenCalled();
+  });
+
+  it("sends no canvasContext when there is no canvas tab, and opens none", async () => {
+    const fake = createFakeCanvasBridge([]);
+    window.penAgentPanel = { version: 2, canvas: fake.bridge };
+    const bodies = await sendHello("unbound");
     expect(bodies[0]).not.toHaveProperty("canvasContext");
     expect(bodies[0].model).toBeDefined();
     expect(fake.posted).toHaveLength(0);
@@ -113,17 +128,45 @@ describe("useDesignChat in the agent panel", () => {
   });
 
   it.each([
-    ["success", JSON.stringify({ success: true }), { ok: true }],
-    ["a tool error", JSON.stringify({ error: "nodeId is required" }), { ok: false, error_kind: "handler_error" }],
-    ["the tab's own timeout", JSON.stringify({ error: "Tool call timed out" }), { ok: false, error_kind: "timeout" }],
-  ])("emits agent_tool_executed for a canvas call run in the tab: %s", async (_label, tabResult, expected) => {
+    ["success", JSON.stringify({ success: true })],
+    ["a tool error", JSON.stringify({ error: "nodeId is required" })],
+    ["the tab's own timeout", JSON.stringify({ error: "Tool call timed out" })],
+  ])("the panel emits NO agent_tool_executed for a call the tab answered (the tab's executeToolCall does): %s", async (_label, tabResult) => {
     const fake = createFakeCanvasBridge([tab(1)]);
     attachScriptedCanvas(fake, { onCall: () => tabResult, context: "{}" });
     window.penAgentPanel = { version: 2, canvas: fake.bridge };
+    await runOneCanvasToolTurn("analytics-chat");
+    expect(trackMock.mock.calls.filter(([name]) => name === "agent_tool_executed")).toHaveLength(0);
+  });
+
+  it("emits one canvas-link agent_tool_executed for a call that never reached the tab handler (main error)", async () => {
+    const fake = createFakeCanvasBridge([tab(1)]);
+    fake.onPost(({ tabId, env }) => {
+      const msg = env.msg;
+      if (msg.kind === "context-request") {
+        queueMicrotask(() => fake.emit(tabId, { kind: "context-response", reqId: msg.reqId, canvasContext: "{}" }));
+      } else if (msg.kind === "call") {
+        queueMicrotask(() => fake.emit(tabId, { kind: "error", refId: env.id, error: "gone" }));
+      }
+    });
+    window.penAgentPanel = { version: 2, canvas: fake.bridge };
+    await runOneCanvasToolTurn("analytics-chat-2");
+    const events = trackMock.mock.calls.filter(([name]) => name === "agent_tool_executed");
+    expect(events).toHaveLength(1);
+    expect(events[0][1]).toMatchObject({
+      tool_name: "batch_get",
+      source: "canvas-link",
+      ok: false,
+      error_kind: "canvas_link_main_error",
+      duration_ms: expect.any(Number),
+    });
+  });
+
+  async function runOneCanvasToolTurn(sessionId: string) {
     const first = controlledSse();
     let calls = 0;
     vi.stubGlobal("fetch", vi.fn(async () => (++calls === 1 ? first.response : textTurn())));
-    const { result } = renderHook(() => useDesignChat({ sessionId: "analytics-chat" }));
+    const { result } = renderHook(() => useDesignChat({ sessionId }));
     act(() => result.current.setInput("go"));
     await act(async () => void result.current.sendMessage());
     await waitFor(() => expect(calls).toBe(1));
@@ -136,10 +179,5 @@ describe("useDesignChat in the agent panel", () => {
       first.close();
     });
     await waitFor(() => expect(calls).toBe(2), { timeout: 5000 });
-    expect(trackMock).toHaveBeenCalledWith(
-      "agent_tool_executed",
-      expect.objectContaining({ tool_name: "batch_get", source: "chat", duration_ms: expect.any(Number), ...expected })
-    );
-    expect(trackMock.mock.calls.filter(([name]) => name === "agent_tool_executed")).toHaveLength(1);
-  });
+  }
 });

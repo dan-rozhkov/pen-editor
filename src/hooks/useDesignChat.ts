@@ -5,6 +5,7 @@ import { createToolExecutor, type ToolExecutedEvent } from "@sideform/agent-harn
 import type { RetryState } from "@sideform/agent-harness/retry-fetch";
 import { browseTaskInnerBoundMs } from "@sideform/browser-agent/loop";
 import { track, bucketLength } from "@/lib/analytics";
+import { getLikedReferences } from "@/lib/canvasLink/likedReferences";
 import { consumeFirstPromptTiming } from "@/lib/analytics/sessionTiming";
 import { isOffline, OFFLINE_MESSAGE } from "@/lib/apiBase";
 import { getRequestUserId } from "@/lib/auth/authState";
@@ -58,13 +59,7 @@ export function buildCanvasContext(sessionId?: string): object {
   const model = resolveSessionModel(sessionId);
   const scene = buildSceneContext({ model });
 
-  const likedReferences = (
-    (sessionId ? useChatStore.getState().likedReferences[sessionId] : undefined) ?? []
-  ).map((r) => ({
-    url: r.url,
-    ...(r.sourceUrl ? { sourceUrl: r.sourceUrl } : {}),
-    ...(r.tool ? { tool: r.tool } : {}),
-  }));
+  const likedReferences = getLikedReferences(sessionId);
 
   return {
     canvasContext: JSON.stringify({
@@ -280,23 +275,6 @@ function trackToolExecuted(event: ToolExecutedEvent<ToolCallSource>): void {
   });
 }
 
-/**
- * Agent panel: a canvas tool ran in the canvas tab, not through `executeToolCall`,
- * so it reports `agent_tool_executed` itself, with the same event shape. The
- * failure shape is the same too (a `{"error": ...}` result); a timeout is told
- * apart by its message (the tab's own, or the panel client's).
- */
-function trackPanelCanvasCall(toolName: string, result: string, startedAt: number): void {
-  const ok = !result.startsWith('{"error"');
-  trackToolExecuted({
-    toolName,
-    ok,
-    durationMs: Math.round(performance.now() - startedAt),
-    ...(ok ? {} : { errorKind: /timed out/i.test(result) ? ("timeout" as const) : ("handler_error" as const) }),
-    source: "chat",
-  });
-}
-
 const CANCELLED_RESULT = JSON.stringify({ error: "Tool call cancelled" });
 
 // Checked inside the queued task (the harness invokes the handler there), so a
@@ -304,7 +282,16 @@ const CANCELLED_RESULT = JSON.stringify({ error: "Tool call cancelled" });
 // never runs and never mutates anything.
 const withAbortedCheck =
   (handler: ToolHandler | undefined): ToolHandler | undefined =>
-  handler && ((args, ctx) => (ctx?.signal?.aborted ? Promise.resolve(CANCELLED_RESULT) : handler(args, ctx)));
+  handler &&
+  ((args, ctx) => {
+    if (ctx?.signal?.aborted) return Promise.resolve(CANCELLED_RESULT);
+    try {
+      ctx?.onStart?.();
+    } catch {
+      // An observer must not stop the handler.
+    }
+    return handler(args, ctx);
+  });
 
 function buildToolExecutor(timeoutMs: (toolName: string) => number) {
   return createToolExecutor<ToolExecutionContext, ToolCallSource>({
@@ -322,6 +309,23 @@ export interface ExecuteToolCallOptions {
   timeoutMs?: number;
 }
 
+// @sideform/agent-harness's `timeoutMs(toolName, input)` does not receive the
+// execution context, so a per-call budget cannot ride in `ctx`. Instead one
+// executor per distinct budget is cached (the canvas link sends the handful of
+// per-tool budgets, never a fresh number per call). Harness follow-up: pass
+// `ctx` to `timeoutMs`, then this map can go.
+const MAX_BUDGET_EXECUTORS = 32;
+const budgetExecutors = new Map<number, ReturnType<typeof buildToolExecutor>>();
+
+function executorForBudget(budget: number): ReturnType<typeof buildToolExecutor> {
+  let executor = budgetExecutors.get(budget);
+  if (!executor) {
+    executor = buildToolExecutor(() => budget);
+    if (budgetExecutors.size < MAX_BUDGET_EXECUTORS) budgetExecutors.set(budget, executor);
+  }
+  return executor;
+}
+
 export function executeToolCall(
   toolName: string,
   input: unknown,
@@ -331,7 +335,7 @@ export function executeToolCall(
 ): Promise<string> {
   const budget = options?.timeoutMs;
   if (typeof budget === "number" && Number.isFinite(budget) && budget > 0) {
-    return buildToolExecutor(() => budget)(toolName, input, context, source);
+    return executorForBudget(budget)(toolName, input, context, source);
   }
   return executeWithHarness(toolName, input, context, source);
 }
@@ -480,13 +484,13 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       try {
         // Agent panel: canvas tools run in the bound canvas tab.
         if (panelRunsInCanvas(toolCall.toolName)) {
-          const startedAt = performance.now();
+          // Analytics: the canvas tab's executeToolCall is the one event; the panel
+          // client reports only failures that never reached it (panelRuntime).
           handlerResult = await panelCallTool(sessionId, toolCall.toolName, toolCall.input, {
             toolCallId: toolCall.toolCallId,
             timeoutMs: getToolCallTimeoutMs(toolCall.toolName),
             signal: toolAbort.signal,
           });
-          trackPanelCanvasCall(toolCall.toolName, handlerResult, startedAt);
         } else {
           handlerResult = await executeToolCall(
             toolCall.toolName,

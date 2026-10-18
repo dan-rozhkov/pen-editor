@@ -13,11 +13,17 @@ import { AppendEncoder } from "../appendCodec";
 import { resetChatModeForTests } from "@/lib/chatMode";
 import { maybeStartCanvasHost, startCanvasHost } from "../canvasHost";
 import { buildSceneContext } from "../sceneContext";
-import type { CanvasHostBridge, CanvasToChatMsg, ChatToCanvasMsg, LinkEnvelope } from "../protocol";
+import type {
+  CanvasHostBridge,
+  CanvasToChatMsg,
+  ChatToCanvasMsg,
+  LinkEnvelope,
+  MainToCanvasMsg,
+} from "../protocol";
 
 function fakeBridge() {
   const posted: CanvasToChatMsg[] = [];
-  let listener: ((env: LinkEnvelope<ChatToCanvasMsg>) => void) | null = null;
+  let listener: ((env: LinkEnvelope<ChatToCanvasMsg | MainToCanvasMsg>) => void) | null = null;
   const bridge: CanvasHostBridge = {
     register: vi.fn(),
     unregister: vi.fn(),
@@ -30,7 +36,7 @@ function fakeBridge() {
     },
   };
   let n = 0;
-  const send = (msg: ChatToCanvasMsg) => listener?.({ id: `t${++n}`, sentAt: 0, msg });
+  const send = (msg: ChatToCanvasMsg | MainToCanvasMsg) => listener?.({ id: `t${++n}`, sentAt: 0, msg });
   return { bridge, posted, send, hasListener: () => listener !== null };
 }
 
@@ -103,6 +109,27 @@ describe("canvas host", () => {
     stop?.();
     stop = undefined;
     expect(namedCount("Card")).toBe(0);
+  });
+
+  it("stays up across edit <-> view toggles (no unregister) and finishes a running call", async () => {
+    let release: (() => void) | undefined;
+    toolHandlers.__toggle_test__ = () => new Promise<string>((resolve) => (release = () => resolve("done")));
+    try {
+      const f = start();
+      f.send({ kind: "call", callId: "t1", toolName: "__toggle_test__", input: {}, timeoutMs: 5000 });
+      await vi.waitFor(() => expect(release).toBeDefined());
+      useEditorModeStore.getState().enterView();
+      useEditorModeStore.getState().exitToEdit();
+      expect(f.bridge.unregister).not.toHaveBeenCalled();
+      expect(f.hasListener()).toBe(true);
+      release?.();
+      await vi.waitFor(() => expect(resultFor(f.posted, "t1")?.result).toBe("done"));
+      // and it serves again after the toggle
+      f.send({ kind: "context-request", reqId: "x", sessionId: "s", model: "m" });
+      expect(f.posted.some((m) => m.kind === "context-response")).toBe(true);
+    } finally {
+      delete toolHandlers.__toggle_test__;
+    }
   });
 
   it("refuses streams and mutating calls once the canvas stops being editable", async () => {
@@ -278,6 +305,111 @@ describe("canvas host", () => {
       expect(signal?.aborted).toBe(true);
       expect(f.posted.filter((m) => m.kind === "result" && m.callId === "c4")).toHaveLength(1);
     });
+
+    it("posts started when the handler really starts, not for a call cancelled while queued", async () => {
+      let release: (() => void) | undefined;
+      toolHandlers[TOOL] = () => new Promise<string>((resolve) => (release = () => resolve("first")));
+      toolHandlers[`${TOOL}2`] = async () => "second";
+      const f = start();
+      f.send({ kind: "call", callId: "s1", toolName: TOOL, input: {}, timeoutMs: 5000 });
+      await vi.waitFor(() => expect(release).toBeDefined());
+      f.send({ kind: "call", callId: "s2", toolName: `${TOOL}2`, input: {}, timeoutMs: 5000 });
+      f.send({ kind: "call", callId: "s3", toolName: `${TOOL}2`, input: {}, timeoutMs: 5000 });
+      f.send({ kind: "cancel", callId: "s3" });
+      const started = () => f.posted.filter((m) => m.kind === "started").map((m) => (m as { callId: string }).callId);
+      expect(started()).toEqual(["s1"]); // s2 still queued behind s1
+      release?.();
+      await vi.waitFor(() => expect(resultFor(f.posted, "s3")).toBeDefined());
+      await vi.waitFor(() => expect(resultFor(f.posted, "s2")).toBeDefined());
+      expect(started()).toEqual(["s1", "s2"]);
+      // started precedes the result of the same call
+      expect(f.posted.findIndex((m) => m.kind === "started" && m.callId === "s2")).toBeLessThan(
+        f.posted.findIndex((m) => m.kind === "result" && m.callId === "s2")
+      );
+      delete toolHandlers[`${TOOL}2`];
+    });
+
+    it("keeps the streamed state while the call is queued, hands it to the handler when it starts", async () => {
+      let release: (() => void) | undefined;
+      toolHandlers[TOOL] = () => new Promise<string>((resolve) => (release = () => resolve("first")));
+      const f = start();
+      f.send({ kind: "call", callId: "k1", toolName: TOOL, input: {}, timeoutMs: 5000 });
+      await vi.waitFor(() => expect(release).toBeDefined());
+      const enc = new AppendEncoder("k2", "batch_design");
+      streamBatch(f, OPS_1, enc);
+      f.send({ kind: "stream-end", toolCallId: "k2", reason: "complete" });
+      f.send({ kind: "call", callId: "k2", toolName: "batch_design", input: { operations: OPS_1 }, timeoutMs: 5000 });
+      expect(namedCount("Card")).toBe(1); // queued, still streamed
+      release?.();
+      await vi.waitFor(() => expect(resultFor(f.posted, "k2")).toBeDefined());
+      expect(namedCount("Card")).toBe(1); // committed once, not duplicated
+    });
+
+    it("rolls back the streamed mutations of a call aborted while queued", async () => {
+      let release: (() => void) | undefined;
+      toolHandlers[TOOL] = () => new Promise<string>((resolve) => (release = () => resolve("first")));
+      const f = start();
+      f.send({ kind: "call", callId: "r1", toolName: TOOL, input: {}, timeoutMs: 5000 });
+      await vi.waitFor(() => expect(release).toBeDefined());
+      const enc = new AppendEncoder("r2", "batch_design");
+      streamBatch(f, OPS_1, enc);
+      f.send({ kind: "stream-end", toolCallId: "r2", reason: "complete" });
+      expect(namedCount("Card")).toBe(1);
+      f.send({ kind: "call", callId: "r2", toolName: "batch_design", input: { operations: OPS_1 }, timeoutMs: 5000 });
+      f.send({ kind: "cancel", callId: "r2" });
+      release?.();
+      await vi.waitFor(() => expect(resultFor(f.posted, "r2")).toBeDefined());
+      expect(resultFor(f.posted, "r2")?.result).toContain("cancelled");
+      expect(namedCount("Card")).toBe(0);
+    });
+
+    it("rolls back the stream of a call that is refused (unknown tool)", async () => {
+      const f = start();
+      const abandons = streamingToolAdapters.map((a) => vi.spyOn(a, "onAbandon"));
+      const enc = new AppendEncoder("u1", "batch_design");
+      streamBatch(f, OPS_1, enc);
+      expect(namedCount("Card")).toBe(1);
+      f.send({ kind: "call", callId: "u1", toolName: "nope_tool", input: {}, timeoutMs: 1000 });
+      await vi.waitFor(() => expect(resultFor(f.posted, "u1")).toBeDefined());
+      expect(namedCount("Card")).toBe(0);
+      expect(abandons.some((a) => a.mock.calls.some(([arg]) => arg.toolCallId === "u1"))).toBe(true);
+    });
+
+    it("panel-gone aborts running calls, never runs queued ones, rolls streams back and posts nothing", async () => {
+      let release: (() => void) | undefined;
+      let signal: AbortSignal | undefined;
+      const queuedRan = vi.fn();
+      toolHandlers[TOOL] = (_a, ctx) =>
+        new Promise<string>((resolve) => {
+          signal = ctx?.signal;
+          release = () => resolve("late");
+        });
+      toolHandlers[`${TOOL}2`] = async () => {
+        queuedRan();
+        return "queued";
+      };
+      const f = start();
+      f.send({ kind: "call", callId: "g1", toolName: TOOL, input: {}, timeoutMs: 5000 });
+      await vi.waitFor(() => expect(release).toBeDefined());
+      const enc = new AppendEncoder("g2", "batch_design");
+      streamBatch(f, OPS_1, enc);
+      const enc3 = new AppendEncoder("g3", "batch_design");
+      streamBatch(f, OPS_2, enc3); // an open, never completed stream
+      f.send({ kind: "stream-end", toolCallId: "g2", reason: "complete" });
+      f.send({ kind: "call", callId: "g2", toolName: `${TOOL}2`, input: {}, timeoutMs: 5000 });
+      expect(namedCount("Card")).toBe(1);
+      expect(namedCount("Card2")).toBe(1);
+      const before = f.posted.length;
+      f.send({ kind: "panel-gone" });
+      expect(signal?.aborted).toBe(true);
+      expect(namedCount("Card")).toBe(0);
+      expect(namedCount("Card2")).toBe(0);
+      release?.();
+      await new Promise((r) => setTimeout(r, 50));
+      expect(queuedRan).not.toHaveBeenCalled();
+      expect(f.posted.slice(before)).toEqual([]); // no result, no started, nothing
+      delete toolHandlers[`${TOOL}2`];
+    });
   });
 
   it("place-node adds the node and answers {id,x,y}", async () => {
@@ -363,16 +495,19 @@ describe("maybeStartCanvasHost gate", () => {
     expect(maybeStartCanvasHost()).toBeNull();
   });
 
-  it("does not start on the shared viewer or in view mode", () => {
+  it("never starts on the shared viewer, but does start in view mode (it refuses mutations itself)", () => {
     const f = fakeBridge();
     window.penDesktop = { onMenuCommand: () => () => {}, agentLayout: true, canvasHost: f.bridge };
     useSharedViewStore.getState().setSharedView(true);
     expect(maybeStartCanvasHost()).toBeNull();
+    expect(f.bridge.register).not.toHaveBeenCalled();
     useSharedViewStore.getState().setSharedView(false);
     useEditorModeStore.getState().enterView();
-    expect(maybeStartCanvasHost()).toBeNull();
+    const stopFn = maybeStartCanvasHost();
+    expect(stopFn).not.toBeNull();
+    expect(f.bridge.register).toHaveBeenCalledTimes(1);
+    stopFn?.();
     useEditorModeStore.getState().exitToEdit();
-    expect(f.bridge.register).not.toHaveBeenCalled();
   });
 
   it("starts when chatless and the bridge exists", () => {

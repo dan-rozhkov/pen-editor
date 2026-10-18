@@ -27,6 +27,13 @@ import {
 export const CALL_TIMEOUT_MARGIN_MS = 2000;
 export const CONTEXT_TIMEOUT_MS = 2000;
 export const PLACE_NODE_TIMEOUT_MS = 30_000;
+/**
+ * Safety net for a `call` the tab has not reported `started` for. The real
+ * budget (`timeoutMs + 2 s`) starts on `started`, so a call queued behind a
+ * long one is not timed out here; this only frees a chat whose tab went silent
+ * without a `tab-gone` (or whose host predates `started`).
+ */
+export const PRE_START_TIMEOUT_MS = 10 * 60_000;
 const MAX_ENDED_STREAMS = 500;
 
 export const TAB_CLOSED_ERROR = JSON.stringify({ error: "The canvas tab was closed." });
@@ -39,8 +46,22 @@ export interface Binding {
 
 export type PlaceNodeResult = { id: string; x: number; y: number } | { error: string };
 
+/** Why a canvas call failed without reaching (or without hearing from) the tab's handler. */
+export type CallFailureKind = "tab_gone" | "main_error" | "timeout" | "bind_failed";
+
+export interface CallFailure {
+  toolName: string;
+  kind: CallFailureKind;
+  durationMs: number;
+}
+
 export interface PanelClientDeps {
   bridge: AgentPanelCanvasBridge;
+  /**
+   * Analytics seam. The tab's `executeToolCall` reports every call that reached
+   * its handler, so this fires only for failures the tab did not report.
+   */
+  onCallFailed?: (failure: CallFailure) => void;
   /** Epoch ms stamped on envelopes (`sentAt`). Default: `linkNow`. */
   now?: () => number;
 }
@@ -69,7 +90,12 @@ interface Pending {
   key: string | null;
   /** A context request settles "" (= no context) where a call settles an error result. */
   isContext: boolean;
-  settle(result: string): void;
+  /** The tab the request went to (null until sent). */
+  tab: Binding | null;
+  /** The tab began running the call (`started`). */
+  onStarted?: () => void;
+  /** `failure` names the panel-side reason when this settle is a failure that never got a tab answer. */
+  settle(result: string, failure?: CallFailureKind): void;
 }
 
 const keyOf = (b: Binding) => `${b.tabId}:${b.registrationId}`;
@@ -77,6 +103,7 @@ const keyOf = (b: Binding) => `${b.tabId}:${b.registrationId}`;
 export class PanelClient {
   private readonly bridge: AgentPanelCanvasBridge;
   private readonly now: () => number;
+  private readonly onCallFailed?: (failure: CallFailure) => void;
   private tabs: CanvasTabInfo[] = [];
   private readonly bindings = new Map<string, Binding>();
   private readonly binding$ = new Map<string, Promise<Binding | null>>();
@@ -94,6 +121,7 @@ export class PanelClient {
   constructor(deps: PanelClientDeps) {
     this.bridge = deps.bridge;
     this.now = deps.now ?? linkNow;
+    this.onCallFailed = deps.onCallFailed;
     this.unsubscribers = [
       deps.bridge.onTabsChanged((tabs) => {
         this.tabs = tabs;
@@ -115,6 +143,11 @@ export class PanelClient {
 
   /** Forgets a chat's binding (not the tab). */
   forgetSession(sessionId: string): void {
+    this.dropBinding(sessionId);
+  }
+
+  /** A binding is gone for good (forgotten or latched): the context of its document goes with it. */
+  private dropBinding(sessionId: string): void {
     this.bindings.delete(sessionId);
     this.lastContext.delete(sessionId);
   }
@@ -138,7 +171,7 @@ export class PanelClient {
     const b = this.bindings.get(sessionId);
     if (!b) return null;
     if (this.latched.has(keyOf(b))) {
-      this.bindings.delete(sessionId);
+      this.dropBinding(sessionId);
       return null;
     }
     const listed = this.tabs.find((t) => t.tabId === b.tabId);
@@ -182,6 +215,23 @@ export class PanelClient {
       return binding;
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Binds a chat to the first registered canvas tab WITHOUT opening one, so the
+   * first message of a chat can carry that tab's `canvasContext`. No tab: stays unbound.
+   */
+  private async bindPassively(sessionId: string): Promise<void> {
+    if (this.binding$.has(sessionId)) return; // a call is resolving (maybe opening) it
+    try {
+      const listed = await this.bridge.listTabs();
+      this.tabs = listed;
+      if (this.liveBinding(sessionId) || this.binding$.has(sessionId)) return;
+      const usable = listed.find((t) => !this.latched.has(`${t.tabId}:${t.registrationId}`));
+      if (usable) this.bindings.set(sessionId, { tabId: usable.tabId, registrationId: usable.registrationId });
+    } catch {
+      // Stays unbound.
     }
   }
 
@@ -271,8 +321,10 @@ export class PanelClient {
     return this.request({
       callId: toolCallId,
       sessionId,
+      toolName,
       timeoutMs: timeoutMs + CALL_TIMEOUT_MARGIN_MS,
       timeoutMessage: `Tool ${toolName} timed out waiting for the canvas tab`,
+      startGated: true,
       signal,
       cancelOnAbort: true,
       send: (binding, callId) => {
@@ -324,6 +376,10 @@ export class PanelClient {
   private request(spec: {
     callId: string;
     sessionId: string;
+    /** Reported to `onCallFailed` on failures; omitted = not a tool call (place-node). */
+    toolName?: string;
+    /** The timer starts on the tab's `started`; until then only `PRE_START_TIMEOUT_MS` applies. */
+    startGated?: boolean;
     timeoutMs: number;
     timeoutMessage: string;
     signal?: AbortSignal;
@@ -331,6 +387,7 @@ export class PanelClient {
     send(binding: Binding, callId: string): string;
   }): Promise<string> {
     const { callId, signal } = spec;
+    const startedAt = performance.now();
     return new Promise<string>((resolve) => {
       let binding: Binding | null = null;
       let done = false;
@@ -338,22 +395,38 @@ export class PanelClient {
       const pending: Pending = {
         key: null,
         isContext: false,
-        settle: (result) => {
+        tab: null,
+        settle: (result, failure) => {
           if (done) return;
           done = true;
           if (timer !== undefined) clearTimeout(timer);
           signal?.removeEventListener("abort", onAbort);
           this.pending.delete(callId);
           resolve(result);
+          if (failure && spec.toolName) {
+            try {
+              this.onCallFailed?.({
+                toolName: spec.toolName,
+                kind: failure,
+                durationMs: Math.round(performance.now() - startedAt),
+              });
+            } catch {
+              // An observer must not break the never-rejects contract.
+            }
+          }
         },
       };
       /** Settles with `message` and tells the tab to drop the call if it was sent. */
-      const fail = (message: string) => {
+      const fail = (message: string, failure?: CallFailureKind) => {
         const sent = binding;
-        pending.settle(errorResult(message));
+        pending.settle(errorResult(message), failure);
         if (sent && spec.cancelOnAbort && !this.latched.has(keyOf(sent))) {
           this.post(sent.tabId, { kind: "cancel", callId });
         }
+      };
+      const arm = (ms: number) => {
+        if (timer !== undefined) clearTimeout(timer);
+        timer = setTimeout(() => fail(spec.timeoutMessage, "timeout"), ms);
       };
       const onAbort = () => fail("Tool call aborted");
       if (signal?.aborted) return onAbort();
@@ -362,23 +435,35 @@ export class PanelClient {
 
       void this.bind(spec.sessionId).then((b) => {
         if (done) return;
-        if (!b) return pending.settle(errorResult("Could not open a canvas tab."));
-        if (this.latched.has(keyOf(b))) return pending.settle(TAB_CLOSED_ERROR);
+        if (!b) return pending.settle(errorResult("Could not open a canvas tab."), "bind_failed");
+        if (this.latched.has(keyOf(b))) return pending.settle(TAB_CLOSED_ERROR, "tab_gone");
         binding = b;
         pending.key = keyOf(b);
+        pending.tab = b;
         this.byEnvelope.set(spec.send(b, callId), callId);
-        // The budget runs from the post: binding / openTab() time is not charged to it.
-        timer = setTimeout(() => fail(spec.timeoutMessage), spec.timeoutMs);
+        // The budget runs from the post, or from the tab's `started` for gated
+        // calls: binding / openTab() / queue time is not charged to it.
+        if (spec.startGated) {
+          pending.onStarted = () => {
+            if (!done) arm(spec.timeoutMs);
+          };
+          arm(PRE_START_TIMEOUT_MS);
+        } else {
+          arm(spec.timeoutMs);
+        }
       });
     });
   }
 
   /**
-   * The canvasContext string of the chat's bound canvas tab. When there is no fresh
-   * one (not bound: a canvas tab is never opened for this; tab gone; error; 2 s
+   * The canvasContext string of the chat's bound canvas tab (an unbound chat binds
+   * passively to the first registered tab, never opening one). When there is no fresh
+   * one (no tab at all; tab gone; error; 2 s
    * timeout; empty) the last one this chat received, or null if it never got one.
    */
   async requestContext(sessionId: string, model: string): Promise<string | null> {
+    // A chat that never called a canvas tool still has the document of the first tab.
+    if (!this.liveBinding(sessionId)) await this.bindPassively(sessionId);
     const fresh = await this.fetchContext(sessionId, model);
     if (fresh !== null) {
       this.lastContext.set(sessionId, fresh);
@@ -397,6 +482,7 @@ export class PanelClient {
       let done = false;
       const pending: Pending = {
         key: keyOf(binding),
+        tab: binding,
         isContext: true,
         settle: (raw) => {
           if (done) return;
@@ -422,6 +508,9 @@ export class PanelClient {
       case "result":
         this.pending.get(msg.callId)?.settle(msg.result);
         break;
+      case "started":
+        this.pending.get(msg.callId)?.onStarted?.();
+        break;
       case "context-response":
         // A genuine empty context is indistinguishable from a failure: both mean "send none".
         this.pending.get(msg.reqId)?.settle(msg.canvasContext);
@@ -434,7 +523,12 @@ export class PanelClient {
         if (!id) break;
         const p = this.pending.get(id);
         // Context requests settle "" (= null); calls get the error as a result.
-        if (p) p.settle(p.isContext ? "" : errorResult(msg.error));
+        if (p) {
+          p.settle(p.isContext ? "" : errorResult(msg.error), "main_error");
+          // Main could not deliver: if the bound tab is no longer listed, latch it
+          // so the next call rebinds instead of failing forever.
+          if (p.tab) void this.latchIfUnlisted(p.tab);
+        }
         break;
       }
       case "tab-gone":
@@ -449,10 +543,24 @@ export class PanelClient {
     }
   }
 
+  private async latchIfUnlisted(tab: Binding): Promise<void> {
+    let list = this.tabs;
+    try {
+      list = await this.bridge.listTabs();
+      this.tabs = list;
+    } catch {
+      // Judge by the last known list.
+    }
+    if (!list.some((t) => t.tabId === tab.tabId && t.registrationId === tab.registrationId)) {
+      this.latchRegistration(tab.tabId, tab.registrationId);
+    }
+  }
+
   private latchRegistration(tabId: number, registrationId: number): void {
     const key = `${tabId}:${registrationId}`;
     this.latched.add(key);
-    for (const [sessionId, b] of [...this.bindings]) if (keyOf(b) === key) this.bindings.delete(sessionId);
+    // The closed document's context must not be sent to the next turn.
+    for (const [sessionId, b] of [...this.bindings]) if (keyOf(b) === key) this.dropBinding(sessionId);
     for (const [toolCallId, s] of [...this.streams]) {
       if (s.binding && keyOf(s.binding) === key) {
         this.streams.delete(toolCallId);
@@ -460,7 +568,7 @@ export class PanelClient {
       }
     }
     for (const p of [...this.pending.values()]) {
-      if (p.key === key) p.settle(p.isContext ? "" : TAB_CLOSED_ERROR);
+      if (p.key === key) p.settle(p.isContext ? "" : TAB_CLOSED_ERROR, "tab_gone");
     }
   }
 }

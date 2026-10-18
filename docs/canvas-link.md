@@ -32,7 +32,9 @@ first canvas tool of a turn with no live binding:
 `listTabs()` is ordered most recently active canvas tab first; each
 `CanvasTabInfo` has a `registrationId` that increments every time the tab
 registers (a reloaded tab keeps its `tabId`, gets a new `registrationId`).
-A `tab-gone` (it carries `registrationId`) for the bound registration clears the binding (latch, see below).
+A `tab-gone` (it carries `registrationId`) for the bound registration clears the binding (latch, see below) AND the chat's remembered `canvasContext` (the closed document's context is never sent again).
+A main `error` for a `call`/`context-request` whose bound tab is no longer in the tab list latches that registration the same way, so the next call rebinds.
+**Passive bind for context:** a chat with no live binding, asked for its `canvasContext`, binds to the first registered canvas tab WITHOUT opening one, so the first message of a new chat already carries that tab's context. With no canvas tab it stays unbound.
 
 ## Channels (desktop)
 
@@ -45,9 +47,10 @@ A `tab-gone` (it carries `registrationId`) for the bound registration clears the
 | `canvas:from-tab` | main → panel | `{tabId, env}` (from a canvas tab, or main's `error` / `tab-gone`) |
 | `canvas:tabs` | main → panel | `CanvasTabInfo[]` on any change (register, close, title, activation) |
 | `canvas:register` | tab → main | none; sender must be an editor tab of this window |
-| `canvas:unregister` | tab → main | none; main treats it like `tab-gone` for the tab's current registration (the tab host stopped: SPA navigation away from the editor, or the canvas stopped being editable) |
+| `canvas:unregister` | tab → main | none; main treats it like `tab-gone` for the tab's current registration (the tab host stopped: SPA navigation away from the editor, or the shared viewer took over) |
 | `canvas:to-panel` | tab → main | `env` (main adds the sender's `tabId`) |
 | `canvas:from-panel` | main → tab | `env` |
+| `canvas:from-panel` (main-made) | main → every registered tab | `{kind:"panel-gone"}` when the agent panel reloads or crashes (see Messages) |
 
 Sender checks: `canvas:*` from the panel only from that window's panel view;
 from tabs only from registered editor tabs (same pattern as `mcp:register`).
@@ -72,6 +75,23 @@ See `protocol.ts`. Rules:
   runs. A `callId` that is still running is ignored if sent again; exactly one
   `result` is posted per `callId`.
   The chat side waits `timeoutMs + 2 s` so the canvas's own timeout error wins.
+- **`started`** (canvas → chat, `{callId}`): posted when the queued task actually
+  starts the handler (not for a call aborted or refused before that). The chat side
+  starts the `timeoutMs + 2 s` timer on `started`, so a call queued behind a long
+  one is not timed out while it waits. Before `started` only a safety net applies
+  (`PRE_START_TIMEOUT_MS`, 10 min) that frees a chat whose tab went silent; abort
+  and `tab-gone` always cancel. A `call` that ends without its handler running
+  (aborted while queued, refused, unknown tool) rolls back its streamed progressive
+  mutations (the host keeps the stream until the handler starts).
+- **`panel-gone`** (main → tab, `{kind:"panel-gone"}`): the agent panel reloaded or
+  crashed; main sends it to every registered canvas tab on `canvas:from-panel`. The
+  tab aborts every call (queued ones never run), abandons every open stream (rolls
+  back) and posts nothing for them. The new panel starts clean.
+- **Analytics**: a call that reached the tab is reported once, by the tab's
+  `executeToolCall` (`agent_tool_executed`, source `canvas-link`). The panel
+  reports only failures that never got the tab's answer, with source `canvas-link`
+  and `error_kind` `canvas_link_tab_gone`, `canvas_link_main_error`,
+  `canvas_link_timeout` or `canvas_link_bind_failed`.
 - **`place-node`** is how a panel-run browser tool writes to the scene.
   `browse_capture`, `browse_screenshot` (`placeOnCanvas`) and `browse_agent`'s
   nested capture call `placeNodeOnCanvas` (src/lib/tools/browser/placeOnCanvas.ts:43;
@@ -87,7 +107,8 @@ See `protocol.ts`. Rules:
   `context-response` carries only the SCENE part of `canvasContext` (roots,
   selection, variables, `selectionHint` ...; `buildSceneContext`). The chat-side
   `likedReferences` are not known to the canvas: the panel appends them as the
-  LAST key of the object. Byte-stable for unchanged state (prompt cache). The chat
+  LAST key of the object (read from the chat store; with no scene context at all
+  the panel sends just `{"likedReferences":[...]}`, or no field when there are none). Byte-stable for unchanged state (prompt cache). The chat
   side prefetches it in the transport `body` provider (async allowed) with a
   2 s timeout; on timeout it sends no canvas context rather than a wrong one.
 - **`tab-gone` is a latch per registration, not per `tabId`**: the chat side
@@ -103,13 +124,13 @@ See `protocol.ts`. Rules:
 - **Known limitation**: "append" covers only a top-level string field.
   `edit_embed_html`'s nested `edits[].…` growth falls back to "full" on every
   update. Future work.
-- **Editability**: a canvas tab hosts only when the canvas is editable: not the
-  shared viewer (`/c/:shareId`, `sharedViewStore`) and `canEditScene(mode)` (the
-  same rule WebMCP uses). It does not register at all otherwise, so no read tool
-  is published on someone else's shared canvas (no redaction needed). If
-  editability is lost while hosting, the host stops (`unregister`); any frame,
-  `place-node` or mutating `call` that still arrives is refused with an error
-  result. Mutating = every tool not in `UNSERIALIZED_TOOL_NAMES`.
+- **Editability**: a canvas tab hosts everywhere except the shared viewer
+  (`/c/:shareId`, `sharedViewStore`): it does not register there, so no read tool
+  is published on someone else's shared canvas (no redaction needed). Edit <->
+  view/present toggles do NOT stop the host (that would kill a running call);
+  while `canMutateScene()` (the one rule WebMCP also uses) is false, any frame,
+  `place-node` or mutating `call` is refused with an error result. Mutating =
+  every tool not in `UNSERIALIZED_TOOL_NAMES`.
 - **Streams**: after `stream-end "complete"` the canvas keeps the tool name until
   the matching `call`; an `"abandoned"` that follows still rolls the stream back.
   On stop the host abandons all such streams and clears the adapters' `"canvas-link"` session.

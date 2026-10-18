@@ -6,10 +6,12 @@
  * build without `window.penAgentPanel`.
  */
 import { getAgentPanelCanvasBridge, isAgentPanelHost } from "@/lib/agentPanel";
+import { track } from "@/lib/analytics";
 import { useChatStore } from "@/store/chatStore";
+import { getLikedReferences } from "./likedReferences";
 import { setPlaceNodeRedirect } from "@/lib/tools/browser/placeOnCanvas";
 import { runsInCanvasTab } from "./canvasTools";
-import { PanelClient, type CallOptions } from "./panelClient";
+import { PanelClient, type CallFailure, type CallOptions } from "./panelClient";
 
 let client: PanelClient | null = null;
 let clientBridge: unknown = null;
@@ -19,13 +21,28 @@ export function isPanelCanvasLinkActive(): boolean {
   return isAgentPanelHost() && getAgentPanelCanvasBridge() !== undefined;
 }
 
+/**
+ * `agent_tool_executed` for a canvas call that never got an answer from the tab's
+ * handler. A call that reached the tab is reported once, by the tab's own
+ * `executeToolCall` (source "canvas-link"); reporting it here too would count it twice.
+ */
+function trackCanvasCallFailed({ toolName, kind, durationMs }: CallFailure): void {
+  track("agent_tool_executed", {
+    tool_name: toolName,
+    ok: false,
+    duration_ms: durationMs,
+    error_kind: `canvas_link_${kind}`,
+    source: "canvas-link",
+  });
+}
+
 /** Creates the singleton (and installs the place-node redirect) on first use. */
 export function getPanelClient(): PanelClient | null {
   const bridge = getAgentPanelCanvasBridge();
   if (!bridge || !isAgentPanelHost()) return null;
   if (client && clientBridge === bridge) return client;
   client?.dispose();
-  client = new PanelClient({ bridge });
+  client = new PanelClient({ bridge, onCallFailed: trackCanvasCallFailed });
   clientBridge = bridge;
   // The browse handlers pass their chat's `sessionId`, so a background chat's capture goes to ITS
   // bound tab. Only a caller without one (none today) falls back to the active chat.
@@ -86,10 +103,11 @@ export function panelEndStream(toolCallId: string, reason: "complete" | "abandon
  * is replaced by the bound canvas tab's, with this chat's `likedReferences`
  * appended as the LAST key of the context JSON.
  *
- * No fresh context (no binding yet: a canvas tab is never opened just to send a
- * message; a gone tab; an error; the 2 s timeout) falls back to the last one this
- * chat received, so the prompt does not flap. A chat that never received one gets NO
- * `canvasContext` field at all. The backend then renders no `<canvas_context>`
+ * An unbound chat binds passively to the first registered canvas tab (one is never
+ * opened just to send a message). No fresh context (an error; the 2 s timeout) falls
+ * back to the last one this chat received, so the prompt does not flap; a gone tab
+ * clears it. A chat with no scene context gets NO `canvasContext` field at all, or
+ * just `{"likedReferences":[...]}` when it has liked references. The backend then renders no `<canvas_context>`
  * message and no pointer block in the system prompt (chatTurn.ts
  * `canvasContextDelivered`), which beats sending the panel's empty scene as if
  * it were the design. Costs one system-prompt change when the first canvas
@@ -98,22 +116,18 @@ export function panelEndStream(toolCallId: string, reason: "complete" | "abandon
 export function withPanelCanvasContext<T extends object>(sessionId: string, local: T): T | Promise<object> {
   const c = getPanelClient();
   if (!c) return local;
-  const { canvasContext: localContext, ...rest } = local as T & { canvasContext?: unknown };
+  const rest = { ...(local as object) } as Record<string, unknown>;
+  delete rest.canvasContext; // the panel's own (empty) scene; replaced below or omitted
   const model = (rest as { model?: unknown }).model;
   return c.requestContext(sessionId, typeof model === "string" ? model : "").then((remote) => {
-    if (remote === null) return rest;
-    return { ...rest, canvasContext: appendLikedReferences(remote, likedReferencesOf(localContext)) };
+    // Same source `buildCanvasContext` reads, not parsed back out of its output.
+    const liked = getLikedReferences(sessionId);
+    if (remote === null) {
+      // No scene context, but the user's hearted references still count.
+      return liked.length > 0 ? { ...rest, canvasContext: JSON.stringify({ likedReferences: liked }) } : rest;
+    }
+    return { ...rest, canvasContext: appendLikedReferences(remote, liked) };
   });
-}
-
-function likedReferencesOf(localContext: unknown): unknown[] {
-  if (typeof localContext !== "string") return [];
-  try {
-    const refs = (JSON.parse(localContext) as { likedReferences?: unknown }).likedReferences;
-    return Array.isArray(refs) ? refs : [];
-  } catch {
-    return [];
-  }
 }
 
 /** JSON.parse + add + JSON.stringify: deterministic, `likedReferences` always last, omitted when empty. */

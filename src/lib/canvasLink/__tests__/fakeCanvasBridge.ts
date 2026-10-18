@@ -153,7 +153,10 @@ export function attachScriptedCanvas(
       if (r.status === "resync") queueMicrotask(() => fake.emit(tabId, { kind: "resync", toolCallId: msg.toolCallId }));
     } else if (msg.kind === "call") {
       const result = script.onCall?.(msg.toolName, msg.input) ?? JSON.stringify({ ok: true });
-      queueMicrotask(() => fake.emit(tabId, { kind: "result", callId: msg.callId, result }));
+      queueMicrotask(() => {
+        fake.emit(tabId, { kind: "started", callId: msg.callId });
+        fake.emit(tabId, { kind: "result", callId: msg.callId, result });
+      });
     } else if (msg.kind === "context-request" && script.context !== undefined) {
       const canvasContext = script.context;
       queueMicrotask(() => fake.emit(tabId, { kind: "context-response", reqId: msg.reqId, canvasContext }));
