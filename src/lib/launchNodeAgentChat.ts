@@ -3,6 +3,8 @@ import { captureNodeScreenshot } from "@/lib/captureNodeScreenshot";
 import { useChatStore } from "@/store/chatStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
+import { useSelectionStore } from "@/store/selectionStore";
+import { deliverAgentLaunch, isCanvasHostRunning } from "@/lib/canvasLink/agentLaunch";
 import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
 
 /**
@@ -13,6 +15,10 @@ import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
  * panel.
  *
  * Returns false (no side effects) when the text is empty/whitespace.
+ *
+ * Chatless tab (`isChatDisabled()`): with a running canvas host the launch goes to
+ * the agent panel instead (`deliverAgentLaunch`, new chat, node selected first so
+ * it rides in the bound tab's `canvasContext`); without a host it returns false.
  *
  * `opts.attachScreenshot` (default false) controls whether a PixiJS screenshot
  * is attached — the node's id already rides along in the next request's
@@ -25,8 +31,9 @@ export async function launchNodeAgentChat(
   text: string,
   opts: { attachScreenshot?: boolean } = {},
 ): Promise<boolean> {
-  // Defence in depth: the UI entry points are hidden in chatless mode.
-  if (isChatDisabled()) return false;
+  // Defence in depth: the UI entry points are hidden without `canLaunchAgent()`.
+  const remote = isChatDisabled();
+  if (remote && !isCanvasHostRunning()) return false;
   const { attachScreenshot = false } = opts;
   const trimmed = text.trim();
   if (!trimmed) return false;
@@ -39,6 +46,13 @@ export async function launchNodeAgentChat(
   }
 
   const payload: ChatLaunchPayload = { text: trimmed, images };
+
+  if (remote) {
+    // The agent panel reads the selection from this tab's canvasContext.
+    const selection = useSelectionStore.getState();
+    if (!selection.selectedIds.includes(nodeId)) selection.setSelectedIds([nodeId]);
+    return deliverAgentLaunch({ ...payload, nodeIds: [nodeId], target: "new-chat" });
+  }
 
   const chatId = useChatStore.getState().createChat();
   useChatStore.getState().queueLaunchPayload(chatId, payload);

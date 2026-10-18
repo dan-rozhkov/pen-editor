@@ -181,3 +181,33 @@ describe("useDesignChat in the agent panel", () => {
     await waitFor(() => expect(calls).toBe(2), { timeout: 5000 });
   }
 });
+
+describe("a launch from a canvas tab in the agent panel", () => {
+  beforeEach(() => resetStores());
+
+  it("sends the launch text in a new chat bound to the sending tab, with that tab's canvasContext", async () => {
+    const fake = createFakeCanvasBridge([tab(1), tab(2, 4)]);
+    attachScriptedCanvas(fake, { context: '{"roots":[],"selectedIds":["n1"]}' });
+    window.penAgentPanel = { version: 2, canvas: fake.bridge };
+    const bodies: Array<Record<string, unknown>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: unknown, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return textTurn();
+      })
+    );
+    getPanelClient();
+    fake.emit(2, { kind: "launch", launchId: "L", payload: { text: "make it blue", nodeIds: ["n1"], target: "new-chat" } });
+    await waitFor(() => expect(useChatStore.getState().activeChatId).not.toBeNull());
+    const sessionId = useChatStore.getState().activeChatId!;
+    await waitFor(() => expect(getPanelClient()!.getBinding(sessionId)).toEqual({ tabId: 2, registrationId: 4 }));
+    renderHook(() => useDesignChat({ sessionId }));
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(JSON.stringify(bodies[0].messages)).toContain("make it blue");
+    expect(JSON.parse(String(bodies[0].canvasContext)).selectedIds).toEqual(["n1"]);
+    expect(fake.ofKind("context-request").every((m) => m.sessionId === sessionId)).toBe(true);
+    expect(fake.posted.filter((p) => p.tabId === 2).length).toBeGreaterThan(0);
+    expect(fake.posted.some((p) => p.tabId === 1)).toBe(false);
+  });
+});

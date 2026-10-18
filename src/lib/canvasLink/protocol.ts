@@ -57,7 +57,23 @@ export type ChatToCanvasMsg =
   | { kind: "place-node"; callId: string; node: unknown; options?: unknown }
   | { kind: "context-request"; reqId: string; sessionId: string; model: string };
 
+/** What a canvas entry point asks the agent panel to send (`launch`). */
+export interface ChatLaunchMessagePayload {
+  text: string;
+  images?: Array<{ dataUrl: string; name: string }>;
+  /** Informational: the canvas tab selected these before sending; the selection reaches the chat via `canvasContext`. */
+  nodeIds?: string[];
+  /** Default "new-chat" (what every local launch helper does). */
+  target?: "new-chat" | "active-chat";
+}
+
 export type CanvasToChatMsg =
+  /**
+   * An on-canvas agent entry point fired in this chatless tab: the panel creates (or reuses,
+   * per `payload.target`) a chat, binds it to the sending tab and sends the message. Main
+   * forwards it untouched.
+   */
+  | { kind: "launch"; launchId: string; payload: ChatLaunchMessagePayload }
   | { kind: "result"; callId: string; result: string }
   /**
    * The queued `call` just started its handler (the tab's serial queue reached

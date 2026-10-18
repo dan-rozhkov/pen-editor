@@ -241,3 +241,46 @@ describe("browser tools placing nodes in the panel", () => {
     expect(placed).toEqual({ id: "n1", x: 3, y: 4 });
   });
 });
+
+describe("launch from a canvas tab", () => {
+  const launch = (fake: ReturnType<typeof installPanel>, tabId: number, payload: Record<string, unknown>, launchId = "l1") => {
+    getPanelClient(); // creates the client
+    fake.emit(tabId, { kind: "launch", launchId, payload } as never);
+  };
+  const settle = () => new Promise<void>((r) => setTimeout(r, 0));
+
+  it("creates a chat, binds it to the sending tab and queues the text and images", async () => {
+    const fake = installPanel();
+    fake.setTabs([tab(1), tab(2, 5)]);
+    useChatStore.setState({ chats: [], activeChatId: null, launchQueue: {} } as never);
+    const images = [{ dataUrl: "data:image/png;base64,A", name: "n" }];
+    launch(fake, 2, { text: "  hi  ", images, nodeIds: ["x"] });
+    await settle();
+    const { activeChatId, launchQueue, chats } = useChatStore.getState();
+    expect(chats).toHaveLength(1);
+    expect(launchQueue[activeChatId!]).toEqual({ text: "hi", images });
+    expect(getPanelClient()!.getBinding(activeChatId!)).toEqual({ tabId: 2, registrationId: 5 });
+  });
+
+  it("target active-chat reuses the active chat and rebinds it; a repeated launchId is ignored", async () => {
+    const fake = installPanel();
+    fake.setTabs([tab(1), tab(2)]);
+    useChatStore.getState().createChat();
+    const active = useChatStore.getState().activeChatId!;
+    launch(fake, 1, { text: "a", target: "active-chat" }, "l1");
+    await settle();
+    launch(fake, 2, { text: "b", target: "active-chat" }, "l1");
+    await settle();
+    expect(useChatStore.getState().activeChatId).toBe(active);
+    expect(useChatStore.getState().launchQueue[active]).toEqual({ text: "a" });
+    expect(getPanelClient()!.getBinding(active)).toEqual({ tabId: 1, registrationId: 1 });
+  });
+
+  it("ignores an empty text", async () => {
+    const fake = installPanel();
+    useChatStore.setState({ chats: [], activeChatId: null, launchQueue: {} } as never);
+    launch(fake, 1, { text: "   " });
+    await settle();
+    expect(useChatStore.getState().chats).toHaveLength(0);
+  });
+});

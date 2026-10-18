@@ -100,6 +100,17 @@ See `protocol.ts`. Rules:
   (node without position; `options` = `{x?, y?, size}`) to the bound canvas tab,
   which runs the real `placeNodeOnCanvas` and answers `result` with
   `{"id","x","y"}` or `{"error":...}`.
+- **`launch`** (canvas → chat, `{launchId, payload: {text, images?, nodeIds?, target?}}`):
+  an on-canvas agent entry point fired in the chatless tab (frame/embed/element
+  button, empty-embed composer, comment "Send to agent", the showcase prompt). Entry
+  points are shown when `canLaunchAgent()` = chat enabled OR the canvas host runs;
+  they call `deliverAgentLaunch`, which posts this instead of launching locally.
+  Main forwards it untouched. The panel creates a new chat (`target` "new-chat",
+  default, as every local helper does) or reuses its active chat ("active-chat"),
+  binds that chat to the SENDING tab (`bindTo`: its `registrationId` is looked up in
+  the tab list), queues `{text, images}` for the normal auto-send and handles each
+  `launchId` once. The tab selects the node(s) before sending, so the selection
+  reaches the chat through `canvasContext`; `nodeIds` is informational.
 - **`cancel`** aborts a running call (the canvas aborts the handler's signal and
   still answers `result` with an error, which the chat side ignores if it
   already resolved).
