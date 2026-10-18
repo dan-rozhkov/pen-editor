@@ -4,6 +4,7 @@ import { toolHandlers, type ToolHandler } from "@/lib/toolRegistry";
 import { useChatStore } from "@/store/chatStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { useSceneStore } from "@/store/sceneStore";
+import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { useSharedViewStore } from "@/store/sharedViewStore";
@@ -517,5 +518,85 @@ describe("maybeStartCanvasHost gate", () => {
     expect(f.bridge.register).toHaveBeenCalledTimes(1);
     stopFn?.();
     expect(f.hasListener()).toBe(false);
+  });
+});
+
+describe("canvas host: selection chips", () => {
+  let stop: (() => void) | undefined;
+  beforeEach(() => {
+    resetStores();
+    seedScene();
+    useSelectionStore.getState().clearSelection();
+    useEmbedPickerStore.setState({ selection: null });
+  });
+  afterEach(() => {
+    stop?.();
+    stop = undefined;
+  });
+
+  const selections = (posted: CanvasToChatMsg[]) =>
+    posted.filter((m): m is Extract<CanvasToChatMsg, { kind: "selection" }> => m.kind === "selection");
+  const tick = () => new Promise<void>((r) => setTimeout(r, 0));
+  const firstNodeId = () => Object.keys(useSceneStore.getState().nodesById)[0];
+
+  it("publishes the current state once right after register", () => {
+    const f = fakeBridge();
+    stop = startCanvasHost(f.bridge);
+    expect(selections(f.posted)).toEqual([{ kind: "selection", selection: { nodes: [], embedElement: null } }]);
+  });
+
+  it("coalesces bursts of changes into one message and skips unchanged content", async () => {
+    const f = fakeBridge();
+    stop = startCanvasHost(f.bridge);
+    const id = firstNodeId();
+    useSelectionStore.getState().setSelectedIds([id]);
+    useSelectionStore.getState().setSelectedIds([]);
+    useSelectionStore.getState().setSelectedIds([id]);
+    await tick();
+    const sent = selections(f.posted);
+    expect(sent).toHaveLength(2);
+    expect(sent[1].selection.nodes.map((n) => n.nodeId)).toEqual([id]);
+    // Same content again (an unrelated scene edit): nothing new.
+    useSceneStore.setState({ rootIds: [...useSceneStore.getState().rootIds] });
+    useSelectionStore.getState().setSelectedIds([id]);
+    await tick();
+    expect(selections(f.posted)).toHaveLength(2);
+  });
+
+  it("publishes a rename of a selected node and the picked embed element", async () => {
+    const f = fakeBridge();
+    stop = startCanvasHost(f.bridge);
+    const id = firstNodeId();
+    useSelectionStore.getState().setSelectedIds([id]);
+    await tick();
+    useSceneStore.getState().updateNode(id, { name: "Renamed" });
+    await tick();
+    expect(selections(f.posted).at(-1)?.selection.nodes[0].name).toBe("Renamed");
+    useEmbedPickerStore.setState({
+      selection: { embedId: id, path: "div", tagName: "button", classes: ["primary"], textPreview: "Go", outerHtml: "<button/>" },
+    });
+    await tick();
+    expect(selections(f.posted).at(-1)?.selection.embedElement).toEqual({
+      label: "button.primary",
+      embedName: "Renamed",
+      textPreview: "Go",
+    });
+  });
+
+  it("answers selection-request with the current state even when unchanged", () => {
+    const f = fakeBridge();
+    stop = startCanvasHost(f.bridge);
+    f.send({ kind: "selection-request" });
+    expect(selections(f.posted)).toHaveLength(2);
+  });
+
+  it("posts nothing after stop", async () => {
+    const f = fakeBridge();
+    stop = startCanvasHost(f.bridge);
+    stop();
+    stop = undefined;
+    useSelectionStore.getState().setSelectedIds([firstNodeId()]);
+    await tick();
+    expect(selections(f.posted)).toHaveLength(1);
   });
 });

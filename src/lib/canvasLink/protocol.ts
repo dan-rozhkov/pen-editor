@@ -62,7 +62,12 @@ export type ChatToCanvasMsg =
    * seconds (`LAUNCH_ACK_TIMEOUT_MS`), tells the user the agent panel did not respond. The panel
    * acks as soon as the chat exists and is bound, before it prefetches that tab's context.
    */
-  | { kind: "launch-ack"; launchId: string; error?: string };
+  | { kind: "launch-ack"; launchId: string; error?: string }
+  /**
+   * The panel has no snapshot of this tab's selection (it just saw the tab, or reloaded): the tab
+   * answers with a `selection` message even if nothing changed since its last one.
+   */
+  | { kind: "selection-request" };
 
 /** What a canvas entry point asks the agent panel to send (`launch`). */
 export interface ChatLaunchMessagePayload {
@@ -70,7 +75,22 @@ export interface ChatLaunchMessagePayload {
   images?: Array<{ dataUrl: string; name: string }>;
 }
 
+/**
+ * What the composer's selection chips show (display only; the selection itself rides in
+ * `canvasContext`). Same shapes `useSelectionContext` / `useEmbedElementContext` return locally.
+ */
+export interface SelectionChipsSnapshot {
+  nodes: Array<{ nodeId: string; name: string; type: string }>;
+  /** Only what the chip shows. */
+  embedElement: { label: string; embedName: string; textPreview: string } | null;
+}
+
 export type CanvasToChatMsg =
+  /**
+   * The tab's selection chips changed (coalesced, deduped by content). Posted once right after
+   * `register()` and again on a `selection-request`. The panel keeps the latest per tab.
+   */
+  | { kind: "selection"; selection: SelectionChipsSnapshot }
   /**
    * An on-canvas agent entry point fired in this chatless tab: the panel creates a NEW chat
    * (like every local launch helper), binds it to the sending tab and sends the message. Main

@@ -22,6 +22,7 @@ import {
   type ChatToCanvasMsg,
   type LinkEnvelope,
   type MainToChatMsg,
+  type SelectionChipsSnapshot,
 } from "./protocol";
 
 /** Added to the per-tool timeout so the canvas tab's own timeout error wins the race. */
@@ -168,6 +169,14 @@ export class PanelClient {
   private readonly byEnvelope = new Map<string, string>();
   /** The last canvasContext each chat received from its tab. */
   private readonly lastContext = new Map<string, string>();
+  /** The latest selection-chips snapshot each tab published, by `tabId` (dropped on its `tab-gone`). */
+  private readonly selections = new Map<number, { registrationId: number | undefined; snapshot: SelectionChipsSnapshot }>();
+  /** Registrations already asked for their selection (`selection-request`). */
+  private readonly selectionAsked = new Set<string>();
+  /** Envelope id of an in-flight `selection-request` -> its registration key (a main `error` re-arms it). */
+  private readonly selectionRequests = new Map<string, string>();
+  private watching = false;
+  private readonly changeListeners = new Set<() => void>();
   private counter = 0;
   private readonly unsubscribers: Array<() => void>;
 
@@ -180,6 +189,8 @@ export class PanelClient {
     this.unsubscribers = [
       deps.bridge.onTabsChanged((tabs) => {
         this.tabs = tabs;
+        this.requestMissingSelections();
+        this.notifyChange();
       }),
       deps.bridge.onMessage((tabId, env) => this.handle(tabId, env)),
     ];
@@ -189,6 +200,68 @@ export class PanelClient {
     for (const off of this.unsubscribers) off();
     for (const p of [...this.pending.values()]) p.settle(errorResult("The agent panel closed."));
     this.streams.clear();
+  }
+
+  /**
+   * The selection chips of the tab this chat is bound to; with no live binding the first listed,
+   * non-latched tab (the same passive rule as `canvasContext`). Null = no tab, or none published yet.
+   * The returned object keeps its identity until the tab publishes a different one.
+   */
+  selectionFor(sessionId?: string): SelectionChipsSnapshot | null {
+    const bound = sessionId ? this.bindings.get(sessionId) : undefined;
+    const tab = bound && !this.latched.has(keyOf(bound)) ? bound : this.tabs.find((t) => !this.latched.has(keyOf(t)));
+    return (tab && this.selections.get(tab.tabId)?.snapshot) || null;
+  }
+
+  /** Fires after any change that can alter `selectionFor` (a snapshot, the tab list, a binding, a tab-gone). */
+  subscribe(cb: () => void): () => void {
+    this.changeListeners.add(cb);
+    this.startWatching();
+    return () => this.changeListeners.delete(cb);
+  }
+
+  /**
+   * Chips are on screen (a subscriber exists): learn the tab list (it has no initial event) and ask the tabs
+   * for their selection. Nothing is sent while nobody shows chips.
+   */
+  private startWatching(): void {
+    if (this.watching) return;
+    this.watching = true;
+    void Promise.resolve(this.bridge.listTabs())
+      .then((tabs) => {
+        if (this.changeListeners.size === 0) return;
+        if (this.tabs.length === 0) this.tabs = tabs;
+        this.requestMissingSelections();
+        this.notifyChange();
+      })
+      .catch(() => {});
+  }
+
+  private notifyChange(): void {
+    for (const cb of [...this.changeListeners]) {
+      try {
+        cb();
+      } catch {
+        // A listener must not break the message loop.
+      }
+    }
+  }
+
+  /** Asks each listed registration whose selection we never saw (a panel opened or reloaded after the tab). */
+  private requestMissingSelections(): void {
+    if (this.changeListeners.size === 0) return;
+    for (const t of this.tabs) {
+      const key = keyOf(t);
+      if (this.latched.has(key) || this.selectionAsked.has(key) || this.selections.has(t.tabId)) continue;
+      this.selectionAsked.add(key);
+      try {
+        const envId = this.postOrThrow(t.tabId, { kind: "selection-request" });
+        this.selectionRequests.set(envId, key);
+        if (this.selectionRequests.size > 50) this.selectionRequests.delete(this.selectionRequests.keys().next().value as string);
+      } catch {
+        this.selectionAsked.delete(key); // retried on the next tab-list change
+      }
+    }
   }
 
   /** The live binding of a chat, or null. */
@@ -246,6 +319,7 @@ export class PanelClient {
   forgetSession(sessionId: string): void {
     this.dropBinding(sessionId);
     this.models.delete(sessionId);
+    this.notifyChange();
   }
 
   /** A binding is gone for good (forgotten or latched): the context of its document goes with it. */
@@ -258,13 +332,24 @@ export class PanelClient {
   // ---- sending -------------------------------------------------------------
 
   private post(tabId: number, msg: Outgoing): string {
-    const id = `p${++this.counter}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = this.nextEnvelopeId();
     try {
       this.bridge.post(tabId, { id, sentAt: this.now(), msg });
     } catch {
       // A throwing bridge must not break the chat; the timeouts report it.
     }
     return id;
+  }
+
+  /** Like `post`, but a throwing bridge reaches the caller (a best-effort message that can be retried). */
+  private postOrThrow(tabId: number, msg: Outgoing): string {
+    const id = this.nextEnvelopeId();
+    this.bridge.post(tabId, { id, sentAt: this.now(), msg });
+    return id;
+  }
+
+  private nextEnvelopeId(): string {
+    return `p${++this.counter}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
   // ---- binding -------------------------------------------------------------
@@ -364,6 +449,7 @@ export class PanelClient {
       const switched = !previous || keyOf(previous) !== keyOf(binding);
       if (switched) this.lastContext.delete(sessionId);
       this.bindings.set(sessionId, binding);
+      this.notifyChange();
       this.lastOpened.set(sessionId, opened);
       if (spec.prime && (switched || !this.lastContext.has(sessionId))) await this.primeContext(sessionId);
       return { ok: true, binding, opened };
@@ -395,7 +481,10 @@ export class PanelClient {
       this.tabs = listed;
       if (this.liveBinding(sessionId) || this.binding$.has(sessionId)) return;
       const usable = listed.find((t) => !this.latched.has(keyOf(t)));
-      if (usable) this.bindings.set(sessionId, { tabId: usable.tabId, registrationId: usable.registrationId });
+      if (usable) {
+        this.bindings.set(sessionId, { tabId: usable.tabId, registrationId: usable.registrationId });
+        this.notifyChange();
+      }
     } catch {
       // Stays unbound.
     }
@@ -741,6 +830,12 @@ export class PanelClient {
         this.streams.get(msg.toolCallId)?.encoder.forceFull();
         break;
       case "error": {
+        const askedKey = this.selectionRequests.get(msg.refId);
+        if (askedKey !== undefined) {
+          // Main could not deliver our selection-request: ask again on the next tab-list change.
+          this.selectionRequests.delete(msg.refId);
+          this.selectionAsked.delete(askedKey);
+        }
         const id = this.byEnvelope.get(msg.refId);
         if (!id) break;
         const p = this.pending.get(id);
@@ -753,6 +848,13 @@ export class PanelClient {
         }
         break;
       }
+      case "selection":
+        this.selections.set(tabId, {
+          registrationId: this.tabs.find((t) => t.tabId === tabId)?.registrationId,
+          snapshot: msg.selection,
+        });
+        this.notifyChange();
+        break;
       case "tab-gone":
         this.latchRegistration(tabId, msg.registrationId);
         break;
@@ -781,6 +883,13 @@ export class PanelClient {
   private latchRegistration(tabId: number, registrationId: number): void {
     const key = `${tabId}:${registrationId}`;
     this.latched.add(key);
+    // Drop the snapshot unless it is known to come from a NEWER registration (the tab list already
+    // shows one). If the list is stale the snapshot goes too, and the new registration is asked again
+    // once the list catches up (`requestMissingSelections`), so the chips recover either way.
+    const held = this.selections.get(tabId);
+    if (held && (held.registrationId === undefined || held.registrationId <= registrationId)) {
+      this.selections.delete(tabId);
+    }
     // The closed document's context must not be sent to the next turn.
     for (const [sessionId, b] of [...this.bindings]) if (keyOf(b) === key) this.dropBinding(sessionId);
     for (const [toolCallId, s] of [...this.streams]) {
@@ -792,5 +901,7 @@ export class PanelClient {
     for (const p of [...this.pending.values()]) {
       if (p.key === key) p.settle(p.isContext ? "" : TAB_CLOSED_ERROR, "tab_gone");
     }
+    this.requestMissingSelections();
+    this.notifyChange();
   }
 }

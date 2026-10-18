@@ -13,6 +13,10 @@ import { isSerializedTool } from "@/lib/toolCallQueue";
 import { toolHandlers } from "@/lib/toolRegistry";
 import { canMutateScene } from "@/lib/webmcp/registerTools";
 import { useSceneStore } from "@/store/sceneStore";
+import { useSelectionStore } from "@/store/selectionStore";
+import { useEmbedPickerStore } from "@/store/embedPickerStore";
+import { computeSelectionItems } from "@/hooks/useSelectionContext";
+import { computeEmbedElementContext } from "@/hooks/useEmbedElementContext";
 import { useSharedViewStore } from "@/store/sharedViewStore";
 import { generateId } from "@/types/scene";
 import { FALLBACK_SIZE, isPositive, placeNodeOnCanvas } from "@/lib/tools/browser/placeOnCanvas";
@@ -26,6 +30,7 @@ import {
   type ChatToCanvasMsg,
   type LinkEnvelope,
   type MainToCanvasMsg,
+  type SelectionChipsSnapshot,
 } from "./protocol";
 import { buildSceneContext } from "./sceneContext";
 import { clearCanvasHostLaunchPoster, nextLaunchId, resolveLaunchAck, setCanvasHostLaunchPoster } from "./agentLaunch";
@@ -36,6 +41,30 @@ export const CANVAS_LINK_SESSION = "canvas-link";
 const errorResult = (message: string): string => JSON.stringify({ error: message });
 const NOT_EDITABLE_MESSAGE =
   "This canvas is not editable right now (read-only view or present mode); editing tools are unavailable.";
+
+/** What the composer's selection chips show for this tab right now (same logic as the chip hooks). */
+function buildSelectionSnapshot(): SelectionChipsSnapshot {
+  const { nodesById } = useSceneStore.getState();
+  const picked = useEmbedPickerStore.getState().selection;
+  const embed = computeEmbedElementContext(picked, picked ? nodesById[picked.embedId] : undefined);
+  return {
+    nodes: computeSelectionItems(useSelectionStore.getState().selectedIds, nodesById),
+    embedElement: embed && { label: embed.label, embedName: embed.embedName, textPreview: embed.selection.textPreview },
+  };
+}
+
+function sameSelection(a: SelectionChipsSnapshot, b: SelectionChipsSnapshot): boolean {
+  if (a.nodes.length !== b.nodes.length) return false;
+  for (let i = 0; i < a.nodes.length; i++) {
+    const x = a.nodes[i];
+    const y = b.nodes[i];
+    if (x.nodeId !== y.nodeId || x.name !== y.name || x.type !== y.type) return false;
+  }
+  const x = a.embedElement;
+  const y = b.embedElement;
+  if (!x || !y) return x === y;
+  return x.label === y.label && x.embedName === y.embedName && x.textPreview === y.textPreview;
+}
 
 /** One editability rule for WebMCP and the host: `canMutateScene` (lib/webmcp/registerTools.ts). */
 const isCanvasEditable = canMutateScene;
@@ -262,6 +291,9 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
       case "launch-ack":
         resolveLaunchAck(msg.launchId, msg.error);
         break;
+      case "selection-request":
+        publishSelection(true);
+        break;
       case "context-request":
         post({
           kind: "context-response",
@@ -273,6 +305,30 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
         break;
     }
   };
+
+  // Selection chips: posted when the snapshot changes, coalesced into one microtask (a drag or marquee
+  // fires many store updates) and deduped by the fields the chips show. `force` re-sends the last one.
+  let lastSelection: SelectionChipsSnapshot | null = null;
+  let selectionQueued = false;
+  const publishSelection = (force = false): void => {
+    if (stopped) return;
+    const next = buildSelectionSnapshot();
+    if (!force && lastSelection && sameSelection(lastSelection, next)) return;
+    if (post({ kind: "selection", selection: next })) lastSelection = next;
+  };
+  const scheduleSelection = (): void => {
+    if (selectionQueued || stopped) return;
+    selectionQueued = true;
+    queueMicrotask(() => {
+      selectionQueued = false;
+      try {
+        publishSelection();
+      } catch (err) {
+        console.warn("[canvasHost] selection publish failed", err);
+      }
+    });
+  };
+  let stopSelectionWatch: (() => void) | null = null;
 
   const unsubscribe = bridge.onMessage((env) => {
     if (stopped) return;
@@ -306,11 +362,29 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
     const launchId = id ?? nextLaunchId();
     return post({ kind: "launch", launchId, payload }) ? launchId : null;
   };
-  if (registered) setCanvasHostLaunchPoster(launchPoster);
+  if (registered) {
+    setCanvasHostLaunchPoster(launchPoster);
+    const offs = [
+      useSelectionStore.subscribe(scheduleSelection),
+      // Scene edits matter only when they touch a selected node or the picked embed (name/type).
+      useSceneStore.subscribe((state, prev) => {
+        if (state.nodesById === prev.nodesById) return;
+        const picked = useEmbedPickerStore.getState().selection;
+        const touched = (id: string) => state.nodesById[id] !== prev.nodesById[id];
+        if (useSelectionStore.getState().selectedIds.some(touched) || (picked && touched(picked.embedId))) {
+          scheduleSelection();
+        }
+      }),
+      useEmbedPickerStore.subscribe(scheduleSelection),
+    ];
+    stopSelectionWatch = () => offs.forEach((off) => off());
+    publishSelection(); // a panel that is already open gets the state without waiting for a change
+  }
 
   return () => {
     if (stopped) return;
     unsubscribe();
+    stopSelectionWatch?.();
     clearCanvasHostLaunchPoster(launchPoster);
     // Roll back half-streamed and completed-but-uncalled streams, drop every
     // adapter's per-session leftovers, abort running calls. Nothing is posted after stop.

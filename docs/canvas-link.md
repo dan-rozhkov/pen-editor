@@ -124,6 +124,19 @@ See `protocol.ts`. Rules:
   the agent panel." The showcase prompt stays in sessionStorage until the ack and an unacked
   launch is retried 3 times, 5 s apart, while the host runs. The panel's client exists from the
   moment `/agent` mounts, so a launch before the first message is received.
+- **`selection`** (canvas → chat, `{selection: {nodes: [{nodeId,name,type}], embedElement: {selection, label, embedName} | null}}`):
+  what the composer's selection chips show, nothing else (the selection itself still rides in
+  `canvasContext`; chips are display-only and carry no message content, so the panel needs no scene
+  data for them). The tab computes it with the same pure functions the chip hooks use
+  (`computeSelectionItems`, `computeEmbedElementContext`), posts it when the selection, scene (a
+  rename) or picked embed element changes, coalesced into one microtask and deduped by content, and
+  once right after `register()`. The panel keeps the latest per `tabId` (dropped on that tab's
+  `tab-gone`, unless a newer registration already published). A chat's chips read the tab it is
+  bound to, else the first listed tab (the passive rule of `canvasContext`).
+- **`selection-request`** (chat → canvas): sent once per registration the panel shows chips for and
+  has no snapshot of (panel opened or reloaded after the tab, new tab). The tab answers with a
+  `selection` even if unchanged. Nothing is sent while no chat input is mounted. There is no
+  chat → canvas message to change the selection: the chips have no actions.
 - **`cancel`** aborts a running call (the canvas aborts the handler's signal and
   still answers `result` with an error, which the chat side ignores if it
   already resolved).

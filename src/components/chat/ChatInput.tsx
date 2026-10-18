@@ -189,12 +189,12 @@ export function ChatInput({
   // message content of their own: they don't occupy an attachment slot,
   // don't count toward MAX_IMAGES, and can't be individually dismissed (the
   // id keeps riding in canvasContext regardless).
-  const selectionContext = useSelectionContext();
+  const selectionContext = useSelectionContext(sessionId);
   // The element the user last picked inside an embed (if any and still
   // live) — display-only, mirroring what's already riding in
   // canvasContext.selectedEmbedElement (see useDesignChat.ts). Not part of
   // attachments/images: it's not message content, just an indicator.
-  const embedElementContext = useEmbedElementContext();
+  const embedElementContext = useEmbedElementContext(sessionId);
 
   const canSubmit =
     isOnline &&

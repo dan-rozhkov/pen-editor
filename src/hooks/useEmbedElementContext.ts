@@ -1,4 +1,6 @@
+import { useMemo } from "react";
 import { useSceneStore } from "@/store/sceneStore";
+import { usePanelSelection } from "@/lib/canvasLink/usePanelSelection";
 import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import type { EmbedElementSelection } from "@/lib/embedElementPicker";
 
@@ -35,11 +37,21 @@ export function formatEmbedElementLabel(
 }
 
 export interface EmbedElementContext {
-  selection: EmbedElementSelection;
+  /** Locally the full pick; in the panel only the text preview the chip shows. */
+  selection: Pick<EmbedElementSelection, "textPreview"> & Partial<EmbedElementSelection>;
   /** Compact CSS-selector-like label, e.g. `#hero` or `button.primary`. */
   label: string;
   /** The owning embed node's display name, for a human-readable title. */
   embedName: string;
+}
+
+/** Pure: the chip for a picked element, or null when its embed left the scene (shared with the canvas link host). */
+export function computeEmbedElementContext(
+  selection: EmbedElementSelection | null,
+  embedNode: { name?: string } | undefined,
+): EmbedElementContext | null {
+  if (!selection || !embedNode) return null;
+  return { selection, label: formatEmbedElementLabel(selection), embedName: embedNode.name ?? "Embed" };
 }
 
 /**
@@ -54,17 +66,23 @@ export interface EmbedElementContext {
  * `buildCanvasContext` applies before forwarding the selection to the agent,
  * so the chip and the actual outgoing context never disagree.
  */
-export function useEmbedElementContext(): EmbedElementContext | null {
-  const selection = useEmbedPickerStore((s) => s.selection);
-  const embedNode = useSceneStore((s) =>
-    selection ? s.nodesById[selection.embedId] : undefined,
+export function useEmbedElementContext(sessionId?: string): EmbedElementContext | null {
+  // In the desktop agent panel the local stores are empty: the chip comes from the bound canvas tab.
+  const remote = usePanelSelection(sessionId);
+  // In the panel the local stores stay unread: constant selectors never re-render.
+  const selection = useEmbedPickerStore((s) => (remote ? null : s.selection));
+  const embedNode = useSceneStore((s) => (selection ? s.nodesById[selection.embedId] : undefined));
+  const remoteChip = useMemo(
+    () =>
+      remote?.embedElement
+        ? {
+            selection: { textPreview: remote.embedElement.textPreview },
+            label: remote.embedElement.label,
+            embedName: remote.embedElement.embedName,
+          }
+        : null,
+    [remote],
   );
-
-  if (!selection || !embedNode) return null;
-
-  return {
-    selection,
-    label: formatEmbedElementLabel(selection),
-    embedName: embedNode.name ?? "Embed",
-  };
+  if (remote) return remoteChip;
+  return computeEmbedElementContext(selection, embedNode);
 }
