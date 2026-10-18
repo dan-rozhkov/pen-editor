@@ -35,10 +35,13 @@ import { OfflineBanner } from "./components/status/OfflineBanner";
 import { ShareDialog } from "./components/share/ShareDialog";
 import { useSharedViewStore } from "./store/sharedViewStore";
 import { EditorProviders } from "./components/EditorProviders";
+import { registerMountedEditor } from "@/lib/uiTheme";
 
 const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default: m.PixiCanvas })));
 
 function App() {
+  // While an editor is mounted it owns its theme: remote ui-theme changes are ignored.
+  useEffect(() => registerMountedEditor(), []);
   const isUIHidden = useUIVisibilityStore((s) => s.isUIHidden);
   const mode = useEditorModeStore((s) => s.mode);
   const is3DActive = useLayers3DStore((s) => s.active);

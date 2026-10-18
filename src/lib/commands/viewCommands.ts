@@ -60,13 +60,13 @@ export function getViewCommands(): PaletteCommand[] {
       id: "view-light-theme",
       label: "Light theme",
       group: "View",
-      run: () => useUIThemeStore.getState().setUITheme("light"),
+      run: () => useUIThemeStore.getState().setUITheme("light", { source: "user" }),
     },
     {
       id: "view-dark-theme",
       label: "Dark theme",
       group: "View",
-      run: () => useUIThemeStore.getState().setUITheme("dark"),
+      run: () => useUIThemeStore.getState().setUITheme("dark", { source: "user" }),
     },
   ];
 }

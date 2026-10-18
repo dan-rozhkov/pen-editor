@@ -1,3 +1,4 @@
+import { isEditorRoute } from "../uiTheme";
 import { announceSurfaceInstalled } from "./announce";
 import { installModelContextPolyfill } from "./polyfill";
 
@@ -27,17 +28,11 @@ import { installModelContextPolyfill } from "./polyfill";
  */
 
 /**
- * Routes where an editor mounts and tools will follow. The showcase at "/"
- * is deliberately excluded: advertising a model context on a page that will
- * never register a tool is its own kind of lie, and it would contradict the
- * invariant that this surface exists only where a document does.
+ * Routes where an editor mounts and tools will follow (rule shared with the
+ * theme sync: `isEditorRoute`). The showcase at "/" is deliberately excluded:
+ * advertising a model context on a page that will never register a tool is its
+ * own kind of lie.
  */
-function isEditorRoute(pathname: string): boolean {
-  const base = import.meta.env.BASE_URL || "/";
-  const path = pathname.startsWith(base) ? pathname.slice(base.length - 1) : pathname;
-  return path === "/app" || path.startsWith("/app/") || path.startsWith("/c/");
-}
-
 export function installModelContextForEditorRoute(
   pathname: string = window.location.pathname
 ): boolean {

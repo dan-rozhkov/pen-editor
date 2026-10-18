@@ -19,7 +19,7 @@ import { ShowcaseFilterBar } from "@/components/showcase/ShowcaseFilterBar";
 import { Button } from "@/components/ui/button";
 import { track } from "@/lib/analytics";
 import { storeShowcaseAgentPrompt } from "@/lib/showcaseAgentHandoff";
-import { getAppliedUITheme } from "@/lib/uiTheme";
+import { getAppliedUITheme, onUIThemeApplied, type UITheme } from "@/lib/uiTheme";
 import { cn } from "@/lib/utils";
 import { useHtmlRouteClass } from "@/hooks/useHtmlRouteClass";
 import {
@@ -407,11 +407,13 @@ export function ShowcasePage() {
   useLayoutEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]');
     const previousThemeColor = meta?.getAttribute("content") ?? null;
-    meta?.setAttribute(
-      "content",
-      getAppliedUITheme() === "dark" ? "#2a2a2a" : "#ffffff",
-    );
+    const paint = (theme: UITheme) =>
+      meta?.setAttribute("content", theme === "dark" ? "#2a2a2a" : "#ffffff");
+    paint(getAppliedUITheme());
+    // Follows a theme switched in another document (storage sync).
+    const unsubscribe = onUIThemeApplied(paint);
     return () => {
+      unsubscribe();
       if (previousThemeColor !== null) {
         meta?.setAttribute("content", previousThemeColor);
       }

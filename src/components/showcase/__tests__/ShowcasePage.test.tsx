@@ -1,3 +1,4 @@
+import { installUIThemeStorageSync } from "@/lib/uiTheme";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
@@ -426,6 +427,17 @@ describe("<ShowcasePage />", () => {
         true,
       );
       expect(document.documentElement.classList.contains("dark")).toBe(true);
+      expect(meta.getAttribute("content")).toBe("#2a2a2a");
+
+      // A theme switched in another document updates the meta too.
+      installUIThemeStorageSync();
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: "ui-theme", newValue: "light", storageArea: localStorage }),
+      );
+      expect(meta.getAttribute("content")).toBe("#ffffff");
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: "ui-theme", newValue: "dark", storageArea: localStorage }),
+      );
       expect(meta.getAttribute("content")).toBe("#2a2a2a");
 
       unmount();

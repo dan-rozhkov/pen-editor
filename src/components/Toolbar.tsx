@@ -247,10 +247,10 @@ export function Toolbar() {
               Settings
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="min-w-56">
-              <DropdownMenuCheckboxItem checked={uiTheme === "light"} onCheckedChange={() => useUIThemeStore.getState().setUITheme("light")}>
+              <DropdownMenuCheckboxItem checked={uiTheme === "light"} onCheckedChange={() => useUIThemeStore.getState().setUITheme("light", { source: "user" })}>
                 Light theme
               </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={uiTheme === "dark"} onCheckedChange={() => useUIThemeStore.getState().setUITheme("dark")}>
+              <DropdownMenuCheckboxItem checked={uiTheme === "dark"} onCheckedChange={() => useUIThemeStore.getState().setUITheme("dark", { source: "user" })}>
                 Dark theme
               </DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
