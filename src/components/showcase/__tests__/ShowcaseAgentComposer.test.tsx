@@ -9,7 +9,7 @@ describe("<ShowcaseAgentComposer />", () => {
   it("keeps send disabled for an empty or whitespace-only prompt", () => {
     render(<ShowcaseAgentComposer onSubmit={vi.fn()} />);
 
-    const input = screen.getByPlaceholderText("Ask the design agent to create…");
+    const input = screen.getByPlaceholderText("Ask Sideform Agent to create…");
     const send = screen.getByRole("button", { name: "Send" });
 
     expect(input.getAttribute("rows")).toBe("1");
@@ -28,7 +28,7 @@ describe("<ShowcaseAgentComposer />", () => {
   it("focuses the textarea when the composer container is clicked", () => {
     render(<ShowcaseAgentComposer onSubmit={vi.fn()} />);
 
-    const input = screen.getByPlaceholderText("Ask the design agent to create…");
+    const input = screen.getByPlaceholderText("Ask Sideform Agent to create…");
     fireEvent.click(input.closest("form")!);
 
     expect(document.activeElement).toBe(input);
@@ -38,7 +38,7 @@ describe("<ShowcaseAgentComposer />", () => {
     const onSubmit = vi.fn();
     render(<ShowcaseAgentComposer onSubmit={onSubmit} />);
 
-    const input = screen.getByPlaceholderText("Ask the design agent to create…");
+    const input = screen.getByPlaceholderText("Ask Sideform Agent to create…");
     fireEvent.change(input, {
       target: { value: "  Build a calm finance dashboard  " },
     });
@@ -51,7 +51,7 @@ describe("<ShowcaseAgentComposer />", () => {
     const onSubmit = vi.fn();
     render(<ShowcaseAgentComposer onSubmit={onSubmit} />);
 
-    const input = screen.getByPlaceholderText("Ask the design agent to create…");
+    const input = screen.getByPlaceholderText("Ask Sideform Agent to create…");
     fireEvent.change(input, { target: { value: "first line" } });
     fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
 
@@ -64,7 +64,7 @@ describe("<ShowcaseAgentComposer />", () => {
     render(<ShowcaseAgentComposer onSubmit={onSubmit} />);
 
     fireEvent.change(
-      screen.getByPlaceholderText("Ask the design agent to create…"),
+      screen.getByPlaceholderText("Ask Sideform Agent to create…"),
       { target: { value: "Create a portfolio" } },
     );
     fireEvent.click(screen.getByRole("button", { name: "Send" }));

@@ -8,7 +8,7 @@ export function LandingPreview() {
   return (
     <figure className="sf-preview">
       <div className="sf-preview-canvas">
-        <div className="sf-preview-label"><span /> A mood-tracker concept, made with the design agent</div>
+        <div className="sf-preview-label"><span /> A mood-tracker concept, made with Sideform Agent</div>
         <div className="sf-preview-screens">
           <img src={asset("mood-today.png")} alt="Mood-tracker concept: daily check-in and evening routine" width="390" height="844" fetchPriority="high" />
           <img src={asset("mood-year.png")} alt="Mood-tracker concept: a year of moods shown as a coloured calendar" width="390" height="844" />

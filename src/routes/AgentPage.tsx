@@ -31,7 +31,7 @@ function AgentPanel() {
     <EditorProviders>
       <div
         role="region"
-        aria-label="Design agent"
+        aria-label="Sideform Agent"
         className="h-dvh w-full overflow-hidden bg-surface-panel"
       >
         {/* isVisible: there is no sidebar section to derive visibility from,

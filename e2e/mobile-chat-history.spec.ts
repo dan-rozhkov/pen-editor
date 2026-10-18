@@ -34,7 +34,7 @@ test("mobile: closing and reopening the Agents panel keeps chat history", async 
 
   // Open the Agents section from the left rail.
   await openAgentsRail(page);
-  await expect(page.getByText("Design Agent", { exact: true })).toBeVisible();
+  await expect(page.getByText("Sideform Agent", { exact: true })).toBeVisible();
 
   // Send a message.
   await sendChatMessage(page, USER_MESSAGE);
@@ -54,11 +54,11 @@ test("mobile: closing and reopening the Agents panel keeps chat history", async 
   // Close the panel: tap the already-active rail button again (mobile-only
   // toggle behavior in LeftRail's handleSectionClick).
   await openAgentsRail(page);
-  await expect(page.getByText("Design Agent", { exact: true })).toBeHidden();
+  await expect(page.getByText("Sideform Agent", { exact: true })).toBeHidden();
 
   // Reopen it.
   await openAgentsRail(page);
-  await expect(page.getByText("Design Agent", { exact: true })).toBeVisible();
+  await expect(page.getByText("Sideform Agent", { exact: true })).toBeVisible();
 
   // The previously sent message and reply must still be there.
   await expect(activeSession.getByText(USER_MESSAGE)).toBeVisible();

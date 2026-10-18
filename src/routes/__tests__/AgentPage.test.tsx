@@ -87,9 +87,9 @@ describe("<AgentPage />", () => {
     expect(applicationCtor).not.toHaveBeenCalled();
   });
 
-  it("has no Design Agent title row and puts the skills button next to New chat", async () => {
+  it("has no Sideform Agent title row and puts the skills button next to New chat", async () => {
     renderAgent();
-    expect(screen.queryByText("Design Agent")).toBeNull();
+    expect(screen.queryByText("Sideform Agent")).toBeNull();
     // chat list: skills button sits beside the "New chat" button
     const newChat = screen.getByTestId("chat-list-new");
     const skills = screen.getByRole("button", { name: "Manage skills" });

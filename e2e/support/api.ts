@@ -56,7 +56,7 @@ export async function openAgentsRail(page: Page): Promise<void> {
 
 /** Fills the chat composer and submits with Enter. */
 export async function sendChatMessage(page: Page, text: string): Promise<void> {
-  const input = page.getByPlaceholder("Ask the design agent...");
+  const input = page.getByPlaceholder("Ask Sideform Agent…");
   await input.fill(text);
   await input.press("Enter");
 }

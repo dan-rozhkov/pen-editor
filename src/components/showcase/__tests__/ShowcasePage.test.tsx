@@ -94,7 +94,7 @@ function makePlatformAssertingFetchMock(platform: "mobile" | "desktop") {
 }
 
 describe("<ShowcasePage />", () => {
-  it("presents the design agent as the primary showcase action", () => {
+  it("presents Sideform Agent as the primary showcase action", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
 
     renderPage();
@@ -112,7 +112,7 @@ describe("<ShowcasePage />", () => {
     ).toBe(true);
     expect(heading.classList.contains("tracking-tight")).toBe(true);
     expect(
-      screen.getByPlaceholderText("Ask the design agent to create…"),
+      screen.getByPlaceholderText("Ask Sideform Agent to create…"),
     ).toBeTruthy();
     expect(editorLink.getAttribute("href")).toBe("/app");
     expect(editorLink.classList.contains("bg-accent-primary/10")).toBe(true);
@@ -148,7 +148,7 @@ describe("<ShowcasePage />", () => {
     sessionStorage.clear();
     renderNavigablePage();
 
-    const input = screen.getByPlaceholderText("Ask the design agent to create…");
+    const input = screen.getByPlaceholderText("Ask Sideform Agent to create…");
     fireEvent.change(input, {
       target: { value: "  Build a calm finance dashboard  " },
     });

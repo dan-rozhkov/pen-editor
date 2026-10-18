@@ -106,8 +106,8 @@ export async function waitForRequestCount(page: Page, count: number): Promise<vo
 
 export async function openChatAndSend(page: Page, message: string): Promise<void> {
   await page.getByTestId("rail-agents").click();
-  await expect(page.getByText("Design Agent", { exact: true })).toBeVisible();
-  const input = page.getByPlaceholder("Ask the design agent...");
+  await expect(page.getByText("Sideform Agent", { exact: true })).toBeVisible();
+  const input = page.getByPlaceholder("Ask Sideform Agent…");
   await input.fill(message);
   await input.press("Enter");
 }

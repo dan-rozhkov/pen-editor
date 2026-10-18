@@ -54,7 +54,7 @@ test("AI chat streams a batch_design tool call, executes it locally and auto-con
 
   // Open the chat panel via the Agents item in the left rail.
   await openAgentsRail(page);
-  await expect(page.getByText("Design Agent", { exact: true })).toBeVisible();
+  await expect(page.getByText("Sideform Agent", { exact: true })).toBeVisible();
 
   // Send a message (Enter submits).
   await sendChatMessage(page, "Create a smoke test frame");

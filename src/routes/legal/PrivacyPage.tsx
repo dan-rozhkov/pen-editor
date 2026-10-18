@@ -5,7 +5,7 @@ export default function PrivacyPage() {
     <LegalShell title="Privacy Policy">
       <p>
         This policy explains what personal data Sideform (&ldquo;we&rdquo;) processes when you use the Sideform design
-        editor, its AI design agent, and its remote MCP server that lets third-party agents such as ChatGPT, Codex or
+        editor, Sideform Agent, and its remote MCP server that lets third-party agents such as ChatGPT, Codex or
         Claude Code work with your canvas. We do not sell your personal data.
       </p>
 

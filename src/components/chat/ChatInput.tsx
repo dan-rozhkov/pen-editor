@@ -525,7 +525,7 @@ export function ChatInput({
           placeholder={
             awaitingAnswer
               ? "Answer the question above to continue…"
-              : "Ask the design agent..."
+              : "Ask Sideform Agent…"
           }
           rows={1}
           disabled={awaitingAnswer}

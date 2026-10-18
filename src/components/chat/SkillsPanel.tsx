@@ -87,7 +87,7 @@ function validateForm(form: FormState): string | null {
 }
 
 /**
- * "Manage skills" surface (Figma-style custom skills for the design agent).
+ * "Manage skills" surface (Figma-style custom skills for Sideform Agent).
  * Modeled on PluginsPanel.tsx: a searchable/browsable list with per-item
  * actions, plus create/upload/generate flows layered on top as a single
  * modal (rather than a left-sidebar panel, since it's reached from the chat
@@ -284,7 +284,7 @@ export function SkillsPanel({ open, onOpenChange }: SkillsPanelProps) {
           <DialogTitle>{title}</DialogTitle>
           {view === "list" && (
             <DialogDescription>
-              Skills teach the design agent your workflows. Built-in skills are shared
+              Skills teach Sideform Agent your workflows. Built-in skills are shared
               and read-only; your own skills are private to you.
             </DialogDescription>
           )}

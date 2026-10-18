@@ -304,7 +304,7 @@ export function MessageList({
     >
       {messages.length === 0 && (
         <PanelEmptyState icon={<SparkleIcon size={28} weight="light" />}>
-          Ask the design agent anything
+          Ask Sideform Agent anything
         </PanelEmptyState>
       )}
 
