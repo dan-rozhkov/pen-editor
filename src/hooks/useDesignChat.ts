@@ -31,6 +31,8 @@ import { isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";
 import { isIsolatedQaCall } from "@/lib/tools/browser/isolation";
 import { BROWSE_AGENT_OUTER_TIMEOUT_MS } from "@/lib/tools/browser/browseAgent";
 import { extractStreamingToolInputs } from "@/hooks/streamingToolParts";
+// SPIKE(ipc-streaming)
+import { spikeCall, spikeEndStream, spikeForwardFrame, spikeForwards, spikeRequestBody } from "@/lib/surfaceSpike/runtime";
 import {
   streamingToolAdapters,
   streamingToolNames,
@@ -456,7 +458,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const transport = useMemo(
     () =>
       createChatTransport({
-        body: () => buildCanvasContext(sessionId),
+        body: () => spikeRequestBody(buildCanvasContext(sessionId)), // SPIKE(ipc-streaming): async is fine, the SDK awaits `body`
         onRetryStateChange: setRetryState,
       }),
     // Built once per mounted session: the model (and everything else in the
@@ -531,12 +533,15 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       pendingToolCallAbortsRef.current.add(toolAbort);
       let handlerResult: string;
       try {
-        handlerResult = await executeToolCall(
-          toolCall.toolName,
-          toolCall.input,
-          { sessionId, toolCallId: toolCall.toolCallId, signal: toolAbort.signal },
-          "chat"
-        );
+        // SPIKE(ipc-streaming): the chat tab hands canvas tools to the canvas tab.
+        handlerResult = spikeForwards(toolCall.toolName)
+          ? await spikeCall(toolCall.toolName, toolCall.toolCallId, toolCall.input, toolAbort.signal)
+          : await executeToolCall(
+              toolCall.toolName,
+              toolCall.input,
+              { sessionId, toolCallId: toolCall.toolCallId, signal: toolAbort.signal },
+              "chat"
+            );
       } finally {
         pendingToolCallAbortsRef.current.delete(toolAbort);
       }
@@ -782,6 +787,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
         sessionId,
         toolCallId: call.toolCallId,
       });
+      spikeEndStream(call.toolCallId, "abandoned"); // SPIKE(ipc-streaming)
     }
     for (const adapter of streamingToolAdapters) {
       adapter.onSessionClear(sessionId);
@@ -852,6 +858,10 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
         toolName: streamed.toolName,
         toolCallId: streamed.toolCallId,
       });
+      // SPIKE(ipc-streaming): forwarded to the canvas tab instead of applied here.
+      if (spikeForwardFrame(sessionId, streamed.toolName, streamed.toolCallId, streamed.input)) {
+        continue;
+      }
       getStreamingToolAdapter(streamed.toolName)?.onFrame({
         sessionId,
         toolCallId: streamed.toolCallId,
@@ -941,6 +951,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
         sessionId,
         toolCallId: call.toolCallId,
       });
+      spikeEndStream(call.toolCallId, "abandoned"); // SPIKE(ipc-streaming)
     }
   }, [chat.status, chat.messages, sessionId]);
 

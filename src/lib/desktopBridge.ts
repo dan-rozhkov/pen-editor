@@ -1,6 +1,7 @@
 import type { BrowserBridge } from "@sideform/browser-agent/loop";
 import { getCommands, runCommand } from "@/lib/commands/registry";
 import { useDocumentStore } from "@/store/documentStore";
+import type { SurfaceSpikeBridge } from "@/lib/surfaceSpike/types"; // SPIKE(ipc-streaming)
 
 /**
  * Bridge to the Electron shell (pen-editor-desktop). The desktop preload
@@ -20,6 +21,8 @@ export type DesktopBrowserBridge = BrowserBridge &
   };
 
 export interface PenDesktopApi {
+  /** SPIKE(ipc-streaming): chat tab <-> canvas tab relay, see docs/spike-ipc-streaming-contract.md. */
+  surfaceSpike?: SurfaceSpikeBridge;
   setDocumentTitle?(title: string): void;
   onMenuCommand(cb: (commandId: string) => void): () => void;
   /**

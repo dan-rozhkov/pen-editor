@@ -55,6 +55,11 @@ if (import.meta.env.PROD && !isMobbinOAuthCallbackRoute()) {
 // ordering and its failure-falls-back-not-silently-disables contract.
 startBridges()
 
+// SPIKE(ipc-streaming): window.__spike, only when the desktop preload offers the bridge.
+if (window.penDesktop?.surfaceSpike) {
+  void import('@/lib/surfaceSpike/install').then(({ installSpike }) => installSpike())
+}
+
 // Start fetching the chat model list here, before the first render, rather
 // than only from App's effect. A chat session's queued-payload effect holds
 // its send while this request is in flight (see useDesignChat), and effects

@@ -1,0 +1,63 @@
+import { describe, it, expect } from "vitest";
+import { AppendDecoder, AppendEncoder } from "../appendCodec";
+
+const ops = (s: string, extra: Record<string, unknown> = {}) => ({ operations: s, ...extra });
+
+describe("append codec", () => {
+  it("sends full first, then only the growth of one string field", () => {
+    const enc = new AppendEncoder("t1", "batch_design");
+    expect(enc.encode(ops("a=I("), "append")).toMatchObject({ format: "full", seq: 0 });
+    const m = enc.encode(ops("a=I(doc)"), "append");
+    expect(m).toMatchObject({ format: "append", field: "operations", offset: 4, append: "doc)", seq: 1 });
+    expect(m).not.toHaveProperty("rest");
+  });
+
+  it("skips unchanged input and sends rest only when other fields changed", () => {
+    const enc = new AppendEncoder("t1", "x");
+    enc.encode(ops("ab", { n: 1 }), "append");
+    expect(enc.encode(ops("ab", { n: 1 }), "append")).toBeNull();
+    const m = enc.encode(ops("abc", { n: 2 }), "append");
+    expect(m).toMatchObject({ format: "append", append: "c", rest: { n: 2 } });
+  });
+
+  it("falls back to full when the string is rewritten or two fields grow", () => {
+    const enc = new AppendEncoder("t1", "x");
+    enc.encode({ a: "xx", b: "yy" }, "append");
+    expect(enc.encode({ a: "zz", b: "yy" }, "append")).toMatchObject({ format: "full" });
+    expect(enc.encode({ a: "zz1", b: "yy1" }, "append")).toMatchObject({ format: "full" });
+  });
+
+  it("honors format=full", () => {
+    const enc = new AppendEncoder("t1", "x");
+    enc.encode(ops("a"), "full");
+    expect(enc.encode(ops("ab"), "full")).toMatchObject({ format: "full" });
+  });
+
+  it("round-trips a stream through the decoder", () => {
+    const enc = new AppendEncoder("t1", "x");
+    const dec = new AppendDecoder();
+    let last: unknown;
+    for (const input of [ops("a"), ops("ab", { name: "n" }), ops("abc", { name: "n" }), ops("abcd", { name: "m" })]) {
+      const msg = enc.encode(input, "append")!;
+      const res = dec.apply(msg);
+      expect(res.status).toBe("input");
+      if (res.status === "input") last = res.input;
+    }
+    expect(last).toEqual(ops("abcd", { name: "m" }));
+  });
+
+  it("asks for resync on an offset mismatch, ignores appends, recovers on full", () => {
+    const enc = new AppendEncoder("t1", "x");
+    const dec = new AppendDecoder();
+    dec.apply(enc.encode(ops("ab"), "append")!);
+    enc.encode(ops("abc"), "append"); // lost on the wire
+    const second = enc.encode(ops("abcd"), "append")!;
+    expect(dec.apply(second)).toEqual({ status: "resync" });
+    expect(dec.apply(enc.encode(ops("abcde"), "append")!)).toEqual({ status: "ignored" });
+    enc.forceFull();
+    const full = enc.encode(ops("abcdef"), "append")!;
+    expect(full.format).toBe("full");
+    expect(dec.apply(full)).toEqual({ status: "input", input: ops("abcdef") });
+    expect(dec.apply(enc.encode(ops("abcdefg"), "append")!)).toEqual({ status: "input", input: ops("abcdefg") });
+  });
+});
