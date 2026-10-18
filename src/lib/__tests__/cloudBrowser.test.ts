@@ -57,6 +57,15 @@ describe("cloudBrowserBridge", () => {
     expect(bodyOf(fetchMock)).toEqual({ userId: getUserId(), chatId: "chat-1", args: { checks } });
   });
 
+  it("posts clearActEmulation to /api/browser/cmd/clearActEmulation", async () => {
+    const fetchMock = stubFetch(jsonResponse({ result: { ok: true } }));
+    const result = await getCloudBrowserBridge("chat-1").clearActEmulation?.();
+
+    expect(result).toEqual({ ok: true });
+    expect(fetchMock.mock.calls[0][0]).toBe(resolveApiUrl("/api/browser/cmd/clearActEmulation"));
+    expect(bodyOf(fetchMock)).toEqual({ userId: getUserId(), chatId: "chat-1", args: {} });
+  });
+
   it("posts userId, chatId and args to /api/browser/cmd/:name and returns the result", async () => {
     const fetchMock = stubFetch(jsonResponse(OK));
     const result = await getCloudBrowserBridge("chat-1").open({ url: "https://example.com" });

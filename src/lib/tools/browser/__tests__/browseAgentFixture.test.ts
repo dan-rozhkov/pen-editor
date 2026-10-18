@@ -40,6 +40,33 @@ afterEach(() => {
   cleanupBrowseAgentTest(restoreHandlers);
 });
 
+describe("browse_agent run end: viewport emulation reset", () => {
+  it("clears after the fixture release when the run had a fixture", async () => {
+    stubFetch();
+    const clearActEmulation = vi.fn(async () => ({ ok: true }));
+    installBridge({ clearActEmulation });
+    await browseAgent({ goal: "g", url: "https://a.test", setup: SETUP }, ctx);
+    expect(clearActEmulation).toHaveBeenCalledTimes(1);
+    expect(releaseFixture.mock.invocationCallOrder[0]).toBeLessThan(clearActEmulation.mock.invocationCallOrder[0]);
+  });
+
+  it("clears also when the run used no fixture", async () => {
+    stubFetch();
+    const clearActEmulation = vi.fn(async () => ({ ok: true }));
+    installBridge({ clearActEmulation });
+    await browseAgent({ goal: "g", url: "https://a.test" }, ctx);
+    expect(clearActEmulation).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a rejection and an older shell without the method", async () => {
+    stubFetch();
+    installBridge({ clearActEmulation: vi.fn(async () => { throw new Error("boom"); }) });
+    expect(JSON.parse(await browseAgent({ goal: "g", url: "https://a.test" }, ctx))).toMatchObject({ status: "done" });
+    installBridge();
+    expect(JSON.parse(await browseAgent({ goal: "g", url: "https://a.test" }, ctx))).toMatchObject({ status: "done" });
+  });
+});
+
 describe("browse_agent setup (page fixture)", () => {
   it("applies the fixture instead of opening the url, then releases with the token", async () => {
     const bodies = stubFetch();

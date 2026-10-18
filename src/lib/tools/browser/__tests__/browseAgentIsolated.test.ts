@@ -45,6 +45,7 @@ const bridgeOf = () => ({
   read: vi.fn(async () => ({})),
   snapshot: vi.fn(async () => ({})),
   perform: vi.fn(async () => ({})),
+  clearActEmulation: vi.fn(async () => ({ ok: true })),
   ...fixtureBridgeMocks(),
 });
 
@@ -93,6 +94,14 @@ describe("browse_agent isolated QA run", () => {
     expect(iso.releaseFixture).toHaveBeenCalledWith("tok-1");
     expect(shared.applyFixture).not.toHaveBeenCalled();
     expect(iso.releaseFixture.mock.invocationCallOrder[0]).toBeLessThan(closeSession.mock.invocationCallOrder[0]);
+  });
+
+  it("clears the viewport emulation on the isolated bridge after the fixture release, before the close", async () => {
+    await browseAgent({ goal: "g", url: "https://a.test", qa: true, setup: SETUP }, ctx);
+    expect(iso.clearActEmulation).toHaveBeenCalledTimes(1);
+    expect(shared.clearActEmulation).not.toHaveBeenCalled();
+    expect(iso.releaseFixture.mock.invocationCallOrder[0]).toBeLessThan(iso.clearActEmulation.mock.invocationCallOrder[0]);
+    expect(iso.clearActEmulation.mock.invocationCallOrder[0]).toBeLessThan(closeSession.mock.invocationCallOrder[0]);
   });
 
   it("closes the session when the run fails", async () => {

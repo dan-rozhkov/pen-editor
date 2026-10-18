@@ -39,6 +39,8 @@ const COMMAND_TIMEOUT_MS: Record<string, number> = {
   captureCheckpoint: 25_000,
   // QA assertions (browser-agent v0.2.21): one page script; the final checks are bounded at 30 s by the package.
   assert: 30_000,
+  // Run-end viewport reset (browser-agent v0.2.23): no navigation, quick; the host bounds it at 5 s anyway.
+  clearActEmulation: 10_000,
 };
 const DEFAULT_COMMAND_TIMEOUT_MS = 85_000;
 const TIMEOUT_ERROR = "Cloud browser timed out — try again.";
@@ -277,6 +279,7 @@ function makeBridge(resolveChat: () => string): CloudBrowserBridge {
     startJournal: async (opts) => unwrapJournalToken(await call("startJournal", { ...(opts?.origins ? { origins: opts.origins } : {}) })),
     stopJournal: (token) => call("stopJournal", token ? { token } : {}),
     assert: (args) => call("assert", args),
+    clearActEmulation: () => call("clearActEmulation"),
     captureCheckpoint: (token) => call("captureCheckpoint", token ? { token } : {}),
   };
 }

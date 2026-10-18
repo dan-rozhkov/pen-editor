@@ -193,7 +193,46 @@ export const browseAgent: ToolHandler = async (args, context) => {
 /** Below this much deadline left after waiting for a slot, an isolated run is not worth starting. */
 const MIN_ISOLATED_RUN_MS = 60_000;
 
+/** Bound of the run-end viewport reset, as the package's runBrowseAgent. */
+const CLEAR_EMULATION_TIMEOUT_MS = 5_000;
+
+/**
+ * Ends the `browse_act` `viewport` layers (browser-agent v0.2.23). Every run end calls it,
+ * with or without a fixture, AFTER the fixture release. Bounded; a rejection is ignored; an
+ * older shell without the method is skipped. A viewport the MAIN model set in manual mode
+ * (browse_act called directly, no browse_agent run) persists until the next browse_agent
+ * run end or a fixture release.
+ */
+async function clearActEmulation(bridge: BrowserBridge | undefined): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      Promise.resolve(bridge?.clearActEmulation?.()).catch(() => undefined),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, CLEAR_EMULATION_TIMEOUT_MS);
+      }),
+    ]);
+  } catch {
+    // A reset must not change the run's result.
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const runBrowseAgent = async (
+  args: Record<string, unknown>,
+  context: Parameters<ToolHandler>[1],
+  runSession: string | undefined,
+  deadlineMs: number | undefined,
+): Promise<string> => {
+  try {
+    return await runBrowseAgentBody(args, context, runSession, deadlineMs);
+  } finally {
+    await clearActEmulation(getBrowserBridge(context?.sessionId, runSession));
+  }
+};
+
+const runBrowseAgentBody = async (
   args: Record<string, unknown>,
   context: Parameters<ToolHandler>[1],
   runSession: string | undefined,
