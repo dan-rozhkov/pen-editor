@@ -21,6 +21,7 @@ import { track } from "@/lib/analytics";
 import { storeShowcaseAgentPrompt } from "@/lib/showcaseAgentHandoff";
 import { getAppliedUITheme } from "@/lib/uiTheme";
 import { cn } from "@/lib/utils";
+import { useHtmlRouteClass } from "@/hooks/useHtmlRouteClass";
 import {
   fetchShowcase,
   fetchShowcaseCategories,
@@ -402,9 +403,8 @@ export function ShowcasePage() {
   // The showcase shares the editor's persisted theme. Its surfaces use theme
   // tokens below, so `.dark` deliberately stays on <html> during client-side
   // navigation instead of being treated as editor-only state.
+  useHtmlRouteClass("route-showcase");
   useLayoutEffect(() => {
-    const html = document.documentElement;
-    html.classList.add("route-showcase");
     const meta = document.querySelector('meta[name="theme-color"]');
     const previousThemeColor = meta?.getAttribute("content") ?? null;
     meta?.setAttribute(
@@ -412,7 +412,6 @@ export function ShowcasePage() {
       getAppliedUITheme() === "dark" ? "#2a2a2a" : "#ffffff",
     );
     return () => {
-      html.classList.remove("route-showcase");
       if (previousThemeColor !== null) {
         meta?.setAttribute("content", previousThemeColor);
       }

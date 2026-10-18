@@ -84,7 +84,15 @@ type ComposerControlsRenderer = (props: ComposerControlsProps) => ReactNode;
 
 /** Compact header shown above the transcript once a chat is open — replaces
  * the old tab bar now that a chat is opened from (and returned to) the list. */
-function OpenChatHeader({ chatId }: { chatId: string }) {
+function OpenChatHeader({
+  chatId,
+  trailingAction,
+}: {
+  chatId: string;
+  /** Extra header button rendered right after "New chat" (the /agent page
+   * moves the skills button here). */
+  trailingAction?: ReactNode;
+}) {
   const chatTitle = useChatStore(
     (s) => s.chats.find((c) => c.id === chatId)?.title ?? "",
   );
@@ -118,6 +126,7 @@ function OpenChatHeader({ chatId }: { chatId: string }) {
       >
         <PlusIcon className="size-4" weight="light" />
       </IconButton>
+      {trailingAction}
       {activeActions?.hasMessages && (
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -468,16 +477,19 @@ function ChatSession({
 }
 
 export function ChatPanelContent({
-  hideExpandToggle = false,
+  variant = "sidebar",
   isVisible,
 }: {
-  /** Hide the "Expand panel" header button, for hosts with no sidebar to
-   * expand (the standalone /agent page). */
-  hideExpandToggle?: boolean;
+  /** "sidebar" (default, /app Agents section): title row with the skills
+   * button and the expand toggle. "standalone" (the /agent page): no title
+   * row and no expand toggle (there is no sidebar to expand); the skills
+   * button sits in the chat header / next to "New chat" instead. */
+  variant?: "sidebar" | "standalone";
   /** Override the computed visibility (sidebar section + mobile panel state).
    * Hosts with no sidebar (the standalone /agent page) pass true. */
   isVisible?: boolean;
 } = {}) {
+  const isStandalone = variant === "standalone";
   const isExpanded = useChatStore((s) => s.isExpanded);
   const toggleExpanded = useChatStore((s) => s.toggleExpanded);
   const model = useChatStore((s) => s.model);
@@ -664,54 +676,56 @@ export function ChatPanelContent({
     </>
   );
 
+  const skillsButton = (
+    <IconButton
+      data-testid="manage-skills-button"
+      type="button"
+      variant="ghost"
+      size="icon"
+      onClick={() => setSkillsPanelOpen(true)}
+      tooltip="Manage skills"
+      aria-label="Manage skills"
+    >
+      <BookOpenIcon className="size-4" weight="regular" />
+    </IconButton>
+  );
+  // Standalone: the skills button lives in the chat header / list row.
+  const chatHeaderAction = isStandalone ? skillsButton : undefined;
+
   return (
     <div className="w-full h-full bg-surface-panel flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="flex h-[49px] items-center gap-2 px-4 py-3 border-b border-border-default shrink-0">
-        <span className="text-sm font-medium text-text-primary flex-1">
-          Design Agent
-        </span>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <button
-                onClick={() => setSkillsPanelOpen(true)}
-                className="-my-0.5 p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
-                aria-label="Manage skills"
-              >
-                <BookOpenIcon size={16} />
-              </button>
-            }
-          />
-          <TooltipContent>Manage skills</TooltipContent>
-        </Tooltip>
-        {!hideExpandToggle && (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <button
-                onClick={toggleExpanded}
-                className="-my-0.5 p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
-                aria-label={isExpanded ? "Collapse panel" : "Expand panel"}
-              >
-                <ArrowLineLeftIcon
-                  size={16}
-                  className={isExpanded ? "" : "rotate-180"}
-                />
-              </button>
-            }
-          />
-          <TooltipContent>
-            {isExpanded ? "Collapse panel" : "Expand panel"}
-          </TooltipContent>
-        </Tooltip>
-        )}
-      </div>
+      {!isStandalone && (
+        <div className="flex h-[49px] items-center gap-2 px-4 py-3 border-b border-border-default shrink-0">
+          <span className="text-sm font-medium text-text-primary flex-1">
+            Design Agent
+          </span>
+          {skillsButton}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  onClick={toggleExpanded}
+                  className="-my-0.5 p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
+                  aria-label={isExpanded ? "Collapse panel" : "Expand panel"}
+                >
+                  <ArrowLineLeftIcon
+                    size={16}
+                    className={isExpanded ? "" : "rotate-180"}
+                  />
+                </button>
+              }
+            />
+            <TooltipContent>
+              {isExpanded ? "Collapse panel" : "Expand panel"}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      )}
 
       {activeChatId === null ? (
-        <ChatList />
+        <ChatList trailingAction={chatHeaderAction} />
       ) : (
-        <OpenChatHeader chatId={activeChatId} />
+        <OpenChatHeader chatId={activeChatId} trailingAction={chatHeaderAction} />
       )}
 
       {/* Keep all sessions mounted so switching chats doesn't reset chat state.

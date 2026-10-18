@@ -327,6 +327,14 @@ html.route-showcase #root {
   background-color: var(--color-surface-panel);
 }
 
+/* "/agent" (desktop agent panel): the whole page is the panel surface in both
+   themes, so the chat matches the desktop island colour edge to edge. */
+html.route-agent,
+html.route-agent body,
+html.route-agent #root {
+  background-color: var(--color-surface-panel);
+}
+
 /* Only on the root element does a percentage min-height resolve against the
    viewport, so this belongs here and not on body/#root (where `height:auto`
    above would leave the percentage indefinite). It guarantees the themed

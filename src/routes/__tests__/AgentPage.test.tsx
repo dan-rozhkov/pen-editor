@@ -80,18 +80,44 @@ afterEach(() => {
 describe("<AgentPage />", () => {
   it("renders only the chat panel: no canvas, no rail, no expand toggle", async () => {
     renderAgent();
-    expect(screen.getByText("Design Agent")).toBeTruthy();
+    expect(screen.getByTestId("chat-list")).toBeTruthy();
     expect(document.querySelector("canvas")).toBeNull();
     expect(screen.queryByLabelText("Expand panel")).toBeNull();
     expect(screen.queryByLabelText("Collapse panel")).toBeNull();
     expect(applicationCtor).not.toHaveBeenCalled();
   });
 
+  it("has no Design Agent title row and puts the skills button next to New chat", async () => {
+    renderAgent();
+    expect(screen.queryByText("Design Agent")).toBeNull();
+    // chat list: skills button sits beside the "New chat" button
+    const newChat = screen.getByTestId("chat-list-new");
+    const skills = screen.getByRole("button", { name: "Manage skills" });
+    expect(newChat.nextElementSibling).toBe(skills);
+    // open chat: skills button sits right after the "+" button in the chat header
+    act(() => {
+      useChatStore.getState().createChat();
+    });
+    const plus = await screen.findByTestId("create-chat-button");
+    const skillsInChat = screen.getByRole("button", { name: "Manage skills" });
+    expect(plus.nextElementSibling).toBe(skillsInChat);
+    expect(screen.getAllByRole("button", { name: "Manage skills" })).toHaveLength(1);
+    fireEvent.click(skillsInChat);
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+  });
+
+  it("paints the page with the panel surface", () => {
+    const { unmount } = renderAgent();
+    expect(document.documentElement.classList.contains("route-agent")).toBe(true);
+    unmount();
+    expect(document.documentElement.classList.contains("route-agent")).toBe(false);
+  });
+
   it("does not touch the global left sidebar store", async () => {
     localStorage.setItem("left-sidebar-section", "pages");
     useLeftSidebarStore.setState({ activeSection: "pages", isPanelOpen: false });
     renderAgent();
-    expect(screen.getByText("Design Agent")).toBeTruthy();
+    expect(screen.getByTestId("chat-list")).toBeTruthy();
     expect(useLeftSidebarStore.getState().activeSection).toBe("pages");
     expect(useLeftSidebarStore.getState().isPanelOpen).toBe(false);
     expect(localStorage.getItem("left-sidebar-section")).toBe("pages");
@@ -101,14 +127,14 @@ describe("<AgentPage />", () => {
     vi.stubEnv("DEV", false);
     window.penAgentPanel = { version: 1 };
     renderAgent();
-    expect(screen.getByText("Design Agent")).toBeTruthy();
+    expect(screen.getByTestId("chat-list")).toBeTruthy();
   });
 
   it("redirects to /app on the public web (production, no agent panel)", () => {
     vi.stubEnv("DEV", false);
     renderAgent();
     expect(screen.getByText("editor route")).toBeTruthy();
-    expect(screen.queryByText("Design Agent")).toBeNull();
+    expect(screen.queryByTestId("chat-list")).toBeNull();
   });
 
   it("sends a message through the stubbed /api/chat stream", async () => {

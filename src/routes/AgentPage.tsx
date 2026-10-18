@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Navigate } from "react-router";
 import { EditorProviders } from "@/components/EditorProviders";
 import { ChatPanelContent } from "@/components/chat/ChatPanel";
+import { useHtmlRouteClass } from "@/hooks/useHtmlRouteClass";
 import { useChatBootstrap } from "@/hooks/useChatBootstrap";
 import { isAgentPanelHost } from "@/lib/agentPanel";
 import { startPanelRuntime } from "@/lib/canvasLink/panelRuntime";
@@ -23,13 +24,20 @@ function AgentPanel() {
   useEffect(() => {
     startPanelRuntime();
   }, []);
+  // body defaults to --color-surface-base; paint the panel surface edge to
+  // edge (overscroll, resize gaps) so the page matches the desktop island.
+  useHtmlRouteClass("route-agent");
   return (
     <EditorProviders>
-      <div className="h-dvh w-full overflow-hidden bg-surface-panel">
+      <div
+        role="region"
+        aria-label="Design agent"
+        className="h-dvh w-full overflow-hidden bg-surface-panel"
+      >
         {/* isVisible: there is no sidebar section to derive visibility from,
             and the global leftSidebarStore must not be touched (it would leak
             into /app on SPA navigation). */}
-        <ChatPanelContent hideExpandToggle isVisible />
+        <ChatPanelContent variant="standalone" isVisible />
       </div>
     </EditorProviders>
   );

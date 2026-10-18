@@ -46,6 +46,7 @@ vi.mock("@/hooks/useDesignChat", () => ({
 
 import { ChatPanelContent } from "../ChatPanel";
 import { useChatStore } from "@/store/chatStore";
+import { useOpenCodeKeyDialogStore } from "@/store/openCodeKeyDialogStore";
 import type { ChatSummary } from "@/store/chatStore";
 import { clearOpenCodeKey, setOpenCodeKey } from "@/lib/opencodeKey";
 import { resetBrowseCheckpoints, useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
@@ -569,5 +570,26 @@ describe("<ChatPanelContent /> OpenCode BYOK picker", () => {
     expect(
       document.querySelectorAll("#opencode-key-dialog-description"),
     ).toHaveLength(1);
+  });
+});
+
+describe("ChatPanelContent variants", () => {
+  beforeEach(() => {
+    // an earlier test may leave the modal OpenCode dialog open (hides the rest)
+    useOpenCodeKeyDialogStore.setState({ open: false });
+  });
+
+  it("sidebar variant (default) keeps the title row, skills button and expand toggle", () => {
+    render(<ChatPanelContent />);
+    expect(screen.getByText("Design Agent")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Manage skills" })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /(Expand|Collapse) panel/ })).toBeTruthy();
+  });
+
+  it("standalone variant has no title row and no expand toggle", () => {
+    render(<ChatPanelContent variant="standalone" isVisible />);
+    expect(screen.queryByText("Design Agent")).toBeNull();
+    expect(screen.queryByRole("button", { name: /(Expand|Collapse) panel/ })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Manage skills" })).toHaveLength(1);
   });
 });

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { PlusIcon, XIcon } from "@phosphor-icons/react";
 import { useChatStore } from "@/store/chatStore";
 import type { ChatSummary } from "@/store/chatStore";
@@ -83,24 +83,25 @@ function ChatListRow({ chat }: { chat: ChatSummary }) {
 }
 
 /** Landing view of the chat panel — shown while `activeChatId` is null. */
-export function ChatList() {
+export function ChatList({ trailingAction }: { trailingAction?: ReactNode } = {}) {
   const chats = useChatStore((s) => s.chats);
   const createChat = useChatStore((s) => s.createChat);
   const sortedChats = useMemo(() => sortChats(chats), [chats]);
 
   return (
     <div data-testid="chat-list" className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="p-2">
+      <div className={trailingAction ? "flex items-center gap-1 p-2" : "p-2"}>
         <Button
           type="button"
           data-testid="chat-list-new"
           onClick={() => createChat()}
           variant="outline"
-          className="w-full"
+          className={trailingAction ? "min-w-0 flex-1" : "w-full"}
         >
           <PlusIcon weight="light" />
           New chat
         </Button>
+        {trailingAction}
       </div>
       {sortedChats.length === 0 ? (
         <PanelEmptyState icon={<PlusIcon size={24} weight="light" />}>
