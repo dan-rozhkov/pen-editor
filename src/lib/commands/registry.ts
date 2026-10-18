@@ -1,4 +1,5 @@
 import { track } from "@/lib/analytics";
+import { isCanvasInputActive } from "@/surfaces/effectiveSurface";
 import { getToolCommands } from "./toolCommands";
 import { getEditCommands } from "./editCommands";
 import { getViewCommands } from "./viewCommands";
@@ -33,6 +34,15 @@ export function getCommands(): PaletteCommand[] {
   ];
 }
 
+/**
+ * False for a canvas command while another surface is in view. The palette
+ * filters with it and `runCommand` enforces it, so the Electron menu cannot
+ * edit a canvas the user cannot see either.
+ */
+export function isCommandAvailable(command: PaletteCommand): boolean {
+  return !(command.requiresCanvas || command.mutatesScene) || isCanvasInputActive();
+}
+
 // "file-export-<format>" ids (see fileCommands.ts) additionally emit
 // `document_exported`, with the format parsed straight from the id.
 const FILE_EXPORT_PREFIX = "file-export-";
@@ -46,6 +56,7 @@ const FILE_EXPORT_PREFIX = "file-export-";
  * single instrumentation site instead of two.
  */
 export function runCommand(command: PaletteCommand): void {
+  if (!isCommandAvailable(command)) return;
   track("editor_command_run", { command_id: command.id });
   if (command.id.startsWith(FILE_EXPORT_PREFIX)) {
     track("document_exported", { format: command.id.slice(FILE_EXPORT_PREFIX.length) });

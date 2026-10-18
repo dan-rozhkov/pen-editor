@@ -1,20 +1,36 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CloudBrowserPanel } from "../CloudBrowserPanel";
 import { useCloudBrowserStore } from "@/store/cloudBrowserStore";
+import { useSurfaceStore } from "@/store/surfaceStore";
+import { useChatStore } from "@/store/chatStore";
+import { useEditorModeStore } from "@/store/editorModeStore";
+import { useDevModeStore } from "@/store/devModeStore";
+import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
+import { useSharedViewStore } from "@/store/sharedViewStore";
+
+const mobile = vi.hoisted(() => ({ value: false }));
+vi.mock("@/hooks/useIsMobile", () => ({
+  useIsMobile: () => mobile.value,
+  isMobileViewport: () => mobile.value,
+}));
 
 const release = vi.fn(async (_chatId: string) => true);
-const expire = vi.fn((chatId: string) => useCloudBrowserStore.getState().clearSession(chatId));
 vi.mock("@/lib/cloudBrowser", () => ({
   releaseCloudBrowser: (id: string) => release(id),
-  expireCloudBrowser: (id: string) => expire(id),
   getCloudBrowserBridge: () => undefined,
   cloudBrowserBridge: undefined,
 }));
 
 beforeEach(() => {
+  mobile.value = false;
+  useSurfaceStore.setState({ activeSurfaceId: "canvas", browserChatId: null });
   release.mockClear();
-  expire.mockClear();
+  useChatStore.setState({ activeChatId: "chat-1" });
+  useEditorModeStore.setState({ mode: "edit" });
+  useDevModeStore.setState({ active: false });
+  useUIVisibilityStore.setState({ isUIHidden: false });
+  useSharedViewStore.setState({ isSharedView: false });
   useCloudBrowserStore.setState({ sessions: {} });
 });
 
@@ -46,68 +62,6 @@ describe("<CloudBrowserPanel />", () => {
     expect(screen.getByTitle("Cloud browser live view")).toBeTruthy();
   });
 
-  it("hides and clears the session once expiresAt passes", () => {
-    vi.useFakeTimers();
-    try {
-      vi.setSystemTime(1_000_000);
-      useCloudBrowserStore
-        .getState()
-        .setSession("chat-1", { liveViewUrl: "u", expiresAt: 1_000_000 + 5_000 });
-      render(<CloudBrowserPanel chatId="chat-1" />);
-      expect(screen.getByTitle("Cloud browser live view")).toBeTruthy();
-      act(() => {
-        vi.advanceTimersByTime(5_001);
-      });
-      expect(screen.queryByTitle("Cloud browser live view")).toBeNull();
-      expect(expire).toHaveBeenCalledWith("chat-1");
-      expect(useCloudBrowserStore.getState().sessions["chat-1"]).toBeUndefined();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("goes stale at lastUsedAt + idleMs when that is sooner than expiresAt", () => {
-    vi.useFakeTimers();
-    try {
-      vi.setSystemTime(2_000_000);
-      useCloudBrowserStore.getState().setSession("chat-1", {
-        liveViewUrl: "u",
-        expiresAt: 2_000_000 + 600_000,
-        lastUsedAt: 2_000_000,
-        idleMs: 30_000,
-      });
-      render(<CloudBrowserPanel chatId="chat-1" />);
-      act(() => {
-        vi.advanceTimersByTime(29_000);
-      });
-      expect(screen.getByTitle("Cloud browser live view")).toBeTruthy();
-      act(() => {
-        vi.advanceTimersByTime(1_500);
-      });
-      expect(screen.queryByTitle("Cloud browser live view")).toBeNull();
-      expect(expire).toHaveBeenCalledWith("chat-1");
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("does not fire early for a far-future expiry (setTimeout overflow)", () => {
-    vi.useFakeTimers();
-    try {
-      vi.setSystemTime(1_000_000);
-      useCloudBrowserStore
-        .getState()
-        .setSession("chat-1", { liveViewUrl: "u", expiresAt: 1_000_000 + 40 * 86_400_000 });
-      render(<CloudBrowserPanel chatId="chat-1" />);
-      act(() => {
-        vi.advanceTimersByTime(1_000);
-      });
-      expect(expire).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   it("shows a sandboxed live-view iframe and an open-in-new-tab link", () => {
     useCloudBrowserStore.getState().setSession("chat-1", SESSION);
     render(<CloudBrowserPanel chatId="chat-1" />);
@@ -134,5 +88,64 @@ describe("<CloudBrowserPanel />", () => {
     render(<CloudBrowserPanel chatId="chat-1" />);
     fireEvent.click(screen.getByRole("button", { name: "Close browser" }));
     expect(release).toHaveBeenCalledWith("chat-1");
+  });
+
+  it("opens the browser surface in the main area", () => {
+    useSurfaceStore.setState({ activeSurfaceId: "canvas" });
+    useCloudBrowserStore.getState().setSession("chat-1", SESSION);
+    render(<CloudBrowserPanel chatId="chat-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Open in main area" }));
+    expect(useSurfaceStore.getState().activeSurfaceId).toBe("browser");
+    expect(useSurfaceStore.getState().browserChatId).toBe("chat-1");
+  });
+
+  it("keeps no live-view iframe while the main area shows the browser, and offers a way back", () => {
+    useSurfaceStore.setState({ activeSurfaceId: "browser" });
+    useCloudBrowserStore.getState().setSession("chat-1", SESSION);
+    render(<CloudBrowserPanel chatId="chat-1" />);
+    expect(screen.queryByTitle("Cloud browser live view")).toBeNull();
+    expect(screen.getByText("Shown in main area")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show here" }));
+    expect(useSurfaceStore.getState().activeSurfaceId).toBe("canvas");
+  });
+
+  it("only the chat whose session the main area shows gives up its iframe", () => {
+    useCloudBrowserStore.getState().setSession("chat-1", SESSION);
+    useCloudBrowserStore.getState().setSession("chat-2", { ...SESSION, liveViewUrl: "https://live.example/v/2" });
+    useSurfaceStore.getState().setActiveSurface("browser", { chatId: "chat-2" });
+    render(
+      <>
+        <CloudBrowserPanel chatId="chat-1" />
+        <CloudBrowserPanel chatId="chat-2" />
+      </>,
+    );
+    expect(screen.getAllByText("Shown in main area")).toHaveLength(1);
+    const frames = screen.getAllByTitle("Cloud browser live view");
+    expect(frames).toHaveLength(1);
+    expect(frames[0].getAttribute("src")).toBe("https://live.example/v/1");
+  });
+
+  it("when the pinned chat's session ends, the active chat's panel takes over the main area", () => {
+    useCloudBrowserStore.getState().setSession("chat-1", SESSION);
+    useCloudBrowserStore.getState().setSession("chat-2", SESSION);
+    useSurfaceStore.getState().setActiveSurface("browser", { chatId: "chat-2" });
+    useCloudBrowserStore.getState().clearSession("chat-2");
+    render(<CloudBrowserPanel chatId="chat-1" />);
+    expect(screen.getByText("Shown in main area")).toBeTruthy();
+  });
+
+  it.each([
+    ["mobile", () => { mobile.value = true; }],
+    ["dev mode", () => useDevModeStore.setState({ active: true })],
+    ["view mode", () => useEditorModeStore.setState({ mode: "view" })],
+    ["hidden UI", () => useUIVisibilityStore.setState({ isUIHidden: true })],
+    ["the shared viewer", () => useSharedViewStore.setState({ isSharedView: true })],
+  ])("in %s offers no main-area button and keeps its iframe even if the browser surface is stored", (_n, enter) => {
+    enter();
+    useSurfaceStore.setState({ activeSurfaceId: "browser" });
+    useCloudBrowserStore.getState().setSession("chat-1", SESSION);
+    render(<CloudBrowserPanel chatId="chat-1" />);
+    expect(screen.queryByRole("button", { name: "Open in main area" })).toBeNull();
+    expect(screen.getByTitle("Cloud browser live view")).toBeTruthy();
   });
 });

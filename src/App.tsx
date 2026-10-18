@@ -19,8 +19,12 @@ import { ReadOnlyProvider } from "./components/ReadOnlyProvider";
 import { FpsDisplay } from "./components/canvas/CanvasOverlays";
 import { Rulers } from "./components/canvas/Rulers";
 import { CanvasContextMenu } from "./components/canvas/CanvasContextMenu";
+import { SurfaceSwitcher } from "./components/surfaces/SurfaceSwitcher";
 import { useUIVisibilityStore } from "./store/uiVisibilityStore";
 import { useEditorModeStore } from "./store/editorModeStore";
+import { useSurfaceStore } from "./store/surfaceStore";
+import { SurfaceViewHost } from "./surfaces/views";
+import { useCanSwitchSurfaces, useEffectiveSurfaceId } from "./surfaces/effectiveSurface";
 import { useDevModeStore } from "./store/devModeStore";
 import { useLayers3DStore } from "./store/layers3dStore";
 import { useIsMobile } from "./hooks/useIsMobile";
@@ -50,6 +54,21 @@ function App() {
   const isPresent = mode === "present";
   const isView = mode === "view";
   const isDev = useDevModeStore((s) => s.active);
+  // The canvas stays mounted whatever the surface; another surface's View is
+  // laid over it, and canvas-only chrome is hidden while one is showing.
+  // What is "really" showing comes from one predicate shared with the keyboard
+  // handlers and palette commands (surfaces/effectiveSurface.ts): switching
+  // is offered only on a desktop-width, editable editor with the UI visible.
+  // Elsewhere the canvas is the surface, and an effect resets a stale request
+  // so the store never disagrees with what is on screen.
+  const requestedSurfaceId = useSurfaceStore((s) => s.activeSurfaceId);
+  const setActiveSurface = useSurfaceStore((s) => s.setActiveSurface);
+  const canSwitchSurface = useCanSwitchSurfaces();
+  const activeSurfaceId = useEffectiveSurfaceId();
+  const isCanvasSurface = activeSurfaceId === "canvas";
+  useEffect(() => {
+    if (requestedSurfaceId !== activeSurfaceId) setActiveSurface(activeSurfaceId);
+  }, [requestedSurfaceId, activeSurfaceId, setActiveSurface]);
 
   // Fires once per mount, before the two showcase-handoff effects below
   // consume (and clear) their sessionStorage payloads — React runs a single
@@ -249,24 +268,34 @@ function App() {
           {!isMobile && (
             <>
               <div className="flex-1 h-full relative">
+                <SurfaceViewHost id={activeSurfaceId} />
+                {/* Below the horizontal ruler, top-right: out of the way of ruler
+                    and canvas clicks. Not offered where the surface is fixed. */}
+                {canSwitchSurface && (
+                  <div className="pointer-events-auto absolute right-3 top-7 z-10">
+                    <SurfaceSwitcher />
+                  </div>
+                )}
                 {/* Drawing tools are pointless in read-only view mode, and
                     the 3D layer view's own control bar occupies the same
                     bottom-center slot — hide the draw palette in both. */}
-                {!isView && !isDev && !is3DActive && (
+                {!isView && !isDev && !is3DActive && isCanvasSurface && (
                   <div className="pointer-events-auto">
                     <PrimitivesPanel />
                   </div>
                 )}
-                {!isView && !is3DActive && <Rulers />}
-                <FpsDisplay />
+                {!isView && !is3DActive && isCanvasSurface && <Rulers />}
+                {isCanvasSurface && <FpsDisplay />}
               </div>
               {/* Right sidebar — read-only in view mode (inspect, no edits);
                   swapped for the read-only InspectPanel in dev mode. */}
-              <div className="pointer-events-auto">
-                <ReadOnlyProvider value={isView || isDev}>
-                  <RightPanel />
-                </ReadOnlyProvider>
-              </div>
+              {isCanvasSurface && (
+                <div className="pointer-events-auto">
+                  <ReadOnlyProvider value={isView || isDev}>
+                    <RightPanel />
+                  </ReadOnlyProvider>
+                </div>
+              )}
             </>
           )}
         </div>

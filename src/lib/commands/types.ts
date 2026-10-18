@@ -20,6 +20,12 @@ export interface PaletteCommand {
    * flagged — they stay available in dev mode (see keyboardCommands.ts).
    */
   mutatesScene?: boolean;
+  /**
+   * The command acts on the canvas (selection, history, clipboard). It is
+   * unavailable, and `runCommand` ignores it, while another surface fills the
+   * work area (`isCanvasInputActive`). Every `mutatesScene` command implies it.
+   */
+  requiresCanvas?: boolean;
   /** Executes the command. Called on Enter/click; the palette closes after. */
   run: () => void;
 }

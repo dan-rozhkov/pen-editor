@@ -1,18 +1,21 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ArrowSquareOutIcon,
+  ArrowsOutSimpleIcon,
   CaretDownIcon,
   CaretUpIcon,
   GlobeIcon,
   XIcon,
 } from "@phosphor-icons/react";
-import { getSessionStaleAt, useCloudBrowserStore } from "@/store/cloudBrowserStore";
-import { expireCloudBrowser, releaseCloudBrowser } from "@/lib/cloudBrowser";
+import { releaseCloudBrowser } from "@/lib/cloudBrowser";
+import { CloudBrowserLiveView } from "./CloudBrowserLiveView";
+import { useBrowserSurfaceChatId } from "@/hooks/useBrowserSurfaceChat";
+import { useCloudBrowserStore } from "@/store/cloudBrowserStore";
+import { useSurfaceStore } from "@/store/surfaceStore";
+import { useCanSwitchSurfaces, useEffectiveSurfaceId } from "@/surfaces/effectiveSurface";
 import { isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-
-const MAX_TIMER_MS = 2 ** 31 - 1;
 
 /**
  * Live view of the agent's cloud browser (pen-editor-backend docs/specs/
@@ -23,28 +26,31 @@ const MAX_TIMER_MS = 2 ** 31 - 1;
 export function CloudBrowserPanel({ chatId }: { chatId: string }) {
   const session = useCloudBrowserStore((s) => s.sessions[chatId]);
   const [collapsed, setCollapsed] = useState(false);
-
-  // One timer set to the moment the backend will have dropped the session
-  // (min of hard expiry and last use + idle timeout); it re-arms itself
-  // because setTimeout cannot represent delays past ~24.8 days.
-  useEffect(() => {
-    if (!session) return;
-    const staleAt = getSessionStaleAt(session);
-    if (staleAt === null) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const arm = () => {
-      const remaining = staleAt - Date.now();
-      if (remaining <= 0) {
-        expireCloudBrowser(chatId);
-        return;
-      }
-      timer = setTimeout(arm, Math.min(remaining, MAX_TIMER_MS));
-    };
-    arm();
-    return () => clearTimeout(timer);
-  }, [session, chatId]);
+  const setActiveSurface = useSurfaceStore((s) => s.setActiveSurface);
+  // Where the main area really shows the browser (not merely requested), and
+  // for which chat: only that chat's panel gives up its iframe.
+  const canSwitch = useCanSwitchSurfaces();
+  const shownChatId = useBrowserSurfaceChatId();
+  const inMainArea = useEffectiveSurfaceId() === "browser" && shownChatId === chatId;
 
   if (isDesktopBrowserAvailable() || !session) return null;
+
+  // One live view per Steel session: while the main area shows it, this panel
+  // keeps no iframe of its own, only a way back.
+  if (inMainArea) {
+    return (
+      <section
+        aria-label="Cloud browser"
+        className="mx-3 mt-2 flex shrink-0 items-center gap-1.5 rounded-xl border border-border-default bg-surface-panel px-2.5 py-1.5 text-text-muted"
+      >
+        <GlobeIcon size={14} className="shrink-0" />
+        <span className="min-w-0 flex-1 truncate text-xs font-medium">Shown in main area</span>
+        <Button variant="ghost" size="sm" onClick={() => setActiveSurface("canvas")}>
+          Show here
+        </Button>
+      </section>
+    );
+  }
 
   return (
     <section
@@ -54,6 +60,23 @@ export function CloudBrowserPanel({ chatId }: { chatId: string }) {
       <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-text-muted">
         <GlobeIcon size={14} className="shrink-0" />
         <span className="min-w-0 flex-1 truncate text-xs font-medium">Browser</span>
+        {canSwitch && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Open in main area"
+                  onClick={() => setActiveSurface("browser", { chatId })}
+                >
+                  <ArrowsOutSimpleIcon />
+                </Button>
+              }
+            />
+            <TooltipContent>Open in main area</TooltipContent>
+          </Tooltip>
+        )}
         <Tooltip>
           <TooltipTrigger
             render={
@@ -98,10 +121,8 @@ export function CloudBrowserPanel({ chatId }: { chatId: string }) {
         </Button>
       </div>
       {!collapsed && (
-        <iframe
-          title="Cloud browser live view"
-          src={session.liveViewUrl}
-          sandbox="allow-scripts allow-same-origin"
+        <CloudBrowserLiveView
+          session={session}
           className="block aspect-[16/10] w-full border-0 border-t border-border-default bg-white"
         />
       )}

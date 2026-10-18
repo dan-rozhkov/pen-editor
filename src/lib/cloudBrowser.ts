@@ -1,6 +1,10 @@
 import { apiFetch } from "@/lib/apiBase";
 import { getRequestUserId } from "@/lib/auth/authState";
-import { useCloudBrowserStore } from "@/store/cloudBrowserStore";
+import {
+  getSessionStaleAt,
+  useCloudBrowserStore,
+  type CloudBrowserSession,
+} from "@/store/cloudBrowserStore";
 import type { PenDesktopApi } from "@/lib/desktopBridge";
 
 // Web-build twin of the desktop shell's `window.penDesktop.browser` bridge
@@ -300,4 +304,51 @@ export function getCloudBrowserBridge(chatId?: string): CloudBrowserBridge {
     boundBridges.set(chatId, bridge);
   }
   return bridge;
+}
+
+// --- Session expiry --------------------------------------------------------
+// One timer per live session, owned here (not by any view): it fires at the
+// moment the backend will have dropped the session (min of hard expiry and
+// last use + idle timeout) and clears local state. It re-arms itself because
+// setTimeout cannot represent delays past ~24.8 days. A republished session
+// (new lastUsedAt) replaces its timer; a cleared one drops it.
+
+const MAX_TIMER_MS = 2 ** 31 - 1;
+const expiryTimers = new Map<string, { session: CloudBrowserSession; timer?: ReturnType<typeof setTimeout> }>();
+
+function armExpiry(chatId: string, session: CloudBrowserSession): void {
+  const entry: { session: CloudBrowserSession; timer?: ReturnType<typeof setTimeout> } = { session };
+  expiryTimers.set(chatId, entry);
+  const staleAt = getSessionStaleAt(session);
+  if (staleAt === null) return;
+  const arm = () => {
+    const remaining = staleAt - Date.now();
+    if (remaining <= 0) {
+      expireCloudBrowser(chatId);
+      return;
+    }
+    entry.timer = setTimeout(arm, Math.min(remaining, MAX_TIMER_MS));
+  };
+  arm();
+}
+
+function syncExpiryTimers(sessions: Record<string, CloudBrowserSession>): void {
+  for (const [chatId, entry] of [...expiryTimers]) {
+    if (sessions[chatId] === entry.session) continue;
+    clearTimeout(entry.timer);
+    expiryTimers.delete(chatId);
+  }
+  for (const [chatId, session] of Object.entries(sessions)) {
+    if (!expiryTimers.has(chatId)) armExpiry(chatId, session);
+  }
+}
+
+useCloudBrowserStore.subscribe((state, prev) => {
+  if (state.sessions !== prev.sessions) syncExpiryTimers(state.sessions);
+});
+syncExpiryTimers(useCloudBrowserStore.getState().sessions);
+
+/** Number of live expiry timers (tests: one per session, however many views). */
+export function getExpiryTimerCount(): number {
+  return [...expiryTimers.values()].filter((e) => e.timer !== undefined).length;
 }

@@ -63,13 +63,14 @@ function deleteSelection(): void {
 
 export function getEditCommands(): PaletteCommand[] {
   return [
-    { id: "edit-undo", label: "Undo", group: "Edit", shortcut: formatShortcut(["mod", "Z"]), run: undo },
-    { id: "edit-redo", label: "Redo", group: "Edit", shortcut: formatShortcut(["mod", "shift", "Z"]), run: redo },
+    { id: "edit-undo", requiresCanvas: true, label: "Undo", group: "Edit", shortcut: formatShortcut(["mod", "Z"]), run: undo },
+    { id: "edit-redo", requiresCanvas: true, label: "Redo", group: "Edit", shortcut: formatShortcut(["mod", "shift", "Z"]), run: redo },
     { id: "edit-cut", label: "Cut", group: "Edit", shortcut: formatShortcut(["mod", "X"]), mutatesScene: true, run: () => dispatch("pen-editor:cut") },
-    { id: "edit-copy", label: "Copy", group: "Edit", shortcut: formatShortcut(["mod", "C"]), run: () => dispatch("pen-editor:copy") },
+    { id: "edit-copy", requiresCanvas: true, label: "Copy", group: "Edit", shortcut: formatShortcut(["mod", "C"]), run: () => dispatch("pen-editor:copy") },
     { id: "edit-paste", label: "Paste", group: "Edit", shortcut: formatShortcut(["mod", "V"]), mutatesScene: true, run: () => dispatch("pen-editor:paste") },
     {
       id: "edit-copy-properties",
+      requiresCanvas: true,
       label: "Copy properties",
       group: "Edit",
       shortcut: formatShortcut(["mod", "alt", "C"]),
@@ -87,6 +88,7 @@ export function getEditCommands(): PaletteCommand[] {
     },
     {
       id: "edit-copy-as-css",
+      requiresCanvas: true,
       label: "Copy as CSS",
       group: "Edit",
       shortcut: formatShortcut(["mod", "shift", "C"]),
@@ -94,12 +96,13 @@ export function getEditCommands(): PaletteCommand[] {
     },
     {
       id: "edit-copy-as-svg",
+      requiresCanvas: true,
       label: "Copy as SVG",
       group: "Edit",
       shortcut: formatShortcut(["mod", "shift", "S"]),
       run: () => void copyAsSvg(),
     },
-    { id: "edit-select-all", label: "Select all", group: "Edit", shortcut: formatShortcut(["mod", "A"]), run: selectAll },
+    { id: "edit-select-all", requiresCanvas: true, label: "Select all", group: "Edit", shortcut: formatShortcut(["mod", "A"]), run: selectAll },
     { id: "edit-group", label: "Group selection", group: "Edit", shortcut: formatShortcut(["mod", "G"]), keywords: ["group"], mutatesScene: true, run: groupSelection },
     { id: "edit-ungroup", label: "Ungroup selection", group: "Edit", shortcut: formatShortcut(["mod", "shift", "G"]), keywords: ["ungroup"], mutatesScene: true, run: ungroupSelection },
     { id: "edit-delete", label: "Delete selection", group: "Edit", shortcut: "⌫", keywords: ["delete", "remove"], mutatesScene: true, run: deleteSelection },

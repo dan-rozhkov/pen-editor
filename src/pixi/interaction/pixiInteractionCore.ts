@@ -1,4 +1,5 @@
 import { Application, Container } from "pixi.js";
+import { isCanvasInputActive } from "@/surfaces/effectiveSurface";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useHoverStore, worldMouse } from "@/store/hoverStore";
@@ -807,7 +808,8 @@ export function setupPixiInteraction(
   }
 
   function handleKeyDown(e: KeyboardEvent): void {
-    if (e.code === "Space" && !e.repeat) {
+    // Not while another surface fills the work area: Space there is not a pan.
+    if (e.code === "Space" && !e.repeat && isCanvasInputActive()) {
       isSpaceHeld = true;
     }
   }

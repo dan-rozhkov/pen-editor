@@ -1,5 +1,4 @@
 import { toast } from "sonner";
-import { toolHandlers } from "@/lib/toolRegistry";
 import { runToolCall } from "@/lib/toolCallQueue";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
@@ -27,6 +26,12 @@ function asStringArray(value: unknown, what: string): string[] {
 async function runTool(name: unknown, args: unknown): Promise<string> {
   if (typeof name !== "string") throw new Error("tools.run: tool name must be a string");
   if (!PLUGIN_ALLOWED_TOOLS.has(name)) throw new Error(`tools.run: tool "${name}" is not allowed for plugins`);
+  // Imported lazily: the surfaces' tool modules (createPlugin & co.) import
+  // this file, and toolRegistry composes those surfaces, so a static import is
+  // a cycle that fails module evaluation when a surface module is the first
+  // entry (a TDZ on `createPlugin`/`SURFACES`). Done BEFORE the Dev Mode check
+  // below so no await separates that check from the handler call.
+  const { toolHandlers } = await import("@/lib/toolRegistry");
   // Dev Mode is a read-only inspect overlay: the Manager's Run button and the
   // command-palette entries are already hidden/disabled there (see
   // PluginsPanel.tsx / pluginCommands.ts), but an *already-running*

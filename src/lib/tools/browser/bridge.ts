@@ -66,12 +66,6 @@ export async function closeBrowserSession(browserSession: string): Promise<void>
   }
 }
 
-/**
- * The single predicate for "this client has its own built-in browser": the
- * Electron shell exposes `window.penDesktop.browser`. A `penDesktop` without
- * `.browser` (older shell) falls through to the cloud browser, so bridge
- * selection, the live-view panel and the request capability must all use this.
- */
-export function isDesktopBrowserAvailable(): boolean {
-  return Boolean(window.penDesktop?.browser);
-}
+// Lives in its own dependency-free module (the surface metadata and so the embed
+// entry need it without the cloud browser); re-exported for existing importers.
+export { isDesktopBrowserAvailable } from "./desktopBrowser";

@@ -20,6 +20,15 @@ vi.mock("@/components/Toolbar", () => {
 vi.mock("@/lib/webmcp", () => {
   throw new Error("embed must not load WebMCP");
 });
+// Surface Views are App-only (surfaces/views.ts); the module-level check that the
+// surface store / predicate / meta pull in no chat or cloud-browser code is
+// src/surfaces/__tests__/embedGraph.test.ts.
+vi.mock("@/components/surfaces/BrowserSurfaceView", () => {
+  throw new Error("embed must not load a surface View (surfaces/views.ts is App-only)");
+});
+vi.mock("@/surfaces/views", () => {
+  throw new Error("embed must not load surfaces/views.ts");
+});
 // PixiJS needs WebGL (e2e territory).
 vi.mock("@/pixi/PixiCanvas", () => ({ PixiCanvas: () => <div data-testid="canvas" /> }));
 

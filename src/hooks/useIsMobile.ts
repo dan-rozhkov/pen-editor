@@ -13,6 +13,11 @@ function getSnapshot() {
   return window.matchMedia(QUERY).matches;
 }
 
+/** Non-React twin of `useIsMobile` (same query, same answer). */
+export function isMobileViewport(): boolean {
+  return getSnapshot();
+}
+
 /** True when the viewport is narrower than the `md` breakpoint. */
 export function useIsMobile() {
   return useSyncExternalStore(subscribe, getSnapshot, () => false);
