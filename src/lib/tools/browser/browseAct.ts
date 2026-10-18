@@ -33,6 +33,8 @@ const ACTION_TO_LOCATE_OPERATION: Record<string, string> = {
   type: "TYPE_TEXT",
   select: "SELECT",
   hover: "HOVER",
+  // The target is a file input, its label or a drop zone: a clickable candidate.
+  upload: "CLICK",
   press: "FOCUS",
 };
 

@@ -4,7 +4,7 @@ import { getOpenCodeKey } from "@/lib/opencodeKey";
 import { createRetryingFetch, type RetryState } from "@/lib/retryFetch";
 import { withMobbinAuthHeader } from "@/lib/mobbinAuth";
 import { isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";
-import { isolatedBrowseAvailable } from "@/lib/tools/browser/isolation";
+import { browseAssertAvailable, isolatedBrowseAvailable } from "@/lib/tools/browser/isolation";
 
 // Shared by the main chat (hooks/useDesignChat.ts) and the nested browse
 // sub-agent session (lib/tools/browser/browseAgent.ts) so both hit /api/chat
@@ -35,6 +35,8 @@ export const CLIENT_CAPABILITIES = {
   // scenarios in one step. Desktop with `browser.isolated` only; static per page
   // load, like `desktopBrowser` (a flip would break the prompt cache).
   browseIsolation: isolatedBrowseAvailable(),
+  // The browser in use supports `assert`: the backend then offers `qa_assert` and browse_agent `checks`.
+  browseAssert: browseAssertAvailable(),
 } as const;
 
 // Whether `model` is an OpenCode BYOK route (pen-editor-backend

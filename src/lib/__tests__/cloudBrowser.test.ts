@@ -47,6 +47,16 @@ afterEach(() => {
 });
 
 describe("cloudBrowserBridge", () => {
+  it("posts assert to /api/browser/cmd/assert with the checks", async () => {
+    const fetchMock = stubFetch(jsonResponse({ result: { ok: true, passed: true, results: [] } }));
+    const checks = [{ type: "text", text: "Hello" }];
+    const result = await getCloudBrowserBridge("chat-1").assert?.({ checks });
+
+    expect(result).toEqual({ ok: true, passed: true, results: [] });
+    expect(fetchMock.mock.calls[0][0]).toBe(resolveApiUrl("/api/browser/cmd/assert"));
+    expect(bodyOf(fetchMock)).toEqual({ userId: getUserId(), chatId: "chat-1", args: { checks } });
+  });
+
   it("posts userId, chatId and args to /api/browser/cmd/:name and returns the result", async () => {
     const fetchMock = stubFetch(jsonResponse(OK));
     const result = await getCloudBrowserBridge("chat-1").open({ url: "https://example.com" });

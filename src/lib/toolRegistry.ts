@@ -188,4 +188,5 @@ export const toolHandlers: Record<string, ToolHandler> = {
   // qa_verdict: browseAgent answers it locally inside a QA run. This entry
   // keeps the tool-name contract whole and refuses a call from the main chat.
   qa_verdict: async () => JSON.stringify({ error: "qa_verdict is only available inside a browse_agent QA run" }),
+  qa_assert: async () => JSON.stringify({ error: "qa_assert is only available inside a browse_agent QA run" }),
 };

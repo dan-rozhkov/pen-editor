@@ -96,6 +96,7 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   // qa_verdict is pure (validates its input and returns JSON); it never
   // touches the scene, so it must not wait behind scene writes.
   "qa_verdict",
+  "qa_assert",
 ];
 
 const unserialized = new Set(UNSERIALIZED_TOOL_NAMES);

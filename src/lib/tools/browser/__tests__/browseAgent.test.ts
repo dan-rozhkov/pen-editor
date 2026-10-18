@@ -400,6 +400,126 @@ describe("browse_agent QA mode", () => {
     expect(out.qa.steps[0]).toMatchObject({ tool: "qa_verdict", ok: false });
   });
 
+  const assertThenVerdict = () =>
+    stubFetch([
+      () => toolTurn("qa_assert", { checks: [{ type: "text", text: "Hello" }] }, "c1"),
+      () => toolTurn("qa_verdict", { verdict: "pass", reason: "ok" }, "c2"),
+    ]);
+
+  const assertAnswer = (passed: boolean, extra: Record<string, unknown> = {}) => ({
+    ok: true,
+    passed,
+    results: [{ check: { type: "text", text: "Hello" }, passed, ...(passed ? {} : { actual: "not found" }) }],
+    ...extra,
+  });
+
+  it("qa_assert goes to bridge.assert, is recorded, and does not end the run", async () => {
+    const assert = vi.fn(async () => assertAnswer(true, { consoleErrors: ["TypeError: x"] }));
+    setPenDesktop(stubBrowser({ assert }));
+    const captured = assertThenVerdict();
+    const out = JSON.parse(await run(true));
+    expect(assert).toHaveBeenCalledTimes(1);
+    expect(assert).toHaveBeenCalledWith({ checks: [{ type: "text", text: "Hello" }] });
+    expect(JSON.parse(outputOf(captured, 1, "c1"))).toMatchObject({ passed: true });
+    expect(out.qa.outcome).toBe("passed");
+    expect(out.qa.checks).toEqual([expect.objectContaining({ source: "agent", passed: true })]);
+    expect(out.qa.consoleErrors).toEqual(["TypeError: x"]);
+    expect(out.qa.steps.map((st: { tool: string }) => st.tool)).toEqual(["qa_assert", "qa_verdict"]);
+  });
+
+  it("final checks flip passed to failed and appear in the JSON with the new fields", async () => {
+    const assert = vi.fn(async () => assertAnswer(false, { failedRequests: ["GET 500 https://x.test/api"] }));
+    setPenDesktop(stubBrowser({ assert }));
+    stubFetch([() => toolTurn("qa_verdict", { verdict: "pass", reason: "looks fine" }, "c1")]);
+    const out = JSON.parse(
+      await browseAgent(
+        { goal: "g", qa: true, checks: [{ type: "text", text: "Hello" }] },
+        { sessionId: "chat-1", toolCallId: "tc-q" },
+      ),
+    );
+    expect(assert).toHaveBeenCalledTimes(1);
+    expect(out.qa.outcome).toBe("failed");
+    expect(out.qa.reason).toContain("Final check failed");
+    expect(out.qa.checks).toEqual([expect.objectContaining({ source: "final", passed: false })]);
+    expect(out.qa.failedRequests).toEqual(["GET 500 https://x.test/api"]);
+  });
+
+  it("invalid checks are an input error before any request", async () => {
+    const captured = stubFetch([]);
+    const out = JSON.parse(await browseAgent({ goal: "g", qa: true, checks: [{ type: "nope" }] }, { sessionId: "chat-1" }));
+    expect(out.status).toBe("error");
+    expect(out.error).toContain("checks");
+    expect(captured).toHaveLength(0);
+  });
+
+  it("checks without qa: true is an input error, not dropped", async () => {
+    const captured = stubFetch([]);
+    const out = JSON.parse(await browseAgent({ goal: "g", checks: [{ type: "text", text: "Hello" }] }, { sessionId: "chat-1" }));
+    expect(out.status).toBe("error");
+    expect(out.error).toContain("qa: true");
+    expect(captured).toHaveLength(0);
+  });
+
+  it("a desktop bridge without assert: checks are an input error", async () => {
+    setPenDesktop(stubBrowser());
+    const captured = stubFetch([]);
+    const out = JSON.parse(await browseAgent({ goal: "g", qa: true, checks: [{ type: "text", text: "Hello" }] }, { sessionId: "chat-1" }));
+    expect(out.error).toBe("Final checks need a browser that supports assertions.");
+    expect(captured).toHaveLength(0);
+  });
+
+  it("the nested turn sends browseAssert only when the bridge has assert", async () => {
+    setPenDesktop(stubBrowser());
+    let captured = stubFetch([() => textTurn("done")]);
+    await run(true);
+    expect((captured[0].body.clientCapabilities as { browseAssert: boolean }).browseAssert).toBe(false);
+    setPenDesktop(stubBrowser({ assert: async () => assertAnswer(true) }));
+    captured = stubFetch([() => textTurn("done")]);
+    await run(true);
+    expect((captured[0].body.clientCapabilities as { browseAssert: boolean }).browseAssert).toBe(true);
+  });
+
+  it("qa_assert is not callable when the bridge has no assert", async () => {
+    setPenDesktop(stubBrowser());
+    const captured = assertThenVerdict();
+    const out = JSON.parse(await run(true));
+    expect(JSON.parse(outputOf(captured, 1, "c1")).error).toBeTruthy();
+    expect(out.qa.checks ?? []).toEqual([]);
+  });
+
+  it("a hung qa_assert is cut at the timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      setPenDesktop(stubBrowser({ assert: () => new Promise(() => {}) }));
+      const captured = stubFetch([
+        () => toolTurn("qa_assert", { checks: [{ type: "text", text: "Hello" }] }, "c1"),
+        () => toolTurn("qa_verdict", { verdict: "pass", reason: "ok" }, "c2"),
+      ]);
+      const p = run(true);
+      await vi.advanceTimersByTimeAsync(31_000);
+      await p;
+      expect(JSON.parse(outputOf(captured, 1, "c1")).error).toContain("timed out");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("an aborted run does not wait for a hung qa_assert", async () => {
+    const ac = new AbortController();
+    setPenDesktop(stubBrowser({ assert: () => { queueMicrotask(() => ac.abort()); return new Promise(() => {}); } }));
+    stubFetch([
+      () => toolTurn("qa_assert", { checks: [{ type: "text", text: "Hello" }] }, "c1"),
+      () => textTurn("never"),
+    ]);
+    const out = JSON.parse(await browseAgent({ goal: "g", qa: true }, { sessionId: "chat-1", toolCallId: "tc-q", signal: ac.signal }));
+    expect(out.status).toBe("aborted");
+  });
+
+  it("the registry qa_assert (main chat path) refuses", async () => {
+    const out = JSON.parse(await toolHandlers.qa_assert({ checks: [] }));
+    expect(out.error).toContain("only available inside a browse_agent QA run");
+  });
+
   it("qa on, no verdict: outcome is inconclusive", async () => {
     stubFetch([() => textTurn("blocked by a captcha")]);
     const out = JSON.parse(await run(true));

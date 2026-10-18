@@ -126,6 +126,7 @@ const toolIcons: Record<string, Icon> = {
   browse_task: CompassIcon,
   browse_agent: CompassIcon,
   qa_verdict: FlagCheckeredIcon,
+  qa_assert: FlagCheckeredIcon,
   web_search: GlobeIcon,
   fetch_url: LinkIcon,
   // Every Mobbin-served tool carries the Mobbin mark instead of a

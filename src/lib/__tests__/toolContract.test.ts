@@ -72,6 +72,7 @@ const EXPECTED_CLIENT_TOOLS = [
   "browse_task",
   "browse_agent",
   "qa_verdict",
+  "qa_assert",
 ];
 
 // Tools whose schema also has a backend `execute` — they run server-side, the

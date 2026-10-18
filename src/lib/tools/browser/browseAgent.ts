@@ -16,6 +16,14 @@ import {
   executeQaVerdict,
   qaResultOf,
   createStepRecorder,
+  QA_ASSERT_TOOL,
+  QA_FINAL_CHECKS_TIMEOUT_MS,
+  executeQaAssert,
+  runFinalChecks,
+  applyFinalChecks,
+  finalChecksApply,
+  parseQaChecks,
+  type QaCheck,
   type BrowseAgentResult,
 } from "@sideform/browser-agent/agent/session";
 import { parsePageFixture, type FixtureNetworkRule } from "@sideform/browser-agent/fixture";
@@ -99,6 +107,35 @@ const DESKTOP_RECORDING_KEY = "desktop";
  */
 const INERT_BRIDGE = {} as BrowserBridge;
 
+/**
+ * `qa_assert` bounded like any nested tool: at most QA_FINAL_CHECKS_TIMEOUT_MS, and it
+ * stops on the run's abort signal, so the session's wait for pending tools cannot hang.
+ */
+async function boundedQaAssert(
+  input: unknown,
+  bridge: BrowserBridge,
+  recorder: ReturnType<typeof createStepRecorder>,
+  signal: AbortSignal,
+): Promise<string> {
+  const fail = (message: string) => JSON.stringify({ error: `${QA_ASSERT_TOOL}: ${message}` });
+  if (signal.aborted) return fail("aborted.");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let onAbort: (() => void) | undefined;
+  try {
+    return await Promise.race([
+      executeQaAssert(input, bridge, recorder),
+      new Promise<string>((resolve) => {
+        timer = setTimeout(() => resolve(fail("timed out.")), QA_FINAL_CHECKS_TIMEOUT_MS);
+        onAbort = () => resolve(fail("aborted."));
+        signal.addEventListener("abort", onAbort, { once: true });
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+    if (onAbort) signal.removeEventListener("abort", onAbort);
+  }
+}
+
 export function nestedChatId(sessionId: string | undefined, toolCallId: string | undefined): string {
   const raw = `browse.${sessionId ?? "no-session"}.${toolCallId ?? Date.now()}`;
   return raw.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, NESTED_ID_MAX_CHARS);
@@ -122,7 +159,10 @@ export const browseAgent: ToolHandler = async (args, context) => {
     // After the run, inside the same outer timeout, comes the tail: the checkpoint
     // capture (bounded by CHECKPOINT_CALL_TIMEOUT_MS), the journal stop, then the
     // session close (bounded by CLOSE_SESSION_TIMEOUT_MS).
-    const deadlineMs = BROWSE_AGENT_DEADLINE_MS - (Date.now() - waitStart) - CHECKPOINT_CALL_TIMEOUT_MS - CLOSE_SESSION_TIMEOUT_MS;
+    // Final checks (`checks`) run after the loop too: reserve their bound as well.
+    const checksReserve = args.checks !== undefined && args.checks !== null ? QA_FINAL_CHECKS_TIMEOUT_MS : 0;
+    const deadlineMs =
+      BROWSE_AGENT_DEADLINE_MS - (Date.now() - waitStart) - CHECKPOINT_CALL_TIMEOUT_MS - CLOSE_SESSION_TIMEOUT_MS - checksReserve;
     if (deadlineMs < MIN_ISOLATED_RUN_MS) {
       return JSON.stringify({
         status: "error",
@@ -177,6 +217,28 @@ const runBrowseAgent = async (
       error: "`resume` cannot be combined with `qa: true`: a QA run is a fresh scenario.",
     });
   }
+  const hasChecks = args.checks !== undefined && args.checks !== null;
+  if (hasChecks && !qaOn) {
+    return JSON.stringify({ status: "error", steps: 0, error: "`checks` need `qa: true`: final checks belong to a QA run." });
+  }
+  // The bridge this run really uses (the isolated session's, or the shared one).
+  const bridge = getBrowserBridge(context?.sessionId, runSession);
+  // Assertions: only when this bridge has `assert` (an older shell lacks it; the cloud bridge has it).
+  const assertAllowed = typeof bridge?.assert === "function";
+  // Final checks (QA only): run once after the loop through the bridge `assert`.
+  let finalChecks: QaCheck[] | undefined;
+  if (qaOn && hasChecks) {
+    const parsedChecks = parseQaChecks(args.checks);
+    if (!parsedChecks.ok) {
+      return JSON.stringify({ status: "error", steps: 0, error: `checks: ${parsedChecks.errors.join("; ")}` });
+    }
+    if (parsedChecks.value.length > 0) {
+      if (!assertAllowed) {
+        return JSON.stringify({ status: "error", steps: 0, error: "Final checks need a browser that supports assertions." });
+      }
+      finalChecks = parsedChecks.value;
+    }
+  }
   const recorder = qaOn ? createStepRecorder() : undefined;
 
   const parentSessionId = context?.sessionId;
@@ -189,7 +251,6 @@ const runBrowseAgent = async (
   // (the isolated session's, or the shared one) has `fillLogin`. An older shell
   // or the cloud bridge keeps today's behavior. The nested `browse_fill_login`
   // call carries `browserSession` (browserContext), so it fills in the same browser.
-  const bridge = getBrowserBridge(parentSessionId, runSession);
   const loginAllowed = typeof bridge?.fillLogin === "function";
 
   // Lazy: useDesignChat imports toolRegistry, which imports this module.
@@ -200,7 +261,8 @@ const runBrowseAgent = async (
     ...(deadlineMs !== undefined ? { deadlineMs } : {}),
     extraTools: {
       ...(loginAllowed ? { [FILL_LOGIN_TOOL]: {} } : {}),
-      ...(qaOn ? { [QA_VERDICT_TOOL]: { ...qaVerdictHooks() } } : {}),
+      // qa_verdict is single-use and ends the run; qa_assert is neither (no hooks).
+      ...(qaOn ? { [QA_VERDICT_TOOL]: { ...qaVerdictHooks() }, ...(assertAllowed ? { [QA_ASSERT_TOOL]: {} } : {}) } : {}),
       ...(captureAllowed
       ? {
           [CAPTURE_TOOL]: singleUseTool({
@@ -227,7 +289,9 @@ const runBrowseAgent = async (
         const output =
           qaOn && call.toolName === QA_VERDICT_TOOL
             ? executeQaVerdict(call.input)
-            : await executeToolCall(
+            : qaOn && recorder && assertAllowed && call.toolName === QA_ASSERT_TOOL
+              ? await boundedQaAssert(call.input, bridge ?? INERT_BRIDGE, recorder, signal)
+              : await executeToolCall(
                 call.toolName,
                 call.input,
                 { sessionId: parentSessionId, ...browserContext, toolCallId: call.toolCallId, signal },
@@ -252,9 +316,10 @@ const runBrowseAgent = async (
         agentMode: "browse",
         ...(captureAllowed ? { browseCapture: true } : {}),
         ...(qaOn ? { browseQa: true } : {}),
+        // Per run, from the bridge this run uses: the static capability may differ (isolated session, older shell).
+        clientCapabilities: { ...CLIENT_CAPABILITIES, browseAssert: assertAllowed },
         ...(loginAllowed ? { browseLogin: true } : {}),
         userId: getRequestUserId(),
-        clientCapabilities: CLIENT_CAPABILITIES,
       }),
     }),
     sendAutomaticallyWhen: (options) => lastAssistantMessageIsCompleteWithToolCalls(options) && session.continueRequest(),
@@ -346,7 +411,21 @@ const runBrowseAgent = async (
   };
   // Only used when the run threw before finishing: no capture by design (aborted, 0 steps).
   const THREW_RESULT: Pick<BrowseAgentResult, "status" | "steps"> = { status: "aborted", steps: 0 };
-  const toJson = (result: BrowseAgentResult, extra: Record<string, unknown>, checkpoint: unknown): string => {
+  /**
+   * The `qa` field: steps, run-level diagnostics and checks. The host's final checks run here, BEFORE
+   * the checkpoint finish releases the fixture mocks (the package does the same order).
+   */
+  const buildQa = async (result: BrowseAgentResult) => {
+    if (!recorder) return undefined;
+    let qa = qaResultOf(result, recorder.steps(), recorder.extras());
+    if (finalChecks && finalChecksApply(qa)) {
+      const finalResults = await runFinalChecks(bridge ?? INERT_BRIDGE, finalChecks, recorder);
+      // The final assert drained more errors into the recorder: refresh the run-level lists.
+      qa = applyFinalChecks({ ...qa, ...recorder.extras() }, finalResults);
+    }
+    return qa;
+  };
+  const toJson = (result: BrowseAgentResult, extra: Record<string, unknown>, checkpoint: unknown, qa: Awaited<ReturnType<typeof buildQa>>): string => {
     if (!recorder) return JSON.stringify({ ...result, ...extra, ...(checkpoint ? { checkpoint } : {}) });
     // Key order as the package's runBrowseAgent: `qa` before `error` and `setupStage`; the verdict field is folded into `qa`.
     const { error, setupStage, [QA_VERDICT_FIELD]: _verdict, ...rest } = result as BrowseAgentResult & Record<string, unknown>;
@@ -354,7 +433,7 @@ const runBrowseAgent = async (
       ...rest,
       ...extra,
       ...(checkpoint ? { checkpoint } : {}),
-      qa: qaResultOf(result, recorder.steps()),
+      qa,
       ...(error !== undefined ? { error } : {}),
       ...(setupStage !== undefined ? { setupStage } : {}),
     });
@@ -365,7 +444,8 @@ const runBrowseAgent = async (
     try {
       await cp.begin();
       const result = await session.run(goal, driver, { url: url || undefined, toolCallId });
-      return toJson(result, {}, await finishCheckpoint(cp, result));
+      const qa = await buildQa(result);
+      return toJson(result, {}, await finishCheckpoint(cp, result), qa);
     } finally {
       if (!finished) await cp.finish(THREW_RESULT);
     }
@@ -446,7 +526,8 @@ const runBrowseAgent = async (
           throw new SetupError("validate", parsed.ok ? "" : parsed.error);
         }),
     });
-    return toJson(result, setupApplied ? { setupApplied: true } : {}, await finishCheckpoint(cp, result, releaseFixture));
+    const qa = await buildQa(result);
+    return toJson(result, setupApplied ? { setupApplied: true } : {}, await finishCheckpoint(cp, result, releaseFixture), qa);
   } finally {
     // On the normal path finishCheckpoint already ran. Otherwise (a throw) this
     // still releases the fixture (before the journal stop) and stops the journal.

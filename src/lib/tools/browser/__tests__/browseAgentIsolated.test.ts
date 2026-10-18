@@ -29,7 +29,7 @@ vi.mock("@sideform/browser-agent/loop", async (importOriginal) => {
 });
 
 import { browseAgent } from "../browseAgent";
-import { BROWSE_AGENT_DEADLINE_MS } from "@sideform/browser-agent/agent/session";
+import { BROWSE_AGENT_DEADLINE_MS, QA_FINAL_CHECKS_TIMEOUT_MS } from "@sideform/browser-agent/agent/session";
 import { CLOSE_SESSION_TIMEOUT_MS, getBrowserBridge, closeBrowserSession } from "../bridge";
 import { resetBrowseCheckpoints, useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
 import { runSessionId } from "../isolation";
@@ -360,6 +360,18 @@ describe("browse_agent isolated QA run", () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it("an isolated run with checks reserves the final-checks bound in its deadline", async () => {
+      gate();
+      (iso as Record<string, unknown>).assert = vi.fn(async () => ({}));
+      const run = (checks?: unknown) =>
+        browseAgent({ goal: "g", qa: true, ...(checks ? { checks } : {}) }, { sessionId: "chat-1", toolCallId: `tc-${Math.random()}` });
+      await run();
+      await run([{ type: "text", text: "Hello" }]);
+      const [plain, withChecks] = createSessionSpy.mock.calls.map((c) => (c[0] as { deadlineMs?: number }).deadlineMs as number);
+      expect(plain - withChecks).toBeGreaterThanOrEqual(QA_FINAL_CHECKS_TIMEOUT_MS - 1000);
+      expect(plain - withChecks).toBeLessThanOrEqual(QA_FINAL_CHECKS_TIMEOUT_MS + 1000);
     });
 
     it("waiting almost the whole deadline: a clear error and no browser", async () => {

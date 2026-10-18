@@ -16,6 +16,14 @@ export function isolatedBrowseAvailable(): boolean {
   return isDesktopBrowserAvailable() && typeof window.penDesktop?.browser?.isolated === "function";
 }
 
+/**
+ * Whether the browser the client uses can run `qa_assert` / final checks: the cloud bridge always can;
+ * a desktop shell only with `browser.assert` (an older shell lacks it). Static for a page load.
+ */
+export function browseAssertAvailable(): boolean {
+  return !isDesktopBrowserAvailable() || typeof window.penDesktop?.browser?.assert === "function";
+}
+
 const idSafe = (value: string) => value.replace(/[^A-Za-z0-9_-]/g, "_");
 const NONCE_CHARS = 6;
 const nonce = () => Math.random().toString(36).slice(2, 2 + NONCE_CHARS).padEnd(NONCE_CHARS, "0");

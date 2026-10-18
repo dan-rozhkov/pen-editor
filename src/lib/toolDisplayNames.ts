@@ -84,6 +84,7 @@ export const toolDisplayNames: Record<string, string> = {
   browse_task: "Browse Task",
   browse_agent: "Browse Agent",
   qa_verdict: "QA Verdict",
+  qa_assert: "QA Assert",
   web_search: "Search the Web",
   fetch_url: "Read Web Pages",
   ...mobbinToolDisplayNames,

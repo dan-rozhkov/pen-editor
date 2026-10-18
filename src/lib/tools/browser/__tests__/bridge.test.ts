@@ -29,3 +29,14 @@ describe("getBrowserBridge", () => {
     expect(getBrowserBridge()).toBe(cloudBrowserBridge);
   });
 });
+
+describe("browseAssertAvailable", () => {
+  it("is true on the web, and on desktop only with browser.assert", async () => {
+    const { browseAssertAvailable } = await import("@/lib/tools/browser/isolation");
+    expect(browseAssertAvailable()).toBe(true);
+    setPenDesktop(stubBrowser());
+    expect(browseAssertAvailable()).toBe(false);
+    setPenDesktop(stubBrowser({ assert: async () => ({}) }));
+    expect(browseAssertAvailable()).toBe(true);
+  });
+});

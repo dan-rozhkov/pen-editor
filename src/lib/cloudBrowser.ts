@@ -37,6 +37,8 @@ const COMMAND_TIMEOUT_MS: Record<string, number> = {
   startJournal: 15_000,
   stopJournal: 15_000,
   captureCheckpoint: 25_000,
+  // QA assertions (browser-agent v0.2.21): one page script; the final checks are bounded at 30 s by the package.
+  assert: 30_000,
 };
 const DEFAULT_COMMAND_TIMEOUT_MS = 85_000;
 const TIMEOUT_ERROR = "Cloud browser timed out — try again.";
@@ -274,6 +276,7 @@ function makeBridge(resolveChat: () => string): CloudBrowserBridge {
     // { error }) goes to the package's normalizeCheckpoint as is.
     startJournal: async (opts) => unwrapJournalToken(await call("startJournal", { ...(opts?.origins ? { origins: opts.origins } : {}) })),
     stopJournal: (token) => call("stopJournal", token ? { token } : {}),
+    assert: (args) => call("assert", args),
     captureCheckpoint: (token) => call("captureCheckpoint", token ? { token } : {}),
   };
 }
