@@ -4,6 +4,7 @@ import { canUseModel, getDefaultModel } from "@/lib/chatModels";
 import { releaseCloudBrowser } from "@/lib/cloudBrowser";
 import { useBrowseCheckpointStore } from "./browseCheckpointStore";
 import { subscribeOpenCodeKey } from "@/lib/opencodeKey";
+import { mergeChangesByEvent, type ChangeDetail } from "@/lib/memoryActivity";
 import type { AttachedImage, ChatLaunchPayload, QueuedChatMessage } from "@/types/chat";
 
 /** Stable empty reference so the per-session selector never returns a fresh
@@ -18,6 +19,11 @@ export const NO_ATTACHED_IMAGES: AttachedImage[] = [];
 export type ChatActivityNote = {
   /** Stable dedup key (derived from the activity response's latestId). */
   id: string;
+  /** What the review changed, per activity event, from the events' `detail`.
+   * Keyed by `String(eventId)`, or `noid:<content>` for an event without a
+   * numeric id. Seeing an event again adds nothing; a new event always does.
+   * Empty/absent lists: an older backend, so the row has nothing to expand. */
+  changesByEvent?: Record<string, ChangeDetail[]>;
 } & (
   | {
       /** Old backends: the message the note renders after. A rolled-back id
@@ -33,6 +39,14 @@ export type ChatActivityNote = {
       turnMessageId: string;
     }
 );
+
+/** `existing` with `incoming`'s new events added; `existing` itself when
+ * every incoming event key is already there. */
+function mergeNoteChanges(existing: ChatActivityNote, incoming: ChatActivityNote): ChatActivityNote {
+  const merged = mergeChangesByEvent(existing.changesByEvent, incoming.changesByEvent);
+  if (merged === existing.changesByEvent) return existing;
+  return { ...existing, changesByEvent: merged };
+}
 
 /** Stable empty reference for chats with no activity notes. Never mutated. */
 export const NO_ACTIVITY_NOTES: ChatActivityNote[] = [];
@@ -306,8 +320,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Dedup across every chat, not just this one: the cursor is per user,
       // so two mounted chats with checks in flight can both read the same
       // event, and the user should see it once.
-      const seen = Object.values(s.activityNotes).some((list) => list.some((n) => n.id === note.id));
-      if (seen) return s;
+      // A repeat of a known id (a later check of the same turn) MERGES its
+      // changes into the existing note instead of being dropped.
+      for (const [id, list] of Object.entries(s.activityNotes)) {
+        const at = list.findIndex((n) => n.id === note.id);
+        if (at === -1) continue;
+        const merged = mergeNoteChanges(list[at], note);
+        if (merged === list[at]) return s;
+        const next = [...list];
+        next[at] = merged;
+        return { activityNotes: { ...s.activityNotes, [id]: next } };
+      }
       const existing = s.activityNotes[chatId] ?? NO_ACTIVITY_NOTES;
       return { activityNotes: { ...s.activityNotes, [chatId]: [...existing, note] } };
     });

@@ -18,9 +18,9 @@ import { ThinkingIndicator } from "./ThinkingIndicator";
 import { ImageLightbox } from "./ImageLightbox";
 import { IconSwap } from "@/components/ui/IconSwap";
 import { AskUserForm } from "./AskUserForm";
-import { MemoryToolIndicator } from "./MemoryToolIndicator";
+import { MemoryActivityRow } from "./MemoryActivityRow";
+import { memoryChangesFromInput, noteChangeList, skillChangeFromInput, SKILL_ACTIONS, type ChangeDetail } from "@/lib/memoryActivity";
 import type { ChatActivityNote } from "@/store/chatStore";
-import { SkillToolIndicator, type SkillManageKind } from "./SkillToolIndicator";
 import type { AskUserInput } from "@/types/askUser";
 import {
   Tooltip,
@@ -61,7 +61,7 @@ function isMemoryWriteSuccessful(output: unknown): boolean {
 function parseSkillManageSuccess(
   input: unknown,
   output: unknown,
-): { kind: SkillManageKind; name: string } | null {
+): ChangeDetail | null {
   let parsedOutput = output;
   if (typeof parsedOutput === "string") {
     try {
@@ -82,9 +82,9 @@ function parseSkillManageSuccess(
   const action = (input as { action?: unknown }).action;
   const name = (input as { name?: unknown }).name;
   if (typeof name !== "string" || name.length === 0) return null;
-  if (action !== "create" && action !== "patch" && action !== "delete") {
-    return null;
-  }
+  const kind = SKILL_ACTIONS.find((a) => a === action);
+  // "revive" is never an input action: it is derived from the output below.
+  if (!kind || kind === "revive") return null;
 
   // `create` covers two distinct backend outcomes: a brand-new skill, or
   // reviving an archived one at the same name (the "revive" branch of
@@ -96,9 +96,9 @@ function parseSkillManageSuccess(
     typeof message === "string" &&
     message.startsWith("Revived archived skill")
   ) {
-    return { kind: "revive", name };
+    return skillChangeFromInput("revive", name, input);
   }
-  return { kind: action, name };
+  return skillChangeFromInput(kind, name, input);
 }
 
 interface ImagePreviewProps {
@@ -415,6 +415,7 @@ export function MessageList({
                     toolCallId: string;
                     state?: string;
                     errorText?: string;
+                    input?: unknown;
                     output?: unknown;
                   };
                   // The memory tool is backend-executed and arrives with an
@@ -422,7 +423,7 @@ export function MessageList({
                   // either: storage errors, over_capacity, an ambiguous
                   // old_text, and the circuit breaker all resolve as a normal
                   // `output-available` with `{ ok: false, error: ... }`. Only
-                  // a genuinely successful write gets the friendly chip;
+                  // a genuinely successful write gets the expandable "Memory updated" row;
                   // everything else (state error, or an ok:false output)
                   // falls through to the generic ToolCallIndicator so the
                   // user can see what actually happened.
@@ -431,7 +432,12 @@ export function MessageList({
                     !tp.errorText &&
                     isMemoryWriteSuccessful(tp.output)
                   ) {
-                    return <MemoryToolIndicator key={tp.toolCallId} />;
+                    return (
+                      <MemoryActivityRow
+                        key={tp.toolCallId}
+                        changes={memoryChangesFromInput(tp.input)}
+                      />
+                    );
                   }
                 }
                 if (part.type === "tool-skill_manage") {
@@ -443,18 +449,14 @@ export function MessageList({
                     output?: unknown;
                   };
                   // Same rule as tool-memory above: only a genuine success
-                  // gets the compact chip; a thrown-error state or an
+                  // gets the "Memory updated" row; a thrown-error state or an
                   // ordinary `{ error: ... }` output falls through to the
                   // generic ToolCallIndicator below.
                   if (tp.state === "output-available" && !tp.errorText) {
                     const success = parseSkillManageSuccess(tp.input, tp.output);
                     if (success) {
                       return (
-                        <SkillToolIndicator
-                          key={tp.toolCallId}
-                          kind={success.kind}
-                          name={success.name}
-                        />
+                        <MemoryActivityRow key={tp.toolCallId} changes={[success]} />
                       );
                     }
                   }
@@ -470,7 +472,7 @@ export function MessageList({
                 }
                 return null;
               })}
-              {notesByMessage.get(msg.id)?.map((n) => <MemoryToolIndicator key={n.id} />)}
+              {notesByMessage.get(msg.id)?.map((n) => <MemoryActivityRow key={n.id} changes={noteChangeList(n.changesByEvent)} />)}
               {isEmptyStreaming && <StreamingIndicator />}
             </div>
             <div className="ml-2 flex items-center">

@@ -3,6 +3,7 @@ import { renderHook } from "@testing-library/react";
 import { useAgentActivityNotes } from "@/hooks/useAgentActivityNotes";
 
 import { useChatStore } from "@/store/chatStore";
+import { formatChange, noteChangeList } from "@/lib/memoryActivity";
 
 const SESSION = "chat-1";
 const getLastMessageId = () => "msg-last";
@@ -72,7 +73,7 @@ describe("useAgentActivityNotes", () => {
     expect(localStorage.getItem(CURSOR_KEY)).toBe("42");
   });
 
-  it("writes a 0 cursor on baseline when the server has no rows yet, so the very next check is no longer treated as baseline (and a memory-only write on that next check still never notes)", async () => {
+  it("writes a 0 cursor on baseline when the server has no rows yet, so the very next check is no longer treated as baseline (and a memory-only write on that next check now notes)", async () => {
     const fetchMock = withFetch((_url, callIndex) => {
       if (callIndex <= 2) {
         // Turn 1's two checks: brand-new user, no audit rows exist yet
@@ -80,7 +81,7 @@ describe("useAgentActivityNotes", () => {
         return jsonResponse({ events: [], latestId: null });
       }
       // Turn 2's first check: a review has now written the user's
-      // first-ever row — a memory write, which never notes (FIR-71).
+      // first-ever row — a memory write.
       return jsonResponse({
         events: [{ id: 1, subsystem: "memory", origin: "background_review" }],
         latestId: 1,
@@ -101,19 +102,24 @@ describe("useAgentActivityNotes", () => {
     await vi.advanceTimersByTimeAsync(20_000);
 
     expect(fetchMock.mock.calls[2][0] as string).toContain("sinceId=0");
-    // The cursor still advances past a memory-only write even though it
-    // produced no note — bookkeeping is independent of announcement.
-    expect(notes()).toEqual([]);
+    expect(notes()).toEqual([{ id: "memory-activity-1", afterMessageId: "msg-last", changesByEvent: {"1": []} }]);
     expect(localStorage.getItem(CURSOR_KEY)).toBe("1");
   });
 
-  it("uses the stored cursor as sinceId once a baseline exists, and never notes for a memory-only background_review event while still advancing the cursor", async () => {
+  it("uses the stored cursor as sinceId once a baseline exists, and notes a memory-only background_review event with its change", async () => {
     localStorage.setItem(CURSOR_KEY, "10");
     const fetchMock = withFetch((_url, callIndex) => {
       if (callIndex === 1) {
         return jsonResponse({
           events: [
-            { id: 11, subsystem: "memory", action: "write", origin: "background_review", created_at: "2026-08-11T00:00:00Z" },
+            {
+              id: 11,
+              subsystem: "memory",
+              action: "write",
+              origin: "background_review",
+              created_at: "2026-08-11T00:00:00Z",
+              detail: { kind: "memory", target: "user", operations: [{ action: "add", content: "likes teal" }] },
+            },
           ],
           latestId: 11,
         });
@@ -128,13 +134,15 @@ describe("useAgentActivityNotes", () => {
     await vi.advanceTimersByTimeAsync(20_000);
 
     expect(fetchMock.mock.calls[0][0] as string).toContain("sinceId=10");
-    expect(notes()).toEqual([]);
+    const change = { kind: "memory", target: "user", action: "add", content: "likes teal" };
+    expect(notes()).toMatchObject([{ id: "memory-activity-11", changesByEvent: { "11": [expect.objectContaining(change)] } }]);
     expect(localStorage.getItem(CURSOR_KEY)).toBe("11");
 
-    // The follow-up check at 60s must still not note.
+    // The follow-up check at 60s sees nothing new and changes nothing.
     await vi.advanceTimersByTimeAsync(40_000);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(notes()).toEqual([]);
+    expect(notes()).toHaveLength(1);
+    expect(noteChangeList(notes()[0].changesByEvent)).toHaveLength(1);
   });
 
   it("records a note when only skill events are present", async () => {
@@ -153,7 +161,7 @@ describe("useAgentActivityNotes", () => {
 
     await vi.advanceTimersByTimeAsync(20_000);
 
-    expect(notes()).toEqual([{ id: "memory-activity-11", afterMessageId: "msg-last" }]);
+    expect(notes()).toEqual([{ id: "memory-activity-11", afterMessageId: "msg-last", changesByEvent: {"11": []} }]);
   });
 
   it("anchors the note to the message that was last when the turn finished, not to one sent before the check fires", async () => {
@@ -175,7 +183,7 @@ describe("useAgentActivityNotes", () => {
 
     await vi.advanceTimersByTimeAsync(20_000);
 
-    expect(notes()).toEqual([{ id: "memory-activity-11", afterMessageId: "msg-turn-end" }]);
+    expect(notes()).toEqual([{ id: "memory-activity-11", afterMessageId: "msg-turn-end", changesByEvent: {"11": []} }]);
   });
 
   it("records one note when both memory and skill events land in the same check", async () => {
@@ -195,10 +203,10 @@ describe("useAgentActivityNotes", () => {
 
     await vi.advanceTimersByTimeAsync(20_000);
 
-    expect(notes()).toEqual([{ id: "memory-activity-12", afterMessageId: "msg-last" }]);
+    expect(notes()).toEqual([{ id: "memory-activity-12", afterMessageId: "msg-last", changesByEvent: {"11": [], "12": []} }]);
   });
 
-  it("treats an event with no subsystem field (older backend, pre-dates skills) as memory and never notes for it", async () => {
+  it("ignores an event with no subsystem field (older backend, pre-dates skills)", async () => {
     localStorage.setItem(CURSOR_KEY, "5");
     withFetch(() =>
       jsonResponse({
@@ -290,16 +298,15 @@ describe("useAgentActivityNotes", () => {
     expect(notes()).toEqual([]);
   });
 
-  it("persists the cursor across separate finished turns so a later turn's event is never lost, even though it's a memory write that never notes", async () => {
+  it("persists the cursor across separate finished turns so a later turn's memory event is noted", async () => {
     const fetchMock = withFetch((_url, callIndex) => {
       if (callIndex <= 2) {
         // Turn 1's two checks: baseline, then nothing new.
         return jsonResponse({ events: [], latestId: 1 });
       }
-      // Turn 2's first check: a background review landed since the cursor
-      // (a memory write — no subsystem, the pre-phase-2 shape).
+      // Turn 2's first check: a background review landed since the cursor.
       return jsonResponse({
-        events: [{ id: 2, origin: "background_review" }],
+        events: [{ id: 2, subsystem: "memory", origin: "background_review" }],
         latestId: 2,
       });
     });
@@ -315,8 +322,7 @@ describe("useAgentActivityNotes", () => {
     await vi.advanceTimersByTimeAsync(20_000);
 
     expect(fetchMock.mock.calls[2][0] as string).toContain("sinceId=1");
-    // Cursor advances past the event even though it never notes.
-    expect(notes()).toEqual([]);
+    expect(notes()).toHaveLength(1);
     expect(localStorage.getItem(CURSOR_KEY)).toBe("2");
   });
 
@@ -423,7 +429,7 @@ describe("useAgentActivityNotes with chatId/messageId on events", () => {
 
     expect(notes()).toEqual([]);
     expect(useChatStore.getState().activityNotes[OTHER]).toEqual([
-      { id: turnNoteId(OTHER, "u1"), turnMessageId: "u1" },
+      { id: turnNoteId(OTHER, "u1"), turnMessageId: "u1", changesByEvent: {"11": []} },
     ]);
   });
 
@@ -446,8 +452,8 @@ describe("useAgentActivityNotes with chatId/messageId on events", () => {
     );
 
     expect(useChatStore.getState().activityNotes[OTHER]).toEqual([
-      { id: turnNoteId(OTHER, "u1"), turnMessageId: "u1" },
-      { id: turnNoteId(OTHER, "u2"), turnMessageId: "u2" },
+      { id: turnNoteId(OTHER, "u1"), turnMessageId: "u1", changesByEvent: {"12": [], "11": []} },
+      { id: turnNoteId(OTHER, "u2"), turnMessageId: "u2", changesByEvent: {"13": []} },
     ]);
   });
 
@@ -469,14 +475,100 @@ describe("useAgentActivityNotes with chatId/messageId on events", () => {
 
     expect(call).toBe(2);
     expect(useChatStore.getState().activityNotes[OTHER]).toEqual([
-      { id: turnNoteId(OTHER, "u1"), turnMessageId: "u1" },
+      { id: turnNoteId(OTHER, "u1"), turnMessageId: "u1", changesByEvent: {"11": [], "12": []} },
     ]);
+  });
+
+  it("merges the changes of a later check into the turn's note, never listing an event twice", async () => {
+    addChat(OTHER);
+    const memEvent = (id: number, content: string) =>
+      skillEvent(id, {
+        subsystem: "memory",
+        chatId: OTHER,
+        messageId: "u1",
+        detail: { kind: "memory", target: "memory", operations: [{ action: "add", content }] },
+      });
+    let call = 0;
+    localStorage.setItem(CURSOR_KEY, "10");
+    withFetch(() => {
+      call += 1;
+      // The 60s check re-reads event 11 (racing tab / cursor not yet written) plus a new one.
+      return jsonResponse(
+        call === 1
+          ? { events: [memEvent(11, "A")], latestId: 11 }
+          : { events: [memEvent(11, "A"), memEvent(12, "B")], latestId: 12 },
+      );
+    });
+    const { rerender } = renderStatus();
+    rerender({ status: "ready" });
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    const [note] = useChatStore.getState().activityNotes[OTHER];
+    expect(noteChangeList(note.changesByEvent).map((c) => (c.kind === "memory" ? c.content : ""))).toEqual(["A", "B"]);
+    expect(Object.keys(note.changesByEvent ?? {})).toEqual(["11", "12"]);
+  });
+
+  it("lists add X, remove X, add X again from three events as three lines", async () => {
+    addChat(OTHER);
+    const ev = (id: number, op: object) =>
+      skillEvent(id, {
+        subsystem: "memory",
+        chatId: OTHER,
+        messageId: "u1",
+        detail: { kind: "memory", target: "memory", operations: [op] },
+      });
+    const add = { action: "add", content: "X" };
+    const rm = { action: "remove", oldText: "X" };
+    let call = 0;
+    localStorage.setItem(CURSOR_KEY, "10");
+    withFetch(() => {
+      call += 1;
+      return jsonResponse(
+        call === 1
+          ? { events: [ev(11, add), ev(12, rm)], latestId: 12 }
+          : { events: [ev(11, add), ev(12, rm), ev(13, add)], latestId: 13 },
+      );
+    });
+    const { rerender } = renderStatus();
+    rerender({ status: "ready" });
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    const [note] = useChatStore.getState().activityNotes[OTHER];
+    expect(noteChangeList(note.changesByEvent).map(formatChange)).toEqual(["Remembered: X", "Forgot: X", "Remembered: X"]);
+  });
+
+  it("an id-less new event next to an already seen id still adds its change", async () => {
+    addChat(OTHER);
+    const base = { subsystem: "memory", chatId: OTHER, messageId: "u1" };
+    const detail = (content: string) => ({ kind: "memory", target: "memory", operations: [{ action: "add", content }] });
+    let call = 0;
+    localStorage.setItem(CURSOR_KEY, "10");
+    withFetch(() => {
+      call += 1;
+      return jsonResponse(
+        call === 1
+          ? { events: [skillEvent(11, { ...base, detail: detail("A") })], latestId: 11 }
+          : {
+              events: [
+                skillEvent(11, { ...base, detail: detail("A") }),
+                { origin: "background_review", ...base, detail: detail("B") },
+              ],
+              latestId: 11,
+            },
+      );
+    });
+    const { rerender } = renderStatus();
+    rerender({ status: "ready" });
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    const [note] = useChatStore.getState().activityNotes[OTHER];
+    expect(noteChangeList(note.changesByEvent).map(formatChange)).toEqual(["Remembered: A", "Remembered: B"]);
   });
 
   it("treats an event with an empty or non-string field as old-shape", async () => {
     await runCheck([skillEvent(11, { chatId: "", messageId: 5 })], 11);
 
-    expect(notes()).toEqual([{ id: "memory-activity-11", afterMessageId: "msg-last" }]);
+    expect(notes()).toEqual([{ id: "memory-activity-11", afterMessageId: "msg-last", changesByEvent: {"11": []} }]);
   });
 });
 

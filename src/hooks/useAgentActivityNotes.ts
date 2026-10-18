@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useChatStore } from "@/store/chatStore";
 import { apiFetchUrl, resolveApiUrl } from "@/lib/apiBase";
 import { isSignedIn } from "@/lib/auth/authState";
+import { changesFromEventDetail, eventKey, type ChangeDetail } from "@/lib/memoryActivity";
 
 // Two delayed checks per finished turn, both scheduled at turn-finish time
 // (not chained). The backend's background review is a full generateText run
@@ -49,9 +50,7 @@ function writeCursor(userId: string, id: number): void {
 
 // `subsystem` is only populated by backends that carry the self-improvement
 // loop's phase-2 (skills) migration — an older backend's events simply omit
-// it, and are therefore never classified as "skill" below (see
-// classifyActivity): memory (phase 1) was the only subsystem that could have
-// written an event with no `subsystem` at all, and memory writes never produce a note.
+// it and are never classified below (see classifyActivity).
 type ActivityEvent = {
   id?: unknown;
   origin?: unknown;
@@ -59,6 +58,8 @@ type ActivityEvent = {
   /** Newer backends: the chat and the turn's user message the review looked at. */
   chatId?: unknown;
   messageId?: unknown;
+  /** Newer backends: what exactly was written. Absent on older ones. */
+  detail?: unknown;
 };
 
 type ParsedActivityResponse = {
@@ -84,32 +85,38 @@ function nonEmptyString(v: unknown): string | undefined {
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
-type SkillTurnGroup = { chatId: string; messageId: string };
+type NoteContent = { changesByEvent: Record<string, ChangeDetail[]> };
+type TurnGroup = NoteContent & { chatId: string; messageId: string };
 
-// Memory writes are silent by design (FIR-71) — only skill writes are worth
-// interrupting the user for, so this only has to detect the skill subsystem.
-// An event whose `subsystem` is missing is a pre-phase-2 backend shape and
-// can never be "skill" (that column didn't exist yet), so it's correctly
-// ignored here without special-casing it.
+// Only events with origin `background_review` and subsystem `memory` or
+// `skill` produce a row (FIR-71, which kept memory silent, is reversed). An
+// event without a `subsystem` (a pre-phase-2 backend shape) is ignored.
 //
-// Skill events carrying BOTH chatId and messageId are grouped per
-// (chatId, messageId) — one note per reviewed turn. Skill events missing
-// either field (older backend) set `legacy`, which keeps the old
-// single-note-in-the-scheduling-chat behaviour.
-function classifyActivity(events: ActivityEvent[]): { legacy: boolean; groups: SkillTurnGroup[] } {
-  let legacy = false;
-  const groups = new Map<string, SkillTurnGroup>();
+// Events carrying BOTH chatId and messageId are grouped per
+// (chatId, messageId) — one note per reviewed turn. Events missing either
+// field (older backend) go to `legacy`, which keeps the old
+// single-note-in-the-scheduling-chat behaviour. Events without `detail` still
+// trigger the row but add nothing to its change list.
+function classifyActivity(events: ActivityEvent[]): { legacy: NoteContent | null; groups: TurnGroup[] } {
+  let legacy: NoteContent | null = null;
+  const groups = new Map<string, TurnGroup>();
   for (const event of events) {
     if (typeof event !== "object" || event === null) continue;
     if (event.origin !== "background_review") continue;
-    if (event.subsystem !== "skill") continue;
+    if (event.subsystem !== "skill" && event.subsystem !== "memory") continue;
+    const changes = changesFromEventDetail(event.detail);
+    const key = eventKey(event.id, changes);
     const chatId = nonEmptyString(event.chatId);
     const messageId = nonEmptyString(event.messageId);
     if (chatId === undefined || messageId === undefined) {
-      legacy = true;
+      legacy ??= { changesByEvent: {} };
+      legacy.changesByEvent[key] ??= changes;
       continue;
     }
-    groups.set(JSON.stringify([chatId, messageId]), { chatId, messageId });
+    const gkey = JSON.stringify([chatId, messageId]);
+    let g = groups.get(gkey);
+    if (!g) groups.set(gkey, (g = { chatId, messageId, changesByEvent: {} }));
+    g.changesByEvent[key] ??= changes;
   }
   return { legacy, groups: [...groups.values()] };
 }
@@ -164,14 +171,15 @@ function checkAgentActivity(
       // anchored to that turn's user message, whichever chat scheduled this
       // check. A chat this tab does not hold (closed, or open in another
       // browser tab) is skipped rather than shown in the wrong chat. The id
-      // is the turn itself, so a skill written before the 20s check and
-      // another before the 60s check still give one row, and it can never
+      // is the turn itself, so a write seen by the 20s check and another by
+      // the 60s check give one row (the store merges their events), and it can never
       // collide with a legacy `memory-activity-<latestId>` id.
       for (const g of groups) {
         if (!store.chats.some((c) => c.id === g.chatId)) continue;
         store.addActivityNote(g.chatId, {
           id: `memory-activity-turn-${JSON.stringify([g.chatId, g.messageId])}`,
           turnMessageId: g.messageId,
+          changesByEvent: g.changesByEvent,
         });
       }
 
@@ -186,7 +194,11 @@ function checkAgentActivity(
         // reading and writing it can make more than one observe the same new
         // events. Keeps its original "memory-activity" prefix for the same
         // reason the cursor key does — it is an internal dedup id.
-        store.addActivityNote(sessionId, { id: `memory-activity-${latestId}`, afterMessageId });
+        store.addActivityNote(sessionId, {
+          id: `memory-activity-${latestId}`,
+          afterMessageId,
+          changesByEvent: legacy.changesByEvent,
+        });
       }
 
       // Advance the cursor regardless of whether we added a note — events
@@ -216,12 +228,11 @@ interface UseAgentActivityNotesOptions {
 // happened after a chat turn finished (the model has no chance to surface
 // these itself — the review runs after the stream already closed) and
 // records a UI-only chat note (rendered as a row after the last message)
-// when the review wrote a skill (FIR-71: memory
-// writes are intentionally never announced — the cursor still advances past
-// them, but they produce no note, memory-only or mixed with a skill write).
-// Silent on any failure: this is a nice-to-have notification, never
-// something that should interrupt the user or throw over a flaky network /
-// an older backend without the endpoint.
+// when the review wrote memory or a skill. The note lists WHAT changed (from
+// the events' `detail`); a later check for the same turn merges its changes
+// into the same note. Silent on any failure: this is a nice-to-have
+// notification, never something that should interrupt the user or throw over
+// a flaky network / an older backend without the endpoint.
 //
 // Cursor-based (by event id, not client clock) so a skewed browser clock
 // can't hide or repeat events, and so events from a turn whose checks got

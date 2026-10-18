@@ -485,43 +485,68 @@ appear in a turn and the activity endpoint returns nothing.
   It is what the backend scopes **memory** to. Not an account: another browser
   or a cleared storage is a different identity with empty memory. Learned
   **skills are global**, not scoped to it — a difference that surprises people.
-- **In-turn chips** (`MessageList.tsx` → `MemoryToolIndicator` /
-  `SkillToolIndicator`). `memory` and `skill_manage` are backend-executed, so
-  they arrive as ordinary tool parts. **Neither ever throws**: a refused write
-  (over capacity, ambiguous match, circuit breaker, a guard rejection) comes
-  back as normal output carrying `ok: false`. So a chip is rendered *only* for
-  a parsed, genuine success — anything else must fall through to
-  `ToolCallIndicator`, which shows the output and therefore the error. Parse
-  defensively; the output may be a JSON string, an object, or a shape nobody
-  anticipated.
+- **In-turn rows** (`MessageList.tsx` -> `MemoryActivityRow`, which replaced
+  `MemoryToolIndicator` / `SkillToolIndicator`). `memory` and `skill_manage`
+  are backend-executed, so they arrive as ordinary tool parts. **Neither ever
+  throws**: a refused write (over capacity, ambiguous match, circuit breaker, a
+  guard rejection) comes back as normal output carrying `ok: false`. So a row is
+  rendered *only* for a parsed, genuine success — anything else must fall
+  through to `ToolCallIndicator`, which shows the output and therefore the
+  error. Parse defensively; the output may be a JSON string, an object, or a
+  shape nobody anticipated. The row is English ("Memory updated", brain icon),
+  collapsed by default, with a chevron like `ToolCallIndicator`; expanded, it
+  lists WHAT changed. In-turn details come from the tool INPUT
+  (`memoryChangesFromInput`: `target` + `operations[{action, content, old_text}]`;
+  for `skill_manage`: action, name, description, old_string, new_string,
+  absorbed_into). All change shapes and their English line texts live in the
+  pure `src/lib/memoryActivity.ts` (`ChangeDetail`, `formatChange`), shared with
+  the background path. No details (older backend, or input we could not read)
+  means no chevron, just the label.
 - **`useAgentActivityNotes`** — the background review runs server-side *after*
   the stream closes, so the model cannot mention it. This schedules two delayed
-  checks of `GET /api/memory/activity` per finished turn and records a note only
-  when a `background_review` event wrote a **skill** (FIR-71: memory writes are
-  never announced, whether alone or alongside a skill write — the cursor still
-  advances past them, but they produce no note). It reads by **event-id cursor**
+  checks of `GET /api/memory/activity` per finished turn and records a note when
+  a `background_review` event of subsystem `memory` **or** `skill` was written
+  (FIR-71, which kept memory writes silent, is reversed: they are shown). Each
+  event may carry `detail` (`{kind:"memory", target, operations[]}` or
+  `{kind:"skill", action, name, ...}`); the note's `changes: ChangeDetail[]`
+  is built from them (`changesFromEventDetail`); memory detail may carry
+  `moreOperations` (operations beyond the backend's 10, cut), shown as a last
+  line "…and N more changes" for that event. A skill patch with an empty
+  `new_string` is a deletion ("removed <old>"), a new string alone is an
+  addition. An event without `detail` still triggers the row but adds no line.
+  A duplicate memory add (a backend no-op) is still listed. In-turn
+  "Forgot/Updated" lines show the model's `old_text` match string, not the full
+  stored entry. It reads by **event-id cursor**
   kept in `localStorage`, never a timestamp — the endpoint filters on Postgres
   `created_at`, so a browser clock a few minutes off would silently suppress or
   repeat every note. A baseline against a server with no rows records a zero
   cursor: "checked, saw nothing" has to be distinguishable from "never checked",
-  or the very first review is swallowed. The note (`{ id, afterMessageId }`,
-  `ChatActivityNote`) is **UI-only**: it lives in `chatStore.activityNotes[chatId]`
+  or the very first review is swallowed. The note (`ChatActivityNote`:
+  `{ id, changesByEvent?, afterMessageId | turnMessageId }`) is **UI-only**:
+  it lives in `chatStore.activityNotes[chatId]`
   (in-memory, like the chats and their messages, so it does not survive a
   reload), is **never added to the AI SDK `messages`** (that would reach the
   backend and break the model's history and prompt caching), and `MessageList`
-  renders it as the "Память обновлена" chip inside the anchored assistant
+  renders it as the same `MemoryActivityRow` inside the anchored assistant
   message (nothing if that message was rolled back). `afterMessageId` is the
   last assistant message when the turn finished (read once, when the checks are
   scheduled) — not at detection time, or a message sent during the 20-60s wait
   would carry the row, possibly the user's own bubble.
-  The note id is stable per event and `addActivityNote` dedups it across all
-  chats, so the two checks and several mounted chats give one row. Separate
-  browser tabs have separate stores and can each show it. **Anchoring:** newer
+  The note id is stable per turn/event and `addActivityNote` finds it across all
+  chats. A repeat of a known id **merges** instead of being dropped: new changes
+  are merged per EVENT: `changesByEvent` is keyed by `String(eventId)` (or
+  `noid:<its own content>` for an event without a numeric id), the merge is a
+  union by key and existing keys win. An event seen twice is listed once, but a
+  later event with identical text (add X, remove X, add X) is its own entry. The
+  row lists the values flattened (`noteChangeList`: numeric ids ascending, then
+  id-less ones). So the 20s and 60s checks, and several mounted chats, give one row
+  whose list is the union. Separate browser tabs have separate stores and can
+  each show it. **Anchoring:** newer
   backends put `chatId` (the chat's id = `sessionId`) and `messageId` (the
-  USER message that started the reviewed turn) on each skill event. Events
+  USER message that started the reviewed turn) on each event. Events
   are grouped per (chatId, messageId); one note `{ id, turnMessageId }` per
   group goes to *that* chat's list (whichever chat scheduled the check). Its id
-  is the turn (`memory-activity-turn-["chatId","messageId"]`), so skills of one
+  is the turn (`memory-activity-turn-["chatId","messageId"]`), so writes of one
   turn seen by the 20s and the 60s checks still give one row. A chatId this tab
   does not hold (closed, or open in another browser tab) is skipped: the shared
   cursor still advances, so that row is lost rather than shown in the wrong

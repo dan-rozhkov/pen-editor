@@ -1,5 +1,5 @@
 import { it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import type { UIMessage } from "ai";
 import { MessageList } from "../MessageList";
 
@@ -18,83 +18,42 @@ function skillManagePart(overrides: Record<string, unknown>) {
   };
 }
 
-it("renders a create chip for a successful skill_manage create", () => {
+it.each([
+  [
+    "create",
+    { action: "create", name: "reading-canvas-state", description: "How to read the canvas" },
+    'Created skill "reading-canvas-state". It will appear in your skills catalog.',
+    "Created skill reading-canvas-state: How to read the canvas",
+  ],
+  [
+    "revive (create that revived an archived skill)",
+    { action: "create", name: "old-skill" },
+    'Revived archived skill "old-skill" with new content.',
+    "Restored skill old-skill",
+  ],
+  [
+    "patch",
+    { action: "patch", name: "reading-canvas-state", old_string: "foo", new_string: "bar" },
+    'Patched skill "reading-canvas-state".',
+    "Updated skill reading-canvas-state: foo → bar",
+  ],
+  [
+    "delete",
+    { action: "delete", name: "old-skill", absorbed_into: "new-skill" },
+    'Deleted skill "old-skill" (pruned).',
+    "Deleted skill old-skill (merged into new-skill)",
+  ],
+])("renders a collapsed 'Memory updated' row with details for a successful %s", (_name, input, message, line) => {
   render(
     <MessageList
-      messages={[
-        assistantWithPart(
-          skillManagePart({
-            input: { action: "create", name: "reading-canvas-state" },
-            output: JSON.stringify({
-              ok: true,
-              message: 'Created skill "reading-canvas-state". It will appear in your skills catalog marked (learned) on the next turn.',
-            }),
-          }),
-        ),
-      ]}
+      messages={[assistantWithPart(skillManagePart({ input, output: JSON.stringify({ ok: true, message }) }))]}
       isLoading={false}
     />,
   );
-  expect(screen.getByText("Скилл создан: reading-canvas-state")).toBeTruthy();
   expect(screen.queryByText("Done")).toBeNull();
-});
-
-it("renders a distinct revive chip when create actually revived an archived skill", () => {
-  render(
-    <MessageList
-      messages={[
-        assistantWithPart(
-          skillManagePart({
-            input: { action: "create", name: "old-skill" },
-            output: JSON.stringify({
-              ok: true,
-              message: 'Revived archived skill "old-skill" with new content. It will appear in your skills catalog marked (learned) on the next turn.',
-            }),
-          }),
-        ),
-      ]}
-      isLoading={false}
-    />,
-  );
-  expect(screen.getByText("Скилл восстановлен: old-skill")).toBeTruthy();
-  expect(screen.queryByText("Скилл создан: old-skill")).toBeNull();
-});
-
-it("renders a patch chip for a successful skill_manage patch", () => {
-  render(
-    <MessageList
-      messages={[
-        assistantWithPart(
-          skillManagePart({
-            input: { action: "patch", name: "reading-canvas-state" },
-            output: JSON.stringify({ ok: true, message: 'Patched skill "reading-canvas-state".' }),
-          }),
-        ),
-      ]}
-      isLoading={false}
-    />,
-  );
-  expect(screen.getByText("Скилл обновлён: reading-canvas-state")).toBeTruthy();
-});
-
-it("renders a delete chip for a successful skill_manage delete", () => {
-  render(
-    <MessageList
-      messages={[
-        assistantWithPart(
-          skillManagePart({
-            input: { action: "delete", name: "old-skill" },
-            output: JSON.stringify({
-              ok: true,
-              message: 'Deleted skill "old-skill" (pruned).',
-            }),
-          }),
-        ),
-      ]}
-      isLoading={false}
-    />,
-  );
-  expect(screen.getByText("Скилл удалён: old-skill")).toBeTruthy();
+  expect(screen.queryByText(line)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /Memory updated/ }));
+  expect(screen.getByText(line)).toBeTruthy();
 });
 
 it("falls back to the generic ToolCallIndicator when skill_manage returns an error (e.g. curated guard)", () => {
@@ -111,7 +70,7 @@ it("falls back to the generic ToolCallIndicator when skill_manage returns an err
       isLoading={false}
     />,
   );
-  expect(screen.queryByText("Скилл обновлён: prototype")).toBeNull();
+  expect(screen.queryByText("Memory updated")).toBeNull();
   expect(screen.getByText("Manage skill")).toBeTruthy();
 });
 
