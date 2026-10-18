@@ -1,3 +1,8 @@
+import type {
+  ToolExecutionContext as HarnessToolExecutionContext,
+  ToolHandler as HarnessToolHandler,
+} from "@sideform/agent-harness/surface";
+import { applyLoopGuard } from "@sideform/browser-agent/loop";
 import { getEditorState } from "./tools/getEditorState";
 import { batchGet } from "./tools/batchGet";
 import { batchDesign } from "./tools/batchDesign";
@@ -52,7 +57,6 @@ import { browseTabs } from "./tools/browser/browseTabs";
 import { browseTask } from "./tools/browser/browseTask";
 import { browseAgent } from "./tools/browser/browseAgent";
 import { defineComponent, extractComponent, detachInstance, deleteComponent } from "./tools/components";
-import { applyLoopGuard } from "@sideform/browser-agent/loop";
 
 /**
  * Per-call metadata threaded through to handlers that need to correlate
@@ -60,12 +64,7 @@ import { applyLoopGuard } from "@sideform/browser-agent/loop";
  * the AI vector drawing preview store). Optional and absent for direct MCP
  * bridge calls, which have no chat session.
  */
-export interface ToolExecutionContext {
-  sessionId?: string;
-  toolCallId?: string;
-  /** Aborts when the turn is stopped/abandoned or the call times out. Only
-   * supplied for long-running cancellable tools (browse_task). */
-  signal?: AbortSignal;
+export interface ToolExecutionContext extends HarnessToolExecutionContext {
   /**
    * Isolated browser session of a browse_agent QA run. The browse_* handlers
    * pass it to `getBrowserBridge` so every nested command reaches the run's own
@@ -74,10 +73,7 @@ export interface ToolExecutionContext {
   browserSession?: string;
 }
 
-export type ToolHandler = (
-  args: Record<string, unknown>,
-  context?: ToolExecutionContext
-) => Promise<string>;
+export type ToolHandler = HarnessToolHandler<ToolExecutionContext>;
 
 /**
  * Wraps a browse_* handler with the loop guard (browse-speed-contract.md,

@@ -16,6 +16,7 @@
  * WebMCP surface and plugins are all reachable at the same time in a single
  * editor tab, so the guarantee has to sit below all of them.
  */
+import { createSerialQueue } from "@sideform/agent-harness/executor";
 
 /**
  * Tools that skip the queue because they cannot change the scene.
@@ -105,15 +106,8 @@ export function isSerializedTool(toolName: string): boolean {
   return !unserialized.has(toolName);
 }
 
-let queue: Promise<unknown> = Promise.resolve();
+const serialize = createSerialQueue();
 
-/**
- * Runs `task` after every previously queued mutating call has settled.
- * Read-only tools run immediately and neither wait nor make others wait.
- *
- * A rejected task must not poison the queue for everything behind it, hence
- * the two-argument `then` and the swallowed tail.
- */
 export function runToolCall<T>(toolName: string, task: () => Promise<T>): Promise<T> {
   if (!isSerializedTool(toolName)) return task();
   return runSerialized(task);
@@ -126,10 +120,5 @@ export function runToolCall<T>(toolName: string, task: () => Promise<T>): Promis
  * serialized writer's snapshot-and-commit.
  */
 export function runSerialized<T>(task: () => Promise<T>): Promise<T> {
-  const result = queue.then(task, task);
-  queue = result.then(
-    () => undefined,
-    () => undefined
-  );
-  return result;
+  return serialize(task);
 }

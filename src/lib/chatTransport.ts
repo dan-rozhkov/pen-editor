@@ -1,7 +1,7 @@
-import { DefaultChatTransport } from "ai";
-import { credentialsMode, resolveApiUrl } from "@/lib/apiBase";
+import { createHarnessTransport } from "@sideform/agent-harness/transport";
+import type { RetryState } from "@sideform/agent-harness/retry-fetch";
+import { credentialsMode, isOffline, OFFLINE_MESSAGE, resolveApiUrl } from "@/lib/apiBase";
 import { getOpenCodeKey } from "@/lib/opencodeKey";
-import { createRetryingFetch, type RetryState } from "@/lib/retryFetch";
 import { withMobbinAuthHeader } from "@/lib/mobbinAuth";
 import { isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";
 import { browseAssertAvailable, isolatedBrowseAvailable } from "@/lib/tools/browser/isolation";
@@ -68,103 +68,40 @@ export interface ChatTransportOptions {
   /** Extra request body fields, resolved on every send. */
   body: () => object;
   onRetryStateChange?: (state: RetryState | null) => void;
+  /** Test seam: replaces the network fetch under the retrying wrapper. */
+  fetchImpl?: typeof fetch;
 }
 
-export function createChatTransport({ body, onRetryStateChange }: ChatTransportOptions) {
-    return new DefaultChatTransport({
-      api: resolveChatApiUrl(),
-      // Session cookie only once accounts are known to be enabled (see
-      // apiBase.ts withCredentials); resolved per request.
-      credentials: () => credentialsMode() as RequestCredentials,
-      // withMobbinAuthHeader wraps the retrying fetch so the *actual*
-      // network call always carries a currently-valid X-Mobbin-Token
-      // header (refreshed first if it had expired) or none at all — see
-      // its doc comment in mobbinAuth.ts for why the header is set here
-      // rather than only in prepareSendMessagesRequest below.
-      fetch: withMobbinAuthHeader(
-        createRetryingFetch({ onRetryStateChange: onRetryStateChange ?? (() => {}) }),
-      ),
-      body,
-      prepareSendMessagesRequest: ({ id, messages, body, headers: baseHeaders, trigger, messageId }) => {
-        // Images always ride along regardless of the selected model's
-        // vision support — the backend decides native-vs-described per
-        // model
-        // (pen-editor-backend/src/ai/vision-messages.ts) and never
-        // forwards raw image parts to a model that can't read them. See
-        // pen-editor-backend/docs/specs/2026-08-14-agent-vision-design.md.
-        //
-        // The OpenCode key is attached HERE, not baked into the transport
-        // at construction: a transport lives as long as its chat session
-        // (the main chat's for the whole mounted session; the nested browse
-        // session builds its own per tool call), so a key read once at
-        // construction would go stale. This function is re-evaluated on
-        // every send, including every tool-loop auto-continuation, so a key
-        // entered mid-session is picked up on the very next request. It rides as a header, never in `body` —
-        // the request body is what reaches pen-editor-backend's
-        // `raw_traces`, and a key that ever landed there would be stored
-        // forever (see the spec's "Поток ключа"). Sent ONLY when this
-        // turn's model is actually an OpenCode route: on every OpenRouter
-        // turn the key must never leave the browser at all.
-        //
-        // `baseHeaders` (renamed from this callback's own `headers` param)
-        // is what HttpChatTransport.sendMessages already computed as the
-        // request's base header set (its `headers` option merged with
-        // whatever `sendMessage` was called with) before invoking us —
-        // see node_modules/ai/dist/index.mjs, `sendMessages`. Whatever we
-        // return here becomes the request's ENTIRE header set if we
-        // return one at all; it does not get merged on top of
-        // `baseHeaders` for us. Returning `{ "X-OpenCode-Key": key }`
-        // alone would silently drop every header the transport itself
-        // would otherwise send — harmless today since nothing sets any,
-        // but a future transport-level header would then vanish only on
-        // OpenCode turns, which is a hard bug to spot from the symptom.
-        // Spread `baseHeaders` first so ours only adds to it.
-        const model = (body as { model?: unknown } | undefined)?.model;
-        const openCodeHeaders =
-          typeof model === "string" && isOpenCodeModel(model)
-            ? (() => {
-                const key = getOpenCodeKey();
-                return key ? { "X-OpenCode-Key": key } : undefined;
-              })()
-            : undefined;
-        // `Headers` also satisfies `HeadersInit` for the return value, and
-        // its constructor accepts every shape `HeadersInit` allows
-        // (another `Headers`, a `[k, v][]`, or a plain object) — so
-        // building one is a shape-agnostic way to merge `baseHeaders`
-        // (whatever form the SDK handed us) with ours.
-        const headers =
-          baseHeaders || openCodeHeaders
-            ? (() => {
-                const merged = new Headers(baseHeaders);
-                if (openCodeHeaders) {
-                  for (const [key, value] of Object.entries(openCodeHeaders)) {
-                    merged.set(key, value);
-                  }
-                }
-                return merged;
-              })()
-            : undefined;
-        // The Mobbin token, by contrast, must NEVER ride in `body` — it's
-        // a user-held OAuth credential, and `body` gets recorded into
-        // `raw_traces` on the backend (src/routes/chat.ts). It only ever
-        // travels as the X-Mobbin-Token header, and only ever set in ONE
-        // place: `withMobbinAuthHeader` above, which wraps the transport's
-        // `fetch` and attaches a currently-valid (refreshed if needed)
-        // token right before the network call actually goes out. Returning
-        // a `headers` object from here would REPLACE `baseHeaders` wholesale
-        // per the AI SDK's own semantics, not merge into it — and it would
-        // be redundant besides, since withMobbinAuthHeader overwrites
-        // whatever header value arrives here anyway.
-        return {
-          ...(headers ? { headers } : {}),
-          body: {
-            ...body,
-            id,
-            messages,
-            trigger,
-            messageId,
-          },
-        };
-      },
-    });
+export function createChatTransport({ body, onRetryStateChange, fetchImpl }: ChatTransportOptions) {
+  return createHarnessTransport({
+    api: resolveChatApiUrl(),
+    // Session cookie only once accounts are known to be enabled (see
+    // apiBase.ts withCredentials); resolved per request.
+    credentials: () => credentialsMode() as RequestCredentials,
+    // withMobbinAuthHeader wraps the retrying fetch so the *actual* network
+    // call always carries a currently-valid X-Mobbin-Token header (refreshed
+    // first if it had expired) or none at all — see its doc comment in
+    // mobbinAuth.ts. The token must NEVER ride in `body`: body is recorded
+    // into `raw_traces` on the backend.
+    wrapFetch: withMobbinAuthHeader,
+    isOffline,
+    offlineMessage: OFFLINE_MESSAGE,
+    onRetryStateChange,
+    fetchImpl,
+    body,
+    // The OpenCode key is attached per send (not at construction) so a key
+    // entered mid-session is picked up on the next request, including every
+    // tool-loop auto-continuation. It rides as a header, never in `body`
+    // (stored forever in raw_traces), and ONLY when this turn's model is an
+    // OpenCode route: on every OpenRouter turn it must never leave the
+    // browser. Images always ride along regardless of model vision support —
+    // the backend decides native-vs-described per model
+    // (pen-editor-backend/src/ai/vision-messages.ts).
+    extraHeaders: (requestBody) => {
+      const model = requestBody?.model;
+      if (typeof model !== "string" || !isOpenCodeModel(model)) return undefined;
+      const key = getOpenCodeKey();
+      return key ? { "X-OpenCode-Key": key } : undefined;
+    },
+  });
 }

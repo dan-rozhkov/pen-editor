@@ -23,6 +23,7 @@
     "@modelcontextprotocol/ext-apps": "^1.7.5",
     "@paper-design/shaders-react": "0.0.76",
     "@phosphor-icons/react": "^2.1.10",
+    "@sideform/agent-harness": "github:dan-rozhkov/agent-harness#v0.1.0",
     "@sideform/browser-agent": "github:dan-rozhkov/browser-agent#v0.2.23",
     "@tailwindcss/vite": "^4.3.1",
     "ai": "^6.0.228",

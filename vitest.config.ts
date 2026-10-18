@@ -17,6 +17,10 @@ export default defineConfig({
     },
   },
   test: {
+    // Inline the harness so vi.mock("ai") (useDesignChat tests spy on
+    // DefaultChatTransport) also reaches its imports; externalized
+    // node_modules code would bypass the mock.
+    server: { deps: { inline: ["@sideform/agent-harness"] } },
     environment: "happy-dom",
     // The sanitizer now allowlists a YouTube <iframe> (see
     // sanitizeEmbedHtml.ts). happy-dom, unlike jsdom, performs a real network

@@ -1,14 +1,15 @@
-import { browseTaskInnerBoundMs } from "@sideform/browser-agent/loop";
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
+import { createToolExecutor } from "@sideform/agent-harness/executor";
+import type { RetryState } from "@sideform/agent-harness/retry-fetch";
+import { browseTaskInnerBoundMs } from "@sideform/browser-agent/loop";
 import { track, bucketLength } from "@/lib/analytics";
 import { consumeFirstPromptTiming } from "@/lib/analytics/sessionTiming";
 import { isOffline, OFFLINE_MESSAGE } from "@/lib/apiBase";
 import { getRequestUserId } from "@/lib/auth/authState";
 import { canSendImages } from "@/lib/chatModels";
 import { createChatTransport, resolveChatApiUrl, CLIENT_CAPABILITIES } from "@/lib/chatTransport";
-import type { RetryState } from "@/lib/retryFetch";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
@@ -173,16 +174,6 @@ export function buildCanvasContext(sessionId?: string): object {
     userId: getRequestUserId(),
     clientCapabilities: CLIENT_CAPABILITIES,
   };
-}
-
-// Coarse, PII-free categorization of a tool failure for analytics. Never the
-// raw error message — that can contain user content (file names, prompt
-// fragments echoed back by a handler, etc.).
-function classifyToolError(err: unknown): string {
-  if (err instanceof Error && err.message === "Tool call timed out") {
-    return "timeout";
-  }
-  return "handler_error";
 }
 
 // Default budget for a tool call before we give up and report a timeout to
@@ -363,92 +354,40 @@ export function extractContextTokens(metadata: unknown): number | undefined {
 // from inside it — callers must say which they are. Defaults to "bridge"
 // since `onToolCall` below is the one call site that passes "chat"
 // explicitly; every other caller is a bridge.
-export async function executeToolCall(
+//
+// The generic mechanics (serialization, timeout race, signal merging, error
+// shaping) live in @sideform/agent-harness; only the app policy is here.
+//
+// Serialized at the funnel, rather than at each call site: chat, both MCP
+// bridges and the WebMCP surface all arrive through here, so "two agents
+// cannot interleave scene mutations" is true by construction. Read-only tools
+// are not queued (see toolCallQueue.ts). The timeout starts inside the queued
+// task so a call that waited behind a long batch_design still gets its full
+// budget.
+type ToolCallSource = "chat" | "bridge" | "webmcp" | "browse_agent";
+
+const executeWithHarness = createToolExecutor<ToolExecutionContext, ToolCallSource>({
+  resolveHandler: (toolName) => toolHandlers[toolName],
+  runQueued: runToolCall,
+  timeoutMs: (toolName) => getToolCallTimeoutMs(toolName),
+  onExecuted: (event) => {
+    track("agent_tool_executed", {
+      tool_name: event.toolName,
+      ok: event.ok,
+      duration_ms: event.durationMs,
+      ...(event.errorKind ? { error_kind: event.errorKind } : {}),
+      source: event.source,
+    });
+  },
+});
+
+export function executeToolCall(
   toolName: string,
   input: unknown,
   context?: ToolExecutionContext,
-  source: "chat" | "bridge" | "webmcp" | "browse_agent" = "bridge"
+  source: ToolCallSource = "bridge"
 ): Promise<string> {
-  const startedAt = performance.now();
-  const handler = toolHandlers[toolName];
-  if (!handler) {
-    track("agent_tool_executed", {
-      tool_name: toolName,
-      ok: false,
-      duration_ms: Math.round(performance.now() - startedAt),
-      error_kind: "unknown_tool",
-      source,
-    });
-    return JSON.stringify({ error: `Unknown tool: ${toolName}` });
-  }
-  const args =
-    input != null && typeof input === "object"
-      ? (input as Record<string, unknown>)
-      : {};
-  try {
-    // Serialized here, at the funnel, rather than at each call site: chat,
-    // both MCP bridges and the WebMCP surface all arrive through this
-    // function, so this is the one place where "two agents cannot interleave
-    // scene mutations" can be true by construction instead of by convention.
-    // Read-only tools are not queued (see toolCallQueue.ts).
-    //
-    // The timeout starts inside the queued task, not around it: a call that
-    // waited behind a long batch_design must still get its full budget once
-    // it actually starts, or a busy editor would time out calls that never
-    // ran.
-    //
-    // Every handler gets a signal that fires on the caller's signal (Stop,
-    // abandoned turn) AND on this timeout, so a long tool (browse_task)
-    // stops instead of running on after the model was told it timed out.
-    // The timer is cleared once the call settles.
-    const timeoutAbort = new AbortController();
-    const signal = context?.signal ? AbortSignal.any([context.signal, timeoutAbort.signal]) : timeoutAbort.signal;
-    const handlerContext: ToolExecutionContext = { ...context, signal };
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const result = await runToolCall(toolName, () => {
-      return Promise.race([
-        handler(args, handlerContext),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            timeoutAbort.abort();
-            reject(new Error("Tool call timed out"));
-          }, getToolCallTimeoutMs(toolName));
-        }),
-      ]).finally(() => {
-        if (timer !== undefined) clearTimeout(timer);
-      });
-    });
-    // Handlers report failure as a JSON `{"error": ...}` string rather than
-    // throwing; detect that shape so `ok` reflects the real outcome. Cheap
-    // string check instead of `JSON.parse`-ing every result: some results
-    // (get_screenshot's base64 imageData, export_layers_svg, batch_get) can
-    // be hundreds of KB to several MB, and a full parse just to read one
-    // boolean is a synchronous main-thread cost the analytics layer must
-    // never impose. `executeToolCall`'s own error branches always produce
-    // exactly `{"error": ...}` (see below and the catch block), so a plain
-    // prefix check is sufficient and never a false negative for the shape
-    // this function itself produces.
-    const ok = !result.startsWith('{"error"');
-    track("agent_tool_executed", {
-      tool_name: toolName,
-      ok,
-      duration_ms: Math.round(performance.now() - startedAt),
-      ...(ok ? {} : { error_kind: "handler_error" }),
-      source,
-    });
-    return result;
-  } catch (err) {
-    track("agent_tool_executed", {
-      tool_name: toolName,
-      ok: false,
-      duration_ms: Math.round(performance.now() - startedAt),
-      error_kind: classifyToolError(err),
-      source,
-    });
-    return JSON.stringify({
-      error: err instanceof Error ? err.message : "Tool call failed",
-    });
-  }
+  return executeWithHarness(toolName, input, context, source);
 }
 
 // Exported for tests. Joins the text parts of the LAST user-role message in

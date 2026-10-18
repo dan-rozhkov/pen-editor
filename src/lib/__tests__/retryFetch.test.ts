@@ -1,6 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { createRetryingFetch, type RetryState } from "@/lib/retryFetch";
-import { OFFLINE_MESSAGE } from "@/lib/apiBase";
+import {
+  createRetryingFetch as createHarnessRetryingFetch,
+  type RetryingFetchOptions,
+  type RetryState,
+} from "@sideform/agent-harness/retry-fetch";
+import { isOffline, OFFLINE_MESSAGE } from "@/lib/apiBase";
+import { createChatTransport } from "@/lib/chatTransport";
+
+// Same offline policy chatTransport.ts injects into createHarnessTransport
+// (which builds the production retrying fetch). The test for the transport
+// below proves chatTransport really wires it.
+function createRetryingFetch(options: RetryingFetchOptions): typeof fetch {
+  return createHarnessRetryingFetch({ ...options, isOffline, offlineMessage: OFFLINE_MESSAGE });
+}
 
 // isOffline reads navigator.onLine; toggle it per-test via the mock below.
 let offlineFlag = false;
@@ -404,5 +416,28 @@ describe("createRetryingFetch", () => {
       { attempt: 1, maxAttempts: 3, reason: "http-status", delayMs: 1000 },
       null,
     ]);
+  });
+});
+
+describe("createChatTransport offline policy", () => {
+  beforeEach(() => {
+    offlineFlag = true;
+  });
+
+  it("injects the app's offline check into the retrying fetch it builds", async () => {
+    const err = networkError();
+    const fetchImpl = vi.fn<typeof fetch>().mockRejectedValue(err);
+    const transport = createChatTransport({ body: () => ({}), fetchImpl });
+
+    await expect(
+      transport.sendMessages({
+        trigger: "submit-message",
+        chatId: "c1",
+        messageId: undefined,
+        messages: [{ id: "m1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        abortSignal: undefined,
+      }),
+    ).rejects.toMatchObject({ message: OFFLINE_MESSAGE, cause: err });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });
