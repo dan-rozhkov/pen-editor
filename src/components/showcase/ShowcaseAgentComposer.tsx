@@ -43,7 +43,7 @@ export function ShowcaseAgentComposer({
         onChange={(event) => setPrompt(event.target.value)}
         onKeyDown={handleKeyDown}
         aria-label="Describe your interface concept"
-        placeholder="Ask the design agent to create…"
+        placeholder="Ask Sideform Agent to create…"
         rows={1}
         // iOS Safari zooms focused form controls below 16px. Keep the
         // mobile textarea at 16px, then restore the denser desktop type size.

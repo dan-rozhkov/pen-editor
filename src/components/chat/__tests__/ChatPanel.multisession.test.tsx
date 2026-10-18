@@ -105,7 +105,7 @@ describe("ChatPanel streaming across two sessions", () => {
   async function submitIn(testId: string, text: string) {
     const container = screen.getByTestId(testId);
     const textarea = within(container).getByPlaceholderText(
-      "Ask the design agent...",
+      "Ask Sideform Agent…",
     ) as HTMLTextAreaElement;
     await act(async () => {
       fireEvent.change(textarea, { target: { value: text } });

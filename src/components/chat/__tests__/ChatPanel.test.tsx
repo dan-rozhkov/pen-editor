@@ -88,9 +88,9 @@ beforeEach(() => {
 describe("<ChatPanelContent />", () => {
   it("composes the header, message list and input", () => {
     render(<ChatPanelContent />);
-    expect(screen.getByText("Design Agent").parentElement?.className).toContain("h-[49px]");
+    expect(screen.getByText("Sideform Agent").parentElement?.className).toContain("h-[49px]");
     // MessageList empty state
-    expect(screen.getByText("Ask the design agent anything")).toBeTruthy();
+    expect(screen.getByText("Ask Sideform Agent anything")).toBeTruthy();
     // ChatInput textarea
     expect(screen.getByRole("textbox")).toBeTruthy();
   });
@@ -581,14 +581,14 @@ describe("ChatPanelContent variants", () => {
 
   it("sidebar variant (default) keeps the title row, skills button and expand toggle", () => {
     render(<ChatPanelContent />);
-    expect(screen.getByText("Design Agent")).toBeTruthy();
+    expect(screen.getByText("Sideform Agent")).toBeTruthy();
     expect(screen.getAllByRole("button", { name: "Manage skills" })).toHaveLength(1);
     expect(screen.getByRole("button", { name: /(Expand|Collapse) panel/ })).toBeTruthy();
   });
 
   it("standalone variant has no title row and no expand toggle", () => {
     render(<ChatPanelContent variant="standalone" isVisible />);
-    expect(screen.queryByText("Design Agent")).toBeNull();
+    expect(screen.queryByText("Sideform Agent")).toBeNull();
     expect(screen.queryByRole("button", { name: /(Expand|Collapse) panel/ })).toBeNull();
     expect(screen.getAllByRole("button", { name: "Manage skills" })).toHaveLength(1);
   });

@@ -208,13 +208,13 @@ test("a showcase prompt opens a new agent chat and sends the message", async ({
   });
 
   await page.goto("/");
-  const input = page.getByPlaceholder("Ask the design agent to create…");
+  const input = page.getByPlaceholder("Ask Sideform Agent to create…");
   await input.fill(prompt);
   await input.press("Enter");
 
   await expect(page).toHaveURL(/\/app$/);
   await expectEditorMounted(page);
-  await expect(page.getByText("Design Agent", { exact: true })).toBeVisible();
+  await expect(page.getByText("Sideform Agent", { exact: true })).toBeVisible();
   // The prompt now surfaces twice: the chat derives its title from the first
   // user message, and the message itself sits in the transcript. Assert both
   // rather than a bare getByText, which matches either one ambiguously.

@@ -65,7 +65,7 @@ describe("launchFrameAgentChat", () => {
     expect(launchQueue[activeChatId!]?.text).toBe("go");
   });
 
-  it("reveals the Design Agent panel by switching the left section to agents", async () => {
+  it("reveals the Sideform Agent panel by switching the left section to agents", async () => {
     await launchFrameAgentChat(FRAME_ID, "go");
     expect(useLeftSidebarStore.getState().activeSection).toBe("agents");
   });

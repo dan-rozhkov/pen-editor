@@ -58,7 +58,7 @@ test("AI chat streams a create_plugin tool call, installs it, and it runs from t
   await page.goto("/app");
 
   await openAgentsRail(page);
-  await expect(page.getByText("Design Agent", { exact: true })).toBeVisible();
+  await expect(page.getByText("Sideform Agent", { exact: true })).toBeVisible();
 
   await sendChatMessage(page, "Make me a plugin that inserts a frame");
 

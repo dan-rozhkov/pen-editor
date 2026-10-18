@@ -313,7 +313,7 @@ export function EmbedPromptHost({
                     }}
                     rows={1}
                     onFocus={selectSelf}
-                    placeholder="Ask the design agent..."
+                    placeholder="Ask Sideform Agent…"
                     disabled={sending}
                     className="flex-1 resize-none bg-transparent pl-2 text-sm text-text-primary placeholder:text-text-disabled outline-none min-h-[29px] max-h-[96px] py-1 leading-normal"
                   />

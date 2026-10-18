@@ -4,7 +4,7 @@ export default function TermsPage() {
   return (
     <LegalShell title="Terms of Service">
       <p>
-        These terms govern your use of Sideform (&ldquo;we&rdquo;): the design editor, the AI design agent, and the
+        These terms govern your use of Sideform (&ldquo;we&rdquo;): the design editor, Sideform Agent, and the
         remote MCP server for third-party agents. By using Sideform you agree to them. How we handle personal data is
         described in the <IntLink path="/privacy">Privacy Policy</IntLink>.
       </p>

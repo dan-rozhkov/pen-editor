@@ -16,7 +16,7 @@ function assistantMessage(id: string, text: string): UIMessage {
 describe("<MessageList />", () => {
   it("shows the empty state when there are no messages", () => {
     render(<MessageList messages={[]} isLoading={false} />);
-    expect(screen.getByText("Ask the design agent anything")).toBeTruthy();
+    expect(screen.getByText("Ask Sideform Agent anything")).toBeTruthy();
   });
 
   it("renders a user message bubble", () => {

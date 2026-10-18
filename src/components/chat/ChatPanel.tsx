@@ -697,7 +697,7 @@ export function ChatPanelContent({
       {!isStandalone && (
         <div className="flex h-[49px] items-center gap-2 px-4 py-3 border-b border-border-default shrink-0">
           <span className="text-sm font-medium text-text-primary flex-1">
-            Design Agent
+            Sideform Agent
           </span>
           {skillsButton}
           <Tooltip>
