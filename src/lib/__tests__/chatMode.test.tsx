@@ -39,6 +39,23 @@ describe("isChatDisabled", () => {
     expect(isChatDisabled()).toBe(expected);
   });
 
+  it("is true when the desktop preload exposes agentLayout, even without the URL flag", () => {
+    setSearch("");
+    window.penDesktop = { agentLayout: true, onMenuCommand: () => () => {} };
+    try {
+      expect(isChatDisabled()).toBe(true);
+    } finally {
+      delete window.penDesktop;
+    }
+    setSearch("");
+    window.penDesktop = { agentLayout: false, onMenuCommand: () => () => {} };
+    try {
+      expect(isChatDisabled()).toBe(false);
+    } finally {
+      delete window.penDesktop;
+    }
+  });
+
   it("is sticky once seen ON: an SPA navigate that drops the query keeps it on", () => {
     setSearch("?chat=off");
     expect(isChatDisabled()).toBe(true);

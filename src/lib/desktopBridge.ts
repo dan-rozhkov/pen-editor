@@ -21,6 +21,8 @@ export type DesktopBrowserBridge = BrowserBridge &
 
 export interface PenDesktopApi {
   setDocumentTitle?(title: string): void;
+  /** true when the desktop agent layout flag is on: the editor tab is chatless. */
+  agentLayout?: boolean;
   onMenuCommand(cb: (commandId: string) => void): () => void;
   /**
    * Registers this tab as the target for the desktop shell's loopback MCP

@@ -21,6 +21,9 @@
  * calls (shared canvas fork, showcase "open editor") drop the query string but
  * not the mode. A full reload of a URL without the flag re-enables the chat.
  *
+ * `window.penDesktop?.agentLayout === true` (desktop agent layout) also
+ * disables the chat, so a reload that lost the query stays chatless.
+ *
  * What chatless mode does NOT do: it keeps `loadModels()` (the same response
  * carries image-ops capabilities and vision metadata used by non-chat tooling)
  * and it never consumes the showcase agent prompt — that stays untouched in
@@ -45,6 +48,11 @@ let seenOn = false;
 export function isChatDisabled(): boolean {
   if (seenOn) return true;
   try {
+    // The desktop agent layout is chatless even if a reload dropped `?chat=off`.
+    if (window.penDesktop?.agentLayout === true) {
+      seenOn = true;
+      return true;
+    }
     const value = new URLSearchParams(window.location.search).get("chat");
     seenOn = value !== null && OFF_VALUES.has(value.toLowerCase());
   } catch {
