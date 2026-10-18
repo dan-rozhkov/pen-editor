@@ -37,8 +37,8 @@ export const PLACE_NODE_TIMEOUT_MS = 30_000;
 export const PRE_START_TIMEOUT_MS = 10 * 60_000;
 const MAX_ENDED_STREAMS = 500;
 
-export const TAB_CLOSED_ERROR = JSON.stringify({ error: "The canvas tab was closed." });
 const TAB_CLOSED_ERROR_OBJ = { error: "The canvas tab was closed." };
+export const TAB_CLOSED_ERROR = JSON.stringify(TAB_CLOSED_ERROR_OBJ);
 const errorResult = (message: string) => JSON.stringify({ error: message });
 
 export interface Binding {
@@ -79,6 +79,32 @@ export interface CallOptions {
 
 type Outgoing = ChatToCanvasMsg;
 
+/** What the one binding path (`establish`) is asked to do. */
+interface EstablishSpec {
+  /**
+   * Return the chat's live binding when it has one (the implicit bind), or, for an explicit bind,
+   * when a bind of this chat finished while this call waited its turn: concurrent binds JOIN
+   * the first one instead of opening a second tab.
+   */
+  reuseLive: boolean;
+  /** Choose a registered tab from the fresh list; undefined = none (open one, if `open`). */
+  find?: (tabs: CanvasTabInfo[]) => CanvasTabInfo | undefined;
+  /** Open a tab when `find` chose none. */
+  open?: { activate: boolean };
+  /** Activate the tab that was found or reused. */
+  activate?: boolean;
+  /** A failing `listTabs()` is judged by the last known list instead of failing. */
+  tolerateListFailure?: boolean;
+  /** Prefetch the new tab's context (so the request after a switch does not lose its `canvasContext`). */
+  prime?: boolean;
+  /** Checked before anything with a side effect; NOT after `openTab()` resolved (the tab exists then). */
+  signal?: AbortSignal;
+}
+
+type Established =
+  | { ok: true; binding: Binding; opened: boolean }
+  | { ok: false; reason: "aborted" | "closed" | "unavailable" | "not_listed" };
+
 interface Stream {
   sessionId: string;
   encoder: AppendEncoder;
@@ -112,7 +138,14 @@ export class PanelClient {
   private readonly seenLaunches = new Set<string>();
   private tabs: CanvasTabInfo[] = [];
   private readonly bindings = new Map<string, Binding>();
-  private readonly binding$ = new Map<string, Promise<Binding | null>>();
+  /** Per chat: the tail of the queue of binds in flight (see `establish`). Present = a bind is running. */
+  private readonly binding$ = new Map<string, Promise<void>>();
+  /** Per chat: how many bindings were set; a joining bind compares it to know one finished meanwhile. */
+  private readonly bindGeneration = new Map<string, number>();
+  /** Per chat: whether the last binding was made by opening a tab (reported to a joining bind). */
+  private readonly lastOpened = new Map<string, boolean>();
+  /** The model each chat last asked for a context with (used when a context is prefetched). */
+  private readonly models = new Map<string, string>();
   private readonly latched = new Set<string>();
   private readonly streams = new Map<string, Stream>();
   /** Calls whose stream is closed: a late frame for one must not reopen it. */
@@ -149,11 +182,10 @@ export class PanelClient {
   }
 
   /**
-   * Binds a chat to a given canvas tab (the sender of a `launch`), replacing any binding.
-   * Looks the registration up in the tab list (refreshed first). Null = the tab is not
-   * listed or its registration is latched; the chat stays as it was.
+   * Looks a tab up in the (refreshed) tab list. Null = not listed or its registration is latched.
+   * Binds nothing: lets a caller check a tab before it creates a chat for it.
    */
-  async bindTo(sessionId: string, tabId: number): Promise<Binding | null> {
+  async probeTab(tabId: number): Promise<Binding | null> {
     try {
       this.tabs = await this.bridge.listTabs();
     } catch {
@@ -162,21 +194,41 @@ export class PanelClient {
     const listed = this.tabs.find((t) => t.tabId === tabId);
     if (!listed) return null;
     const binding = { tabId: listed.tabId, registrationId: listed.registrationId };
-    if (this.latched.has(keyOf(binding))) return null;
-    if (this.bindings.get(sessionId) && keyOf(this.bindings.get(sessionId)!) !== keyOf(binding)) this.lastContext.delete(sessionId);
-    this.bindings.set(sessionId, binding);
-    return binding;
+    return this.latched.has(keyOf(binding)) ? null : binding;
+  }
+
+  /**
+   * Binds a chat to a given canvas tab (the sender of a `launch`), replacing any binding, and
+   * primes the chat's context from it. Null = the tab is not listed or its registration is
+   * latched; the chat stays as it was.
+   */
+  async bindTo(sessionId: string, tabId: number): Promise<Binding | null> {
+    const r = await this.establish(sessionId, {
+      reuseLive: false,
+      find: (tabs) => tabs.find((t) => t.tabId === tabId),
+      tolerateListFailure: true,
+      prime: true,
+    });
+    return r.ok ? r.binding : null;
+  }
+
+  /** Tells a canvas tab its `launch` was handled (no `error`) or refused (`error`). */
+  ackLaunch(tabId: number, launchId: string, error?: string): void {
+    this.post(tabId, { kind: "launch-ack", launchId, ...(error ? { error } : {}) });
   }
 
   /** Forgets a chat's binding (not the tab). */
   forgetSession(sessionId: string): void {
     this.dropBinding(sessionId);
+    this.bindGeneration.delete(sessionId);
+    this.models.delete(sessionId);
   }
 
   /** A binding is gone for good (forgotten or latched): the context of its document goes with it. */
   private dropBinding(sessionId: string): void {
     this.bindings.delete(sessionId);
     this.lastContext.delete(sessionId);
+    this.lastOpened.delete(sessionId);
   }
 
   // ---- sending -------------------------------------------------------------
@@ -210,39 +262,110 @@ export class PanelClient {
     return b;
   }
 
-  /** Resolve per docs/canvas-link.md "Binding"; shares one in-flight resolution per chat. */
-  private bind(sessionId: string): Promise<Binding | null> {
-    const live = this.liveBinding(sessionId);
-    if (live) return Promise.resolve(live);
-    const inFlight = this.binding$.get(sessionId);
-    if (inFlight) return inFlight;
-    const p = this.resolveBinding(sessionId).finally(() => {
-      this.binding$.delete(sessionId);
+  /** Resolve per docs/canvas-link.md "Binding"; queued behind any bind of this chat in flight. */
+  private async bind(sessionId: string): Promise<Binding | null> {
+    if (!this.binding$.has(sessionId)) {
+      const live = this.liveBinding(sessionId);
+      if (live) return live;
+    }
+    const r = await this.establish(sessionId, {
+      reuseLive: true,
+      find: (tabs) => tabs.find((t) => !this.latched.has(keyOf(t))),
+      // `openTab()` answers with the registration it waited for (see `establish`).
+      open: { activate: false },
     });
-    this.binding$.set(sessionId, p);
-    return p;
+    return r.ok ? r.binding : null;
   }
 
-  private async resolveBinding(sessionId: string): Promise<Binding | null> {
+  /**
+   * THE binding path: `bind` (implicit), `bindExplicit` and `bindTo` all go through here. Binds of one
+   * chat run one after another (`binding$` is the queue), so two concurrent binds never open two tabs
+   * or overwrite each other. Picks a listed tab (or opens one), checks abort / latch BEFORE any side effect,
+   * sets the binding. Never rejects.
+   *
+   * `openTab()` answers with the registration it waited for: it is never looked up in the tab list,
+   * which may not have announced the new tab yet (a guessed registrationId would later read as a
+   * reload and latch the tab).
+   */
+  private establish(sessionId: string, spec: EstablishSpec): Promise<Established> {
+    const joined = this.binding$.has(sessionId);
+    const generation = this.bindGeneration.get(sessionId) ?? 0;
+    const prev = this.binding$.get(sessionId) ?? Promise.resolve();
+    const run = prev.then(() => this.establishNow(sessionId, spec, joined, generation));
+    const tail = run.then(
+      () => undefined,
+      () => undefined
+    );
+    this.binding$.set(sessionId, tail);
+    void tail.then(() => {
+      if (this.binding$.get(sessionId) === tail) this.binding$.delete(sessionId);
+    });
+    return run;
+  }
+
+  private async establishNow(
+    sessionId: string,
+    spec: EstablishSpec,
+    joined: boolean,
+    generationAtEntry: number
+  ): Promise<Established> {
     try {
-      const listed = await this.bridge.listTabs();
-      this.tabs = listed;
-      const usable = listed.find((t) => !this.latched.has(`${t.tabId}:${t.registrationId}`));
-      let binding: Binding | null = usable ? { tabId: usable.tabId, registrationId: usable.registrationId } : null;
-      if (!binding) {
-        // `openTab()` answers with the registration it waited for: never look it up
-        // in the tab list, which may not have announced the new tab yet (binding with a
-        // guessed registrationId would later read as a reload and latch the tab).
-        const opened = await this.bridge.openTab();
-        if (!opened || typeof opened.tabId !== "number" || typeof opened.registrationId !== "number") return null;
-        binding = { tabId: opened.tabId, registrationId: opened.registrationId };
+      if (spec.signal?.aborted) return { ok: false, reason: "aborted" };
+      const live = this.liveBinding(sessionId);
+      const bindFinishedMeanwhile = joined && (this.bindGeneration.get(sessionId) ?? 0) !== generationAtEntry;
+      if (live && (spec.reuseLive || bindFinishedMeanwhile)) {
+        if (spec.activate) this.bridge.activateTab(live.tabId);
+        return { ok: true, binding: live, opened: this.lastOpened.get(sessionId) ?? false };
       }
-      if (this.latched.has(keyOf(binding))) return null;
+      try {
+        this.tabs = await this.bridge.listTabs();
+      } catch (err) {
+        if (!spec.tolerateListFailure) throw err;
+      }
+      let binding: Binding | null = null;
+      let opened = false;
+      const found = spec.find?.(this.tabs);
+      if (found) {
+        binding = { tabId: found.tabId, registrationId: found.registrationId };
+        if (spec.signal?.aborted) return { ok: false, reason: "aborted" };
+        if (this.latched.has(keyOf(binding))) return { ok: false, reason: "closed" };
+        if (spec.activate) this.bridge.activateTab(binding.tabId);
+      } else if (spec.open) {
+        if (spec.signal?.aborted) return { ok: false, reason: "aborted" };
+        const made = spec.open.activate ? await this.bridge.openTab({ activate: true }) : await this.bridge.openTab();
+        if (!made || typeof made.tabId !== "number" || typeof made.registrationId !== "number") {
+          return { ok: false, reason: "unavailable" };
+        }
+        binding = { tabId: made.tabId, registrationId: made.registrationId };
+        opened = true;
+        // The tab exists now: bind it even if the call was aborted meanwhile.
+        if (this.latched.has(keyOf(binding))) return { ok: false, reason: "closed" };
+      } else {
+        return { ok: false, reason: "not_listed" };
+      }
+      const previous = this.bindings.get(sessionId);
+      const switched = !previous || keyOf(previous) !== keyOf(binding);
+      if (switched) this.lastContext.delete(sessionId);
       this.bindings.set(sessionId, binding);
-      return binding;
+      this.bindGeneration.set(sessionId, (this.bindGeneration.get(sessionId) ?? 0) + 1);
+      this.lastOpened.set(sessionId, opened);
+      if (spec.prime && (switched || !this.lastContext.has(sessionId))) await this.primeContext(sessionId);
+      return { ok: true, binding, opened };
     } catch {
-      return null;
+      return { ok: false, reason: "unavailable" };
     }
+  }
+
+  /**
+   * Fills `lastContext` from the freshly bound tab (up to `CONTEXT_TIMEOUT_MS`). On failure it holds
+   * `{}` (an empty scene), NOT nothing: a chat that has a tab keeps sending a `canvasContext` field, so the
+   * system prompt (the pointer block) does not flip because of a slow tab. The old tab's context is
+   * never kept: its ids do not exist in the new document.
+   */
+  private async primeContext(sessionId: string): Promise<void> {
+    const fresh = await this.fetchContext(sessionId, this.models.get(sessionId) ?? "");
+    if (!this.liveBinding(sessionId)) return; // latched meanwhile: its context goes with it
+    this.lastContext.set(sessionId, fresh ?? "{}");
   }
 
   /**
@@ -250,12 +373,12 @@ export class PanelClient {
    * first message of a chat can carry that tab's `canvasContext`. No tab: stays unbound.
    */
   private async bindPassively(sessionId: string): Promise<void> {
-    if (this.binding$.has(sessionId)) return; // a call is resolving (maybe opening) it
+    if (this.binding$.has(sessionId)) return; // a bind is running (maybe opening a tab)
     try {
       const listed = await this.bridge.listTabs();
       this.tabs = listed;
       if (this.liveBinding(sessionId) || this.binding$.has(sessionId)) return;
-      const usable = listed.find((t) => !this.latched.has(`${t.tabId}:${t.registrationId}`));
+      const usable = listed.find((t) => !this.latched.has(keyOf(t)));
       if (usable) this.bindings.set(sessionId, { tabId: usable.tabId, registrationId: usable.registrationId });
     } catch {
       // Stays unbound.
@@ -266,55 +389,38 @@ export class PanelClient {
    * Explicit (model-requested) binding, for `open_canvas_tab`. "current": the first usable
    * listed tab (most recently active), opened if there is none, and activated. "new": a freshly
    * opened, activated tab. The chat's previous tab is released WITHOUT latching it (other chats may
-   * still use it); the chat's remembered context goes, so the next request carries the new tab's.
-   * Never rejects.
+   * still use it); its context goes and the new tab's is prefetched. Concurrent binds of the chat are
+   * serialized and joined (see `establish`). An abort stops the call before it opens or activates
+   * anything; once the tab was opened it is bound and reported as a success. Never rejects.
    */
   async bindExplicit(
     sessionId: string,
     target: "new" | "current",
     signal?: AbortSignal
   ): Promise<{ tabId: number; title: string; opened: boolean } | { error: string }> {
-    const aborted = { error: "Tool call aborted" };
-    if (signal?.aborted) return aborted;
-    try {
-      // A call resolving this chat's binding right now must not overwrite ours afterwards.
-      await this.binding$.get(sessionId);
-      let binding: Binding | null = null;
-      let opened = false;
-      if (target === "current") {
-        const listed = await this.bridge.listTabs();
-        this.tabs = listed;
-        const usable = listed.find((t) => !this.latched.has(`${t.tabId}:${t.registrationId}`));
-        if (usable) binding = { tabId: usable.tabId, registrationId: usable.registrationId };
-      }
-      if (!binding) {
-        const made = await this.bridge.openTab({ activate: true });
-        if (!made || typeof made.tabId !== "number" || typeof made.registrationId !== "number") {
-          return { error: "Could not open a canvas tab." };
-        }
-        binding = { tabId: made.tabId, registrationId: made.registrationId };
-        opened = true;
-      } else {
-        this.bridge.activateTab(binding.tabId);
-      }
-      if (signal?.aborted) return aborted;
-      if (this.latched.has(keyOf(binding))) return TAB_CLOSED_ERROR_OBJ;
-      const previous = this.bindings.get(sessionId);
-      if (!previous || keyOf(previous) !== keyOf(binding)) this.lastContext.delete(sessionId);
-      this.bindings.set(sessionId, binding);
-      let title = this.tabs.find((t) => t.tabId === binding!.tabId)?.title;
-      if (title === undefined) {
-        try {
-          this.tabs = await this.bridge.listTabs();
-          title = this.tabs.find((t) => t.tabId === binding!.tabId)?.title;
-        } catch {
-          // Keep the fallback.
-        }
-      }
-      return { tabId: binding.tabId, title: title ?? "Untitled", opened };
-    } catch {
-      return { error: "Could not open a canvas tab." };
+    const r = await this.establish(sessionId, {
+      reuseLive: false,
+      find: target === "current" ? (tabs) => tabs.find((t) => !this.latched.has(keyOf(t))) : undefined,
+      open: { activate: true },
+      activate: true,
+      prime: true,
+      signal,
+    });
+    if (!r.ok) {
+      if (r.reason === "aborted") return { error: "Tool call aborted" };
+      return r.reason === "closed" ? TAB_CLOSED_ERROR_OBJ : { error: "Could not open a canvas tab." };
     }
+    const { binding, opened } = r;
+    let title = this.tabs.find((t) => t.tabId === binding.tabId)?.title;
+    if (title === undefined) {
+      try {
+        this.tabs = await this.bridge.listTabs();
+        title = this.tabs.find((t) => t.tabId === binding.tabId)?.title;
+      } catch {
+        // Keep the fallback.
+      }
+    }
+    return { tabId: binding.tabId, title: title ?? "Untitled", opened };
   }
 
   // ---- streaming -----------------------------------------------------------
@@ -544,6 +650,7 @@ export class PanelClient {
    * timeout; empty) the last one this chat received, or null if it never got one.
    */
   async requestContext(sessionId: string, model: string): Promise<string | null> {
+    this.models.set(sessionId, model);
     // A chat that never called a canvas tool still has the document of the first tab.
     if (!this.liveBinding(sessionId)) await this.bindPassively(sessionId);
     const fresh = await this.fetchContext(sessionId, model);

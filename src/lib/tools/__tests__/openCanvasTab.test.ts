@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openCanvasTab } from "../openCanvasTab";
-import { getPanelClient, panelCallTool, resetPanelRuntimeForTests } from "@/lib/canvasLink/panelRuntime";
+import { getPanelClient, panelCallTool, resetPanelRuntimeForTests, withPanelCanvasContext } from "@/lib/canvasLink/panelRuntime";
 import { attachScriptedCanvas, createFakeCanvasBridge, tab } from "@/lib/canvasLink/__tests__/fakeCanvasBridge";
 
 type PanelApi = NonNullable<Window["penAgentPanel"]>;
 
-function installPanel(tabs = [tab(1), tab(2)]) {
+function installPanel(tabs = [tab(1), tab(2)], answerContext = true) {
   const fake = createFakeCanvasBridge(tabs);
+  // Every tab answers `context-request` (a bind prefetches the new tab's context).
+  if (answerContext) attachScriptedCanvas(fake, { context: "{}" });
   window.penAgentPanel = { version: 2, canvas: fake.bridge, browser: {} as PanelApi["browser"] };
   return fake;
 }
@@ -49,9 +51,9 @@ describe("open_canvas_tab", () => {
   });
 
   it("new: opens, rebinds, sends later calls to the new tab and does not latch the old one", async () => {
-    const fake = installPanel();
+    const fake = installPanel(undefined, false);
+    attachScriptedCanvas(fake, { onCall: () => "ok", context: "{}" });
     const seen: number[] = [];
-    attachScriptedCanvas(fake, { onCall: () => "ok" });
     fake.onPost(({ tabId, env }) => {
       if (env.msg.kind === "call") seen.push(tabId);
     });
@@ -68,7 +70,7 @@ describe("open_canvas_tab", () => {
   });
 
   it("new: clears the remembered context so the next request carries the new tab's", async () => {
-    const fake = installPanel();
+    const fake = installPanel(undefined, false);
     fake.onPost(({ tabId, env }) => {
       if (env.msg.kind !== "context-request") return;
       const reqId = env.msg.reqId;
@@ -91,14 +93,112 @@ describe("open_canvas_tab", () => {
     expect(getPanelClient()!.getBinding("chat")).toBeNull();
   });
 
-  it("does not bind when aborted while the tab opens", async () => {
-    const fake = installPanel();
+  it("an abort that lands after openTab() resolved still binds the opened tab and succeeds", async () => {
+    const fake = installPanel([]);
     const release = fake.holdOpen();
     const ac = new AbortController();
     const p = run({ target: "new" }, { sessionId: "chat", signal: ac.signal });
+    await vi.waitFor(() => expect(fake.openTab).toHaveBeenCalled());
     ac.abort();
     release();
+    expect(await p).toMatchObject({ tabId: 100, opened: true });
+    expect(getPanelClient()!.getBinding("chat")).toEqual({ tabId: 100, registrationId: 1 });
+  });
+
+  it("current: an abort before the call runs never switches the user's tab", async () => {
+    const fake = installPanel();
+    const activate = vi.spyOn(fake.bridge, "activateTab");
+    const ac = new AbortController();
+    const release = fake.holdOpen(); // keeps the first bind busy so the aborted call waits its turn
+    const first = run({ target: "new" }, { sessionId: "chat" });
+    const p = run({ target: "current" }, { sessionId: "chat", signal: ac.signal });
+    await vi.waitFor(() => expect(fake.openTab).toHaveBeenCalled());
+    ac.abort();
+    release();
+    await first;
     expect((await p).error).toBeTruthy();
-    expect(getPanelClient()!.getBinding("chat")).toBeNull();
+    expect(activate).not.toHaveBeenCalled(); // not even the tab the first call opened and bound
+    expect(fake.openTab).toHaveBeenCalledTimes(1);
+  });
+
+  it("current: a latched tab is not activated", async () => {
+    const fake = installPanel([tab(1)]);
+    const activate = vi.spyOn(fake.bridge, "activateTab");
+    getPanelClient();
+    fake.emit(1, { kind: "tab-gone", registrationId: 1 });
+    const r = await run({ target: "current" });
+    expect(r).toMatchObject({ opened: true }); // the latched tab is skipped, a new one opens
+    expect(activate).not.toHaveBeenCalledWith(1);
+  });
+
+  it("concurrent open_canvas_tab(current) and a canvas tool frame open ONE tab", async () => {
+    const fake = installPanel([]);
+    const release = fake.holdOpen();
+    const seen: number[] = [];
+    fake.onPost(({ tabId, env }) => {
+      if (env.msg.kind === "call") seen.push(tabId);
+    });
+    const callP = call("c1");
+    const explicit = run({ target: "current" });
+    await vi.waitFor(() => expect(fake.openTab).toHaveBeenCalledTimes(1));
+    release();
+    const [result] = await Promise.all([explicit, callP]);
+    expect(fake.openTab).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ tabId: 100 });
+    expect(seen).toEqual([100]);
+    expect(getPanelClient()!.getBinding("chat")).toEqual({ tabId: 100, registrationId: 1 });
+  });
+
+  it("two parallel open_canvas_tab(new) open ONE tab and report the same one", async () => {
+    const fake = installPanel([]);
+    const release = fake.holdOpen();
+    const a = run({ target: "new" });
+    const b = run({ target: "new" });
+    await vi.waitFor(() => expect(fake.openTab).toHaveBeenCalledTimes(1));
+    release();
+    const [ra, rb] = await Promise.all([a, b]);
+    expect(fake.openTab).toHaveBeenCalledTimes(1);
+    expect(ra).toEqual(rb);
+    expect(ra).toMatchObject({ tabId: 100, opened: true });
+  });
+
+  it("a later (not concurrent) new still opens a fresh tab", async () => {
+    const fake = installPanel([]);
+    await run({ target: "new" });
+    await run({ target: "new" });
+    expect(fake.openTab).toHaveBeenCalledTimes(2);
+    expect(getPanelClient()!.getBinding("chat")).toEqual({ tabId: 101, registrationId: 1 });
+  });
+
+  it("primes the new tab's context during the bind, before any request of the chat asks for it", async () => {
+    const fake = installPanel(undefined, false);
+    const asked: number[] = [];
+    fake.onPost(({ tabId, env }) => {
+      if (env.msg.kind !== "context-request") return;
+      asked.push(tabId);
+      const reqId = env.msg.reqId;
+      const canvasContext = tabId === 100 ? '{"d":"new"}' : '{"d":"old"}';
+      queueMicrotask(() => fake.emit(tabId, { kind: "context-response", reqId, canvasContext }));
+    });
+    await run({ target: "new" });
+    expect(asked).toEqual([100]);
+  });
+
+  it("falls back to an empty scene context ({}), not to none, when the new tab does not answer", async () => {
+    vi.useFakeTimers();
+    try {
+      installPanel([tab(1)], false); // nobody answers context requests
+      const p = run({ target: "current" });
+      await vi.advanceTimersByTimeAsync(2100);
+      expect(await p).toMatchObject({ tabId: 1 });
+      const remote = getPanelClient()!.requestContext("chat", "m");
+      await vi.advanceTimersByTimeAsync(2100);
+      expect(await remote).toBe("{}");
+      const withCtx = withPanelCanvasContext("chat", { model: "m" });
+      await vi.advanceTimersByTimeAsync(2100);
+      expect(await withCtx).toEqual({ model: "m", canvasContext: "{}" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

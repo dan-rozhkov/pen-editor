@@ -33,3 +33,9 @@ describe("getToolCallTimeoutMs browse_* desktop/cloud split", () => {
     expect(getToolCallTimeoutMs("generate_image")).toBe(95_000);
   });
 });
+
+describe("getToolCallTimeoutMs open_canvas_tab", () => {
+  it("leaves room for a cold canvas tab load", () => {
+    expect(getToolCallTimeoutMs("open_canvas_tab")).toBe(60_000);
+  });
+});

@@ -6,6 +6,12 @@ import { sse, textTurn } from "@/test/sseStream";
 import { setPenDesktop, stubBrowser, type PenDesktopBrowser } from "./helpers";
 import { BROWSE_AGENT_DEADLINE_MS, browseAgent, nestedChatId } from "../browseAgent";
 
+// The agent panel advertises canvasTabs; the sub-agent request must still not.
+vi.mock("@/lib/chatTransport", async (importActual) => {
+  const actual = await importActual<typeof import("@/lib/chatTransport")>();
+  return { ...actual, CLIENT_CAPABILITIES: { ...actual.CLIENT_CAPABILITIES, canvasTabs: true } };
+});
+
 const toolTurn = (toolName: string, input: unknown, toolCallId = "call-1"): Response =>
   sse([
     { type: "start" },
@@ -478,6 +484,13 @@ describe("browse_agent QA mode", () => {
     captured = stubFetch([() => textTurn("done")]);
     await run(true);
     expect((captured[0].body.clientCapabilities as { browseAssert: boolean }).browseAssert).toBe(true);
+  });
+
+  it("the nested turn never advertises canvasTabs (no open_canvas_tab for the sub-agent)", async () => {
+    setPenDesktop(stubBrowser());
+    const captured = stubFetch([() => textTurn("done")]);
+    await run(true);
+    expect((captured[0].body.clientCapabilities as { canvasTabs: boolean }).canvasTabs).toBe(false);
   });
 
   it("qa_assert is not callable when the bridge has no assert", async () => {

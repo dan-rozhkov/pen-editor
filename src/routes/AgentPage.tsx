@@ -1,8 +1,10 @@
+import { useEffect } from "react";
 import { Navigate } from "react-router";
 import { EditorProviders } from "@/components/EditorProviders";
 import { ChatPanelContent } from "@/components/chat/ChatPanel";
 import { useChatBootstrap } from "@/hooks/useChatBootstrap";
 import { isAgentPanelHost } from "@/lib/agentPanel";
+import { startPanelRuntime } from "@/lib/canvasLink/panelRuntime";
 
 /**
  * "/agent": the agent chat on its own (chat list + open chat), full height.
@@ -17,6 +19,10 @@ export default function AgentPage() {
 
 function AgentPanel() {
   useChatBootstrap();
+  // The canvas-link client listens from the start, not from the first chat request (canvas `launch`es).
+  useEffect(() => {
+    startPanelRuntime();
+  }, []);
   return (
     <EditorProviders>
       <div className="h-dvh w-full overflow-hidden bg-surface-panel">

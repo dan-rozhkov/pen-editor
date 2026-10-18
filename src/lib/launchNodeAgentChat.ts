@@ -1,10 +1,6 @@
-import { isChatDisabled } from "@/lib/chatMode";
 import { captureNodeScreenshot } from "@/lib/captureNodeScreenshot";
-import { useChatStore } from "@/store/chatStore";
+import { canLaunchAgent, launchAgentChat } from "@/lib/canvasLink/agentLaunch";
 import { useSceneStore } from "@/store/sceneStore";
-import { useLeftSidebarStore } from "@/store/leftSidebarStore";
-import { useSelectionStore } from "@/store/selectionStore";
-import { deliverAgentLaunch, isCanvasHostRunning } from "@/lib/canvasLink/agentLaunch";
 import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
 
 /**
@@ -12,13 +8,11 @@ import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
  * becomes the first message, optionally with a screenshot of the node attached
  * as visual context. Creates a fresh chat, queues the launch payload (the
  * session's auto-send effect delivers it once ready), and reveals the agents
- * panel.
+ * panel (`launchAgentChat`, which also routes the launch to the agent panel from a
+ * chatless tab with a running canvas host; the selection is not touched either way).
  *
- * Returns false (no side effects) when the text is empty/whitespace.
- *
- * Chatless tab (`isChatDisabled()`): with a running canvas host the launch goes to
- * the agent panel instead (`deliverAgentLaunch`, new chat, node selected first so
- * it rides in the bound tab's `canvasContext`); without a host it returns false.
+ * Returns false (no side effects) when the text is empty/whitespace, or when
+ * nothing can take the launch (chatless tab without a host, or the agent panel did not answer).
  *
  * `opts.attachScreenshot` (default false) controls whether a PixiJS screenshot
  * is attached — the node's id already rides along in the next request's
@@ -32,8 +26,7 @@ export async function launchNodeAgentChat(
   opts: { attachScreenshot?: boolean } = {},
 ): Promise<boolean> {
   // Defence in depth: the UI entry points are hidden without `canLaunchAgent()`.
-  const remote = isChatDisabled();
-  if (remote && !isCanvasHostRunning()) return false;
+  if (!canLaunchAgent()) return false;
   const { attachScreenshot = false } = opts;
   const trimmed = text.trim();
   if (!trimmed) return false;
@@ -46,21 +39,5 @@ export async function launchNodeAgentChat(
   }
 
   const payload: ChatLaunchPayload = { text: trimmed, images };
-
-  if (remote) {
-    // The agent panel reads the selection from this tab's canvasContext.
-    const selection = useSelectionStore.getState();
-    if (!selection.selectedIds.includes(nodeId)) selection.setSelectedIds([nodeId]);
-    return deliverAgentLaunch({ ...payload, nodeIds: [nodeId], target: "new-chat" });
-  }
-
-  const chatId = useChatStore.getState().createChat();
-  useChatStore.getState().queueLaunchPayload(chatId, payload);
-  // Reveal the agents section AND open the panel: on a narrow (mobile) layout
-  // LeftSidebar unmounts entirely while collapsed, which would leave the queued
-  // message stranded with no session mounted to auto-send it.
-  useLeftSidebarStore.getState().setActiveSection("agents");
-  useLeftSidebarStore.getState().setPanelOpen(true);
-
-  return true;
+  return launchAgentChat(payload);
 }

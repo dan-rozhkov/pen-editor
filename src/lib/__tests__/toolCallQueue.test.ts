@@ -26,6 +26,10 @@ describe("isSerializedTool", () => {
     expect(isSerializedTool("a_tool_added_next_week")).toBe(true);
   });
 
+  it("does not serialize open_canvas_tab (it touches no scene; a cold tab load is slow)", () => {
+    expect(isSerializedTool("open_canvas_tab")).toBe(false);
+  });
+
   it("does not serialize the listed read-only tools", () => {
     for (const name of UNSERIALIZED_TOOL_NAMES) {
       expect(isSerializedTool(name), name).toBe(false);

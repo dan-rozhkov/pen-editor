@@ -34,6 +34,7 @@ first canvas tool of a turn with no live binding:
 registers (a reloaded tab keeps its `tabId`, gets a new `registrationId`).
 A `tab-gone` (it carries `registrationId`) for the bound registration clears the binding (latch, see below) AND the chat's remembered `canvasContext` (the closed document's context is never sent again).
 A main `error` for a `call`/`context-request` whose bound tab is no longer in the tab list latches that registration the same way, so the next call rebinds.
+Binds of one chat are serialized (`open_canvas_tab` and a canvas tool frame, or two parallel "new", join one bind instead of opening two tabs).
 **Passive bind for context:** a chat with no live binding, asked for its `canvasContext`, binds to the first registered canvas tab WITHOUT opening one, so the first message of a new chat already carries that tab's context. With no canvas tab it stays unbound.
 
 ## Channels (desktop)
@@ -100,17 +101,25 @@ See `protocol.ts`. Rules:
   (node without position; `options` = `{x?, y?, size}`) to the bound canvas tab,
   which runs the real `placeNodeOnCanvas` and answers `result` with
   `{"id","x","y"}` or `{"error":...}`.
-- **`launch`** (canvas → chat, `{launchId, payload: {text, images?, nodeIds?, target?}}`):
+- **`launch`** (canvas → chat, `{launchId, payload: {text, images?, target?}}`):
   an on-canvas agent entry point fired in the chatless tab (frame/embed/element
   button, empty-embed composer, comment "Send to agent", the showcase prompt). Entry
   points are shown when `canLaunchAgent()` = chat enabled OR the canvas host runs;
-  they call `deliverAgentLaunch`, which posts this instead of launching locally.
+  they call `launchAgentChat`, which posts this (`deliverAgentLaunch`) instead of launching locally.
   Main forwards it untouched. The panel creates a new chat (`target` "new-chat",
   default, as every local helper does) or reuses its active chat ("active-chat"),
   binds that chat to the SENDING tab (`bindTo`: its `registrationId` is looked up in
   the tab list), queues `{text, images}` for the normal auto-send and handles each
-  `launchId` once. The tab selects the node(s) before sending, so the selection
-  reaches the chat through `canvasContext`; `nodeIds` is informational.
+  `launchId` once. A local launch does not select a node or put it in the prompt, so
+  neither does a remote one (no `nodeIds`); the tab's own selection rides in `canvasContext`.
+  "active-chat" reuses the active chat only if it is idle and unbound or bound to the
+  sending tab. The panel answers every launch with `launch-ack`.
+- **`launch-ack`** (chat → canvas, `{launchId, error?}`): the launch was handled, or
+  (`error`) refused (the sending tab is not listed or its registration is latched; the
+  panel then shows nothing). The tab waits 3 s: no ack, or an error, shows a toast
+  ("The agent panel did not respond.") and the entry point returns false. The showcase
+  prompt stays in sessionStorage until the ack. The panel's client exists from the
+  moment `/agent` mounts, so a launch before the first message is received.
 - **`cancel`** aborts a running call (the canvas aborts the handler's signal and
   still answers `result` with an error, which the chat side ignores if it
   already resolved).
@@ -121,7 +130,7 @@ See `protocol.ts`. Rules:
   LAST key of the object (read from the chat store; with no scene context at all
   the panel sends just `{"likedReferences":[...]}`, or no field when there are none). Byte-stable for unchanged state (prompt cache). The chat
   side prefetches it in the transport `body` provider (async allowed) with a
-  2 s timeout; on timeout it sends no canvas context rather than a wrong one.
+  2 s timeout; on timeout it sends the chat's last good context, or none rather than a wrong one. After a bind to a new tab (`open_canvas_tab`, `launch`) it prefetches that tab's context once; if that fails the held context is `{}`, so the field (and the system prompt's pointer block) does not flip.
 - **`tab-gone` is a latch per registration, not per `tabId`**: the chat side
   immediately fails every pending call for that registration with `{"error":"The canvas tab was closed."}`, abandons its
   open streams and stops forwarding frames for it. (The spike reopened streams

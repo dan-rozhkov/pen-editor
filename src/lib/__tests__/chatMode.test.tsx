@@ -94,7 +94,7 @@ describe("chatless mode", () => {
   it("agent launch helpers are inert", async () => {
     const before = useChatStore.getState().chats.length;
     expect(await launchNodeAgentChat("n1", "hi")).toBe(false);
-    expect(sendCommentToAgent("t1")).toBe(false);
+    expect(await sendCommentToAgent("t1")).toBe(false);
     expect(useChatStore.getState().chats.length).toBe(before);
   });
 

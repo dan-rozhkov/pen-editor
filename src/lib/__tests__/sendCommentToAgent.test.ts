@@ -35,8 +35,8 @@ beforeEach(() => {
 });
 
 describe("sendCommentToAgent", () => {
-  it("queues a chat message referencing the thread's order number and opens the agents panel", () => {
-    const ok = sendCommentToAgent("t1");
+  it("queues a chat message referencing the thread's order number and opens the agents panel", async () => {
+    const ok = await sendCommentToAgent("t1");
     expect(ok).toBe(true);
 
     const { chats, activeChatId, launchQueue } = useChatStore.getState();
@@ -47,8 +47,8 @@ describe("sendCommentToAgent", () => {
     expect(useLeftSidebarStore.getState().isPanelOpen).toBe(true);
   });
 
-  it("is a no-op for an unknown thread id", () => {
-    const ok = sendCommentToAgent("missing");
+  it("is a no-op for an unknown thread id", async () => {
+    const ok = await sendCommentToAgent("missing");
     expect(ok).toBe(false);
     expect(useChatStore.getState().chats.length).toBe(1);
   });

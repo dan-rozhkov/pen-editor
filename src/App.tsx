@@ -95,10 +95,10 @@ function App() {
   // Chatless mode leaves the showcase prompt UNCONSUMED in sessionStorage until the
   // canvas host is registered; then it is forwarded once to the agent panel.
   useEffect(() => {
-    launchShowcaseAgentChat();
+    void launchShowcaseAgentChat();
     // Chatless: forwarded once the canvas host registers (no-op while no prompt is stored).
     return subscribeCanvasHost(() => {
-      launchShowcaseAgentChat();
+      void launchShowcaseAgentChat();
     });
   }, []);
 

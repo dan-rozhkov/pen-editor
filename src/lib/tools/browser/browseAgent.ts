@@ -356,7 +356,8 @@ const runBrowseAgentBody = async (
         ...(captureAllowed ? { browseCapture: true } : {}),
         ...(qaOn ? { browseQa: true } : {}),
         // Per run, from the bridge this run uses: the static capability may differ (isolated session, older shell).
-        clientCapabilities: { ...CLIENT_CAPABILITIES, browseAssert: assertAllowed },
+        // canvasTabs off: the sub-agent has no chat-to-canvas binding, so it is never offered open_canvas_tab.
+        clientCapabilities: { ...CLIENT_CAPABILITIES, canvasTabs: false, browseAssert: assertAllowed },
         ...(loginAllowed ? { browseLogin: true } : {}),
         userId: getRequestUserId(),
       }),

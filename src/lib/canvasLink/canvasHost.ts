@@ -28,7 +28,7 @@ import {
   type MainToCanvasMsg,
 } from "./protocol";
 import { buildSceneContext } from "./sceneContext";
-import { clearCanvasHostLaunchPoster, nextLaunchId, setCanvasHostLaunchPoster } from "./agentLaunch";
+import { clearCanvasHostLaunchPoster, nextLaunchId, resolveLaunchAck, setCanvasHostLaunchPoster } from "./agentLaunch";
 
 /** Session id every canvas-link tool call and stream runs under. */
 export const CANVAS_LINK_SESSION = "canvas-link";
@@ -256,6 +256,9 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
         for (const [toolCallId, { toolName }] of streams) abandon(toolCallId, toolName);
         streams.clear();
         break;
+      case "launch-ack":
+        resolveLaunchAck(msg.launchId, msg.error);
+        break;
       case "context-request":
         post({
           kind: "context-response",
@@ -286,16 +289,22 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
     }
   });
 
+  let registered = false;
   try {
     bridge.register();
+    registered = true;
   } catch (err) {
     console.warn("[canvasHost] register failed", err);
   }
 
-  // Entry points (deliverAgentLaunch) post through this host once it is registered.
-  const launchPoster = (payload: ChatLaunchMessagePayload): void =>
-    post({ kind: "launch", launchId: nextLaunchId(), payload });
-  setCanvasHostLaunchPoster(launchPoster);
+  // Entry points (deliverAgentLaunch) post through this host, but only once it IS registered:
+  // `canLaunchAgent()` / `isCanvasHostRunning()` must not promise a delivery a failed register cannot make.
+  const launchPoster = (payload: ChatLaunchMessagePayload): string | null => {
+    const launchId = nextLaunchId();
+    post({ kind: "launch", launchId, payload });
+    return launchId;
+  };
+  if (registered) setCanvasHostLaunchPoster(launchPoster);
 
   return () => {
     if (stopped) return;

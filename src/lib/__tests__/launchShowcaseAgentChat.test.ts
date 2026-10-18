@@ -33,10 +33,10 @@ beforeEach(() => {
 });
 
 describe("launchShowcaseAgentChat", () => {
-  it("consumes the handoff into a new chat and reveals the agents panel", () => {
+  it("consumes the handoff into a new chat and reveals the agents panel", async () => {
     storeShowcaseAgentPrompt("  make a travel app  ");
 
-    expect(launchShowcaseAgentChat()).toBe(true);
+    expect(await launchShowcaseAgentChat()).toBe(true);
 
     const chat = useChatStore.getState();
     expect(chat.chats).toHaveLength(2);
@@ -47,8 +47,8 @@ describe("launchShowcaseAgentChat", () => {
     expect(consumeShowcaseAgentPrompt()).toBeNull();
   });
 
-  it("does nothing when there is no showcase handoff", () => {
-    expect(launchShowcaseAgentChat()).toBe(false);
+  it("does nothing when there is no showcase handoff", async () => {
+    expect(await launchShowcaseAgentChat()).toBe(false);
 
     expect(useChatStore.getState().chats).toHaveLength(1);
     expect(useChatStore.getState().launchQueue).toEqual({});

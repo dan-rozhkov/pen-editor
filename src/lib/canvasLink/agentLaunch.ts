@@ -12,16 +12,25 @@
  * Kept free of heavy imports: `canvasHost.ts` registers itself here.
  */
 import { useSyncExternalStore } from "react";
+import { toast } from "sonner";
 import { isChatDisabled } from "@/lib/chatMode";
+import { useChatStore } from "@/store/chatStore";
+import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import type { ChatLaunchPayload } from "@/types/chat";
 import type { ChatLaunchMessagePayload } from "./protocol";
 
-type Poster = (payload: ChatLaunchMessagePayload) => void;
+/** Posts a `launch` through the running host; returns its `launchId`, or null when nothing was sent. */
+type Poster = (payload: ChatLaunchMessagePayload) => string | null;
+
+/** How long a canvas tab waits for the panel's `launch-ack`. */
+export const LAUNCH_ACK_TIMEOUT_MS = 3000;
+export const LAUNCH_NO_ACK_MESSAGE = "The agent panel did not respond.";
 
 let poster: Poster | null = null;
 const listeners = new Set<() => void>();
+const pendingAcks = new Map<string, (error: string | null) => void>();
 
-/** Called by `startCanvasHost` once registered. */
+/** Called by `startCanvasHost` once its `register()` succeeded. */
 export function setCanvasHostLaunchPoster(next: Poster): void {
   if (poster === next) return;
   poster = next;
@@ -32,7 +41,14 @@ export function setCanvasHostLaunchPoster(next: Poster): void {
 export function clearCanvasHostLaunchPoster(mine: Poster): void {
   if (poster !== mine) return;
   poster = null;
+  // Nobody will answer these any more.
+  for (const settle of [...pendingAcks.values()]) settle("The canvas host stopped.");
   listeners.forEach((cb) => cb());
+}
+
+/** The host received the panel's `launch-ack` (`error` = the panel refused the launch). */
+export function resolveLaunchAck(launchId: string, error?: string): void {
+  pendingAcks.get(launchId)?.(error ?? null);
 }
 
 export function isCanvasHostRunning(): boolean {
@@ -58,14 +74,54 @@ export function useCanLaunchAgent(): boolean {
 let launchCounter = 0;
 
 /**
- * Sends a launch to the agent panel. Returns false (nothing sent) without a running host.
+ * Sends a launch to the agent panel and waits for its `launch-ack` (`LAUNCH_ACK_TIMEOUT_MS`).
+ * Resolves true on a clean ack. False = nothing sent (no running host), or the panel refused / did
+ * not answer; then a toast says so unless `opts.toast` is false (the caller keeps its source and retries).
  * The panel creates (or reuses) the chat, binds it to THIS tab and sends the message.
  */
 export function deliverAgentLaunch(
-  payload: ChatLaunchPayload & { nodeIds?: string[]; target?: "new-chat" | "active-chat" }
-): boolean {
-  if (!poster) return false;
-  poster({ target: "new-chat", ...payload });
+  payload: ChatLaunchMessagePayload,
+  opts: { toast?: boolean } = {}
+): Promise<boolean> {
+  const post = poster;
+  if (!post) return Promise.resolve(false);
+  const launchId = post({ target: "new-chat", ...payload });
+  if (!launchId) {
+    if (opts.toast !== false) toast.error("Could not reach the agent panel.");
+    return Promise.resolve(false);
+  }
+  return new Promise<boolean>((resolve) => {
+    const timer = setTimeout(() => settle(LAUNCH_NO_ACK_MESSAGE), LAUNCH_ACK_TIMEOUT_MS);
+    const settle = (error: string | null): void => {
+      clearTimeout(timer);
+      pendingAcks.delete(launchId);
+      if (error !== null && opts.toast !== false) toast.error(error);
+      resolve(error === null);
+    };
+    pendingAcks.set(launchId, settle);
+  });
+}
+
+/**
+ * The ONE dispatcher of every on-canvas agent entry point. Chat enabled: a new chat, the payload queued
+ * (the session's auto-send effect delivers it) and the agents panel revealed. Chatless tab: the launch
+ * goes to the agent panel (`deliverAgentLaunch`), which does the same there. Local and remote
+ * launches stay the same on purpose: neither selects a node nor changes the selection.
+ *
+ * Reveal the agents section AND open the panel: on a narrow (mobile) layout LeftSidebar unmounts
+ * entirely while collapsed, which would leave the queued message stranded with no session mounted to
+ * auto-send it.
+ */
+export async function launchAgentChat(payload: ChatLaunchPayload, opts: { toast?: boolean } = {}): Promise<boolean> {
+  if (isChatDisabled()) {
+    if (!isCanvasHostRunning()) return false;
+    const { text, images } = payload;
+    return deliverAgentLaunch({ text, ...(images && images.length > 0 ? { images } : {}) }, opts);
+  }
+  const chatId = useChatStore.getState().createChat();
+  useChatStore.getState().queueLaunchPayload(chatId, payload);
+  useLeftSidebarStore.getState().setActiveSection("agents");
+  useLeftSidebarStore.getState().setPanelOpen(true);
   return true;
 }
 

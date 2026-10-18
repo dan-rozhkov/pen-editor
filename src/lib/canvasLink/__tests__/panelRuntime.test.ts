@@ -10,6 +10,7 @@ import {
   isPanelCanvasLinkActive,
   panelRunsInCanvas,
   resetPanelRuntimeForTests,
+  startPanelRuntime,
   withPanelCanvasContext,
 } from "../panelRuntime";
 import { attachScriptedCanvas, createFakeCanvasBridge, tab } from "./fakeCanvasBridge";
@@ -247,40 +248,137 @@ describe("launch from a canvas tab", () => {
     getPanelClient(); // creates the client
     fake.emit(tabId, { kind: "launch", launchId, payload } as never);
   };
-  const settle = () => new Promise<void>((r) => setTimeout(r, 0));
+  const acks = (fake: ReturnType<typeof installPanel>) => fake.ofKind("launch-ack");
+  const settleFor = async (fake: ReturnType<typeof installPanel>, n = 1) => {
+    await vi.waitFor(() => expect(acks(fake).length).toBeGreaterThanOrEqual(n));
+  };
+  const resetChats = () => useChatStore.setState({ chats: [], activeChatId: null, launchQueue: {} } as never);
 
-  it("creates a chat, binds it to the sending tab and queues the text and images", async () => {
+  it("creates a chat, binds it to the sending tab, queues the text and images and acks", async () => {
     const fake = installPanel();
+    attachScriptedCanvas(fake, { context: "{}" });
     fake.setTabs([tab(1), tab(2, 5)]);
-    useChatStore.setState({ chats: [], activeChatId: null, launchQueue: {} } as never);
+    resetChats();
     const images = [{ dataUrl: "data:image/png;base64,A", name: "n" }];
-    launch(fake, 2, { text: "  hi  ", images, nodeIds: ["x"] });
-    await settle();
+    launch(fake, 2, { text: "  hi  ", images }, "l1");
+    await settleFor(fake);
     const { activeChatId, launchQueue, chats } = useChatStore.getState();
     expect(chats).toHaveLength(1);
     expect(launchQueue[activeChatId!]).toEqual({ text: "hi", images });
     expect(getPanelClient()!.getBinding(activeChatId!)).toEqual({ tabId: 2, registrationId: 5 });
+    expect(fake.posted.find((p) => p.env.msg.kind === "launch-ack")).toMatchObject({
+      tabId: 2,
+      env: { msg: { kind: "launch-ack", launchId: "l1" } },
+    });
+    expect(acks(fake)[0]).not.toHaveProperty("error");
   });
 
-  it("target active-chat reuses the active chat and rebinds it; a repeated launchId is ignored", async () => {
+  it("a launch arriving before any chat activity (startPanelRuntime on mount) creates the chat", async () => {
     const fake = installPanel();
+    attachScriptedCanvas(fake, { context: "{}" });
+    resetChats();
+    startPanelRuntime(); // what AgentPage does on mount; no chat request was made
+    fake.emit(1, { kind: "launch", launchId: "early", payload: { text: "first" } } as never);
+    await settleFor(fake);
+    const { activeChatId, launchQueue } = useChatStore.getState();
+    expect(launchQueue[activeChatId!]).toEqual({ text: "first" });
+  });
+
+  it("startPanelRuntime does nothing outside the panel", () => {
+    window.penAgentPanel = { version: 1 };
+    startPanelRuntime();
+    expect(window.penAgentPanel).toBeDefined();
+  });
+
+  it("target active-chat reuses an idle active chat; a repeated launchId is ignored", async () => {
+    const fake = installPanel();
+    attachScriptedCanvas(fake, { context: "{}" });
     fake.setTabs([tab(1), tab(2)]);
     useChatStore.getState().createChat();
     const active = useChatStore.getState().activeChatId!;
     launch(fake, 1, { text: "a", target: "active-chat" }, "l1");
-    await settle();
+    await settleFor(fake);
     launch(fake, 2, { text: "b", target: "active-chat" }, "l1");
-    await settle();
+    await new Promise<void>((r) => setTimeout(r, 20));
+    expect(acks(fake)).toHaveLength(1);
     expect(useChatStore.getState().activeChatId).toBe(active);
     expect(useChatStore.getState().launchQueue[active]).toEqual({ text: "a" });
     expect(getPanelClient()!.getBinding(active)).toEqual({ tabId: 1, registrationId: 1 });
   });
 
-  it("ignores an empty text", async () => {
+  it("target active-chat creates a new chat when the active one is busy, has a pending launch, or is bound to another tab", async () => {
     const fake = installPanel();
-    useChatStore.setState({ chats: [], activeChatId: null, launchQueue: {} } as never);
+    attachScriptedCanvas(fake, { context: "{}" });
+    fake.setTabs([tab(1), tab(2)]);
+    useChatStore.getState().createChat();
+    const first = useChatStore.getState().activeChatId!;
+    const markBusy = (isBusy: boolean) =>
+      useChatStore.setState((s) => ({ chats: s.chats.map((c) => (c.id === first ? { ...c, isBusy } : c)) }));
+
+    // busy
+    markBusy(true);
+    launch(fake, 1, { text: "a", target: "active-chat" }, "b1");
+    await settleFor(fake, 1);
+    expect(useChatStore.getState().launchQueue[first]).toBeUndefined();
+    markBusy(false);
+
+    // pending launch on the active chat
+    useChatStore.getState().openChat(first);
+    useChatStore.getState().queueLaunchPayload(first, { text: "pending" });
+    launch(fake, 1, { text: "b", target: "active-chat" }, "b2");
+    await settleFor(fake, 2);
+    expect(useChatStore.getState().launchQueue[first]).toEqual({ text: "pending" });
+    useChatStore.getState().consumeLaunchPayload(first);
+
+    // bound to another tab
+    useChatStore.getState().openChat(first);
+    await getPanelClient()!.bindTo(first, 1);
+    const chatsBefore = useChatStore.getState().chats.length;
+    launch(fake, 2, { text: "c", target: "active-chat" }, "b3");
+    await settleFor(fake, 3);
+    expect(useChatStore.getState().chats.length).toBe(chatsBefore + 1);
+    expect(getPanelClient()!.getBinding(first)).toEqual({ tabId: 1, registrationId: 1 });
+
+    // same tab, idle, no pending launch: reused
+    useChatStore.getState().openChat(first);
+    launch(fake, 1, { text: "d", target: "active-chat" }, "b4");
+    await settleFor(fake, 4);
+    expect(useChatStore.getState().launchQueue[first]).toEqual({ text: "d" });
+  });
+
+  it("a launch from an unlisted tab gets an error ack and shows nothing in the panel", async () => {
+    const fake = installPanel();
+    resetChats();
+    const queueBefore = useChatStore.getState().launchQueue;
+    launch(fake, 9, { text: "lost" }, "gone");
+    await settleFor(fake);
+    expect(acks(fake)[0]).toMatchObject({ launchId: "gone", error: expect.any(String) });
+    expect(useChatStore.getState().chats).toHaveLength(0);
+    expect(useChatStore.getState().launchQueue).toEqual(queueBefore);
+  });
+
+  it("a launch from a latched registration is refused and does not touch another tab's chat", async () => {
+    const fake = installPanel();
+    attachScriptedCanvas(fake, { context: "{}" });
+    fake.setTabs([tab(1), tab(2)]);
+    useChatStore.getState().createChat();
+    const active = useChatStore.getState().activeChatId!;
+    await getPanelClient()!.bindTo(active, 1);
+    fake.emit(2, { kind: "tab-gone", registrationId: 1 });
+    fake.setTabs([tab(1), tab(2)]);
+    launch(fake, 2, { text: "x", target: "active-chat" }, "latched");
+    await settleFor(fake);
+    expect(acks(fake)[0]).toMatchObject({ launchId: "latched", error: expect.any(String) });
+    expect(useChatStore.getState().launchQueue[active]).toBeUndefined();
+    expect(getPanelClient()!.getBinding(active)).toEqual({ tabId: 1, registrationId: 1 });
+  });
+
+  it("acks an empty text with an error and creates nothing", async () => {
+    const fake = installPanel();
+    resetChats();
     launch(fake, 1, { text: "   " });
-    await settle();
+    await settleFor(fake);
+    expect(acks(fake)[0]).toMatchObject({ error: expect.any(String) });
     expect(useChatStore.getState().chats).toHaveLength(0);
   });
 });

@@ -1,26 +1,28 @@
 import { isChatDisabled } from "@/lib/chatMode";
-import { deliverAgentLaunch, isCanvasHostRunning } from "@/lib/canvasLink/agentLaunch";
-import { consumeShowcaseAgentPrompt } from "@/lib/showcaseAgentHandoff";
-import { useChatStore } from "@/store/chatStore";
-import { useLeftSidebarStore } from "@/store/leftSidebarStore";
+import { canLaunchAgent, launchAgentChat } from "@/lib/canvasLink/agentLaunch";
+import { clearShowcaseAgentPrompt, peekShowcaseAgentPrompt } from "@/lib/showcaseAgentHandoff";
+
+let inFlight = false;
 
 /**
- * Chatless tab: the prompt stays in sessionStorage until the canvas host is
- * registered, then it is forwarded once to the agent panel (and removed). Without a
- * host it is left untouched. `App.tsx` calls this again when the host starts.
+ * Hands the stored showcase prompt to the Design Agent. Chatless tab: the prompt stays in
+ * sessionStorage until the canvas host is registered AND the agent panel acknowledged the
+ * launch, then it is removed; without a host, or without an ack, it is left untouched (and no toast
+ * is shown: `App.tsx` calls this again when the host starts). Never sends one prompt twice at once.
  */
-export function launchShowcaseAgentChat(): boolean {
-  const remote = isChatDisabled();
-  if (remote && !isCanvasHostRunning()) return false;
-
-  const text = consumeShowcaseAgentPrompt();
+export async function launchShowcaseAgentChat(): Promise<boolean> {
+  if (inFlight || !canLaunchAgent()) return false;
+  const text = peekShowcaseAgentPrompt();
   if (!text) return false;
-
-  if (remote) return deliverAgentLaunch({ text, target: "new-chat" });
-
-  const chatId = useChatStore.getState().createChat();
-  useChatStore.getState().queueLaunchPayload(chatId, { text });
-  useLeftSidebarStore.getState().setActiveSection("agents");
-  useLeftSidebarStore.getState().setPanelOpen(true);
-  return true;
+  inFlight = true;
+  try {
+    const launched = launchAgentChat({ text }, { toast: false });
+    // A local launch is done once launchAgentChat's synchronous part ran; only the agent panel acks later.
+    if (!isChatDisabled()) clearShowcaseAgentPrompt();
+    const delivered = await launched;
+    if (delivered) clearShowcaseAgentPrompt();
+    return delivered;
+  } finally {
+    inFlight = false;
+  }
 }

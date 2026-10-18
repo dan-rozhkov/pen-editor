@@ -53,6 +53,10 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   // which is exactly the window that would stall unrelated bridge traffic.
   "read_design_repo",
   "read_repo_files",
+  // Panel-local (canvasLink): binds the chat to a canvas tab of the desktop agent panel. It
+  // touches no scene, and a cold tab load can take many seconds, which would stall every
+  // scene-mutating call behind it.
+  "open_canvas_tab",
   // The three browse_* tools (docs/superpowers/specs/2026-09-18-builtin-
   // browser-design.md) are thin forwarders onto the desktop shell's
   // BrowserController — they never touch the scene graph. `browse_open` in

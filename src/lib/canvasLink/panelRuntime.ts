@@ -42,9 +42,15 @@ function trackCanvasCallFailed({ toolName, kind, durationMs }: CallFailure): voi
  * new chat (default, like every local launch helper) or reuses the active one, BINDS it to the
  * sending tab first (so the first request already carries that tab's `canvasContext`, which holds
  * the selection), then queues the payload; the chat session's auto-send effect delivers it.
+ *
+ * Always answers the tab with a `launch-ack`. A tab that is unlisted or latched is refused with an
+ * error ack and the panel shows nothing (no chat is created, no other chat is touched). "active-chat"
+ * reuses the active chat only when it is idle (no turn, no pending launch) and unbound or bound to
+ * the same tab; otherwise a new chat is created.
  */
 async function handleLaunch({
   tabId,
+  launchId,
   payload,
 }: {
   tabId: number;
@@ -52,16 +58,38 @@ async function handleLaunch({
   payload: ChatLaunchMessagePayload;
 }): Promise<void> {
   const c = client;
+  if (!c) return;
   const text = typeof payload?.text === "string" ? payload.text.trim() : "";
-  if (!c || !text) return;
+  if (!text) {
+    c.ackLaunch(tabId, launchId, "The launch had no message.");
+    return;
+  }
+  const refused = "The agent panel could not reach this canvas tab.";
+  if (!(await c.probeTab(tabId))) {
+    c.ackLaunch(tabId, launchId, refused);
+    return;
+  }
   const store = useChatStore.getState();
-  const chatId =
-    payload.target === "active-chat" && store.activeChatId ? store.activeChatId : store.createChat();
-  await c.bindTo(chatId, tabId);
+  const active = store.activeChatId ? store.chats.find((chat) => chat.id === store.activeChatId) : undefined;
+  const bound = active ? c.getBinding(active.id) : null;
+  const reuse =
+    payload.target === "active-chat" &&
+    active !== undefined &&
+    !active.isBusy &&
+    !(active.id in store.launchQueue) &&
+    (bound === null || bound.tabId === tabId);
+  const chatId = reuse ? active!.id : store.createChat();
+  if (!(await c.bindTo(chatId, tabId))) {
+    // The tab went away between the probe and the bind.
+    if (!reuse) useChatStore.getState().closeChat(chatId);
+    c.ackLaunch(tabId, launchId, refused);
+    return;
+  }
   useChatStore.getState().queueLaunchPayload(chatId, {
     text,
     ...(Array.isArray(payload.images) && payload.images.length > 0 ? { images: payload.images } : {}),
   });
+  c.ackLaunch(tabId, launchId);
 }
 
 /** Creates the singleton (and installs the place-node redirect) on first use. */
@@ -87,6 +115,15 @@ export function getPanelClient(): PanelClient | null {
     return placed;
   });
   return client;
+}
+
+/**
+ * Creates the panel client as soon as the panel page has a canvas bridge (AgentPage mounts this), so its
+ * `bridge.onMessage` subscription exists before the first chat request: a `launch` that arrives
+ * before any chat activity is received. No-op elsewhere.
+ */
+export function startPanelRuntime(): void {
+  if (isPanelCanvasLinkActive()) getPanelClient();
 }
 
 /** Test seam: drops the singleton and the place-node redirect. */

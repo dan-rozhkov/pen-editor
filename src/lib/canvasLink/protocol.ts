@@ -55,14 +55,18 @@ export type ChatToCanvasMsg =
    * `{x?, y?, size: {width, height}}`.
    */
   | { kind: "place-node"; callId: string; node: unknown; options?: unknown }
-  | { kind: "context-request"; reqId: string; sessionId: string; model: string };
+  | { kind: "context-request"; reqId: string; sessionId: string; model: string }
+  /**
+   * The panel handled (no `error`) or refused (`error`) a canvas tab's `launch`. The tab keeps
+   * the launch's source (the showcase prompt) until this arrives and, with no ack within a few
+   * seconds, tells the user the agent panel did not respond.
+   */
+  | { kind: "launch-ack"; launchId: string; error?: string };
 
 /** What a canvas entry point asks the agent panel to send (`launch`). */
 export interface ChatLaunchMessagePayload {
   text: string;
   images?: Array<{ dataUrl: string; name: string }>;
-  /** Informational: the canvas tab selected these before sending; the selection reaches the chat via `canvasContext`. */
-  nodeIds?: string[];
   /** Default "new-chat" (what every local launch helper does). */
   target?: "new-chat" | "active-chat";
 }
