@@ -102,6 +102,12 @@ export interface AgentPanelCanvasBridge {
 export interface CanvasHostBridge {
   /** Called once by a chatless editor tab: "I am a canvas the panel may drive". */
   register(): void;
+  /**
+   * Called when the host stops (the editor unmounts, e.g. SPA navigation away,
+   * or the canvas stops being editable). Main treats it like `tab-gone` for the
+   * current registration. Idempotent.
+   */
+  unregister(): void;
   post(env: LinkEnvelope<CanvasToChatMsg>): void;
   onMessage(cb: (env: LinkEnvelope<ChatToCanvasMsg>) => void): () => void;
 }

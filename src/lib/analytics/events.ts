@@ -50,7 +50,7 @@ export interface AnalyticsEventMap {
     // numbers stay comparable across the change. "browse_agent": a browse_*
     // call made by the nested browse sub-agent session, kept apart from the
     // user's own chat calls.
-    source: "chat" | "bridge" | "webmcp" | "browse_agent";
+    source: "chat" | "bridge" | "webmcp" | "browse_agent" | "canvas-link";
   };
   agent_turn_failed: { error_kind: string };
   editor_command_run: { command_id: string };
