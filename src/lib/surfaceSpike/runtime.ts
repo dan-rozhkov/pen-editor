@@ -23,6 +23,8 @@ export interface SpikeApi {
   format: SpikeFormat;
   stats(): SpikeStats & { role: SpikeRole | null; format: SpikeFormat };
   reset(): void;
+  /** SPIKE(ipc-streaming): bench helper, one context round trip from the chat tab (null = fallback). */
+  requestContext(): Promise<string | null>;
 }
 
 declare global {
@@ -73,6 +75,7 @@ export function createSpikeRuntime(deps: SpikeRuntimeDeps): { api: SpikeApi; dis
       }
       deps.bridge.setRole(next);
     },
+    requestContext: () => (mine ? mine.requestContext() : Promise.resolve(null)), // SPIKE(ipc-streaming)
     stats: () => ({ ...stats.snapshot(), role, format: api.format }),
     reset() {
       // New collector; the sides keep a reference to the old one, so rebuild them.
