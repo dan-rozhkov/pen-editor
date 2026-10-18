@@ -1,11 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook } from "@testing-library/react";
-import { useAgentActivityToast } from "@/hooks/useAgentActivityToast";
+import { useAgentActivityNotes } from "@/hooks/useAgentActivityNotes";
 
-const toastMock = vi.fn();
-vi.mock("sonner", () => ({
-  toast: (...args: unknown[]) => toastMock(...args),
-}));
+import { useChatStore } from "@/store/chatStore";
+
+const SESSION = "chat-1";
+const getLastMessageId = () => "msg-last";
+
+function notes() {
+  return useChatStore.getState().activityNotes[SESSION] ?? [];
+}
 
 // The cursor key deliberately kept its original "memoryActivityCursor"
 // spelling when this hook grew skill support — see the hook's own comment.
@@ -13,7 +17,7 @@ const CURSOR_KEY = "pen.memoryActivityCursor:user-1";
 
 beforeEach(() => {
   vi.useFakeTimers();
-  toastMock.mockReset();
+  useChatStore.setState({ activityNotes: {} });
   localStorage.clear();
 });
 
@@ -43,13 +47,13 @@ function withFetch(impl: (url: string, callIndex: number) => Promise<Response> |
 
 function renderStatus() {
   return renderHook(
-    ({ status }) => useAgentActivityToast({ userId: "user-1", status }),
+    ({ status }) => useAgentActivityNotes({ userId: "user-1", status, sessionId: SESSION, getLastMessageId }),
     { initialProps: { status: "streaming" } },
   );
 }
 
-describe("useAgentActivityToast", () => {
-  it("establishes a baseline on the first-ever check (no stored cursor) and does not toast", async () => {
+describe("useAgentActivityNotes", () => {
+  it("establishes a baseline on the first-ever check (no stored cursor) and does not note", async () => {
     const fetchMock = withFetch(() => jsonResponse({ events: [], latestId: 42 }));
 
     const { rerender } = renderStatus();
@@ -64,11 +68,11 @@ describe("useAgentActivityToast", () => {
     expect(calledUrl).toContain("/api/memory/activity");
     expect(calledUrl).toContain("userId=user-1");
     expect(calledUrl).not.toContain("sinceId=");
-    expect(toastMock).not.toHaveBeenCalled();
+    expect(notes()).toEqual([]);
     expect(localStorage.getItem(CURSOR_KEY)).toBe("42");
   });
 
-  it("writes a 0 cursor on baseline when the server has no rows yet, so the very next check is no longer treated as baseline (and a memory-only write on that next check still never toasts)", async () => {
+  it("writes a 0 cursor on baseline when the server has no rows yet, so the very next check is no longer treated as baseline (and a memory-only write on that next check still never notes)", async () => {
     const fetchMock = withFetch((_url, callIndex) => {
       if (callIndex <= 2) {
         // Turn 1's two checks: brand-new user, no audit rows exist yet
@@ -76,7 +80,7 @@ describe("useAgentActivityToast", () => {
         return jsonResponse({ events: [], latestId: null });
       }
       // Turn 2's first check: a review has now written the user's
-      // first-ever row — a memory write, which never toasts (FIR-71).
+      // first-ever row — a memory write, which never notes (FIR-71).
       return jsonResponse({
         events: [{ id: 1, subsystem: "memory", origin: "background_review" }],
         latestId: 1,
@@ -87,7 +91,7 @@ describe("useAgentActivityToast", () => {
     rerender({ status: "ready" }); // turn 1: baseline, empty server
     await vi.advanceTimersByTimeAsync(60_000);
 
-    expect(toastMock).not.toHaveBeenCalled();
+    expect(notes()).toEqual([]);
     // Must be the string "0", not absent — an absent key is what would send
     // the hook back into the baseline branch on the next check.
     expect(localStorage.getItem(CURSOR_KEY)).toBe("0");
@@ -98,12 +102,12 @@ describe("useAgentActivityToast", () => {
 
     expect(fetchMock.mock.calls[2][0] as string).toContain("sinceId=0");
     // The cursor still advances past a memory-only write even though it
-    // produced no toast — bookkeeping is independent of announcement.
-    expect(toastMock).not.toHaveBeenCalled();
+    // produced no note — bookkeeping is independent of announcement.
+    expect(notes()).toEqual([]);
     expect(localStorage.getItem(CURSOR_KEY)).toBe("1");
   });
 
-  it("uses the stored cursor as sinceId once a baseline exists, and never toasts for a memory-only background_review event while still advancing the cursor", async () => {
+  it("uses the stored cursor as sinceId once a baseline exists, and never notes for a memory-only background_review event while still advancing the cursor", async () => {
     localStorage.setItem(CURSOR_KEY, "10");
     const fetchMock = withFetch((_url, callIndex) => {
       if (callIndex === 1) {
@@ -124,16 +128,16 @@ describe("useAgentActivityToast", () => {
     await vi.advanceTimersByTimeAsync(20_000);
 
     expect(fetchMock.mock.calls[0][0] as string).toContain("sinceId=10");
-    expect(toastMock).not.toHaveBeenCalled();
+    expect(notes()).toEqual([]);
     expect(localStorage.getItem(CURSOR_KEY)).toBe("11");
 
-    // The follow-up check at 60s must still not toast.
+    // The follow-up check at 60s must still not note.
     await vi.advanceTimersByTimeAsync(40_000);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(toastMock).not.toHaveBeenCalled();
+    expect(notes()).toEqual([]);
   });
 
-  it("toasts a skill-specific message when only skill events are present", async () => {
+  it("records a note when only skill events are present", async () => {
     localStorage.setItem(CURSOR_KEY, "10");
     withFetch(() =>
       jsonResponse({
@@ -149,13 +153,32 @@ describe("useAgentActivityToast", () => {
 
     await vi.advanceTimersByTimeAsync(20_000);
 
-    expect(toastMock).toHaveBeenCalledTimes(1);
-    expect(toastMock).toHaveBeenCalledWith("Агент обновил свои скиллы", {
-      id: "memory-activity-11",
-    });
+    expect(notes()).toEqual([{ id: "memory-activity-11", afterMessageId: "msg-last" }]);
   });
 
-  it("toasts only the skills message (no 'память' wording) when both memory and skill events land in the same check", async () => {
+  it("anchors the note to the message that was last when the turn finished, not to one sent before the check fires", async () => {
+    localStorage.setItem(CURSOR_KEY, "10");
+    withFetch(() =>
+      jsonResponse({
+        events: [{ id: 11, subsystem: "skill", action: "create", origin: "background_review" }],
+        latestId: 11,
+      }),
+    );
+    let lastId = "msg-turn-end";
+    const { rerender } = renderHook(
+      ({ status }) =>
+        useAgentActivityNotes({ userId: "user-1", status, sessionId: SESSION, getLastMessageId: () => lastId }),
+      { initialProps: { status: "streaming" } },
+    );
+    rerender({ status: "ready" });
+    lastId = "msg-user-next";
+
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(notes()).toEqual([{ id: "memory-activity-11", afterMessageId: "msg-turn-end" }]);
+  });
+
+  it("records one note when both memory and skill events land in the same check", async () => {
     localStorage.setItem(CURSOR_KEY, "10");
     withFetch(() =>
       jsonResponse({
@@ -172,13 +195,10 @@ describe("useAgentActivityToast", () => {
 
     await vi.advanceTimersByTimeAsync(20_000);
 
-    expect(toastMock).toHaveBeenCalledTimes(1);
-    expect(toastMock).toHaveBeenCalledWith("Агент обновил свои скиллы", {
-      id: "memory-activity-12",
-    });
+    expect(notes()).toEqual([{ id: "memory-activity-12", afterMessageId: "msg-last" }]);
   });
 
-  it("treats an event with no subsystem field (older backend, pre-dates skills) as memory and never toasts for it", async () => {
+  it("treats an event with no subsystem field (older backend, pre-dates skills) as memory and never notes for it", async () => {
     localStorage.setItem(CURSOR_KEY, "5");
     withFetch(() =>
       jsonResponse({
@@ -192,7 +212,7 @@ describe("useAgentActivityToast", () => {
 
     await vi.advanceTimersByTimeAsync(20_000);
 
-    expect(toastMock).not.toHaveBeenCalled();
+    expect(notes()).toEqual([]);
     expect(localStorage.getItem(CURSOR_KEY)).toBe("6");
   });
 
@@ -213,17 +233,35 @@ describe("useAgentActivityToast", () => {
     rerender({ status: "ready" });
 
     await vi.advanceTimersByTimeAsync(20_000);
-    expect(toastMock).not.toHaveBeenCalled();
+    expect(notes()).toEqual([]);
 
     await vi.advanceTimersByTimeAsync(40_000);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(toastMock).toHaveBeenCalledTimes(1);
+    expect(notes()).toHaveLength(1);
     // Total requests per completed turn is capped at two.
     await vi.advanceTimersByTimeAsync(120_000);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("does not toast when no background_review events are present", async () => {
+  it("dedups by id when both checks of a turn observe the same skill event", async () => {
+    localStorage.setItem(CURSOR_KEY, "10");
+    const fetchMock = withFetch(() =>
+      jsonResponse({
+        events: [{ id: 11, subsystem: "skill", origin: "background_review" }],
+        latestId: 11,
+      }),
+    );
+
+    const { rerender } = renderStatus();
+    rerender({ status: "ready" });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(notes()).toHaveLength(1);
+  });
+
+  it("does not note when no background_review events are present", async () => {
     localStorage.setItem(CURSOR_KEY, "1");
     withFetch(() => jsonResponse({ events: [], latestId: 1 }));
 
@@ -232,10 +270,10 @@ describe("useAgentActivityToast", () => {
 
     await vi.advanceTimersByTimeAsync(60_000);
 
-    expect(toastMock).not.toHaveBeenCalled();
+    expect(notes()).toEqual([]);
   });
 
-  it("does not toast for a non-background_review event even with a skill subsystem", async () => {
+  it("does not note for a non-background_review event even with a skill subsystem", async () => {
     localStorage.setItem(CURSOR_KEY, "1");
     withFetch(() =>
       jsonResponse({
@@ -249,10 +287,10 @@ describe("useAgentActivityToast", () => {
 
     await vi.advanceTimersByTimeAsync(20_000);
 
-    expect(toastMock).not.toHaveBeenCalled();
+    expect(notes()).toEqual([]);
   });
 
-  it("persists the cursor across separate finished turns so a later turn's event is never lost, even though it's a memory write that never toasts", async () => {
+  it("persists the cursor across separate finished turns so a later turn's event is never lost, even though it's a memory write that never notes", async () => {
     const fetchMock = withFetch((_url, callIndex) => {
       if (callIndex <= 2) {
         // Turn 1's two checks: baseline, then nothing new.
@@ -269,7 +307,7 @@ describe("useAgentActivityToast", () => {
     const { rerender } = renderStatus();
     rerender({ status: "ready" }); // turn 1 finishes
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(toastMock).not.toHaveBeenCalled();
+    expect(notes()).toEqual([]);
     expect(localStorage.getItem(CURSOR_KEY)).toBe("1");
 
     rerender({ status: "streaming" });
@@ -277,8 +315,8 @@ describe("useAgentActivityToast", () => {
     await vi.advanceTimersByTimeAsync(20_000);
 
     expect(fetchMock.mock.calls[2][0] as string).toContain("sinceId=1");
-    // Cursor advances past the event even though it never toasts.
-    expect(toastMock).not.toHaveBeenCalled();
+    // Cursor advances past the event even though it never notes.
+    expect(notes()).toEqual([]);
     expect(localStorage.getItem(CURSOR_KEY)).toBe("2");
   });
 
@@ -294,7 +332,7 @@ describe("useAgentActivityToast", () => {
 
     await vi.advanceTimersByTimeAsync(20_000);
 
-    expect(toastMock).not.toHaveBeenCalled();
+    expect(notes()).toEqual([]);
   });
 
   it("silently ignores a 404 from an older backend", async () => {
@@ -306,7 +344,7 @@ describe("useAgentActivityToast", () => {
 
     await vi.advanceTimersByTimeAsync(20_000);
 
-    expect(toastMock).not.toHaveBeenCalled();
+    expect(notes()).toEqual([]);
   });
 
   it("silently ignores a network error", async () => {
@@ -318,7 +356,7 @@ describe("useAgentActivityToast", () => {
 
     await vi.advanceTimersByTimeAsync(20_000);
 
-    expect(toastMock).not.toHaveBeenCalled();
+    expect(notes()).toEqual([]);
   });
 
   it("does not schedule a check without a userId", async () => {
@@ -326,7 +364,7 @@ describe("useAgentActivityToast", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { rerender } = renderHook(
-      ({ status }) => useAgentActivityToast({ userId: undefined, status }),
+      ({ status }) => useAgentActivityNotes({ userId: undefined, status, sessionId: SESSION, getLastMessageId }),
       { initialProps: { status: "streaming" } },
     );
     rerender({ status: "ready" });
@@ -353,5 +391,22 @@ describe("useAgentActivityToast", () => {
 
     await vi.advanceTimersByTimeAsync(10_000);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("chatStore activity notes", () => {
+  it("keeps one row for an event seen by two chats, and drops a chat's notes when it closes", () => {
+    const store = useChatStore.getState();
+    store.addActivityNote("chat-a", { id: "memory-activity-7", afterMessageId: "m1" });
+    store.addActivityNote("chat-b", { id: "memory-activity-7", afterMessageId: "m2" });
+
+    expect(useChatStore.getState().activityNotes).toEqual({
+      "chat-a": [{ id: "memory-activity-7", afterMessageId: "m1" }],
+    });
+
+    useChatStore.setState({ chats: [...useChatStore.getState().chats, { ...useChatStore.getState().chats[0], id: "chat-a" }] });
+    useChatStore.getState().closeChat("chat-a");
+
+    expect(useChatStore.getState().activityNotes).toEqual({});
   });
 });

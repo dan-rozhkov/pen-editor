@@ -19,6 +19,7 @@ import { ImageLightbox } from "./ImageLightbox";
 import { IconSwap } from "@/components/ui/IconSwap";
 import { AskUserForm } from "./AskUserForm";
 import { MemoryToolIndicator } from "./MemoryToolIndicator";
+import type { ChatActivityNote } from "@/store/chatStore";
 import { SkillToolIndicator, type SkillManageKind } from "./SkillToolIndicator";
 import type { AskUserInput } from "@/types/askUser";
 import {
@@ -209,6 +210,10 @@ interface MessageListProps {
    * box and resets `scrollTop` to 0. Defaults to true for callers that are
    * always visible. */
   isVisible?: boolean;
+  /** UI-only rows for background-review writes, each rendered after the
+   * assistant message it is anchored to. A note whose message is gone (rolled
+   * back) renders nothing. */
+  activityNotes?: ChatActivityNote[];
 }
 
 export function MessageList({
@@ -217,6 +222,7 @@ export function MessageList({
   onRollback,
   addToolOutput,
   isVisible = true,
+  activityNotes,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isAutoScrollRef = useRef(true);
@@ -429,6 +435,9 @@ export function MessageList({
                 }
                 return null;
               })}
+              {activityNotes
+                ?.filter((n) => n.afterMessageId === msg.id)
+                .map((n) => <MemoryToolIndicator key={n.id} />)}
               {isEmptyStreaming && <StreamingIndicator />}
             </div>
             <div className="ml-2 flex items-center">

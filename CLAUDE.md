@@ -474,18 +474,32 @@ appear in a turn and the activity endpoint returns nothing.
   `ToolCallIndicator`, which shows the output and therefore the error. Parse
   defensively; the output may be a JSON string, an object, or a shape nobody
   anticipated.
-- **`useAgentActivityToast`** — the background review runs server-side *after*
+- **`useAgentActivityNotes`** — the background review runs server-side *after*
   the stream closes, so the model cannot mention it. This schedules two delayed
-  checks of `GET /api/memory/activity` per finished turn and toasts only when a
-  `background_review` event wrote a **skill** (FIR-71: memory writes are never
-  announced, whether alone or alongside a skill write — the cursor still
-  advances past them, but they produce no toast). It reads by **event-id cursor** kept in `localStorage`, never a
-  timestamp — the endpoint filters on Postgres `created_at`, so a browser clock
-  a few minutes off would silently suppress or repeat every toast. A baseline
-  against a server with no rows records a zero cursor: "checked, saw nothing"
-  has to be distinguishable from "never checked", or the very first review is
-  swallowed. The toast id is stable per event so parallel chat tabs collapse
-  into one notification.
+  checks of `GET /api/memory/activity` per finished turn and records a note only
+  when a `background_review` event wrote a **skill** (FIR-71: memory writes are
+  never announced, whether alone or alongside a skill write — the cursor still
+  advances past them, but they produce no note). It reads by **event-id cursor**
+  kept in `localStorage`, never a timestamp — the endpoint filters on Postgres
+  `created_at`, so a browser clock a few minutes off would silently suppress or
+  repeat every note. A baseline against a server with no rows records a zero
+  cursor: "checked, saw nothing" has to be distinguishable from "never checked",
+  or the very first review is swallowed. The note (`{ id, afterMessageId }`,
+  `ChatActivityNote`) is **UI-only**: it lives in `chatStore.activityNotes[chatId]`
+  (in-memory, like the chats and their messages, so it does not survive a
+  reload), is **never added to the AI SDK `messages`** (that would reach the
+  backend and break the model's history and prompt caching), and `MessageList`
+  renders it as the "Память обновлена" chip inside the anchored assistant
+  message (nothing if that message was rolled back). `afterMessageId` is the
+  last assistant message when the turn finished (read once, when the checks are
+  scheduled) — not at detection time, or a message sent during the 20-60s wait
+  would carry the row, possibly the user's own bubble.
+  The note id is stable per event and `addActivityNote` dedups it across all
+  chats, so the two checks and several mounted chats give one row. Separate
+  browser tabs have separate stores and can each show it. Known limit: audit
+  events carry no chat id, so with turns finishing in two chats at once the
+  row can land in the other chat, and a review that finishes after the next
+  turn ended lands under that turn's reply.
 
 ### User-authored skills (the Skills panel)
 

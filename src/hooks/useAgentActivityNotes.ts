@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { toast } from "sonner";
+import { useChatStore } from "@/store/chatStore";
 import { apiFetchUrl, resolveApiUrl } from "@/lib/apiBase";
 import { isSignedIn } from "@/lib/auth/authState";
 
@@ -51,7 +51,7 @@ function writeCursor(userId: string, id: number): void {
 // loop's phase-2 (skills) migration — an older backend's events simply omit
 // it, and are therefore never classified as "skill" below (see
 // classifyActivity): memory (phase 1) was the only subsystem that could have
-// written an event with no `subsystem` at all, and memory writes never toast.
+// written an event with no `subsystem` at all, and memory writes never produce a note.
 type ActivityEvent = {
   id?: unknown;
   origin?: unknown;
@@ -94,12 +94,6 @@ function classifyActivity(events: ActivityEvent[]): { skill: boolean } {
   return { skill };
 }
 
-function activityToastText(events: ActivityEvent[]): string | undefined {
-  const { skill } = classifyActivity(events);
-  if (skill) return "Агент обновил свои скиллы";
-  return undefined;
-}
-
 function buildUrl(userId: string, sinceId: number | undefined): string {
   // Signed in: no userId param, the session cookie identifies the caller.
   const params = new URLSearchParams(isSignedIn() || !userId ? {} : { userId });
@@ -109,7 +103,11 @@ function buildUrl(userId: string, sinceId: number | undefined): string {
   return `${resolveApiUrl("/api/memory/activity")}?${params.toString()}`;
 }
 
-function checkAgentActivity(userId: string): void {
+function checkAgentActivity(
+  userId: string,
+  sessionId: string,
+  afterMessageId: string,
+): void {
   const cursor = readCursor(userId);
   apiFetchUrl(buildUrl(userId, cursor))
     .then((res) => (res.ok ? res.json() : null))
@@ -121,7 +119,7 @@ function checkAgentActivity(userId: string): void {
       if (cursor === undefined) {
         // Baseline run: no cursor yet (first check ever for this user, or
         // storage was cleared). There is nothing to compare against, so just
-        // record where the timeline currently ends and never toast for
+        // record where the timeline currently ends and never note for
         // pre-existing history.
         //
         // A brand-new user has zero audit rows, so `latestId` is `null` here
@@ -132,28 +130,32 @@ function checkAgentActivity(userId: string): void {
         // require), every one of those checks would keep re-entering this
         // baseline branch, including the one right after the first review
         // finally wrote something — silently eating the very event the
-        // toast exists to surface. Writing `0` distinguishes "checked, saw
+        // note exists to surface. Writing `0` distinguishes "checked, saw
         // nothing yet" from "never checked", so the next check goes out
         // with `sinceId=0` and takes the non-baseline path below instead.
         writeCursor(userId, latestId ?? 0);
         return;
       }
 
-      const text = activityToastText(events);
-      if (text !== undefined) {
-        // A stable id (derived from the response's own latestId) lets sonner
-        // collapse duplicate toasts: multiple chat tabs can each schedule
-        // their own check against the same shared, per-user localStorage
-        // cursor, and a race between reading and writing it can make more
-        // than one tab observe the same new events. Keeps its original
-        // "memory-activity" prefix for the same reason the cursor key does
-        // — it is an internal dedup id, never shown to the user.
-        toast(text, { id: `memory-activity-${latestId}` });
+      if (classifyActivity(events).skill) {
+        // The anchor was captured when the turn finished, not now (the check
+        // fires 20-60s later): a message sent in the meantime must not pull
+        // the row under the next turn, or under the user's own bubble. A
+        // stable id (derived from the response's own
+        // latestId) lets the store collapse duplicates: multiple chat tabs
+        // can each schedule their own check against the same shared,
+        // per-user localStorage cursor, and a race between reading and
+        // writing it can make more than one observe the same new events.
+        // Keeps its original "memory-activity" prefix for the same reason
+        // the cursor key does — it is an internal dedup id, never shown.
+        useChatStore
+          .getState()
+          .addActivityNote(sessionId, { id: `memory-activity-${latestId}`, afterMessageId });
       }
 
-      // Advance the cursor regardless of whether we toasted — events are
-      // only ever lost if we forget to record having read them, not by
-      // skipping a toast for them.
+      // Advance the cursor regardless of whether we added a note — events
+      // are only ever lost if we forget to record having read them, not by
+      // skipping a note for them.
       if (latestId !== null) writeCursor(userId, latestId);
     })
     .catch(() => {
@@ -162,19 +164,25 @@ function checkAgentActivity(userId: string): void {
     });
 }
 
-interface UseAgentActivityToastOptions {
+interface UseAgentActivityNotesOptions {
   /** Anonymous client id memory/skills are scoped to; absent disables the check. */
   userId: string | undefined;
   /** The chat hook's `status` — a transition into "ready" schedules a check. */
   status: string;
+  /** Chat the note is recorded under. */
+  sessionId: string;
+  /** Reads the latest message id at call time (not a stale render's). Read
+   * once when the turn finishes — that message is the note's anchor. */
+  getLastMessageId: () => string | undefined;
 }
 
 // Schedules two delayed checks for server-side memory/skill writes that
 // happened after a chat turn finished (the model has no chance to surface
 // these itself — the review runs after the stream already closed) and
-// surfaces a transient toast when the review wrote a skill (FIR-71: memory
+// records a UI-only chat note (rendered as a row after the last message)
+// when the review wrote a skill (FIR-71: memory
 // writes are intentionally never announced — the cursor still advances past
-// them, but they produce no toast, memory-only or mixed with a skill write).
+// them, but they produce no note, memory-only or mixed with a skill write).
 // Silent on any failure: this is a nice-to-have notification, never
 // something that should interrupt the user or throw over a flaky network /
 // an older backend without the endpoint.
@@ -184,10 +192,12 @@ interface UseAgentActivityToastOptions {
 // cancelled (a new turn started before they fired) are simply picked up by
 // the next turn's checks instead of being lost — the cursor only advances
 // on a successful read.
-export function useAgentActivityToast({
+export function useAgentActivityNotes({
   userId,
   status,
-}: UseAgentActivityToastOptions): void {
+  sessionId,
+  getLastMessageId,
+}: UseAgentActivityNotesOptions): void {
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const wasActiveRef = useRef(false);
 
@@ -203,11 +213,13 @@ export function useAgentActivityToast({
     if (!justFinished || !userId) {
       return;
     }
+    const afterMessageId = getLastMessageId();
+    if (afterMessageId === undefined) return;
 
     timeoutsRef.current.forEach(clearTimeout);
     timeoutsRef.current = [
-      setTimeout(() => checkAgentActivity(userId), FIRST_CHECK_DELAY_MS),
-      setTimeout(() => checkAgentActivity(userId), SECOND_CHECK_DELAY_MS),
+      setTimeout(() => checkAgentActivity(userId, sessionId, afterMessageId), FIRST_CHECK_DELAY_MS),
+      setTimeout(() => checkAgentActivity(userId, sessionId, afterMessageId), SECOND_CHECK_DELAY_MS),
     ];
-  }, [status, userId]);
+  }, [status, userId, sessionId, getLastMessageId]);
 }

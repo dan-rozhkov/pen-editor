@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   PlusIcon,
   LightningIcon,
@@ -13,14 +13,14 @@ import {
   SphereIcon,
   LockIcon,
 } from "@phosphor-icons/react";
-import { useChatStore } from "@/store/chatStore";
+import { useChatStore, NO_ACTIVITY_NOTES } from "@/store/chatStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useUserSkillStore } from "@/store/userSkillStore";
 import type { ChatSummary, ParallelCount } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
 import { useModelOptions } from "@/hooks/useModelOptions";
-import { useAgentActivityToast } from "@/hooks/useAgentActivityToast";
+import { useAgentActivityNotes } from "@/hooks/useAgentActivityNotes";
 import { useReleaseCloudBrowserWhenDone } from "@/hooks/useReleaseCloudBrowserWhenDone";
 import { getActorId, useAuthStore } from "@/lib/auth/authState";
 import { hasOpenCodeKey, subscribeOpenCodeKey } from "@/lib/opencodeKey";
@@ -191,11 +191,32 @@ function ChatSession({
 
   // Surfaces server-side memory/skill writes that happen after this turn's
   // stream already closed (background review) — the model has no chance to
-  // mention these itself. See useAgentActivityToast for the delayed-check
-  // design.
+  // mention these itself. See useAgentActivityNotes for the delayed-check
+  // design. The result is a UI-only row in chatStore (never part of
+  // `messages`, so it is never sent to the backend).
   // Subscribed so the id re-resolves when the session loads/changes.
   useAuthStore((s) => s.userId);
-  useAgentActivityToast({ userId: getActorId(), status });
+  // The checks fire 20-60s after the turn, so they read the latest message
+  // through a ref rather than the render that scheduled them.
+  const latestMessagesRef = useRef(messages);
+  useEffect(() => {
+    latestMessagesRef.current = messages;
+  }, [messages]);
+  // Only assistant messages render notes, so the anchor is the last
+  // assistant message — a turn stopped before any reply ends on the user's.
+  const getLastMessageId = useCallback(
+    () => latestMessagesRef.current.filter((m) => m.role === "assistant").at(-1)?.id,
+    [],
+  );
+  useAgentActivityNotes({
+    userId: getActorId(),
+    status,
+    sessionId,
+    getLastMessageId,
+  });
+  const activityNotes = useChatStore(
+    (s) => s.activityNotes[sessionId] ?? NO_ACTIVITY_NOTES,
+  );
 
   const awaitingAnswer = hasPendingAskUser(messages);
 
@@ -400,6 +421,7 @@ function ChatSession({
           isLoading={isLoading}
           onRollback={isLoading ? undefined : handleRollback}
           addToolOutput={addToolOutput}
+          activityNotes={activityNotes}
           isVisible={isVisible}
         />
       </ChatSessionIdContext.Provider>

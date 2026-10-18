@@ -11,6 +11,20 @@ import type { AttachedImage, ChatLaunchPayload, QueuedChatMessage } from "@/type
  * change). Never mutated — the store always writes fresh arrays. */
 export const NO_ATTACHED_IMAGES: AttachedImage[] = [];
 
+/** A UI-only transcript row for a background-review write (see
+ * useAgentActivityNotes). Deliberately NOT a UIMessage: it lives beside the
+ * AI SDK `messages` array and is never sent to the backend, so it cannot
+ * touch the model's history or the prompt-cache prefix. */
+export interface ChatActivityNote {
+  /** Stable dedup key (derived from the activity response's latestId). */
+  id: string;
+  /** The message the note renders after. A rolled-back id renders nothing. */
+  afterMessageId: string;
+}
+
+/** Stable empty reference for chats with no activity notes. Never mutated. */
+export const NO_ACTIVITY_NOTES: ChatActivityNote[] = [];
+
 /** Stable empty reference for sessions with no queued messages, for the same
  * reason as NO_ATTACHED_IMAGES. Never mutated. */
 export const NO_QUEUED_MESSAGES: QueuedChatMessage[] = [];
@@ -84,6 +98,10 @@ interface ChatState {
   model: string;
   parallelCount: ParallelCount;
   chats: ChatSummary[];
+  /** UI-only background-review rows per chat. In-memory like the chats and
+   * their messages, so they do not survive a reload either. */
+  activityNotes: Record<string, ChatActivityNote[]>;
+  addActivityNote: (chatId: string, note: ChatActivityNote) => void;
   /** The chat currently shown in the panel, or null to show the chat list
    * with no chat open. */
   activeChatId: string | null;
@@ -270,6 +288,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isExpanded: localStorage.getItem("chat-expanded") === "true",
   model: normalizeModel(localStorage.getItem("chat-model")),
   parallelCount: normalizeParallelCount(localStorage.getItem("chat-parallel-count")),
+  activityNotes: {},
+  addActivityNote: (chatId, note) => {
+    set((s) => {
+      // Dedup across every chat, not just this one: the cursor is per user,
+      // so two mounted chats with checks in flight can both read the same
+      // event, and the user should see it once.
+      const seen = Object.values(s.activityNotes).some((list) => list.some((n) => n.id === note.id));
+      if (seen) return s;
+      const existing = s.activityNotes[chatId] ?? NO_ACTIVITY_NOTES;
+      return { activityNotes: { ...s.activityNotes, [chatId]: [...existing, note] } };
+    });
+  },
   chats: [
     makeChat(
       initialChatId,
@@ -343,6 +373,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       attachedImages,
       likedReferences,
       contextTokens,
+      activityNotes,
     } = get();
 
     // Abort any ongoing request for this chat
@@ -372,6 +403,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       delete newLikedReferences[chatId];
       const newContextTokens = { ...contextTokens };
       delete newContextTokens[chatId];
+      const newActivityNotes = { ...activityNotes };
+      delete newActivityNotes[chatId];
       set({
         chats: [makeChat(newId, "Chat 1", model, parallelCount)],
         // Only jump into the replacement chat if the user was already looking
@@ -386,6 +419,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         attachedImages: newAttachedImages,
         likedReferences: newLikedReferences,
         contextTokens: newContextTokens,
+        activityNotes: newActivityNotes,
       });
       return;
     }
@@ -403,6 +437,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     delete newMessageQueue[chatId];
     delete newAttachedImages[chatId];
     delete newContextTokens[chatId];
+    const newActivityNotes = { ...activityNotes };
+    delete newActivityNotes[chatId];
 
     // Closing the open chat returns to the chat list rather than jumping to a
     // sibling chat.
@@ -417,6 +453,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       attachedImages: newAttachedImages,
       likedReferences: newLikedReferences,
       contextTokens: newContextTokens,
+      activityNotes: newActivityNotes,
     });
   },
 
