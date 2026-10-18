@@ -467,7 +467,17 @@ function ChatSession({
   );
 }
 
-export function ChatPanelContent() {
+export function ChatPanelContent({
+  hideExpandToggle = false,
+  isVisible,
+}: {
+  /** Hide the "Expand panel" header button, for hosts with no sidebar to
+   * expand (the standalone /agent page). */
+  hideExpandToggle?: boolean;
+  /** Override the computed visibility (sidebar section + mobile panel state).
+   * Hosts with no sidebar (the standalone /agent page) pass true. */
+  isVisible?: boolean;
+} = {}) {
   const isExpanded = useChatStore((s) => s.isExpanded);
   const toggleExpanded = useChatStore((s) => s.toggleExpanded);
   const model = useChatStore((s) => s.model);
@@ -486,7 +496,7 @@ export function ChatPanelContent() {
   // (`display: none`) instead of unmounting it, MessageList's scroll
   // position and ChatInput's focus/resize effects need this real visibility
   // signal instead of a boolean that never changes across close/reopen.
-  const isChatVisible = isAgentsSectionActive && (!isMobile || isPanelOpen);
+  const isChatVisible = isVisible ?? (isAgentsSectionActive && (!isMobile || isPanelOpen));
   const [isSkillsPanelOpen, setSkillsPanelOpen] = useState(false);
   const isOpenCodeDialogOpen = useOpenCodeKeyDialogStore((s) => s.open);
   const setOpenCodeDialogOpen = useOpenCodeKeyDialogStore((s) => s.setOpen);
@@ -675,6 +685,7 @@ export function ChatPanelContent() {
           />
           <TooltipContent>Manage skills</TooltipContent>
         </Tooltip>
+        {!hideExpandToggle && (
         <Tooltip>
           <TooltipTrigger
             render={
@@ -694,6 +705,7 @@ export function ChatPanelContent() {
             {isExpanded ? "Collapse panel" : "Expand panel"}
           </TooltipContent>
         </Tooltip>
+        )}
       </div>
 
       {activeChatId === null ? (

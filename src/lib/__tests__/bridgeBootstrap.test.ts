@@ -26,6 +26,24 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("startBridges on the /agent route", () => {
+  it("starts no bridge at all", async () => {
+    vi.stubEnv("VITE_MCP_WS_TOKEN", "secret-token");
+    (window as unknown as { penDesktop: unknown }).penDesktop = {};
+    window.history.pushState({}, "", "/agent");
+    try {
+      const { startBridges } = await import("@/lib/bridgeBootstrap");
+      startBridges();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(initDesktopMcpBridgeMock).not.toHaveBeenCalled();
+      expect(initDesktopBridgeMock).not.toHaveBeenCalled();
+      expect(startMcpBridgeIfConfiguredMock).not.toHaveBeenCalled();
+    } finally {
+      window.history.pushState({}, "", "/");
+    }
+  });
+});
+
 describe("startBridges", () => {
   it("starts the WebSocket bridge when configured and there is no desktop shell", async () => {
     vi.stubEnv("VITE_MCP_WS_TOKEN", "secret-token");

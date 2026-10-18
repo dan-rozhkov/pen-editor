@@ -16,6 +16,10 @@ const EditorApp = lazy(() => import("./App"));
 // chunk world too, never in the showcase entry bundle.
 const SharedCanvasPage = lazy(() => import("./components/share/SharedCanvasPage"));
 
+// The agent chat on its own at "/agent" (narrow desktop-shell panel). Lazy and
+// separate from the editor chunk: it must never import App or the Pixi stack.
+const AgentPage = lazy(() => import("@/routes/AgentPage"));
+
 // Accounts (Better Auth). Lazy for the same reason as the editor: the auth
 // client must not weigh on the showcase entry bundle, and all three pages are
 // only reachable on deployments where /api/auth-config reports accounts on.
@@ -43,6 +47,14 @@ export function AppRouter() {
           element={
             <Suspense fallback={null}>
               <EditorApp />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/agent"
+          element={
+            <Suspense fallback={null}>
+              <AgentPage />
             </Suspense>
           }
         />

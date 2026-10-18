@@ -2,8 +2,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { track } from "./lib/analytics";
 import { markEditorOpened } from "./lib/analytics/sessionTiming";
 import { chatHiddenSections, isChatDisabled } from "./lib/chatMode";
-import { loadModels } from "./lib/chatModels";
-import { reconcileModels } from "./store/chatStore";
+import { useChatBootstrap } from "./hooks/useChatBootstrap";
 import { useCustomFontStore } from "./store/customFontStore";
 import { usePluginStore } from "./store/pluginStore";
 import { useSceneStore } from "./store/sceneStore";
@@ -33,9 +32,7 @@ import { importShowcaseScreensFromHandoff } from "./lib/importShowcaseScreens";
 import { OfflineBanner } from "./components/status/OfflineBanner";
 import { ShareDialog } from "./components/share/ShareDialog";
 import { useSharedViewStore } from "./store/sharedViewStore";
-import { Toaster } from "./components/ui/sonner";
-import { TooltipProvider } from "./components/ui/tooltip";
-import "./store/uiThemeStore"; // Initialize the editor theme store after the shared page bootstrap.
+import { EditorProviders } from "./components/EditorProviders";
 
 const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default: m.PixiCanvas })));
 
@@ -87,17 +84,11 @@ function App() {
     });
   }, []);
 
-  // Pull the authoritative chat model list from the backend (which models,
-  // whether each reads images, which image ops exist), then drop any saved
-  // selection it no longer offers. Falls back to the hardcoded list on
-  // failure.
-  // Runs in chatless mode too: the same response carries the image-ops
-  // capabilities (canRemoveBackground/canVectorize) and vision metadata that
-  // non-chat tooling reads. reconcileModels only touches chat-store model ids,
-  // so it is harmless there.
-  useEffect(() => {
-    void loadModels().then(reconcileModels);
-  }, []);
+  // Authoritative chat model list + stale-selection cleanup. Runs in
+  // chatless mode too: the same response carries the image-ops capabilities
+  // (canRemoveBackground/canVectorize) and vision metadata that non-chat
+  // tooling reads; reconcileModels only touches chat-store model ids.
+  useChatBootstrap();
 
   // Chatless mode leaves the showcase prompt UNCONSUMED in sessionStorage (a
   // later task routes it to the desktop chat panel) — never consume it here.
@@ -180,11 +171,9 @@ function App() {
   }, []);
 
   return (
-    // Single app-wide TooltipProvider: shares hover-delay grouping across
-    // every IconButton/Tooltip so sweeping across a row of icon buttons
-    // doesn't re-trigger the open delay on each one. Do not mount another
-    // provider closer to the leaves.
-    <TooltipProvider delay={400} closeDelay={0}>
+    // EditorProviders: the single app-wide TooltipProvider + Toaster (also
+    // initializes the editor theme store), shared with the /agent page.
+    <EditorProviders>
     <div className="w-full h-full relative overflow-hidden">
       {/* Canvas — always full window, behind everything. `isolate` creates a
           stacking context so the embed DOM overlay (and other canvas overlays,
@@ -200,10 +189,6 @@ function App() {
           </Suspense>
         </CanvasContextMenu>
       </div>
-
-      {/* Sonner toast portal — hosts the editor's toasts. Themed with the
-          editor's UI theme. */}
-      <Toaster />
 
       {/* Keeps the present-mode frame fitted to the window; no-op otherwise. */}
       <PresentController />
@@ -280,7 +265,7 @@ function App() {
         </div>
       )}
     </div>
-    </TooltipProvider>
+    </EditorProviders>
   );
 }
 
