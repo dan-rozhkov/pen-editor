@@ -65,8 +65,8 @@ export function resolveChatApiUrl(): string {
 }
 
 export interface ChatTransportOptions {
-  /** Extra request body fields, resolved on every send. */
-  body: () => object;
+  /** Extra request body fields, resolved on every send. May be async (the AI SDK awaits it): the agent panel fetches the canvas tab's context here. */
+  body: () => object | Promise<object>;
   onRetryStateChange?: (state: RetryState | null) => void;
   /** Test seam: replaces the network fetch under the retrying wrapper. */
   fetchImpl?: typeof fetch;

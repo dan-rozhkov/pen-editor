@@ -87,8 +87,11 @@ export interface CanvasTabInfo {
 /** Preload API of the agent panel: `window.penAgentPanel.canvas`. */
 export interface AgentPanelCanvasBridge {
   listTabs(): Promise<CanvasTabInfo[]>;
-  /** Opens a `/app?chat=off` tab; resolves once it registered as a canvas host. */
-  openTab(opts?: { activate?: boolean }): Promise<{ tabId: number }>;
+  /**
+   * Opens a `/app?chat=off` tab; resolves once it registered as a canvas host, with the
+   * `registrationId` of that registration (the tab list may not show it yet; bind with this one).
+   */
+  openTab(opts?: { activate?: boolean }): Promise<{ tabId: number; registrationId: number }>;
   activateTab(tabId: number): void;
   post(tabId: number, env: LinkEnvelope<ChatToCanvasMsg>): void;
   onMessage(cb: (tabId: number, env: LinkEnvelope<CanvasToChatMsg | MainToChatMsg>) => void): () => void;

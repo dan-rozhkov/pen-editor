@@ -69,29 +69,6 @@ export function stubLocateFetch(payload: Record<string, unknown>, status = 200) 
   return fetchMock;
 }
 
-/** An AI SDK v6 UI-message SSE response from raw chunks (nested browse_agent chat). */
-export function sse(chunks: Array<Record<string, unknown>>): Response {
-  const body = [...chunks, "[DONE]"]
-    .map((c) => `data: ${typeof c === "string" ? c : JSON.stringify(c)}\n\n`)
-    .join("");
-  return new Response(body, {
-    status: 200,
-    headers: { "content-type": "text/event-stream", "x-vercel-ai-ui-message-stream": "v1" },
-  });
-}
-
-/** One assistant text turn. */
-export const textTurn = (text: string): Response =>
-  sse([
-    { type: "start" },
-    { type: "start-step" },
-    { type: "text-start", id: "t1" },
-    { type: "text-delta", id: "t1", delta: text },
-    { type: "text-end", id: "t1" },
-    { type: "finish-step" },
-    { type: "finish" },
-  ]);
-
 // Shared arrange for the browse_agent fixture/checkpoint suites
 // (browseAgentFixture.test.ts, browseAgentCheckpoint.test.ts).
 

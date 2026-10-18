@@ -28,7 +28,7 @@ Each chat is bound to one canvas tab (`tabId`), kept on the chat side. On the
 first canvas tool of a turn with no live binding:
 1. exactly one canvas tab → bind it;
 2. several → the first in the list (the most recently active canvas tab), even if a browser tab is currently active;
-3. none → `openTab()` and bind the new tab.
+3. none → `openTab()` and bind the new tab with the `{ tabId, registrationId }` it resolves with (never look the registration up in the tab list: it may not have announced the new tab yet).
 `listTabs()` is ordered most recently active canvas tab first; each
 `CanvasTabInfo` has a `registrationId` that increments every time the tab
 registers (a reloaded tab keeps its `tabId`, gets a new `registrationId`).
@@ -39,7 +39,7 @@ A `tab-gone` (it carries `registrationId`) for the bound registration clears the
 | Channel | Direction | Payload |
 |---|---|---|
 | `canvas:list` | panel → main, invoke | → `CanvasTabInfo[]` (this window's registered canvas tabs) |
-| `canvas:open` | panel → main, invoke | `{activate?}` → `{tabId}` after the new tab called `register()` (timeout 20 s → reject) |
+| `canvas:open` | panel → main, invoke | `{activate?}` → `{tabId, registrationId}` after the new tab called `register()` (timeout 20 s → reject) |
 | `canvas:activate` | panel → main | `tabId` |
 | `canvas:to-tab` | panel → main | `{tabId, env}` |
 | `canvas:from-tab` | main → panel | `{tabId, env}` (from a canvas tab, or main's `error` / `tab-gone`) |

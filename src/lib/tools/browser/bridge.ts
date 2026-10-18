@@ -27,8 +27,17 @@ const closedBridge = new Proxy({} as BrowserBridge, {
   get: (_t, key) => (key === "then" || typeof key === "symbol" ? undefined : async () => CLOSED_ERROR),
 });
 
+/**
+ * The shell's own browser bridge: `window.penDesktop.browser` in an editor tab,
+ * `window.penAgentPanel.browser` in the agent panel (which has no scene but runs
+ * every browse_* tool itself; same shape).
+ */
+export function desktopBrowserBridge(): BrowserBridge | undefined {
+  return window.penDesktop?.browser ?? window.penAgentPanel?.browser;
+}
+
 export function getBrowserBridge(chatId?: string, browserSession?: string): BrowserBridge | undefined {
-  const desktop = window.penDesktop?.browser;
+  const desktop = desktopBrowserBridge();
   if (desktop && browserSession && typeof desktop.isolated === "function") {
     if (closedSessions.has(browserSession)) return closedBridge;
     let bridge = isolatedBridges.get(browserSession);
@@ -53,7 +62,7 @@ export async function closeBrowserSession(browserSession: string): Promise<void>
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
-      window.penDesktop?.browser?.closeSession?.(browserSession),
+      desktopBrowserBridge()?.closeSession?.(browserSession),
       new Promise<void>((resolve) => {
         timer = setTimeout(resolve, CLOSE_SESSION_TIMEOUT_MS);
       }),
@@ -68,10 +77,11 @@ export async function closeBrowserSession(browserSession: string): Promise<void>
 
 /**
  * The single predicate for "this client has its own built-in browser": the
- * Electron shell exposes `window.penDesktop.browser`. A `penDesktop` without
+ * Electron shell exposes `window.penDesktop.browser` (or the agent panel
+ * `window.penAgentPanel.browser`). A `penDesktop` without
  * `.browser` (older shell) falls through to the cloud browser, so bridge
  * selection, the live-view panel and the request capability must all use this.
  */
 export function isDesktopBrowserAvailable(): boolean {
-  return Boolean(window.penDesktop?.browser);
+  return Boolean(desktopBrowserBridge());
 }

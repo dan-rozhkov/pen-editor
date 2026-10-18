@@ -61,7 +61,8 @@ export const browseCapture: ToolHandler = async (args, context) => {
       height: size.height,
       htmlContent: html,
     }),
-    signal
+    signal,
+    context?.sessionId
   );
   if (!placed) return ABORTED_ERROR;
   const nodeId = placed.id;

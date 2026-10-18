@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toolHandlers } from "@/lib/toolRegistry";
 import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
-import { cleanupBrowseAgentTest, fixtureBridgeMocks, stubBrowseOpenSnapshot, textTurn } from "./helpers";
+import { textTurn } from "@/test/sseStream";
+import { cleanupBrowseAgentTest, fixtureBridgeMocks, stubBrowseOpenSnapshot } from "./helpers";
 import { browseAgent } from "../browseAgent";
 
 function stubFetch() {

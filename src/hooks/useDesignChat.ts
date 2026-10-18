@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
-import { createToolExecutor } from "@sideform/agent-harness/executor";
+import { createToolExecutor, type ToolExecutedEvent } from "@sideform/agent-harness/executor";
 import type { RetryState } from "@sideform/agent-harness/retry-fetch";
 import { browseTaskInnerBoundMs } from "@sideform/browser-agent/loop";
 import { track, bucketLength } from "@/lib/analytics";
@@ -31,6 +31,13 @@ import { isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";
 import { isIsolatedQaCall } from "@/lib/tools/browser/isolation";
 import { BROWSE_AGENT_OUTER_TIMEOUT_MS } from "@/lib/tools/browser/browseAgent";
 import { extractStreamingToolInputs } from "@/hooks/streamingToolParts";
+import {
+  panelCallTool,
+  panelEndStream,
+  panelForwardFrame,
+  panelRunsInCanvas,
+  withPanelCanvasContext,
+} from "@/lib/canvasLink/panelRuntime";
 import {
   streamingToolAdapters,
   streamingToolNames,
@@ -366,19 +373,38 @@ export function extractContextTokens(metadata: unknown): number | undefined {
 // budget.
 type ToolCallSource = "chat" | "bridge" | "webmcp" | "browse_agent";
 
+function trackToolExecuted(event: ToolExecutedEvent<ToolCallSource>): void {
+  track("agent_tool_executed", {
+    tool_name: event.toolName,
+    ok: event.ok,
+    duration_ms: event.durationMs,
+    ...(event.errorKind ? { error_kind: event.errorKind } : {}),
+    source: event.source,
+  });
+}
+
+/**
+ * Agent panel: a canvas tool ran in the canvas tab, not through `executeToolCall`,
+ * so it reports `agent_tool_executed` itself, with the same event shape. The
+ * failure shape is the same too (a `{"error": ...}` result); a timeout is told
+ * apart by its message (the tab's own, or the panel client's).
+ */
+function trackPanelCanvasCall(toolName: string, result: string, startedAt: number): void {
+  const ok = !result.startsWith('{"error"');
+  trackToolExecuted({
+    toolName,
+    ok,
+    durationMs: Math.round(performance.now() - startedAt),
+    ...(ok ? {} : { errorKind: /timed out/i.test(result) ? ("timeout" as const) : ("handler_error" as const) }),
+    source: "chat",
+  });
+}
+
 const executeWithHarness = createToolExecutor<ToolExecutionContext, ToolCallSource>({
   resolveHandler: (toolName) => toolHandlers[toolName],
   runQueued: runToolCall,
   timeoutMs: (toolName) => getToolCallTimeoutMs(toolName),
-  onExecuted: (event) => {
-    track("agent_tool_executed", {
-      tool_name: event.toolName,
-      ok: event.ok,
-      duration_ms: event.durationMs,
-      ...(event.errorKind ? { error_kind: event.errorKind } : {}),
-      source: event.source,
-    });
-  },
+  onExecuted: trackToolExecuted,
 });
 
 export function executeToolCall(
@@ -456,7 +482,8 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const transport = useMemo(
     () =>
       createChatTransport({
-        body: () => buildCanvasContext(sessionId),
+        // Agent panel: the canvas tab's context (async; the SDK awaits `body`).
+        body: () => withPanelCanvasContext(sessionId, buildCanvasContext(sessionId)),
         onRetryStateChange: setRetryState,
       }),
     // Built once per mounted session: the model (and everything else in the
@@ -531,12 +558,23 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       pendingToolCallAbortsRef.current.add(toolAbort);
       let handlerResult: string;
       try {
-        handlerResult = await executeToolCall(
-          toolCall.toolName,
-          toolCall.input,
-          { sessionId, toolCallId: toolCall.toolCallId, signal: toolAbort.signal },
-          "chat"
-        );
+        // Agent panel: canvas tools run in the bound canvas tab.
+        if (panelRunsInCanvas(toolCall.toolName)) {
+          const startedAt = performance.now();
+          handlerResult = await panelCallTool(sessionId, toolCall.toolName, toolCall.input, {
+            toolCallId: toolCall.toolCallId,
+            timeoutMs: getToolCallTimeoutMs(toolCall.toolName),
+            signal: toolAbort.signal,
+          });
+          trackPanelCanvasCall(toolCall.toolName, handlerResult, startedAt);
+        } else {
+          handlerResult = await executeToolCall(
+            toolCall.toolName,
+            toolCall.input,
+            { sessionId, toolCallId: toolCall.toolCallId, signal: toolAbort.signal },
+            "chat"
+          );
+        }
       } finally {
         pendingToolCallAbortsRef.current.delete(toolAbort);
       }
@@ -570,6 +608,12 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       // `turnStoppedRef`: a Stop that landed while the handler itself was
       // still running (e.g. queued behind other mutations) happened before
       // any controller existed to abort, so don't start a check at all.
+      //
+      // Agent panel: NOT run for canvas-link calls. The handler ran in the canvas
+      // tab, so the touched-embed registry this check reads was filled in that
+      // process, not here: `hasTouchedEmbeds` is always false below. Known
+      // limitation (CLAUDE.md, "Canvas link — panel side"); a cross-process
+      // taste check is a follow-up.
       if (
         (toolCall.toolName === "batch_design" || toolCall.toolName === "edit_embed_html") &&
         !turnStoppedRef.current &&
@@ -782,6 +826,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
         sessionId,
         toolCallId: call.toolCallId,
       });
+      panelEndStream(call.toolCallId, "abandoned");
     }
     for (const adapter of streamingToolAdapters) {
       adapter.onSessionClear(sessionId);
@@ -852,6 +897,10 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
         toolName: streamed.toolName,
         toolCallId: streamed.toolCallId,
       });
+      // Agent panel: forwarded to the canvas tab instead of applied here.
+      if (panelForwardFrame(sessionId, streamed.toolName, streamed.toolCallId, streamed.input)) {
+        continue;
+      }
       getStreamingToolAdapter(streamed.toolName)?.onFrame({
         sessionId,
         toolCallId: streamed.toolCallId,
@@ -941,6 +990,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
         sessionId,
         toolCallId: call.toolCallId,
       });
+      panelEndStream(call.toolCallId, "abandoned");
     }
   }, [chat.status, chat.messages, sessionId]);
 

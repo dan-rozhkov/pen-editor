@@ -1,4 +1,4 @@
-import type { ToolHandler } from "../../toolRegistry";
+import type { ToolExecutionContext, ToolHandler } from "../../toolRegistry";
 import { createImagePaint, clearLegacyFillProps } from "@/utils/fillUtils";
 import { generateId, type RectNode } from "@/types/scene";
 import { loadImageSize } from "@/components/canvas/imageImport";
@@ -48,13 +48,10 @@ async function screenshotSize(shot: Record<string, unknown>, dataUrl: string) {
   return FALLBACK_SIZE;
 }
 
-const placeOnCanvasStep: NonNullable<ExecuteBrowseToolOptions["afterScreenshot"]> = async ({
-  raw,
-  result,
-  args,
-  bridgeArgs,
-  capture,
-}) => {
+const placeOnCanvasStep = async (
+  { raw, result, args, bridgeArgs, capture }: Parameters<NonNullable<ExecuteBrowseToolOptions["afterScreenshot"]>>[0],
+  context: ToolExecutionContext | undefined
+): Promise<string> => {
   if ("error" in result) return raw;
   if (typeof result.imageData !== "string") {
     return JSON.stringify({ ...result, placeError: "The capture returned no image data." });
@@ -74,24 +71,40 @@ const placeOnCanvasStep: NonNullable<ExecuteBrowseToolOptions["afterScreenshot"]
   const { width, height } = await screenshotSize(shot, dataUrl);
   const name = pageNodeName(shot, "Screenshot");
 
-  const placedAt = await placeNodeOnCanvas(args.x, args.y, { width, height }, (pos) => ({
-    id: generateId(),
-    type: "rect",
-    name,
-    x: pos.x,
-    y: pos.y,
-    width,
-    height,
-    cornerRadius: 0,
-    fills: [createImagePaint({ url: dataUrl, mode: "fill" })],
-    ...clearLegacyFillProps(),
-  } as RectNode)) as { id: string; x: number; y: number };
+  // The capture is already in hand: a failed placement (e.g. the canvas tab refused it
+  // in the agent panel) is reported next to it instead of throwing the screenshot away.
+  let placedAt: { id: string; x: number; y: number } | undefined;
+  try {
+    placedAt = await placeNodeOnCanvas(
+      args.x,
+      args.y,
+      { width, height },
+      (pos) => ({
+        id: generateId(),
+        type: "rect",
+        name,
+        x: pos.x,
+        y: pos.y,
+        width,
+        height,
+        cornerRadius: 0,
+        fills: [createImagePaint({ url: dataUrl, mode: "fill" })],
+        ...clearLegacyFillProps(),
+      } as RectNode),
+      context?.signal,
+      context?.sessionId
+    );
+  } catch (err) {
+    return JSON.stringify({ ...result, placeError: err instanceof Error ? err.message : "Placing the screenshot failed." });
+  }
+  if (!placedAt) return JSON.stringify({ ...result, placeError: "Placing the screenshot was aborted." });
   const placedRect = { x: placedAt.x, y: placedAt.y, width, height };
 
   return JSON.stringify({ ...result, placedNodeId: placedAt.id, placedAt: placedRect });
 };
 
-const screenshotOptions: ExecuteBrowseToolOptions = { ...peBase, afterScreenshot: placeOnCanvasStep };
-
 export const browseScreenshot: ToolHandler = (args, context) =>
-  executeBrowseTool(getBrowserBridge(context?.sessionId, context?.browserSession), "browse_screenshot", args, screenshotOptions);
+  executeBrowseTool(getBrowserBridge(context?.sessionId, context?.browserSession), "browse_screenshot", args, {
+    ...peBase,
+    afterScreenshot: (ctx) => placeOnCanvasStep(ctx, context),
+  });

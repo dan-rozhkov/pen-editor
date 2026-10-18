@@ -1,16 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { toolHandlers, type ToolHandler } from "@/lib/toolRegistry";
+import { sse, textTurn } from "@/test/sseStream";
 import { useDesignChat } from "../useDesignChat";
 
-const turn = (chunks: Array<Record<string, unknown>>) =>
-  new Response(chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") + "data: [DONE]\n\n", {
-    status: 200,
-    headers: { "content-type": "text/event-stream", "x-vercel-ai-ui-message-stream": "v1" },
-  });
-
 const callsTurn = (calls: Array<{ id: string; input: Record<string, unknown> }>) =>
-  turn([
+  sse([
     { type: "start" },
     { type: "start-step" },
     ...calls.map((c) => ({ type: "tool-input-available", toolCallId: c.id, toolName: "browse_agent", input: c.input })),
@@ -18,16 +13,7 @@ const callsTurn = (calls: Array<{ id: string; input: Record<string, unknown> }>)
     { type: "finish" },
   ]);
 
-const doneTurn = () =>
-  turn([
-    { type: "start" },
-    { type: "start-step" },
-    { type: "text-start", id: "t" },
-    { type: "text-delta", id: "t", delta: "ok" },
-    { type: "text-end", id: "t" },
-    { type: "finish-step" },
-    { type: "finish" },
-  ]);
+const doneTurn = () => textTurn("ok");
 
 type Run = { id: string; signal?: AbortSignal; finish: (out: string) => void };
 let runs: Run[];
@@ -186,7 +172,7 @@ describe("parallel isolated QA browse_agent calls", () => {
   it("a provider-executed tool part without output never keeps the chat busy", async () => {
     fetchMock = vi.fn(async () =>
       fetchMock.mock.calls.length === 1
-        ? turn([
+        ? sse([
             { type: "start" },
             { type: "start-step" },
             { type: "tool-input-available", toolCallId: "p1", toolName: "web_search", input: {}, providerExecuted: true },

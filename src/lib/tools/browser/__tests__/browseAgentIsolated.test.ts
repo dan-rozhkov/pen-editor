@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupBrowseAgentTest, fixtureBridgeMocks, textTurn } from "./helpers";
+import { textTurn } from "@/test/sseStream";
+import { cleanupBrowseAgentTest, fixtureBridgeMocks } from "./helpers";
 
 const loop = vi.hoisted(() => ({ reset: vi.fn(), apply: vi.fn() }));
 const createSessionSpy = vi.hoisted(() => vi.fn());

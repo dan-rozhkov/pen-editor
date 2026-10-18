@@ -34,19 +34,52 @@ export function pageNodeName(page: Record<string, unknown>, prefix: string): str
 }
 
 /**
+ * Where the node is placed when this page has no scene of its own (the agent
+ * panel, docs/canvas-link.md): receives the node WITHOUT position and
+ * `{x?, y?, size}` (a `build` callback cannot cross the wire) and answers the
+ * placed `{id, x, y}`. `undefined` = aborted. Throws with the reason on failure.
+ * `sessionId` is the chat the tool runs for (its bound canvas tab gets the node).
+ */
+export type PlaceNodeRedirect = (
+  node: Record<string, unknown>,
+  options: { x?: number; y?: number; size: { width: number; height: number } },
+  signal?: AbortSignal,
+  sessionId?: string
+) => Promise<{ id: string; x: number; y: number } | undefined>;
+
+let placeNodeRedirect: PlaceNodeRedirect | null = null;
+
+/** Installs (or with null removes) the redirect. Only the agent panel sets it. */
+export function setPlaceNodeRedirect(redirect: PlaceNodeRedirect | null): void {
+  placeNodeRedirect = redirect;
+}
+
+/**
  * Queued so the read of the scene (for the position) and the addNode are not
  * interleaved with a serialized writer's snapshot-and-commit. `x`/`y` apply
  * only as a pair, else the node goes right of existing root content. If
  * `signal` is already aborted when the task runs, nothing is added and
- * `undefined` comes back.
+ * `undefined` comes back. `sessionId` (the calling chat) only matters in the
+ * agent panel, where the node goes to that chat's bound canvas tab.
  */
 export function placeNodeOnCanvas<T extends SceneNode>(
   x: unknown,
   y: unknown,
   size: { width: number; height: number },
   build: (pos: { x: number; y: number }) => T,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  sessionId?: string
 ): Promise<{ id: string; x: number; y: number } | undefined> {
+  const redirect = placeNodeRedirect;
+  if (redirect) {
+    if (signal?.aborted) return Promise.resolve(undefined);
+    // Position is the canvas tab's business: build with a dummy spot, strip it.
+    const { x: _x, y: _y, ...node } = build({ x: 0, y: 0 });
+    void _x;
+    void _y;
+    const pair = isFiniteNumber(x) && isFiniteNumber(y) ? { x, y } : {};
+    return redirect(node, { ...pair, size }, signal, sessionId);
+  }
   return runSerialized(async () => {
     if (signal?.aborted) return undefined;
     const spot =

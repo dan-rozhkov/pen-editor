@@ -1,5 +1,5 @@
 import { hashString } from "@sideform/browser-agent/loop";
-import { isDesktopBrowserAvailable } from "./bridge";
+import { desktopBrowserBridge, isDesktopBrowserAvailable } from "./bridge";
 
 /** Longest session id the desktop shell accepts (`^[A-Za-z0-9_-]{1,64}$`). */
 const SESSION_ID_MAX = 64;
@@ -13,7 +13,7 @@ let runCounter = 0;
  * per day). Static for a page load, so it is safe to advertise as a capability.
  */
 export function isolatedBrowseAvailable(): boolean {
-  return isDesktopBrowserAvailable() && typeof window.penDesktop?.browser?.isolated === "function";
+  return isDesktopBrowserAvailable() && typeof desktopBrowserBridge()?.isolated === "function";
 }
 
 /**
@@ -21,7 +21,7 @@ export function isolatedBrowseAvailable(): boolean {
  * a desktop shell only with `browser.assert` (an older shell lacks it). Static for a page load.
  */
 export function browseAssertAvailable(): boolean {
-  return !isDesktopBrowserAvailable() || typeof window.penDesktop?.browser?.assert === "function";
+  return !isDesktopBrowserAvailable() || typeof desktopBrowserBridge()?.assert === "function";
 }
 
 const idSafe = (value: string) => value.replace(/[^A-Za-z0-9_-]/g, "_");

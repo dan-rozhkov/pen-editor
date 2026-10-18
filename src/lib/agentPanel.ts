@@ -1,8 +1,25 @@
+import type { PenDesktopApi } from "@/lib/desktopBridge";
+import type { AgentPanelCanvasBridge } from "@/lib/canvasLink/protocol";
+
+/** Preload API of the agent panel view (docs/canvas-link.md). */
+export interface PenAgentPanelApi {
+  version: number;
+  /** version >= 2: the link to the canvas tabs. Absent on an older shell. */
+  canvas?: AgentPanelCanvasBridge;
+  /** version >= 2: the shell's built-in browser, the same shape as `window.penDesktop.browser`. */
+  browser?: PenDesktopApi["browser"];
+}
+
 declare global {
   interface Window {
     /** Exposed by the desktop shell's preload ONLY inside the agent panel view. */
-    penAgentPanel?: { version: number };
+    penAgentPanel?: PenAgentPanelApi;
   }
+}
+
+/** The panel's canvas bridge, or undefined (web, dev build, shell older than panel version 2). */
+export function getAgentPanelCanvasBridge(): AgentPanelCanvasBridge | undefined {
+  return window.penAgentPanel?.canvas;
 }
 
 /**

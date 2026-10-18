@@ -3,7 +3,8 @@ import { toolHandlers } from "@/lib/toolRegistry";
 import { messageToMarkdown } from "@/lib/chatExport";
 import { unwrapJournalToken } from "@/lib/cloudBrowser";
 import { MAX_CHECKPOINTS_PER_CHAT, resetBrowseCheckpoints, useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
-import { cleanupBrowseAgentTest, fixtureBridgeMocks, stubBrowseOpenSnapshot, textTurn } from "./helpers";
+import { textTurn } from "@/test/sseStream";
+import { cleanupBrowseAgentTest, fixtureBridgeMocks, stubBrowseOpenSnapshot } from "./helpers";
 import { browseAgent } from "../browseAgent";
 import { getBrowserBridge } from "../bridge";
 

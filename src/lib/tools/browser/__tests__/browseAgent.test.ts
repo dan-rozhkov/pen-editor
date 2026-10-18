@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toolHandlers, type ToolHandler } from "@/lib/toolRegistry";
 import { clearOpenCodeKey, setOpenCodeKey } from "@/lib/opencodeKey";
 import { useChatStore } from "@/store/chatStore";
-import { sse, textTurn, setPenDesktop, stubBrowser, type PenDesktopBrowser } from "./helpers";
+import { sse, textTurn } from "@/test/sseStream";
+import { setPenDesktop, stubBrowser, type PenDesktopBrowser } from "./helpers";
 import { BROWSE_AGENT_DEADLINE_MS, browseAgent, nestedChatId } from "../browseAgent";
 
 const toolTurn = (toolName: string, input: unknown, toolCallId = "call-1"): Response =>
