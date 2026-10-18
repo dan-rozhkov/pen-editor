@@ -1,6 +1,7 @@
 import type { BrowserBridge } from "@sideform/browser-agent/loop";
 import { getCommands, runCommand } from "@/lib/commands/registry";
 import { useDocumentStore } from "@/store/documentStore";
+import type { CanvasHostBridge } from "@/lib/canvasLink/protocol";
 
 /**
  * Bridge to the Electron shell (pen-editor-desktop). The desktop preload
@@ -23,6 +24,8 @@ export interface PenDesktopApi {
   setDocumentTitle?(title: string): void;
   /** true when the desktop agent layout flag is on: the editor tab is chatless. */
   agentLayout?: boolean;
+  /** Canvas link host bridge (desktop agent layout only); see docs/canvas-link.md. */
+  canvasHost?: CanvasHostBridge;
   onMenuCommand(cb: (commandId: string) => void): () => void;
   /**
    * Registers this tab as the target for the desktop shell's loopback MCP

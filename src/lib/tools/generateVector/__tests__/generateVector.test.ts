@@ -241,6 +241,22 @@ describe("generate_vector handler", () => {
     useChatStore.setState({ abortControllers: {} });
   });
 
+  it("honors the call's own signal, alone and combined with the chat controller", async () => {
+    streamQuiverVector.mockResolvedValue(ARTWORK);
+    const own = new AbortController();
+    await generateVector({ prompt: "a mark", x: 0, y: 0 }, { ...CONTEXT, signal: own.signal });
+    expect(streamQuiverVector.mock.calls[0][0].signal).toBe(own.signal);
+
+    const chat = new AbortController();
+    useChatStore.setState({ abortControllers: { s1: chat } });
+    await generateVector({ prompt: "a mark", x: 0, y: 0 }, { ...CONTEXT, signal: own.signal });
+    const combined = streamQuiverVector.mock.calls[1][0].signal as AbortSignal;
+    expect(combined.aborted).toBe(false);
+    own.abort();
+    expect(combined.aborted).toBe(true);
+    useChatStore.setState({ abortControllers: {} });
+  });
+
   // Finding 6: an aborted generation must be reported as a cancellation, not
   // a retry-worthy failure, and must not commit any nodes from whatever
   // truncated SVG had streamed in so far.

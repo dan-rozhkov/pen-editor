@@ -93,9 +93,15 @@ export const generateVector: ToolHandler = async (
   const rawParentId = typeof args.parentId === "string" ? args.parentId.trim() : "";
   const parentId = rawParentId.length > 0 ? rawParentId : undefined;
 
-  const abortSignal = context?.sessionId
+  // Both sources count: the chat's Stop button (per-session controller) and the
+  // call's own signal (cancel / timeout from executeToolCall, e.g. canvas link).
+  const chatSignal = context?.sessionId
     ? useChatStore.getState().abortControllers[context.sessionId]?.signal
     : undefined;
+  const abortSignal =
+    chatSignal && context?.signal
+      ? AbortSignal.any([chatSignal, context.signal])
+      : (chatSignal ?? context?.signal);
 
   // Claim the spot before the model has produced a single byte. Quiver sends
   // nothing at all for ~18s, so without this the canvas stays blank for the

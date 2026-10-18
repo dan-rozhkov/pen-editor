@@ -28,6 +28,7 @@ import { useOnlineStatus } from "./hooks/useOnlineStatus";
 import { useSessionMcpBridge } from "./hooks/useSessionMcpBridge";
 import { launchShowcaseAgentChat } from "./lib/launchShowcaseAgentChat";
 import { startWebMcp, stopWebMcp } from "./lib/webmcp";
+import { maybeStartCanvasHost } from "./lib/canvasLink/canvasHost";
 import { importShowcaseScreensFromHandoff } from "./lib/importShowcaseScreens";
 import { OfflineBanner } from "./components/status/OfflineBanner";
 import { ShareDialog } from "./components/share/ShareDialog";
@@ -149,6 +150,16 @@ function App() {
     void startWebMcp();
     return () => stopWebMcp();
   }, []);
+
+  // Canvas link (docs/canvas-link.md): in the desktop agent layout this chatless
+  // tab registers as a canvas host so the agent panel can drive its document.
+  // Re-evaluated when editability changes: the host is stopped (and unregisters)
+  // on the shared viewer and in view/present mode, and starts when editing is allowed.
+  const canvasHostEditable = mode === "edit" && !isSharedView;
+  useEffect(() => {
+    if (!canvasHostEditable) return undefined;
+    return maybeStartCanvasHost() ?? undefined;
+  }, [canvasHostEditable]);
 
   // Embed HTML components: re-render consumers when a master changes (edit,
   // undo, redo) and catch stale regions up on page activation. See
