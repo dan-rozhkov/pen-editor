@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
 import { track } from "./lib/analytics";
 import { markEditorOpened } from "./lib/analytics/sessionTiming";
+import { chatHiddenSections, isChatDisabled } from "./lib/chatMode";
 import { loadModels } from "./lib/chatModels";
 import { reconcileModels } from "./store/chatStore";
 import { useCustomFontStore } from "./store/customFontStore";
@@ -90,11 +91,18 @@ function App() {
   // whether each reads images, which image ops exist), then drop any saved
   // selection it no longer offers. Falls back to the hardcoded list on
   // failure.
+  // Runs in chatless mode too: the same response carries the image-ops
+  // capabilities (canRemoveBackground/canVectorize) and vision metadata that
+  // non-chat tooling reads. reconcileModels only touches chat-store model ids,
+  // so it is harmless there.
   useEffect(() => {
     void loadModels().then(reconcileModels);
   }, []);
 
+  // Chatless mode leaves the showcase prompt UNCONSUMED in sessionStorage (a
+  // later task routes it to the desktop chat panel) — never consume it here.
   useEffect(() => {
+    if (isChatDisabled()) return;
     launchShowcaseAgentChat();
   }, []);
 
@@ -239,7 +247,7 @@ function App() {
         <div className="absolute inset-0 flex flex-row pointer-events-none">
           {/* Left rail + sidebar — layers panel is read-only in view mode. */}
           <div className="pointer-events-auto flex flex-row">
-            <LeftRail />
+            <LeftRail hiddenSections={chatHiddenSections()} />
             <ReadOnlyProvider value={isView}>
               <LeftSidebar />
             </ReadOnlyProvider>

@@ -3,6 +3,7 @@ import { SparkleIcon, ArrowUpIcon } from "@phosphor-icons/react";
 import { IconButton } from "@/components/ui/IconButton";
 import { cn } from "@/lib/utils";
 import { useDevModeStore } from "@/store/devModeStore";
+import { isChatDisabled } from "@/lib/chatMode";
 import type { FrameQuickAction } from "@/components/canvas/frameQuickActions";
 
 interface AgentComposerButtonProps {
@@ -82,7 +83,9 @@ export function AgentComposerButton({
     [submit],
   );
 
-  if (isDevMode) return null;
+  // Chatless mode (`?chat=off`): the ONE gate for every on-canvas "ask the
+  // agent" trigger (frame, embed, picked embed element all render through here).
+  if (isDevMode || isChatDisabled()) return null;
 
   return (
     <div

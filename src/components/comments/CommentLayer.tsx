@@ -11,6 +11,7 @@ import {
 import { getCanvasElement } from "@/utils/canvasViewport";
 import { resolveAnchorPoint, buildClickAnchor, isAgentThread, type NodeRect } from "@/lib/comments/commentsLogic";
 import { findCanvasHitTargetAtPoint } from "@/pixi/interaction/hitTesting";
+import { isChatDisabled } from "@/lib/chatMode";
 import { sendCommentToAgent } from "@/lib/sendCommentToAgent";
 import { IconButton } from "@/components/ui/IconButton";
 import {
@@ -283,16 +284,18 @@ function ThreadPopover({ thread, onClose }: { thread: CommentThread; onClose: ()
           >
             {resolved ? <ArrowCounterClockwiseIcon /> : <CheckIcon />}
           </IconButton>
-          <IconButton
-            size="icon-sm"
-            variant="ghost"
-            className="size-6 rounded-lg"
-            tooltip="Send to agent"
-            side="top"
-            onClick={() => sendCommentToAgent(thread.id)}
-          >
-            <SparkleIcon />
-          </IconButton>
+          {!isChatDisabled() && (
+            <IconButton
+              size="icon-sm"
+              variant="ghost"
+              className="size-6 rounded-lg"
+              tooltip="Send to agent"
+              side="top"
+              onClick={() => sendCommentToAgent(thread.id)}
+            >
+              <SparkleIcon />
+            </IconButton>
+          )}
           <IconButton
             size="icon-sm"
             variant="ghost"

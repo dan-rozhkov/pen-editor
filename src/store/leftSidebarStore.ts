@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { isChatDisabled } from "@/lib/chatMode";
 
 const STORAGE_KEY = "left-sidebar-section";
 const EXPANDED_STORAGE_KEY = "left-sidebar-expanded";
@@ -52,9 +53,15 @@ interface LeftSidebarState {
 function getInitial(): LeftSection {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored && (LEFT_SECTIONS as string[]).includes(stored)) {
-    return stored as LeftSection;
+    return coerceSection(stored as LeftSection);
   }
   return "pages";
+}
+
+// Chatless mode (`?chat=off`) has no Agents section: nothing — persisted
+// preference, launch helper, deep link — may leave the store on it.
+function coerceSection(section: LeftSection): LeftSection {
+  return section === "agents" && isChatDisabled() ? "pages" : section;
 }
 
 function clampWidth(width: number): number {
@@ -71,9 +78,12 @@ function getInitialWidth(): number {
 
 export const useLeftSidebarStore = create<LeftSidebarState>((set, get) => ({
   activeSection: getInitial(),
-  setActiveSection: (section) => {
+  setActiveSection: (requested) => {
+    const section = coerceSection(requested);
     set({ activeSection: section });
-    localStorage.setItem(STORAGE_KEY, section);
+    // In chatless mode a rejected "agents" must not clobber the persisted
+    // preference of the normal (chat) editor in the same browser profile.
+    if (section === requested) localStorage.setItem(STORAGE_KEY, section);
   },
   // Closed by default so mobile starts with only the rail visible.
   isPanelOpen: false,

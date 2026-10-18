@@ -42,7 +42,15 @@ const MIN_COMPOSER_HEIGHT = 72;
  * surprises, and `EmbedLayer` just picks one component or the other per node
  * (see the comment there).
  */
-export function EmbedPromptHost({ nodeId }: { nodeId: string }) {
+export function EmbedPromptHost({
+  nodeId,
+  composer = true,
+}: {
+  nodeId: string;
+  /** false (chatless mode): keep the empty-state placeholder (dashed outline)
+   * but render no agent prompt input. */
+  composer?: boolean;
+}) {
   const node = useSceneStore((s) => s.nodesById[nodeId]);
   const mode = useEditorModeStore((s) => s.mode);
   const isDevMode = useDevModeStore((s) => s.active);
@@ -206,6 +214,7 @@ export function EmbedPromptHost({ nodeId }: { nodeId: string }) {
   const showOutline = isEmbedNode && mode !== "present";
 
   const showComposer =
+    composer &&
     isEmbedNode &&
     canEditScene(mode) &&
     !isDevMode &&

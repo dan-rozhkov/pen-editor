@@ -19,6 +19,7 @@ import type { EmbedNode } from "@/types/scene";
 import { topLevelAncestorId } from "@/utils/topLevelAncestor";
 import { useOverlayHostRect } from "./useOverlayHostRect";
 import { isEmbedContentEmpty } from "@/lib/embedDefaults";
+import { isChatDisabled } from "@/lib/chatMode";
 import { EmbedPromptHost } from "./EmbedPromptHost";
 import { StreamingEmbedPreviewLayer } from "./StreamingEmbedPreviewLayer";
 import { redispatchWheelAt } from "./forwardWheelToPixiCanvas";
@@ -1736,7 +1737,7 @@ export function EmbedLayer() {
         // switching modes. Same `key={id}` in both branches keeps React's
         // reconciliation honest across that swap.
         isEmbedContentEmpty((nodesById[id] as EmbedNode).htmlContent) ? (
-          <EmbedPromptHost key={id} nodeId={id} />
+          <EmbedPromptHost key={id} nodeId={id} composer={!isChatDisabled()} />
         ) : (
           <EmbedHost key={id} nodeId={id} />
         ),

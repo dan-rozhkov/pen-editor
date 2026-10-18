@@ -1,3 +1,4 @@
+import { isChatDisabled } from "@/lib/chatMode";
 import { captureNodeScreenshot } from "@/lib/captureNodeScreenshot";
 import { useChatStore } from "@/store/chatStore";
 import { useSceneStore } from "@/store/sceneStore";
@@ -24,6 +25,8 @@ export async function launchNodeAgentChat(
   text: string,
   opts: { attachScreenshot?: boolean } = {},
 ): Promise<boolean> {
+  // Defence in depth: the UI entry points are hidden in chatless mode.
+  if (isChatDisabled()) return false;
   const { attachScreenshot = false } = opts;
   const trimmed = text.trim();
   if (!trimmed) return false;

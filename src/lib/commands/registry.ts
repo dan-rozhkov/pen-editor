@@ -6,6 +6,7 @@ import { getFileCommands } from "./fileCommands";
 import { getPluginCommands } from "./pluginCommands";
 import { getImageOpsCommands } from "./imageOpsCommands";
 import { getShareCommands } from "./shareCommands";
+import { isChatDisabled } from "@/lib/chatMode";
 import { getOpenCodeCommands } from "./opencodeCommands";
 import type { PaletteCommand } from "./types";
 
@@ -27,7 +28,8 @@ export function getCommands(): PaletteCommand[] {
     ...getViewCommands(),
     ...getFileCommands(),
     ...getShareCommands(),
-    ...getOpenCodeCommands(),
+    // The OpenCode key dialog is the chat model picker's BYOK flow: chat-only.
+    ...(isChatDisabled() ? [] : getOpenCodeCommands()),
     ...getPluginCommands(),
     ...getImageOpsCommands(),
   ];

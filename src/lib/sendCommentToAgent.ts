@@ -1,3 +1,4 @@
+import { isChatDisabled } from "@/lib/chatMode";
 import { useChatStore } from "@/store/chatStore";
 import { useCommentsStore } from "@/store/commentsStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
@@ -14,6 +15,7 @@ import type { ChatLaunchPayload } from "@/types/chat";
  * Returns false (no side effects) when the thread doesn't exist.
  */
 export function sendCommentToAgent(threadId: string): boolean {
+  if (isChatDisabled()) return false;
   const thread = useCommentsStore.getState().threads.find((t) => t.id === threadId);
   if (!thread) return false;
 
