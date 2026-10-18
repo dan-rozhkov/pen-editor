@@ -1,6 +1,5 @@
 import { useEffect, type RefObject } from "react";
 import { useMeasureStore } from "@/store/measureStore";
-import { isCanvasInputActive } from "@/surfaces/effectiveSurface";
 
 /**
  * FPS counter for dev mode. Measures frame rate using requestAnimationFrame.
@@ -54,7 +53,7 @@ export function useAltKeyMeasurement() {
   useEffect(() => {
     const { setModifierHeld, clearLines } = useMeasureStore.getState();
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Alt" && isCanvasInputActive()) setModifierHeld(true);
+      if (e.key === "Alt") setModifierHeld(true);
     };
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.key === "Alt") {

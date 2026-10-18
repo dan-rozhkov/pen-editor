@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/command";
 import { useCommandPaletteStore } from "@/store/commandPaletteStore";
 import { useDevModeStore } from "@/store/devModeStore";
-import { getCommands, commandFilter, isCommandAvailable, runCommand as dispatchCommand, type CommandGroupName } from "@/lib/commands/registry";
+import { getCommands, commandFilter, runCommand as dispatchCommand, type CommandGroupName } from "@/lib/commands/registry";
 import { isTypingTarget } from "@/components/canvas/keyboardShortcutUtils";
 
 const GROUP_ORDER: CommandGroupName[] = ["Tools", "Edit", "View", "File", "Plugins"];
@@ -49,7 +49,7 @@ export function CommandPalette() {
   // stay available (see PaletteCommand.mutatesScene doc).
   // `getCommands()` rebuilds every group's command list from scratch (cheap,
   // but non-zero) — only pay for it while the palette is actually open.
-  const commands = open ? getCommands().filter((c) => (!isDevMode || !c.mutatesScene) && isCommandAvailable(c)) : [];
+  const commands = open ? getCommands().filter((c) => !isDevMode || !c.mutatesScene) : [];
   const groups = GROUP_ORDER.map((group) => ({
     group,
     commands: commands.filter((c) => c.group === group),

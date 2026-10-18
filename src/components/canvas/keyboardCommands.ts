@@ -5,7 +5,6 @@ import { ALL_TOOLS } from "@/lib/toolDefinitions";
 import { usePenToolStore } from "@/store/penToolStore";
 import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";
-import { isCanvasInputActive } from "@/surfaces/effectiveSurface";
 import { useSharedViewStore } from "@/store/sharedViewStore";
 import { useDevModeStore } from "@/store/devModeStore";
 import { useMeasurementsStore } from "@/store/measurementsStore";
@@ -146,12 +145,6 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
       }
       return; // present mode swallows all other keys
     }
-
-    // Another surface (the browser) fills the work area and the canvas is
-    // hidden: its shortcuts (delete, paste, undo, tool letters...) must not
-    // edit the scene the user cannot see. Window-level shortcuts that are not
-    // canvas shortcuts (command palette) live in their own listeners.
-    if (!isCanvasInputActive()) return;
 
     const nodes = useSceneStore.getState().getNodes();
 

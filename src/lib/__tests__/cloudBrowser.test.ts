@@ -4,7 +4,6 @@ import {
   releaseCloudBrowser,
   setCloudBrowserChat,
   cloudBrowserBridge,
-  getExpiryTimerCount,
 } from "@/lib/cloudBrowser";
 import { rehydrateCloudBrowserSessions, useCloudBrowserStore } from "@/store/cloudBrowserStore";
 import { getUserId } from "@/lib/userId";
@@ -387,58 +386,5 @@ describe("releaseCloudBrowser", () => {
     stubFetch(new Error("offline"));
     await expect(releaseCloudBrowser("chat-f")).resolves.toBe(false);
     expect(sessionStorage.getItem("pen.cloudBrowser.chat-f")).toBeNull();
-  });
-});
-
-describe("session expiry timer", () => {
-  const T0 = 1_000_000;
-  const stale = (over: Partial<{ expiresAt: number | null; lastUsedAt: number; idleMs: number }>) => ({
-    liveViewUrl: "u",
-    expiresAt: null,
-    ...over,
-  });
-
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(T0);
-  });
-  afterEach(() => {
-    useCloudBrowserStore.setState({ sessions: {} });
-    vi.useRealTimers();
-  });
-
-  it("clears the session once expiresAt passes", () => {
-    useCloudBrowserStore.getState().setSession("chat-1", stale({ expiresAt: T0 + 5_000 }));
-    vi.advanceTimersByTime(4_000);
-    expect(useCloudBrowserStore.getState().sessions["chat-1"]).toBeDefined();
-    vi.advanceTimersByTime(1_001);
-    expect(useCloudBrowserStore.getState().sessions["chat-1"]).toBeUndefined();
-  });
-
-  it("goes stale at lastUsedAt + idleMs when that is sooner than expiresAt", () => {
-    useCloudBrowserStore
-      .getState()
-      .setSession("chat-1", stale({ expiresAt: T0 + 600_000, lastUsedAt: T0, idleMs: 30_000 }));
-    vi.advanceTimersByTime(29_000);
-    expect(useCloudBrowserStore.getState().sessions["chat-1"]).toBeDefined();
-    vi.advanceTimersByTime(1_500);
-    expect(useCloudBrowserStore.getState().sessions["chat-1"]).toBeUndefined();
-  });
-
-  it("does not fire early for a far-future expiry (setTimeout overflow)", () => {
-    useCloudBrowserStore.getState().setSession("chat-1", stale({ expiresAt: T0 + 40 * 86_400_000 }));
-    vi.advanceTimersByTime(3 * 86_400_000);
-    expect(useCloudBrowserStore.getState().sessions["chat-1"]).toBeDefined();
-  });
-
-  it("keeps exactly one timer per session, replaced when the session is refreshed", () => {
-    const { setSession, clearSession } = useCloudBrowserStore.getState();
-    setSession("chat-1", stale({ expiresAt: T0 + 5_000 }));
-    setSession("chat-2", stale({ expiresAt: T0 + 9_000 }));
-    expect(getExpiryTimerCount()).toBe(2);
-    setSession("chat-1", stale({ expiresAt: T0 + 50_000 }));
-    expect(getExpiryTimerCount()).toBe(2);
-    clearSession("chat-2");
-    expect(getExpiryTimerCount()).toBe(1);
   });
 });

@@ -14,7 +14,6 @@ export function getToolCommands(): PaletteCommand[] {
     label: def.label,
     group: "Tools",
     shortcut: def.shortcut,
-    requiresCanvas: true,
     icon: def.icon,
     run: () => {
       if (def.tool === "cursor") {

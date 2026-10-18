@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 
 const { trackMock } = vi.hoisted(() => ({ trackMock: vi.fn() }));
 vi.mock("@/lib/analytics", () => ({
@@ -6,15 +6,13 @@ vi.mock("@/lib/analytics", () => ({
 }));
 
 import { resetStores, seedScene } from "@/test/fixtures";
-import { getCommands, isCommandAvailable, runCommand } from "../registry";
+import { getCommands, runCommand } from "../registry";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useHistoryStore } from "@/store/historyStore";
 import { useSceneStore, createSnapshot } from "@/store/sceneStore";
 import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
 import { ALL_TOOLS } from "@/lib/toolDefinitions";
-import { useSurfaceStore } from "@/store/surfaceStore";
-import { useEditorModeStore } from "@/store/editorModeStore";
 
 beforeEach(() => {
   resetStores();
@@ -141,87 +139,5 @@ describe("runCommand analytics", () => {
 
     expect(trackMock.mock.calls.filter(([event]) => event === "document_exported")).toHaveLength(1);
     expect(trackMock).toHaveBeenCalledWith("document_exported", { format: "tokens" });
-  });
-});
-
-describe("surface commands", () => {
-  it("switch the active surface", () => {
-    useSurfaceStore.setState({ activeSurfaceId: "canvas" });
-    getCommands().find((c) => c.id === "view-surface-browser")!.run();
-    expect(useSurfaceStore.getState().activeSurfaceId).toBe("browser");
-    getCommands().find((c) => c.id === "view-surface-canvas")!.run();
-    expect(useSurfaceStore.getState().activeSurfaceId).toBe("canvas");
-  });
-
-  it("leave out the browser surface in the desktop shell", () => {
-    window.penDesktop = { onMenuCommand: () => () => {}, browser: {} } as never;
-    try {
-      const ids = getCommands().map((c) => c.id);
-      expect(ids).toContain("view-surface-canvas");
-      expect(ids).not.toContain("view-surface-browser");
-    } finally {
-      delete window.penDesktop;
-    }
-  });
-});
-
-describe("commands while the canvas is not the surface in view", () => {
-  const EDIT_IDS = [
-    "edit-undo",
-    "edit-redo",
-    "edit-cut",
-    "edit-copy",
-    "edit-paste",
-    "edit-select-all",
-    "edit-group",
-    "edit-ungroup",
-    "edit-delete",
-    "tool-rect",
-  ];
-
-  beforeEach(() => {
-    useEditorModeStore.setState({ mode: "edit" });
-    useSurfaceStore.setState({ activeSurfaceId: "browser", browserChatId: null });
-  });
-  afterEach(() => {
-    useSurfaceStore.setState({ activeSurfaceId: "canvas", browserChatId: null });
-  });
-
-  it.each(EDIT_IDS)("%s is unavailable and does nothing while the browser fills the work area", (id) => {
-    const command = getCommands().find((c) => c.id === id)!;
-    expect(isCommandAvailable(command)).toBe(false);
-    const run = vi.spyOn(command, "run");
-    runCommand(command);
-    expect(run).not.toHaveBeenCalled();
-  });
-
-  it("deleting the selection through the menu bridge leaves the scene alone", () => {
-    seedScene();
-    useSelectionStore.getState().setSelectedIds(["rect1"]);
-    const before = Object.keys(useSceneStore.getState().nodesById);
-    runCommand(getCommands().find((c) => c.id === "edit-delete")!);
-    expect(Object.keys(useSceneStore.getState().nodesById)).toEqual(before);
-  });
-
-  it("are available again on the canvas, and with the UI hidden (the browser view is not shown then)", () => {
-    useUIVisibilityStore.setState({ isUIHidden: true });
-    try {
-      for (const id of EDIT_IDS) expect(isCommandAvailable(getCommands().find((c) => c.id === id)!)).toBe(true);
-    } finally {
-      useUIVisibilityStore.setState({ isUIHidden: false });
-    }
-  });
-
-  it.each([
-    ["view mode", () => useEditorModeStore.setState({ mode: "view" })],
-    ["hidden UI", () => useUIVisibilityStore.setState({ isUIHidden: true })],
-  ])("offers no view-surface commands in %s", (_name, enter) => {
-    enter();
-    try {
-      expect(getCommands().map((c) => c.id).filter((id) => id.startsWith("view-surface-"))).toEqual([]);
-    } finally {
-      useEditorModeStore.setState({ mode: "edit" });
-      useUIVisibilityStore.setState({ isUIHidden: false });
-    }
   });
 });

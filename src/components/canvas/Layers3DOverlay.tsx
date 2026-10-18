@@ -1,4 +1,3 @@
-import { isCanvasInputActive } from "@/surfaces/effectiveSurface";
 import {
   ArrowCounterClockwiseIcon,
   CircleNotch,
@@ -98,8 +97,6 @@ export function Layers3DOverlay() {
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.code !== "Space") return;
-      // Another surface fills the work area: Space belongs to it.
-      if (!isCanvasInputActive()) return;
       const target = event.target;
       if (
         target instanceof Element &&

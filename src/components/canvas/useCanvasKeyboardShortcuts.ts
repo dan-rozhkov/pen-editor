@@ -4,7 +4,6 @@ import { createClipboardActions } from "./clipboardActions";
 import { createStyleClipboardActions } from "./styleClipboardActions";
 import { createKeyDownHandler } from "./keyboardCommands";
 import type { SharedKeyboardDeps } from "./keyboardCommands";
-import { isCanvasInputActive } from "@/surfaces/effectiveSurface";
 import { copyAsCss, copyAsSvg } from "./copyAsActions";
 
 interface CanvasKeyboardShortcutsParams extends SharedKeyboardDeps {
@@ -103,21 +102,29 @@ export function useCanvasKeyboardShortcuts({
       }
     };
 
-    // Canvas clipboard actions only apply while the canvas is the surface in
-    // view; with the browser surface open they would edit a hidden scene.
-    const isCanvasSurface = isCanvasInputActive;
-    const handleMenuCopy = () => isCanvasSurface() && copySelection();
-    const handleMenuCut = () => isCanvasSurface() && cutSelection();
-    const handleMenuPaste = () => isCanvasSurface() && pasteFromInternalClipboard();
-    const handleMenuCopyStyle = () => isCanvasSurface() && copyStyleSelection();
-    const handleMenuPasteStyle = () => isCanvasSurface() && pasteStyleSelection();
-    const handleCanvasPaste = (e: ClipboardEvent) => {
-      if (isCanvasSurface()) void handlePaste(e);
+    const handleMenuCopy = () => {
+      copySelection();
+    };
+
+    const handleMenuCut = () => {
+      cutSelection();
+    };
+
+    const handleMenuPaste = () => {
+      pasteFromInternalClipboard();
+    };
+
+    const handleMenuCopyStyle = () => {
+      copyStyleSelection();
+    };
+
+    const handleMenuPasteStyle = () => {
+      pasteStyleSelection();
     };
 
     window.addEventListener("keydown", handleKeyDown, { capture: true });
     window.addEventListener("keyup", handleKeyUp);
-    window.addEventListener("paste", handleCanvasPaste);
+    window.addEventListener("paste", handlePaste);
     window.addEventListener("pen-editor:copy", handleMenuCopy);
     window.addEventListener("pen-editor:cut", handleMenuCut);
     window.addEventListener("pen-editor:paste", handleMenuPaste);
@@ -126,7 +133,7 @@ export function useCanvasKeyboardShortcuts({
     return () => {
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
       window.removeEventListener("keyup", handleKeyUp);
-      window.removeEventListener("paste", handleCanvasPaste);
+      window.removeEventListener("paste", handlePaste);
       window.removeEventListener("pen-editor:copy", handleMenuCopy);
       window.removeEventListener("pen-editor:cut", handleMenuCut);
       window.removeEventListener("pen-editor:paste", handleMenuPaste);
