@@ -496,10 +496,21 @@ appear in a turn and the activity endpoint returns nothing.
   would carry the row, possibly the user's own bubble.
   The note id is stable per event and `addActivityNote` dedups it across all
   chats, so the two checks and several mounted chats give one row. Separate
-  browser tabs have separate stores and can each show it. Known limit: audit
-  events carry no chat id, so with turns finishing in two chats at once the
-  row can land in the other chat, and a review that finishes after the next
-  turn ended lands under that turn's reply.
+  browser tabs have separate stores and can each show it. **Anchoring:** newer
+  backends put `chatId` (the chat's id = `sessionId`) and `messageId` (the
+  USER message that started the reviewed turn) on each skill event. Events
+  are grouped per (chatId, messageId); one note `{ id, turnMessageId }` per
+  group goes to *that* chat's list (whichever chat scheduled the check). Its id
+  is the turn (`memory-activity-turn-["chatId","messageId"]`), so skills of one
+  turn seen by the 20s and the 60s checks still give one row. A chatId this tab
+  does not hold (closed, or open in another browser tab) is skipped: the shared
+  cursor still advances, so that row is lost rather than shown in the wrong
+  chat. `MessageList` renders it under the last
+  assistant message between that user message and the next one (nothing if the
+  message was rolled back or has no reply). So a late review stays under the
+  turn it reviewed. Events without both fields (older backend) fall back to
+  `{ id, afterMessageId }` in the scheduling chat, anchored at turn end as
+  above; `ChatActivityNote` has exactly one of the two anchors.
 
 ### User-authored skills (the Skills panel)
 

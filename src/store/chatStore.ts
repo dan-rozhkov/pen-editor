@@ -15,12 +15,24 @@ export const NO_ATTACHED_IMAGES: AttachedImage[] = [];
  * useAgentActivityNotes). Deliberately NOT a UIMessage: it lives beside the
  * AI SDK `messages` array and is never sent to the backend, so it cannot
  * touch the model's history or the prompt-cache prefix. */
-export interface ChatActivityNote {
+export type ChatActivityNote = {
   /** Stable dedup key (derived from the activity response's latestId). */
   id: string;
-  /** The message the note renders after. A rolled-back id renders nothing. */
-  afterMessageId: string;
-}
+} & (
+  | {
+      /** Old backends: the message the note renders after. A rolled-back id
+       * renders nothing. */
+      afterMessageId: string;
+      turnMessageId?: never;
+    }
+  | {
+      afterMessageId?: never;
+      /** The USER message that started the reviewed turn; the note renders
+       * under the last assistant message of that turn. Missing, or no
+       * assistant reply: renders nothing. */
+      turnMessageId: string;
+    }
+);
 
 /** Stable empty reference for chats with no activity notes. Never mutated. */
 export const NO_ACTIVITY_NOTES: ChatActivityNote[] = [];

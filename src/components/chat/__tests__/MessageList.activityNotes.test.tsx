@@ -1,4 +1,4 @@
-import { it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import type { UIMessage } from "ai";
 import { MessageList } from "../MessageList";
@@ -32,4 +32,31 @@ it("renders nothing for a note whose message is gone (rolled back)", () => {
     />,
   );
   expect(screen.queryByText("Память обновлена")).toBeNull();
+});
+
+function userText(id: string): UIMessage {
+  return { id, role: "user", parts: [{ type: "text", text: id }] } as UIMessage;
+}
+
+describe("turnMessageId anchoring", () => {
+  const turns = [userText("u1"), assistantText("a1", "one"), assistantText("a1b", "one-b"), userText("u2"), assistantText("a2", "two")];
+
+  it("renders under the last assistant reply of that turn, not under a later turn", () => {
+    const { container } = render(
+      <MessageList messages={turns} isLoading={false} activityNotes={[{ id: "memory-activity-5", turnMessageId: "u1" }]} />,
+    );
+    const chip = screen.getByText("Память обновлена");
+    const blocks = Array.from(container.querySelectorAll(".group"));
+    const holders = blocks.filter((b) => b.contains(chip));
+    expect(holders).toHaveLength(1);
+    expect(holders[0].textContent).toContain("one-b");
+  });
+
+  it.each([
+    ["a missing id", [userText("u1"), assistantText("a1", "x")], "gone"],
+    ["a turn with no assistant reply", [userText("u1")], "u1"],
+  ])("renders nothing for %s", (_n, messages, turnMessageId) => {
+    render(<MessageList messages={messages} isLoading={false} activityNotes={[{ id: "memory-activity-5", turnMessageId }]} />);
+    expect(screen.queryByText("Память обновлена")).toBeNull();
+  });
 });

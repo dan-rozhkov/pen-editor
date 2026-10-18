@@ -56,6 +56,9 @@ type ActivityEvent = {
   id?: unknown;
   origin?: unknown;
   subsystem?: unknown;
+  /** Newer backends: the chat and the turn's user message the review looked at. */
+  chatId?: unknown;
+  messageId?: unknown;
 };
 
 type ParsedActivityResponse = {
@@ -77,21 +80,38 @@ function parseResponse(data: unknown): ParsedActivityResponse | undefined {
   return { events: events as ActivityEvent[], latestId };
 }
 
+function nonEmptyString(v: unknown): string | undefined {
+  return typeof v === "string" && v.length > 0 ? v : undefined;
+}
+
+type SkillTurnGroup = { chatId: string; messageId: string };
+
 // Memory writes are silent by design (FIR-71) — only skill writes are worth
 // interrupting the user for, so this only has to detect the skill subsystem.
 // An event whose `subsystem` is missing is a pre-phase-2 backend shape and
 // can never be "skill" (that column didn't exist yet), so it's correctly
 // ignored here without special-casing it.
-function classifyActivity(events: ActivityEvent[]): { skill: boolean } {
-  let skill = false;
+//
+// Skill events carrying BOTH chatId and messageId are grouped per
+// (chatId, messageId) — one note per reviewed turn. Skill events missing
+// either field (older backend) set `legacy`, which keeps the old
+// single-note-in-the-scheduling-chat behaviour.
+function classifyActivity(events: ActivityEvent[]): { legacy: boolean; groups: SkillTurnGroup[] } {
+  let legacy = false;
+  const groups = new Map<string, SkillTurnGroup>();
   for (const event of events) {
     if (typeof event !== "object" || event === null) continue;
     if (event.origin !== "background_review") continue;
-    if (event.subsystem === "skill") {
-      skill = true;
+    if (event.subsystem !== "skill") continue;
+    const chatId = nonEmptyString(event.chatId);
+    const messageId = nonEmptyString(event.messageId);
+    if (chatId === undefined || messageId === undefined) {
+      legacy = true;
+      continue;
     }
+    groups.set(JSON.stringify([chatId, messageId]), { chatId, messageId });
   }
-  return { skill };
+  return { legacy, groups: [...groups.values()] };
 }
 
 function buildUrl(userId: string, sinceId: number | undefined): string {
@@ -137,20 +157,36 @@ function checkAgentActivity(
         return;
       }
 
-      if (classifyActivity(events).skill) {
-        // The anchor was captured when the turn finished, not now (the check
-        // fires 20-60s later): a message sent in the meantime must not pull
-        // the row under the next turn, or under the user's own bubble. A
-        // stable id (derived from the response's own
-        // latestId) lets the store collapse duplicates: multiple chat tabs
-        // can each schedule their own check against the same shared,
-        // per-user localStorage cursor, and a race between reading and
-        // writing it can make more than one observe the same new events.
-        // Keeps its original "memory-activity" prefix for the same reason
-        // the cursor key does — it is an internal dedup id, never shown.
-        useChatStore
-          .getState()
-          .addActivityNote(sessionId, { id: `memory-activity-${latestId}`, afterMessageId });
+      const { legacy, groups } = classifyActivity(events);
+      const store = useChatStore.getState();
+
+      // Events that name their chat and turn: the note goes to THAT chat,
+      // anchored to that turn's user message, whichever chat scheduled this
+      // check. A chat this tab does not hold (closed, or open in another
+      // browser tab) is skipped rather than shown in the wrong chat. The id
+      // is the turn itself, so a skill written before the 20s check and
+      // another before the 60s check still give one row, and it can never
+      // collide with a legacy `memory-activity-<latestId>` id.
+      for (const g of groups) {
+        if (!store.chats.some((c) => c.id === g.chatId)) continue;
+        store.addActivityNote(g.chatId, {
+          id: `memory-activity-turn-${JSON.stringify([g.chatId, g.messageId])}`,
+          turnMessageId: g.messageId,
+        });
+      }
+
+      if (legacy) {
+        // Older backend (no chatId/messageId). The anchor was captured when
+        // the turn finished, not now (the check fires 20-60s later): a
+        // message sent in the meantime must not pull the row under the next
+        // turn, or under the user's own bubble. A stable id (derived from the
+        // response's own latestId) lets the store collapse duplicates:
+        // multiple chat tabs can each schedule their own check against the
+        // same shared, per-user localStorage cursor, and a race between
+        // reading and writing it can make more than one observe the same new
+        // events. Keeps its original "memory-activity" prefix for the same
+        // reason the cursor key does — it is an internal dedup id.
+        store.addActivityNote(sessionId, { id: `memory-activity-${latestId}`, afterMessageId });
       }
 
       // Advance the cursor regardless of whether we added a note — events

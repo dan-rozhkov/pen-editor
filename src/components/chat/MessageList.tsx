@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { UIMessage } from "ai";
 import { isToolUIPart } from "ai";
 import {
@@ -216,6 +216,37 @@ interface MessageListProps {
   activityNotes?: ChatActivityNote[];
 }
 
+/** Maps message id -> notes rendered under it. `afterMessageId` anchors
+ * directly; `turnMessageId` resolves to the last assistant message between
+ * that user message and the next user message (nothing if absent). */
+function groupNotesByMessage(
+  messages: UIMessage[],
+  notes: ChatActivityNote[] | undefined,
+): Map<string, ChatActivityNote[]> {
+  const out = new Map<string, ChatActivityNote[]>();
+  if (!notes?.length) return out;
+  const add = (messageId: string, n: ChatActivityNote) => {
+    const list = out.get(messageId);
+    if (list) list.push(n);
+    else out.set(messageId, [n]);
+  };
+  for (const n of notes) {
+    if (n.afterMessageId !== undefined) {
+      add(n.afterMessageId, n);
+      continue;
+    }
+    const start = messages.findIndex((m) => m.id === n.turnMessageId && m.role === "user");
+    if (start === -1) continue;
+    let target: string | undefined;
+    for (let i = start + 1; i < messages.length; i++) {
+      if (messages[i].role === "user") break;
+      if (messages[i].role === "assistant") target = messages[i].id;
+    }
+    if (target !== undefined) add(target, n);
+  }
+  return out;
+}
+
 export function MessageList({
   messages,
   isLoading,
@@ -225,6 +256,10 @@ export function MessageList({
   activityNotes,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const notesByMessage = useMemo(
+    () => groupNotesByMessage(messages, activityNotes),
+    [messages, activityNotes],
+  );
   const isAutoScrollRef = useRef(true);
 
   const handleScroll = useCallback(() => {
@@ -435,9 +470,7 @@ export function MessageList({
                 }
                 return null;
               })}
-              {activityNotes
-                ?.filter((n) => n.afterMessageId === msg.id)
-                .map((n) => <MemoryToolIndicator key={n.id} />)}
+              {notesByMessage.get(msg.id)?.map((n) => <MemoryToolIndicator key={n.id} />)}
               {isEmptyStreaming && <StreamingIndicator />}
             </div>
             <div className="ml-2 flex items-center">

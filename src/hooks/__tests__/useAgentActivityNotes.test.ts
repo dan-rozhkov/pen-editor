@@ -394,6 +394,92 @@ describe("useAgentActivityNotes", () => {
   });
 });
 
+describe("useAgentActivityNotes with chatId/messageId on events", () => {
+  const OTHER = "chat-other";
+
+  function skillEvent(id: number, extra: Record<string, unknown> = {}) {
+    return { id, subsystem: "skill", origin: "background_review", ...extra };
+  }
+
+  async function runCheck(events: unknown[], latestId: number) {
+    localStorage.setItem(CURSOR_KEY, "10");
+    withFetch(() => jsonResponse({ events, latestId }));
+    const { rerender } = renderStatus();
+    rerender({ status: "ready" });
+    await vi.advanceTimersByTimeAsync(20_000);
+  }
+
+  const turnNoteId = (chatId: string, messageId: string) =>
+    `memory-activity-turn-${JSON.stringify([chatId, messageId])}`;
+
+  function addChat(id: string) {
+    const st = useChatStore.getState();
+    useChatStore.setState({ chats: [...st.chats, { ...st.chats[0], id }] });
+  }
+
+  it("puts the note in the event's chat with turnMessageId, even if another chat scheduled the check", async () => {
+    addChat(OTHER);
+    await runCheck([skillEvent(11, { chatId: OTHER, messageId: "u1" })], 11);
+
+    expect(notes()).toEqual([]);
+    expect(useChatStore.getState().activityNotes[OTHER]).toEqual([
+      { id: turnNoteId(OTHER, "u1"), turnMessageId: "u1" },
+    ]);
+  });
+
+  it("skips an event whose chatId names no existing chat", async () => {
+    await runCheck([skillEvent(11, { chatId: "ghost", messageId: "u1" })], 11);
+
+    expect(useChatStore.getState().activityNotes).toEqual({});
+    expect(localStorage.getItem(CURSOR_KEY)).toBe("11");
+  });
+
+  it("gives one note for two events of the same turn", async () => {
+    addChat(OTHER);
+    await runCheck(
+      [
+        skillEvent(12, { chatId: OTHER, messageId: "u1" }),
+        skillEvent(11, { chatId: OTHER, messageId: "u1" }),
+        skillEvent(13, { chatId: OTHER, messageId: "u2" }),
+      ],
+      13,
+    );
+
+    expect(useChatStore.getState().activityNotes[OTHER]).toEqual([
+      { id: turnNoteId(OTHER, "u1"), turnMessageId: "u1" },
+      { id: turnNoteId(OTHER, "u2"), turnMessageId: "u2" },
+    ]);
+  });
+
+  it("keeps one note when the same turn's skills arrive in the 20s and the 60s checks", async () => {
+    addChat(OTHER);
+    let call = 0;
+    localStorage.setItem(CURSOR_KEY, "10");
+    withFetch(() => {
+      call += 1;
+      return jsonResponse(
+        call === 1
+          ? { events: [skillEvent(11, { chatId: OTHER, messageId: "u1" })], latestId: 11 }
+          : { events: [skillEvent(12, { chatId: OTHER, messageId: "u1" })], latestId: 12 },
+      );
+    });
+    const { rerender } = renderStatus();
+    rerender({ status: "ready" });
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(call).toBe(2);
+    expect(useChatStore.getState().activityNotes[OTHER]).toEqual([
+      { id: turnNoteId(OTHER, "u1"), turnMessageId: "u1" },
+    ]);
+  });
+
+  it("treats an event with an empty or non-string field as old-shape", async () => {
+    await runCheck([skillEvent(11, { chatId: "", messageId: 5 })], 11);
+
+    expect(notes()).toEqual([{ id: "memory-activity-11", afterMessageId: "msg-last" }]);
+  });
+});
+
 describe("chatStore activity notes", () => {
   it("keeps one row for an event seen by two chats, and drops a chat's notes when it closes", () => {
     const store = useChatStore.getState();
