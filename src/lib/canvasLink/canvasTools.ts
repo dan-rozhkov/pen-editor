@@ -16,6 +16,8 @@ export const PANEL_LOCAL_FIXED_TOOL_NAMES: ReadonlySet<string> = new Set([
   "ask_user",
   // Looks at an image by URL; touches no scene.
   "analyze_image",
+  // Binds this chat to a canvas tab; the panel owns the binding.
+  "open_canvas_tab",
   // Static guideline text; touches no scene.
   "get_guidelines",
   "get_style_guide",

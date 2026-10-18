@@ -54,6 +54,7 @@ const EXPECTED_CLIENT_TOOLS = [
   "draw_vector",
   "generate_vector",
   "analyze_image",
+  "open_canvas_tab",
   "publish_to_showcase",
   "remove_background",
   "vectorize_image",

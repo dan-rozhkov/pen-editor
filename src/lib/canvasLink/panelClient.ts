@@ -37,6 +37,7 @@ export const PRE_START_TIMEOUT_MS = 10 * 60_000;
 const MAX_ENDED_STREAMS = 500;
 
 export const TAB_CLOSED_ERROR = JSON.stringify({ error: "The canvas tab was closed." });
+const TAB_CLOSED_ERROR_OBJ = { error: "The canvas tab was closed." };
 const errorResult = (message: string) => JSON.stringify({ error: message });
 
 export interface Binding {
@@ -232,6 +233,61 @@ export class PanelClient {
       if (usable) this.bindings.set(sessionId, { tabId: usable.tabId, registrationId: usable.registrationId });
     } catch {
       // Stays unbound.
+    }
+  }
+
+  /**
+   * Explicit (model-requested) binding, for `open_canvas_tab`. "current": the first usable
+   * listed tab (most recently active), opened if there is none, and activated. "new": a freshly
+   * opened, activated tab. The chat's previous tab is released WITHOUT latching it (other chats may
+   * still use it); the chat's remembered context goes, so the next request carries the new tab's.
+   * Never rejects.
+   */
+  async bindExplicit(
+    sessionId: string,
+    target: "new" | "current",
+    signal?: AbortSignal
+  ): Promise<{ tabId: number; title: string; opened: boolean } | { error: string }> {
+    const aborted = { error: "Tool call aborted" };
+    if (signal?.aborted) return aborted;
+    try {
+      // A call resolving this chat's binding right now must not overwrite ours afterwards.
+      await this.binding$.get(sessionId);
+      let binding: Binding | null = null;
+      let opened = false;
+      if (target === "current") {
+        const listed = await this.bridge.listTabs();
+        this.tabs = listed;
+        const usable = listed.find((t) => !this.latched.has(`${t.tabId}:${t.registrationId}`));
+        if (usable) binding = { tabId: usable.tabId, registrationId: usable.registrationId };
+      }
+      if (!binding) {
+        const made = await this.bridge.openTab({ activate: true });
+        if (!made || typeof made.tabId !== "number" || typeof made.registrationId !== "number") {
+          return { error: "Could not open a canvas tab." };
+        }
+        binding = { tabId: made.tabId, registrationId: made.registrationId };
+        opened = true;
+      } else {
+        this.bridge.activateTab(binding.tabId);
+      }
+      if (signal?.aborted) return aborted;
+      if (this.latched.has(keyOf(binding))) return TAB_CLOSED_ERROR_OBJ;
+      const previous = this.bindings.get(sessionId);
+      if (!previous || keyOf(previous) !== keyOf(binding)) this.lastContext.delete(sessionId);
+      this.bindings.set(sessionId, binding);
+      let title = this.tabs.find((t) => t.tabId === binding!.tabId)?.title;
+      if (title === undefined) {
+        try {
+          this.tabs = await this.bridge.listTabs();
+          title = this.tabs.find((t) => t.tabId === binding!.tabId)?.title;
+        } catch {
+          // Keep the fallback.
+        }
+      }
+      return { tabId: binding.tabId, title: title ?? "Untitled", opened };
+    } catch {
+      return { error: "Could not open a canvas tab." };
     }
   }
 

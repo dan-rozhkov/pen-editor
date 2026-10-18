@@ -51,6 +51,18 @@ describe("panel browser bridge", () => {
     });
   });
 
+  it("advertises canvasTabs only in the panel with a canvas bridge", async () => {
+    installPanel();
+    vi.resetModules();
+    expect((await import("@/lib/chatTransport")).CLIENT_CAPABILITIES.canvasTabs).toBe(true);
+    delete window.penAgentPanel;
+    vi.resetModules();
+    expect((await import("@/lib/chatTransport")).CLIENT_CAPABILITIES.canvasTabs).toBe(false);
+    window.penAgentPanel = { version: 1 };
+    vi.resetModules();
+    expect((await import("@/lib/chatTransport")).CLIENT_CAPABILITIES.canvasTabs).toBe(false);
+  });
+
   it("without a panel bridge the cloud browser stays in charge", () => {
     window.penAgentPanel = { version: 2 };
     expect(isDesktopBrowserAvailable()).toBe(false);

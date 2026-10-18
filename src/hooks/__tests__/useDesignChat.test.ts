@@ -568,7 +568,7 @@ describe("clientCapabilities", () => {
 
     const context = fresh.buildCanvasContext() as Record<string, unknown>;
 
-    expect(context.clientCapabilities).toEqual({ desktopBrowser: true, browser: "desktop", browseQa: true, browseIsolation: false, browseAssert: false });
+    expect(context.clientCapabilities).toEqual({ desktopBrowser: true, browser: "desktop", browseQa: true, browseIsolation: false, browseAssert: false, canvasTabs: false });
     // Not nested inside the stringified canvasContext.
     const canvas = JSON.parse((context as { canvasContext: string }).canvasContext);
     expect(canvas.clientCapabilities).toBeUndefined();
@@ -581,7 +581,7 @@ describe("clientCapabilities", () => {
 
     const context = fresh.buildCanvasContext() as Record<string, unknown>;
 
-    expect(context.clientCapabilities).toEqual({ desktopBrowser: false, browser: "cloud", browseQa: true, browseIsolation: false, browseAssert: true });
+    expect(context.clientCapabilities).toEqual({ desktopBrowser: false, browser: "cloud", browseQa: true, browseIsolation: false, browseAssert: true, canvasTabs: false });
   });
 
   it("browseIsolation is true when the shell exposes browser.isolated", async () => {

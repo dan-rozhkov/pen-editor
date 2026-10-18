@@ -3,6 +3,7 @@ import type { RetryState } from "@sideform/agent-harness/retry-fetch";
 import { credentialsMode, isOffline, OFFLINE_MESSAGE, resolveApiUrl } from "@/lib/apiBase";
 import { getOpenCodeKey } from "@/lib/opencodeKey";
 import { withMobbinAuthHeader } from "@/lib/mobbinAuth";
+import { isPanelCanvasLinkActive } from "@/lib/canvasLink/panelRuntime";
 import { isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";
 import { browseAssertAvailable, isolatedBrowseAvailable } from "@/lib/tools/browser/isolation";
 
@@ -37,6 +38,9 @@ export const CLIENT_CAPABILITIES = {
   browseIsolation: isolatedBrowseAvailable(),
   // The browser in use supports `assert`: the backend then offers `qa_assert` and browse_agent `checks`.
   browseAssert: browseAssertAvailable(),
+  // The desktop agent panel has a canvas bridge: the backend then offers `open_canvas_tab`.
+  // Static per page load like the others (a flip would break the prompt cache).
+  canvasTabs: isPanelCanvasLinkActive(),
 } as const;
 
 // Whether `model` is an OpenCode BYOK route (pen-editor-backend

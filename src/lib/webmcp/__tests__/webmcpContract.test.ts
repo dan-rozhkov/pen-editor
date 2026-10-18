@@ -77,7 +77,7 @@ describe("WebMCP tool specs", () => {
   // MCP subset and must not drift into this one.
   it("publishes nothing consequential", () => {
     const names = WEBMCP_TOOL_SPECS.map((spec) => spec.name);
-    for (const forbidden of ["publish_to_showcase", "create_plugin", "ask_user"]) {
+    for (const forbidden of ["publish_to_showcase", "create_plugin", "ask_user", "open_canvas_tab"]) {
       expect(names).not.toContain(forbidden);
     }
   });

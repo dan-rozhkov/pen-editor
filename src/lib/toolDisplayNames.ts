@@ -68,6 +68,7 @@ export const toolDisplayNames: Record<string, string> = {
   remove_background: "Remove Background",
   vectorize_image: "Vectorize Image",
   analyze_image: "Analyze Image",
+  open_canvas_tab: "Open Canvas Tab",
   publish_to_showcase: "Publish to Showcase",
   read_design_repo: "View Repo",
   read_repo_files: "Read Repo Files",

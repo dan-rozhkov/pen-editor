@@ -5,6 +5,7 @@ import { PANEL_LOCAL_FIXED_TOOL_NAMES, runsInCanvasTab } from "../canvasTools";
 const PANEL = [
   "ask_user",
   "analyze_image",
+  "open_canvas_tab",
   "get_guidelines",
   "get_style_guide",
   "get_style_guide_tags",
