@@ -42,6 +42,8 @@ test("browse_agent setup that fails shows Setup failed and 'The agent did not ru
     // Every run records a checkpoint journal around the setup; only applyFixture touches the page.
     if (name === "startJournal") return route.fulfill({ json: { result: { ok: true, token: "cj_e2e" }, handle: null } });
     if (name === "stopJournal") return route.fulfill({ json: { result: { ok: true }, handle: null } });
+    // Every run end clears the agent's viewport emulation; it does not touch the page here.
+    if (name === "clearActEmulation") return route.fulfill({ json: { result: { ok: true }, handle: null } });
     await route.fulfill({
       json: { result: { ok: false, stage: "expect", error: 'text "3 items" not found' }, handle: "h1" },
     });
@@ -57,7 +59,10 @@ test("browse_agent setup that fails shows Setup failed and 'The agent did not ru
   await expect(page.getByText(/expect — text "3 items" not found/)).toBeVisible();
   await expect(page.getByText(/The agent did not run\./)).toBeVisible();
   await expect(page.getByText("The page could not be prepared.")).toBeVisible({ timeout: 15_000 });
-  expect(commands.filter((c) => c !== "startJournal" && c !== "stopJournal")).toEqual(["applyFixture"]);
+  const bookkeeping = new Set(["startJournal", "stopJournal", "clearActEmulation"]);
+  expect(commands.filter((c) => !bookkeeping.has(c))).toEqual(["applyFixture"]);
+  // The run end clears any viewport emulation, also after a failed setup.
+  await expect.poll(() => commands.includes("clearActEmulation")).toBe(true);
   // The journal started for the run is stopped again (in the background), and no checkpoint is taken after a failed setup.
   await expect.poll(() => commands.includes("stopJournal")).toBe(commands.includes("startJournal"));
   expect(commands).not.toContain("captureCheckpoint");
