@@ -11,6 +11,7 @@ import { useChatStore } from "@/store/chatStore";
 import { getLikedReferences } from "./likedReferences";
 import { setPlaceNodeRedirect } from "@/lib/tools/browser/placeOnCanvas";
 import { runsInCanvasTab } from "./canvasTools";
+import type { ChatLaunchMessagePayload } from "./protocol";
 import { PanelClient, type CallFailure, type CallOptions } from "./panelClient";
 
 let client: PanelClient | null = null;
@@ -36,13 +37,40 @@ function trackCanvasCallFailed({ toolName, kind, durationMs }: CallFailure): voi
   });
 }
 
+/**
+ * A canvas tab's `launch` (an on-canvas agent entry point fired in a chatless tab): creates a
+ * new chat (default, like every local launch helper) or reuses the active one, BINDS it to the
+ * sending tab first (so the first request already carries that tab's `canvasContext`, which holds
+ * the selection), then queues the payload; the chat session's auto-send effect delivers it.
+ */
+async function handleLaunch({
+  tabId,
+  payload,
+}: {
+  tabId: number;
+  launchId: string;
+  payload: ChatLaunchMessagePayload;
+}): Promise<void> {
+  const c = client;
+  const text = typeof payload?.text === "string" ? payload.text.trim() : "";
+  if (!c || !text) return;
+  const store = useChatStore.getState();
+  const chatId =
+    payload.target === "active-chat" && store.activeChatId ? store.activeChatId : store.createChat();
+  await c.bindTo(chatId, tabId);
+  useChatStore.getState().queueLaunchPayload(chatId, {
+    text,
+    ...(Array.isArray(payload.images) && payload.images.length > 0 ? { images: payload.images } : {}),
+  });
+}
+
 /** Creates the singleton (and installs the place-node redirect) on first use. */
 export function getPanelClient(): PanelClient | null {
   const bridge = getAgentPanelCanvasBridge();
   if (!bridge || !isAgentPanelHost()) return null;
   if (client && clientBridge === bridge) return client;
   client?.dispose();
-  client = new PanelClient({ bridge, onCallFailed: trackCanvasCallFailed });
+  client = new PanelClient({ bridge, onCallFailed: trackCanvasCallFailed, onLaunch: (l) => void handleLaunch(l) });
   clientBridge = bridge;
   // The browse handlers pass their chat's `sessionId`, so a background chat's capture goes to ITS
   // bound tab. Only a caller without one (none today) falls back to the active chat.

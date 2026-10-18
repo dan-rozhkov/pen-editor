@@ -11,7 +11,7 @@ import {
 import { getCanvasElement } from "@/utils/canvasViewport";
 import { resolveAnchorPoint, buildClickAnchor, isAgentThread, type NodeRect } from "@/lib/comments/commentsLogic";
 import { findCanvasHitTargetAtPoint } from "@/pixi/interaction/hitTesting";
-import { isChatDisabled } from "@/lib/chatMode";
+import { useCanLaunchAgent } from "@/lib/canvasLink/agentLaunch";
 import { sendCommentToAgent } from "@/lib/sendCommentToAgent";
 import { IconButton } from "@/components/ui/IconButton";
 import {
@@ -226,6 +226,7 @@ function CommentPin({ thread, screen, open, onOpen, onClose }: CommentPinProps) 
 }
 
 function ThreadPopover({ thread, onClose }: { thread: CommentThread; onClose: () => void }) {
+  const canLaunchAgent = useCanLaunchAgent();
   const [replyText, setReplyText] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
@@ -284,7 +285,7 @@ function ThreadPopover({ thread, onClose }: { thread: CommentThread; onClose: ()
           >
             {resolved ? <ArrowCounterClockwiseIcon /> : <CheckIcon />}
           </IconButton>
-          {!isChatDisabled() && (
+          {canLaunchAgent && (
             <IconButton
               size="icon-sm"
               variant="ghost"

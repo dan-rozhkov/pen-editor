@@ -18,6 +18,7 @@ import {
   type AgentPanelCanvasBridge,
   type CanvasTabInfo,
   type CanvasToChatMsg,
+  type ChatLaunchMessagePayload,
   type ChatToCanvasMsg,
   type LinkEnvelope,
   type MainToChatMsg,
@@ -64,6 +65,8 @@ export interface PanelClientDeps {
   onCallFailed?: (failure: CallFailure) => void;
   /** Epoch ms stamped on envelopes (`sentAt`). Default: `linkNow`. */
   now?: () => number;
+  /** A canvas tab's `launch` (an on-canvas agent entry point). Each `launchId` is delivered once. */
+  onLaunch?: (launch: { tabId: number; launchId: string; payload: ChatLaunchMessagePayload }) => void;
 }
 
 export interface CallOptions {
@@ -104,6 +107,8 @@ export class PanelClient {
   private readonly bridge: AgentPanelCanvasBridge;
   private readonly now: () => number;
   private readonly onCallFailed?: (failure: CallFailure) => void;
+  private readonly onLaunch?: PanelClientDeps["onLaunch"];
+  private readonly seenLaunches = new Set<string>();
   private tabs: CanvasTabInfo[] = [];
   private readonly bindings = new Map<string, Binding>();
   private readonly binding$ = new Map<string, Promise<Binding | null>>();
@@ -122,6 +127,7 @@ export class PanelClient {
     this.bridge = deps.bridge;
     this.now = deps.now ?? linkNow;
     this.onCallFailed = deps.onCallFailed;
+    this.onLaunch = deps.onLaunch;
     this.unsubscribers = [
       deps.bridge.onTabsChanged((tabs) => {
         this.tabs = tabs;
@@ -139,6 +145,26 @@ export class PanelClient {
   /** The live binding of a chat, or null. */
   getBinding(sessionId: string): Binding | null {
     return this.bindings.get(sessionId) ?? null;
+  }
+
+  /**
+   * Binds a chat to a given canvas tab (the sender of a `launch`), replacing any binding.
+   * Looks the registration up in the tab list (refreshed first). Null = the tab is not
+   * listed or its registration is latched; the chat stays as it was.
+   */
+  async bindTo(sessionId: string, tabId: number): Promise<Binding | null> {
+    try {
+      this.tabs = await this.bridge.listTabs();
+    } catch {
+      // Judge by the last known list.
+    }
+    const listed = this.tabs.find((t) => t.tabId === tabId);
+    if (!listed) return null;
+    const binding = { tabId: listed.tabId, registrationId: listed.registrationId };
+    if (this.latched.has(keyOf(binding))) return null;
+    if (this.bindings.get(sessionId) && keyOf(this.bindings.get(sessionId)!) !== keyOf(binding)) this.lastContext.delete(sessionId);
+    this.bindings.set(sessionId, binding);
+    return binding;
   }
 
   /** Forgets a chat's binding (not the tab). */
@@ -510,6 +536,17 @@ export class PanelClient {
         break;
       case "started":
         this.pending.get(msg.callId)?.onStarted?.();
+        break;
+      case "launch":
+        if (!this.seenLaunches.has(msg.launchId)) {
+          this.seenLaunches.add(msg.launchId);
+          if (this.seenLaunches.size > MAX_ENDED_STREAMS) this.seenLaunches.delete(this.seenLaunches.values().next().value as string);
+          try {
+            this.onLaunch?.({ tabId, launchId: msg.launchId, payload: msg.payload });
+          } catch {
+            // A launch handler must not break the message loop.
+          }
+        }
         break;
       case "context-response":
         // A genuine empty context is indistinguishable from a failure: both mean "send none".

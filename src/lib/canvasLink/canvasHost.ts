@@ -22,11 +22,13 @@ import {
   linkNow,
   type CanvasHostBridge,
   type CanvasToChatMsg,
+  type ChatLaunchMessagePayload,
   type ChatToCanvasMsg,
   type LinkEnvelope,
   type MainToCanvasMsg,
 } from "./protocol";
 import { buildSceneContext } from "./sceneContext";
+import { clearCanvasHostLaunchPoster, nextLaunchId, setCanvasHostLaunchPoster } from "./agentLaunch";
 
 /** Session id every canvas-link tool call and stream runs under. */
 export const CANVAS_LINK_SESSION = "canvas-link";
@@ -290,9 +292,15 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
     console.warn("[canvasHost] register failed", err);
   }
 
+  // Entry points (deliverAgentLaunch) post through this host once it is registered.
+  const launchPoster = (payload: ChatLaunchMessagePayload): void =>
+    post({ kind: "launch", launchId: nextLaunchId(), payload });
+  setCanvasHostLaunchPoster(launchPoster);
+
   return () => {
     if (stopped) return;
     unsubscribe();
+    clearCanvasHostLaunchPoster(launchPoster);
     // Roll back half-streamed and completed-but-uncalled streams, drop every
     // adapter's per-session leftovers, abort running calls. Nothing is posted after stop.
     for (const [toolCallId, { toolName }] of streams) abandon(toolCallId, toolName);

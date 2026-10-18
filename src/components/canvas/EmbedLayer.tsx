@@ -19,7 +19,7 @@ import type { EmbedNode } from "@/types/scene";
 import { topLevelAncestorId } from "@/utils/topLevelAncestor";
 import { useOverlayHostRect } from "./useOverlayHostRect";
 import { isEmbedContentEmpty } from "@/lib/embedDefaults";
-import { isChatDisabled } from "@/lib/chatMode";
+import { useCanLaunchAgent } from "@/lib/canvasLink/agentLaunch";
 import { EmbedPromptHost } from "./EmbedPromptHost";
 import { StreamingEmbedPreviewLayer } from "./StreamingEmbedPreviewLayer";
 import { redispatchWheelAt } from "./forwardWheelToPixiCanvas";
@@ -1680,6 +1680,7 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
  * (double-click-entered) embed.
  */
 export function EmbedLayer() {
+  const canLaunchAgent = useCanLaunchAgent();
   const nodesById = useSceneStore((s) => s.nodesById);
   const parentById = useSceneStore((s) => s.parentById);
   const mode = useEditorModeStore((s) => s.mode);
@@ -1737,7 +1738,7 @@ export function EmbedLayer() {
         // switching modes. Same `key={id}` in both branches keeps React's
         // reconciliation honest across that swap.
         isEmbedContentEmpty((nodesById[id] as EmbedNode).htmlContent) ? (
-          <EmbedPromptHost key={id} nodeId={id} composer={!isChatDisabled()} />
+          <EmbedPromptHost key={id} nodeId={id} composer={canLaunchAgent} />
         ) : (
           <EmbedHost key={id} nodeId={id} />
         ),

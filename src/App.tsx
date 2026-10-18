@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
 import { track } from "./lib/analytics";
 import { markEditorOpened } from "./lib/analytics/sessionTiming";
-import { chatHiddenSections, isChatDisabled } from "./lib/chatMode";
+import { chatHiddenSections } from "./lib/chatMode";
 import { useChatBootstrap } from "./hooks/useChatBootstrap";
 import { useCustomFontStore } from "./store/customFontStore";
 import { usePluginStore } from "./store/pluginStore";
@@ -27,6 +27,7 @@ import { useIsMobile } from "./hooks/useIsMobile";
 import { useOnlineStatus } from "./hooks/useOnlineStatus";
 import { useSessionMcpBridge } from "./hooks/useSessionMcpBridge";
 import { launchShowcaseAgentChat } from "./lib/launchShowcaseAgentChat";
+import { subscribeCanvasHost } from "./lib/canvasLink/agentLaunch";
 import { startWebMcp, stopWebMcp } from "./lib/webmcp";
 import { maybeStartCanvasHost } from "./lib/canvasLink/canvasHost";
 import { importShowcaseScreensFromHandoff } from "./lib/importShowcaseScreens";
@@ -91,11 +92,14 @@ function App() {
   // tooling reads; reconcileModels only touches chat-store model ids.
   useChatBootstrap();
 
-  // Chatless mode leaves the showcase prompt UNCONSUMED in sessionStorage (a
-  // later task routes it to the desktop chat panel) — never consume it here.
+  // Chatless mode leaves the showcase prompt UNCONSUMED in sessionStorage until the
+  // canvas host is registered; then it is forwarded once to the agent panel.
   useEffect(() => {
-    if (isChatDisabled()) return;
     launchShowcaseAgentChat();
+    // Chatless: forwarded once the canvas host registers (no-op while no prompt is stored).
+    return subscribeCanvasHost(() => {
+      launchShowcaseAgentChat();
+    });
   }, []);
 
   // "Open in Editor" handoff (FIR-62): a showcase card's screens, dropped
