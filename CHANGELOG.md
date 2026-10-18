@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.82.0] - 2026-10-18
+
+Three themes: the browse subagent (`browse_agent`) grows into a QA tool, a
+quieter chat, and the enterprise design-system libraries are removed. Pairs
+with pen-editor-backend 0.41.0.
+
+### Added
+- **`browse_agent` runs a nested browsing subagent** and can do QA: QA mode,
+  `qa_assert`, final checks and diagnostics in the result, parallel isolated
+  QA runs on desktop. Viewport emulation is cleared at the end of every run.
+- **Setup, checkpoints and resume:** fixtures prepare the page before the
+  subagent starts; a run can resume from a checkpoint.
+- **Saved logins:** `browse_fill_login` signs the subagent in with a saved
+  desktop login, also in isolated QA runs.
+- **Browser page on the canvas:** `browse_capture` puts the page on the canvas
+  as an embed; a browser screenshot can be placed on the canvas.
+
+### Changed
+- **A background skill write is a chat row, not a toast.** "Память обновлена"
+  appears under the reply of the turn that caused it; the bottom-right toast
+  is gone. The row is UI-only and never reaches the model.
+- The `read_design_repo` chip reads **"View Repo"**.
+- Chat: assistant messages use the full panel width; tool errors show as a
+  muted row with a cross icon; the `browse_agent` card keeps setup details
+  under the fold.
+- The browse_* handlers run on the `@sideform/browser-agent` executor and
+  session core (now v0.2.23). `browse_agent` no longer asks for the OpenCode Go
+  model.
+
+### Removed
+- Enterprise design-system libraries, design lint and tokens v2.
+
 ## [0.81.0] - 2026-10-13
 
 Three themes: design tokens with modes and organization libraries, the
