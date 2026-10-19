@@ -20,6 +20,10 @@ const SharedCanvasPage = lazy(() => import("./components/share/SharedCanvasPage"
 // separate from the editor chunk: it must never import App or the Pixi stack.
 const AgentPage = lazy(() => import("@/routes/AgentPage"));
 
+// The markdown document editor at "/doc" (desktop tab or plain browser). Lazy:
+// Tiptap must stay out of the showcase and editor chunks.
+const DocPage = lazy(() => import("@/routes/DocPage"));
+
 // Accounts (Better Auth). Lazy for the same reason as the editor: the auth
 // client must not weigh on the showcase entry bundle, and all three pages are
 // only reachable on deployments where /api/auth-config reports accounts on.
@@ -55,6 +59,14 @@ export function AppRouter() {
           element={
             <Suspense fallback={null}>
               <AgentPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/doc"
+          element={
+            <Suspense fallback={null}>
+              <DocPage />
             </Suspense>
           }
         />

@@ -57,6 +57,13 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   // touches no scene, and a cold tab load can take many seconds, which would stall every
   // scene-mutating call behind it.
   "open_canvas_tab",
+  // Panel-local markdown documents (docs/docStore.ts): localStorage only, no scene. doc_create /
+  // doc_open wait for the shell to open a tab, which must not stall scene-mutating calls.
+  "doc_list",
+  "doc_create",
+  "doc_read",
+  "doc_edit",
+  "doc_open",
   // The three browse_* tools (docs/superpowers/specs/2026-09-18-builtin-
   // browser-design.md) are thin forwarders onto the desktop shell's
   // BrowserController — they never touch the scene graph. `browse_open` in

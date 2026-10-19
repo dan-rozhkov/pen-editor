@@ -26,11 +26,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("startBridges on the /agent route", () => {
+describe.each(["/agent", "/doc"])("startBridges on the %s route", (route) => {
   it("starts no bridge at all", async () => {
     vi.stubEnv("VITE_MCP_WS_TOKEN", "secret-token");
     (window as unknown as { penDesktop: unknown }).penDesktop = {};
-    window.history.pushState({}, "", "/agent");
+    window.history.pushState({}, "", route);
     try {
       const { startBridges } = await import("@/lib/bridgeBootstrap");
       startBridges();

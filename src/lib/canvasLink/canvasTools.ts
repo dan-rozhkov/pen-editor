@@ -3,12 +3,12 @@
  * to the bound canvas tab. The panel has NO scene but HAS its own browser
  * bridge (`window.penAgentPanel.browser`), so it runs every tool that needs
  * neither scene nor canvas-tab-only state: ask_user, analyze_image, the static
- * guideline tools and ALL `browse_*` / `qa_*` tools. Every other tool runs in
+ * guideline tools ALL `browse_*` / `qa_*` tools and the `doc_*` markdown-document tools. Every other tool runs in
  * the canvas tab. The one scene write a browser tool does (placing a node via
  * `placeNodeOnCanvas`) goes to the canvas tab as a `place-node` message.
  */
 
-const PANEL_LOCAL_PREFIXES = ["browse_", "qa_"] as const;
+const PANEL_LOCAL_PREFIXES = ["browse_", "qa_", "doc_"] as const;
 
 /** Fixed (non-prefixed) tools that run in the agent panel itself. */
 export const PANEL_LOCAL_FIXED_TOOL_NAMES: ReadonlySet<string> = new Set([

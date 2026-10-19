@@ -25,6 +25,7 @@ import { booleanOperation } from "./tools/booleanOperation";
 import { getGuidelines, getStyleGuide, getStyleGuideTags } from "./tools/staticTools";
 import { analyzeImage } from "./tools/analyzeImage";
 import { openCanvasTab } from "./tools/openCanvasTab";
+import { docList, docCreate, docRead, docEdit, docOpen } from "./tools/docTools";
 import { generateImage, generateFrameImage } from "./tools/generateImage";
 import { setExportSettings } from "./tools/setExportSettings";
 import { exportLayersSvg } from "./tools/exportLayersSvg";
@@ -153,6 +154,13 @@ export const toolHandlers: Record<string, ToolHandler> = {
   // Panel-local (canvasTools.ts); advertised only with clientCapabilities.canvasTabs. NOT in
   // mcpToolNames.ts / WebMCP / plugins: it only means something in the desktop agent panel.
   open_canvas_tab: openCanvasTab,
+  // Panel-local markdown documents (canvasTools.ts "doc_" prefix); advertised only with
+  // clientCapabilities.docTabs. NOT in mcpToolNames.ts / WebMCP / plugins.
+  doc_list: docList,
+  doc_create: docCreate,
+  doc_read: docRead,
+  doc_edit: docEdit,
+  doc_open: docOpen,
   publish_to_showcase: publishToShowcase,
   remove_background: removeBackground,
   vectorize_image: vectorizeImage,

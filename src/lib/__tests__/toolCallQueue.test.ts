@@ -26,6 +26,10 @@ describe("isSerializedTool", () => {
     expect(isSerializedTool("a_tool_added_next_week")).toBe(true);
   });
 
+  it("does not serialize the panel-local doc_* tools", () => {
+    for (const n of ["doc_list", "doc_create", "doc_read", "doc_edit", "doc_open"]) expect(isSerializedTool(n), n).toBe(false);
+  });
+
   it("does not serialize open_canvas_tab (it touches no scene; a cold tab load is slow)", () => {
     expect(isSerializedTool("open_canvas_tab")).toBe(false);
   });

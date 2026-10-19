@@ -568,7 +568,7 @@ describe("clientCapabilities", () => {
 
     const context = fresh.buildCanvasContext() as Record<string, unknown>;
 
-    expect(context.clientCapabilities).toEqual({ desktopBrowser: true, browser: "desktop", browseQa: true, browseIsolation: false, browseAssert: false, canvasTabs: false });
+    expect(context.clientCapabilities).toEqual({ desktopBrowser: true, browser: "desktop", browseQa: true, browseIsolation: false, browseAssert: false, canvasTabs: false, docTabs: false });
     // Not nested inside the stringified canvasContext.
     const canvas = JSON.parse((context as { canvasContext: string }).canvasContext);
     expect(canvas.clientCapabilities).toBeUndefined();
@@ -581,7 +581,16 @@ describe("clientCapabilities", () => {
 
     const context = fresh.buildCanvasContext() as Record<string, unknown>;
 
-    expect(context.clientCapabilities).toEqual({ desktopBrowser: false, browser: "cloud", browseQa: true, browseIsolation: false, browseAssert: true, canvasTabs: false });
+    expect(context.clientCapabilities).toEqual({ desktopBrowser: false, browser: "cloud", browseQa: true, browseIsolation: false, browseAssert: true, canvasTabs: false, docTabs: false });
+  });
+
+  it("docTabs is true when the agent panel exposes docs.open at import time", async () => {
+    window.penAgentPanel = { version: 3, docs: { open: async () => ({ ok: true }) } } as unknown as Window["penAgentPanel"];
+    vi.resetModules();
+    const fresh = await import("@/hooks/useDesignChat");
+    const context = fresh.buildCanvasContext() as { clientCapabilities: { docTabs: boolean } };
+    delete window.penAgentPanel;
+    expect(context.clientCapabilities.docTabs).toBe(true);
   });
 
   it("browseIsolation is true when the shell exposes browser.isolated", async () => {

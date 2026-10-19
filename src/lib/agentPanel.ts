@@ -14,6 +14,13 @@ export interface PenAgentPanelApi {
      */
     revealAgentTab?(sessionId?: string): Promise<unknown>;
   };
+  /** The shell's markdown document tabs (/doc). Absent on a shell without doc tabs. */
+  docs?: AgentPanelDocsBridge;
+}
+
+/** Opens or activates the doc tab that shows `docId`. Resolves after the tab exists. */
+export interface AgentPanelDocsBridge {
+  open(docId: string): Promise<{ ok: boolean; error?: string }>;
 }
 
 declare global {
@@ -21,6 +28,12 @@ declare global {
     /** Exposed by the desktop shell's preload ONLY inside the agent panel view. */
     penAgentPanel?: PenAgentPanelApi;
   }
+}
+
+/** The panel's markdown-document bridge, or undefined (web, dev build, shell without doc tabs). */
+export function getAgentPanelDocsBridge(): AgentPanelDocsBridge | undefined {
+  const docs = window.penAgentPanel?.docs;
+  return typeof docs?.open === "function" ? docs : undefined;
 }
 
 /** The panel's canvas bridge, or undefined (web, dev build, shell older than panel version 2). */
@@ -38,8 +51,17 @@ export function isAgentPanelHost(): boolean {
   return import.meta.env.DEV || typeof window.penAgentPanel !== "undefined";
 }
 
+function isRoutePath(pathname: string, name: string, base: string): boolean {
+  const prefix = base.endsWith("/") ? base.slice(0, -1) : base;
+  return pathname === `${prefix}/${name}` || pathname === `${prefix}/${name}/`;
+}
+
 /** True when `pathname` is the canvas-less /agent route (basename-aware). */
 export function isAgentRoutePath(pathname: string, base: string = import.meta.env.BASE_URL || "/"): boolean {
-  const prefix = base.endsWith("/") ? base.slice(0, -1) : base;
-  return pathname === `${prefix}/agent` || pathname === `${prefix}/agent/`;
+  return isRoutePath(pathname, "agent", base);
+}
+
+/** True when `pathname` is the canvas-less /doc route (basename-aware). */
+export function isDocRoutePath(pathname: string, base: string = import.meta.env.BASE_URL || "/"): boolean {
+  return isRoutePath(pathname, "doc", base);
 }

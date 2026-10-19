@@ -3,6 +3,7 @@ import type { RetryState } from "@sideform/agent-harness/retry-fetch";
 import { credentialsMode, isOffline, OFFLINE_MESSAGE, resolveApiUrl } from "@/lib/apiBase";
 import { getOpenCodeKey } from "@/lib/opencodeKey";
 import { withMobbinAuthHeader } from "@/lib/mobbinAuth";
+import { getAgentPanelDocsBridge } from "@/lib/agentPanel";
 import { isPanelCanvasLinkActive } from "@/lib/canvasLink/panelRuntime";
 import { isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";
 import { browseAssertAvailable, isolatedBrowseAvailable } from "@/lib/tools/browser/isolation";
@@ -41,6 +42,8 @@ export const CLIENT_CAPABILITIES = {
   // The desktop agent panel has a canvas bridge: the backend then offers `open_canvas_tab`.
   // Static per page load like the others (a flip would break the prompt cache).
   canvasTabs: isPanelCanvasLinkActive(),
+  // The desktop panel can open markdown document tabs: the backend then offers doc_*.
+  docTabs: getAgentPanelDocsBridge() !== undefined,
 } as const;
 
 // Whether `model` is an OpenCode BYOK route (pen-editor-backend
