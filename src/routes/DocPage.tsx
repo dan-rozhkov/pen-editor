@@ -84,7 +84,7 @@ export default function DocPage() {
                   }
                 />
                 <DropdownMenuContent align="end" sideOffset={4} className="min-w-44">
-                  <DropdownMenuItem variant="destructive" onClick={() => setConfirmingDelete(true)}>
+                  <DropdownMenuItem onClick={() => setConfirmingDelete(true)}>
                     <TrashIcon /> Delete document
                   </DropdownMenuItem>
                 </DropdownMenuContent>
