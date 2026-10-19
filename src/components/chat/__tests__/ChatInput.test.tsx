@@ -85,6 +85,8 @@ interface HarnessProps {
   initialInput?: string;
   sessionId?: string;
   shouldFocus?: boolean;
+  suggestion?: string | null;
+  awaitingAnswer?: boolean;
 }
 
 /** Wrap ChatInput with local input state, mirroring the real parent wiring. */
@@ -95,8 +97,11 @@ function Harness({
   initialInput = "",
   sessionId = "test-session",
   shouldFocus,
+  suggestion,
+  awaitingAnswer,
 }: HarnessProps) {
   const [input, setInput] = useState(initialInput);
+  const [live, setLive] = useState(suggestion);
   return (
     <ChatInput
       sessionId={sessionId}
@@ -106,6 +111,9 @@ function Harness({
       isLoading={isLoading}
       stop={stop}
       shouldFocus={shouldFocus}
+      suggestion={live}
+      onDismissSuggestion={() => setLive(null)}
+      awaitingAnswer={awaitingAnswer}
     />
   );
 }
@@ -603,5 +611,72 @@ describe("<ChatInput />", () => {
     expect(img.className).not.toContain("img-outline");
     expect(img.parentElement?.className).toContain("img-outline");
     expect(img.parentElement?.className).not.toContain("border-border-default");
+  });
+
+  describe("prompt suggestion", () => {
+    const placeholder = () => (screen.getByRole("textbox") as HTMLTextAreaElement).placeholder;
+
+    it("shows the suggestion as the placeholder while the input is empty", () => {
+      render(<Harness onSubmit={vi.fn()} suggestion="add a footer" />);
+      expect(placeholder()).toBe("add a footer");
+      // No visible hint; screen readers get an sr-only description.
+      expect(screen.getByRole("textbox").getAttribute("aria-describedby")).toBeTruthy();
+      expect(screen.getByText(/Press Tab to accept/)).toBeTruthy();
+    });
+
+    it("sizes the textarea to a multi-line placeholder, capped at 96px", () => {
+      const sh = vi.spyOn(HTMLTextAreaElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLTextAreaElement) {
+        return this.value === "" ? 20 : 60;
+      });
+      render(<Harness onSubmit={vi.fn()} suggestion={"line one\nline two\nline three"} />);
+      const ta = screen.getByRole("textbox") as HTMLTextAreaElement;
+      expect(ta.style.height).toBe("60px");
+      expect(ta.value).toBe("");
+      sh.mockRestore();
+    });
+
+    it("Tab accepts the suggestion into the input", () => {
+      render(<Harness onSubmit={vi.fn()} suggestion="add a footer" />);
+      const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+      const notPrevented = fireEvent.keyDown(textarea, { key: "Tab" });
+      expect(notPrevented).toBe(false);
+      expect(textarea.value).toBe("add a footer");
+      expect(textarea.selectionStart).toBe("add a footer".length);
+    });
+
+    it("ArrowRight accepts it too", () => {
+      render(<Harness onSubmit={vi.fn()} suggestion="add a footer" />);
+      const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+      fireEvent.keyDown(textarea, { key: "ArrowRight" });
+      expect(textarea.value).toBe("add a footer");
+    });
+
+    it("Tab without a suggestion keeps its default behavior", () => {
+      render(<Harness onSubmit={vi.fn()} />);
+      const textarea = screen.getByRole("textbox");
+      expect(fireEvent.keyDown(textarea, { key: "Tab" })).toBe(true);
+    });
+
+    it("Enter on an empty input does not send the suggestion", () => {
+      const onSubmit = vi.fn();
+      render(<Harness onSubmit={onSubmit} suggestion="add a footer" />);
+      fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it("is dropped for good once the user types", () => {
+      render(<Harness onSubmit={vi.fn()} suggestion="add a footer" />);
+      const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: "x" } });
+      fireEvent.change(textarea, { target: { value: "" } });
+      expect(placeholder()).toBe("Ask Sideform Agent…");
+      expect(screen.queryByText(/Press Tab to accept/)).toBeNull();
+    });
+
+    it("is hidden while awaiting an answer", () => {
+      render(<Harness onSubmit={vi.fn()} suggestion="add a footer" awaitingAnswer />);
+      expect(placeholder()).toBe("Answer the question above to continue…");
+      expect(screen.queryByText(/Press Tab to accept/)).toBeNull();
+    });
   });
 });

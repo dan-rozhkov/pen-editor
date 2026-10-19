@@ -19,6 +19,7 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { useUserSkillStore } from "@/store/userSkillStore";
 import type { ChatSummary, ParallelCount } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
+import { usePromptSuggestion } from "@/hooks/usePromptSuggestion";
 import { useModelOptions } from "@/hooks/useModelOptions";
 import { useAgentActivityNotes } from "@/hooks/useAgentActivityNotes";
 import { useReleaseCloudBrowserWhenDone } from "@/hooks/useReleaseCloudBrowserWhenDone";
@@ -224,7 +225,16 @@ function ChatSession({
     (s) => s.activityNotes[sessionId] ?? NO_ACTIVITY_NOTES,
   );
 
+  const isMobile = useIsMobile();
   const awaitingAnswer = hasPendingAskUser(messages);
+  const { suggestion, dismiss: dismissSuggestion } = usePromptSuggestion({
+    sessionId,
+    status,
+    messages,
+    input,
+    awaitingAnswer,
+    enabled: isVisible && !isMobile,
+  });
 
   const parallelCount = useChatStore((s) => s.parallelCount);
   const setParallelCount = useChatStore((s) => s.setParallelCount);
@@ -443,6 +453,8 @@ function ChatSession({
           stop={stop}
           shouldFocus={isVisible}
           awaitingAnswer={awaitingAnswer}
+          suggestion={suggestion}
+          onDismissSuggestion={dismissSuggestion}
           onManageSkills={onManageSkills}
           renderFooter={(footerProps) => (
             <div className="flex items-center gap-1 px-2 pb-2 pt-1.5">

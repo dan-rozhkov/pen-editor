@@ -63,6 +63,12 @@ interface ChatInputProps {
   /** Opens the "Manage skills" modal — forwarded to the slash menu's footer
    * row. Omitted in contexts without skill management. */
   onManageSkills?: () => void;
+  /** Predicted next message, shown as ghost text while the input is empty;
+   * Tab / ArrowRight accepts it into the input. */
+  suggestion?: string | null;
+  /** Called when the user types or accepts, so the parent drops the
+   * suggestion for good (it must not reappear after they delete their text). */
+  onDismissSuggestion?: () => void;
 }
 
 interface ChatInputFooterProps {
@@ -144,6 +150,8 @@ export function ChatInput({
   shouldFocus = false,
   renderFooter,
   onManageSkills,
+  suggestion,
+  onDismissSuggestion,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -241,16 +249,33 @@ export function ChatInput({
     const ta = textareaRef.current;
     if (!ta) return;
     ta.style.height = "auto";
-    ta.style.height = `${Math.min(ta.scrollHeight, 96)}px`;
+    // scrollHeight ignores placeholder text; measure it via the value instead
+    // (restored in the same tick, so nothing paints).
+    const measurePlaceholder = ta.value === "" && ta.placeholder !== "";
+    if (measurePlaceholder) ta.value = ta.placeholder;
+    const full = ta.scrollHeight;
+    if (measurePlaceholder) ta.value = "";
+    ta.style.height = `${Math.min(full, 96)}px`;
     // Only show the scrollbar once content actually exceeds the max height;
     // otherwise the default `overflow: auto` renders a scrollbar even at a
     // single line due to line-height/subpixel rounding.
-    ta.style.overflowY = ta.scrollHeight > 96 ? "auto" : "hidden";
+    ta.style.overflowY = full > 96 ? "auto" : "hidden";
   }, []);
 
+  // Set when a suggestion is accepted; the next input change moves the caret
+  // to the end once the textarea holds the new value.
+  const caretToEndRef = useRef(false);
   useEffect(() => {
     resize();
-  }, [input, resize]);
+    const ta = textareaRef.current;
+    if (ta && caretToEndRef.current) {
+      caretToEndRef.current = false;
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+    }
+  }, [input, suggestion, resize]);
+
+  const suggestionId = `${formId}-suggestion`;
+  const showSuggestion = input === "" && !awaitingAnswer && !!suggestion;
 
   // Re-measure when the composer becomes visible again. While hidden behind
   // `display: none` (mobile panel closed), `scrollHeight` reads 0, so a
@@ -309,12 +334,28 @@ export function ChatInput({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (
+        showSuggestion &&
+        suggestion &&
+        !e.nativeEvent.isComposing &&
+        !e.shiftKey &&
+        !e.altKey &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        (e.key === "Tab" || e.key === "ArrowRight")
+      ) {
+        e.preventDefault();
+        caretToEndRef.current = true;
+        setInput(suggestion);
+        onDismissSuggestion?.();
+        return;
+      }
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         doSubmit();
       }
     },
-    [doSubmit]
+    [doSubmit, showSuggestion, suggestion, setInput, onDismissSuggestion]
   );
 
   const handleSubmit = useCallback(
@@ -518,6 +559,7 @@ export function ChatInput({
           value={input}
           onChange={(e) => {
             setInput(e.target.value);
+            onDismissSuggestion?.();
             resize();
           }}
           onKeyDown={handleKeyDown}
@@ -525,12 +567,20 @@ export function ChatInput({
           placeholder={
             awaitingAnswer
               ? "Answer the question above to continue…"
-              : "Ask Sideform Agent…"
+              : showSuggestion
+                ? suggestion
+                : "Ask Sideform Agent…"
           }
+          aria-describedby={showSuggestion ? suggestionId : undefined}
           rows={1}
           disabled={awaitingAnswer}
           className="flex-1 resize-none bg-transparent pl-2 text-sm text-text-primary placeholder:text-text-disabled outline-none min-h-[29px] max-h-[96px] py-1 leading-normal"
         />
+        {showSuggestion && (
+          <span id={suggestionId} className="sr-only">
+            Suggestion: {suggestion}. Press Tab to accept.
+          </span>
+        )}
         {!renderFooter && isLoading && (
           <Tooltip>
             <TooltipTrigger
