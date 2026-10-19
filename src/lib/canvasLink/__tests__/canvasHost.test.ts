@@ -8,6 +8,7 @@ import { useEmbedPickerStore } from "@/store/embedPickerStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { useSharedViewStore } from "@/store/sharedViewStore";
+import { resetTouchedEmbedsRegistry } from "@/lib/tools/tasteCheckRegistry";
 import { streamingToolAdapters } from "@/lib/streamingTools";
 import { resetStores, seedScene } from "@/test/fixtures";
 import { AppendEncoder } from "../appendCodec";
@@ -21,6 +22,13 @@ import type {
   LinkEnvelope,
   MainToCanvasMsg,
 } from "../protocol";
+
+const { tasteSpy } = vi.hoisted(() => ({ tasteSpy: vi.fn() }));
+vi.mock("@/lib/tools/tasteCheck", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/tools/tasteCheck")>();
+  tasteSpy.mockImplementation(actual.runTasteCheckForToolCall);
+  return { ...actual, runTasteCheckForToolCall: tasteSpy };
+});
 
 function fakeBridge() {
   const posted: CanvasToChatMsg[] = [];
@@ -221,6 +229,47 @@ describe("canvas host", () => {
       await vi.waitFor(() => expect(resultFor(f.posted, "c2")).toBeDefined());
       expect(resultFor(f.posted, "c1")?.result).toBe("fine");
       expect(resultFor(f.posted, "c2")?.result).toContain("error");
+    });
+
+    describe("Jev taste check", () => {
+      const EMBED_OPS =
+        's=I(document, {type: "embed", name: "Screen", width: 390, height: 844, htmlContent: "<div>Hi</div>"})\n';
+      beforeEach(() => {
+        resetTouchedEmbedsRegistry();
+        tasteSpy.mockReset();
+      });
+
+      it("runs for a batch_design call with a brief that touched an embed and merges the feedback", async () => {
+        tasteSpy.mockResolvedValue("merged with feedback");
+        const f = start();
+        f.send({ kind: "call", callId: "t1", toolName: "batch_design", input: { operations: EMBED_OPS }, timeoutMs: 5000, brief: "a login screen" });
+        await vi.waitFor(() => expect(resultFor(f.posted, "t1")).toBeDefined());
+        expect(resultFor(f.posted, "t1")?.result).toBe("merged with feedback");
+        expect(tasteSpy).toHaveBeenCalledTimes(1);
+        const args = tasteSpy.mock.calls[0];
+        expect(args[0]).toBe("batch_design");
+        expect(args[1]).toBe("t1");
+        expect(args[3]).toEqual({ brief: "a login screen" });
+        expect(args[4]).toBeInstanceOf(AbortSignal);
+      });
+
+      it("keeps the handler's result when the check throws", async () => {
+        tasteSpy.mockRejectedValue(new Error("boom"));
+        const f = start();
+        f.send({ kind: "call", callId: "t2", toolName: "batch_design", input: { operations: EMBED_OPS }, timeoutMs: 5000, brief: "x" });
+        await vi.waitFor(() => expect(resultFor(f.posted, "t2")).toBeDefined());
+        expect(JSON.parse(resultFor(f.posted, "t2")!.result).success).toBe(true);
+      });
+
+      it("does not run without a brief or for another tool", async () => {
+        const f = start();
+        f.send({ kind: "call", callId: "t3", toolName: "batch_design", input: { operations: EMBED_OPS }, timeoutMs: 5000 });
+        await vi.waitFor(() => expect(resultFor(f.posted, "t3")).toBeDefined());
+        toolHandlers[TOOL] = async () => "fine";
+        f.send({ kind: "call", callId: "t4", toolName: TOOL, input: {}, timeoutMs: 1000, brief: "x" });
+        await vi.waitFor(() => expect(resultFor(f.posted, "t4")).toBeDefined());
+        expect(tasteSpy).not.toHaveBeenCalled();
+      });
     });
 
     it("aborts the handler's signal on cancel and still answers", async () => {

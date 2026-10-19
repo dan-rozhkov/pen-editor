@@ -31,8 +31,10 @@ import {
   panelEndStream,
   panelForwardFrame,
   panelRunsInCanvas,
+  subscribePanelStreamLost,
   withPanelCanvasContext,
 } from "@/lib/canvasLink/panelRuntime";
+import { TAB_CLOSED_ERROR } from "@/lib/canvasLink/panelClient";
 import {
   streamingToolAdapters,
   streamingToolNames,
@@ -337,6 +339,11 @@ export function executeToolCall(
   return executeWithHarness(toolName, input, context, source);
 }
 
+/** The tools whose touched embeds get a Jev taste check (tasteCheck.ts). */
+function isTasteCheckedTool(toolName: string): boolean {
+  return toolName === "batch_design" || toolName === "edit_embed_html";
+}
+
 // Exported for tests. Joins the text parts of the LAST user-role message in
 // `messages` — this is the `brief` handed to a Jev taste check
 // (tasteCheck.ts truncates it to 4000 chars itself), so the check has some
@@ -487,6 +494,10 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
             toolCallId: toolCall.toolCallId,
             timeoutMs: getToolCallTimeoutMs(toolCall.toolName),
             signal: toolAbort.signal,
+            // The tab runs the Jev taste check (below, for local calls) and merges its feedback.
+            ...(isTasteCheckedTool(toolCall.toolName) && !turnStoppedRef.current
+              ? { brief: getLastUserMessageText(chat.messages) }
+              : {}),
           });
         } else {
           handlerResult = await executeToolCall(
@@ -530,13 +541,12 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       // still running (e.g. queued behind other mutations) happened before
       // any controller existed to abort, so don't start a check at all.
       //
-      // Agent panel: NOT run for canvas-link calls. The handler ran in the canvas
-      // tab, so the touched-embed registry this check reads was filled in that
-      // process, not here: `hasTouchedEmbeds` is always false below. Known
-      // limitation (CLAUDE.md, "Canvas link — panel side"); a cross-process
-      // taste check is a follow-up.
+      // Agent panel: canvas-link calls run this check in the canvas tab (the
+      // touched-embed registry lives in that process); the `brief` goes with
+      // the call and `handlerResult` already holds the merged feedback, so
+      // `hasTouchedEmbeds` is false here and this block is skipped.
       if (
-        (toolCall.toolName === "batch_design" || toolCall.toolName === "edit_embed_html") &&
+        isTasteCheckedTool(toolCall.toolName) &&
         !turnStoppedRef.current &&
         hasTouchedEmbeds(toolCall.toolCallId)
       ) {
@@ -782,6 +792,31 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, registerAbortController, unregisterAbortController]);
+
+  // Agent panel: the canvas tab closed while a tool's INPUT was still streaming
+  // to it. The model would go on writing a call that can no longer run where it
+  // was built (and `callTool` refuses to move it to another tab), so the error
+  // would only surface after the stream ends. Stop the turn now (same path as a
+  // user Stop), then answer the lost call with the tab-closed error. The output
+  // is written only AFTER `stop()` settled the stream: `addToolOutput` on a live
+  // stream would race the SDK's own part updates. `turnStoppedRef` (set by
+  // `clearStreamingToolSession`) keeps `sendAutomaticallyWhen` from resuming.
+  useEffect(() => {
+    return subscribePanelStreamLost(sessionId, (toolCallId) => {
+      const call = [...seenStreamingCallsRef.current.values()].find((c) => c.toolCallId === toolCallId);
+      if (!call) return;
+      clearStreamingToolSession();
+      void (async () => {
+        try {
+          await chat.stop();
+          await chat.addToolOutput({ tool: call.toolName, toolCallId, output: TAB_CLOSED_ERROR });
+        } catch {
+          // The transcript was cleared or replaced meanwhile: nothing to write to.
+        }
+      })();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, clearStreamingToolSession]);
 
   // Observe partial tool input as it streams in and dispatch it to whichever
   // registered adapter (src/lib/streamingTools/) owns that tool name.

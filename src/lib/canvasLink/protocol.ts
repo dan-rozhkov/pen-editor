@@ -44,7 +44,19 @@ export type StreamMsg =
 export type ChatToCanvasMsg =
   | StreamMsg
   | { kind: "stream-end"; toolCallId: string; reason: "complete" | "abandoned" }
-  | { kind: "call"; callId: string; toolName: string; input: unknown; timeoutMs: number }
+  | {
+      kind: "call";
+      callId: string;
+      toolName: string;
+      input: unknown;
+      timeoutMs: number;
+      /**
+       * The user's request text. Set only for `batch_design`/`edit_embed_html`: the tab then runs the
+       * Jev taste check on the embeds the call touched (its touched-embed registry lives in the tab's
+       * process) and merges the feedback into the `result`.
+       */
+      brief?: string;
+    }
   | { kind: "cancel"; callId: string }
   /**
    * The one scene write a panel-run browser tool does. The canvas tab calls

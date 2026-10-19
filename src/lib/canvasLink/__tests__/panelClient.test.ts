@@ -5,7 +5,9 @@ import {
   CALL_TIMEOUT_MARGIN_MS,
   CONTEXT_TIMEOUT_MS,
   PRE_START_TIMEOUT_MS,
+  TASTE_CHECK_MARGIN_MS,
   type CallFailure,
+  type PanelClientDeps,
 } from "../panelClient";
 import { appendLikedReferences } from "../panelRuntime";
 import { attachScriptedCanvas, createFakeCanvasBridge, tab, type FakeCanvasBridge } from "./fakeCanvasBridge";
@@ -15,9 +17,9 @@ const errorOf = (raw: string) => (JSON.parse(raw) as { error: string }).error;
 
 let fake: FakeCanvasBridge;
 let client: PanelClient;
-const setup = (tabs = [tab(1)]) => {
+const setup = (tabs = [tab(1)], deps: Partial<PanelClientDeps> = {}) => {
   fake = createFakeCanvasBridge(tabs);
-  client = new PanelClient({ bridge: fake.bridge, now: () => 42 });
+  client = new PanelClient({ bridge: fake.bridge, now: () => 42, ...deps });
   return fake;
 };
 afterEach(() => {
@@ -365,6 +367,41 @@ describe("tab-gone latch", () => {
     await flush();
     expect(fake.posted).toHaveLength(before);
     expect(fake.openTab).not.toHaveBeenCalled();
+  });
+
+  it("reports a stream the closing tab took, and answers its later call with the tab-closed error on no new tab", async () => {
+    const lost: Array<[string, string]> = [];
+    setup([tab(1, 4)], { onStreamLost: (s, id) => lost.push([s, id]) });
+    attachScriptedCanvas(fake);
+    client.forwardFrame("s", "b1", "batch_design", { operations: "a" });
+    await flush();
+    fake.closeTab(1);
+    expect(lost).toEqual([["s", "b1"]]);
+    fake.setTabs([tab(2, 1)]); // another tab exists: the call must still not run there
+    const before = fake.posted.length;
+    expect(await client.callTool("s", "batch_design", {}, { toolCallId: "b1", timeoutMs: 1000 })).toBe(TAB_CLOSED_ERROR);
+    expect(fake.posted).toHaveLength(before);
+    expect(client.getBinding("s")).toBeNull();
+    expect(fake.openTab).not.toHaveBeenCalled();
+  });
+
+  it("sends the brief with the call and widens the wait for the taste check", async () => {
+    setup([tab(1)]);
+    vi.useFakeTimers();
+    try {
+      let outcome: string | undefined;
+      void client.callTool("s", "batch_design", {}, { toolCallId: "c1", timeoutMs: 1000, brief: "make it" }).then((r) => (outcome = r));
+      await vi.advanceTimersByTimeAsync(0);
+      const call = fake.posted.map((p) => p.env.msg).find((m) => m.kind === "call");
+      expect(call).toMatchObject({ callId: "c1", brief: "make it" });
+      fake.emit(1, { kind: "started", callId: "c1" });
+      await vi.advanceTimersByTimeAsync(1000 + CALL_TIMEOUT_MARGIN_MS + 1);
+      expect(outcome).toBeUndefined(); // 1 s + 2 s alone would have timed out
+      await vi.advanceTimersByTimeAsync(TASTE_CHECK_MARGIN_MS);
+      expect(outcome).toContain("timed out");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not post to a latched registration even if the tab list still shows it", async () => {

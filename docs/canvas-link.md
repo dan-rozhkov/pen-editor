@@ -73,7 +73,11 @@ See `protocol.ts`. Rules:
   runs it through `executeToolCall` with that budget (one timeout mechanism; it
   starts inside the serial tool queue, so queue wait is not charged) and answers
   `result`. A call cancelled or timed out before its queued task starts never
-  runs. A `callId` that is still running is ignored if sent again; exactly one
+  runs. The optional `brief` (the user's request text) is set only for
+  `batch_design`/`edit_embed_html`: after the handler the tab runs the Jev taste
+  check on the embeds the call touched (fail-open; the call's abort signal) and
+  returns the result with the feedback merged. The chat side then waits an extra
+  9 s (`TASTE_CHECK_MARGIN_MS`). A `callId` that is still running is ignored if sent again; exactly one
   `result` is posted per `callId`.
   The chat side waits `timeoutMs + 2 s` so the canvas's own timeout error wins.
 - **`started`** (canvas → chat, `{callId}`): posted when the queued task actually
@@ -154,6 +158,9 @@ See `protocol.ts`. Rules:
   on the next frame and failed only ~3 s later; that must not happen.) A reloaded
   tab registers again with the same `tabId` and a new `registrationId`; it is
   usable and the latch does not apply to it.
+  A stream dropped by the latch (the tool input was still being written) is
+  reported to the chat (`onStreamLost`): the chat stops the turn and answers that
+  call with the same error; a later `call` for it is never sent to another tab.
 - **Stream integrity**: the decoder accepts only `seq` = last + 1 (first message:
   seq 0, "full"); anything else answers `resync` and ignores appends until a
   "full" arrives. While waiting, every ignored append re-sends `resync`, at most
