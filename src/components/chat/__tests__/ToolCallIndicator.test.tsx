@@ -267,4 +267,14 @@ describe("<ToolCallIndicator />", () => {
     expect(screen.getByText("Done")).toBeTruthy();
     expect(screen.queryByText("Error")).toBeNull();
   });
+
+  it("keeps Done for {\"error\":null,...} output", () => {
+    render(
+      <ToolCallIndicator
+        part={toolPart({ state: "output-available", output: '{"error":null,"result":1}' })}
+      />,
+    );
+    expect(screen.getByText("Done")).toBeTruthy();
+    expect(screen.queryByText("Error")).toBeNull();
+  });
 });

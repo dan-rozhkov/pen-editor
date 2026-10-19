@@ -385,15 +385,15 @@ describe("tab-gone latch", () => {
     expect(fake.openTab).not.toHaveBeenCalled();
   });
 
-  it("sends the brief with the call and widens the wait for the taste check", async () => {
+  it.each(["make it", ""])("sends the brief %j with the call and widens the wait for the taste check", async (brief) => {
     setup([tab(1)]);
     vi.useFakeTimers();
     try {
       let outcome: string | undefined;
-      void client.callTool("s", "batch_design", {}, { toolCallId: "c1", timeoutMs: 1000, brief: "make it" }).then((r) => (outcome = r));
+      void client.callTool("s", "batch_design", {}, { toolCallId: "c1", timeoutMs: 1000, brief }).then((r) => (outcome = r));
       await vi.advanceTimersByTimeAsync(0);
       const call = fake.posted.map((p) => p.env.msg).find((m) => m.kind === "call");
-      expect(call).toMatchObject({ callId: "c1", brief: "make it" });
+      expect(call).toMatchObject({ callId: "c1", brief });
       fake.emit(1, { kind: "started", callId: "c1" });
       await vi.advanceTimersByTimeAsync(1000 + CALL_TIMEOUT_MARGIN_MS + 1);
       expect(outcome).toBeUndefined(); // 1 s + 2 s alone would have timed out

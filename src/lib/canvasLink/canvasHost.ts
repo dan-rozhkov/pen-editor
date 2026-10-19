@@ -263,7 +263,7 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
             );
             // Jev taste check: the touched-embed registry was filled by the handler above, in this process.
             if (
-              msg.brief &&
+              typeof msg.brief === "string" &&
               (msg.toolName === "batch_design" || msg.toolName === "edit_embed_html") &&
               !signal.aborted &&
               hasTouchedEmbeds(msg.callId)

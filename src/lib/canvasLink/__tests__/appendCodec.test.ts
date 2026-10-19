@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { AppendDecoder, AppendEncoder } from "../appendCodec";
 
 const ops = (s: string, extra: Record<string, unknown> = {}) => ({ operations: s, ...extra });
@@ -24,7 +24,8 @@ describe("append codec", () => {
     const enc = new AppendEncoder("t1", "x");
     enc.encode({ a: "xx", b: "yy" });
     expect(enc.encode({ a: "zz", b: "yy" })).toMatchObject({ format: "full" });
-    expect(enc.encode({ a: "zz1", b: "yy1" })).toMatchObject({ format: "full" });
+    // Two fields grow: no single-field append; a small patch carries both.
+    expect(enc.encode({ a: "zz1", b: "yy1" })).toMatchObject({ format: "patch" });
   });
 
 
@@ -78,12 +79,10 @@ describe("append codec", () => {
     expect(dec.apply(enc.encode(ops("abcd"))!)).toEqual({ status: "resync" });
   });
 
-  it("survives caller mutation, key order and nested values", () => {
+  it("handles key order and nested values (fresh input objects per frame, like the SDK's partial parse)", () => {
     const enc = new AppendEncoder("t1", "x");
-    const input: Record<string, unknown> = { a: "x", n: { k: 1 } };
-    enc.encode(input);
-    input.a = "xy";
-    expect(enc.encode(input)).toMatchObject({ format: "append", append: "y" });
+    enc.encode({ a: "x", n: { k: 1 } });
+    expect(enc.encode({ a: "xy", n: { k: 1 } })).toMatchObject({ format: "append", append: "y" });
     expect(enc.encode({ n: { k: 1 }, a: "xy" })).toBeNull();
     expect(enc.encode({ n: { k: 2 }, a: "xy" })).toMatchObject({ format: "full" });
   });
@@ -163,8 +162,39 @@ describe("append codec", () => {
 
     it("falls back to full when the ops are not smaller than the input", () => {
       const enc = new AppendEncoder("t1", "x");
-      enc.encode({ e: [{ s: "a" }] });
-      expect(enc.encode({ e: [{ s: "ab" }] })).toMatchObject({ format: "full" });
+      enc.encode({ e: [] });
+      expect(enc.encode({ e: ["z".repeat(2000)] })).toMatchObject({ format: "full" });
+    });
+
+    it("does not stringify the whole input for small ops", () => {
+      const enc = new AppendEncoder("t1", "x");
+      const big = "x".repeat(50_000);
+      enc.encode({ keep: big, edits: [{ s: "a" }] });
+      const spy = vi.spyOn(JSON, "stringify");
+      try {
+        const m = enc.encode({ keep: big, edits: [{ s: "ab" }] });
+        expect(m).toMatchObject({ format: "patch" });
+        for (const call of spy.mock.calls) expect(call[0]).not.toHaveProperty("keep");
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it("stops emitting patch frames for a stream once it got a resync (older receiver)", () => {
+      const enc = new AppendEncoder("t1", "edit_embed_html");
+      const big = "x".repeat(200);
+      enc.encode(edit("n1", [{ oldString: "<p>", newString: big }]));
+      expect(enc.encode(edit("n1", [{ oldString: "<p>", newString: big + "a" }]))).toMatchObject({ format: "patch" });
+      enc.forceFull();
+      expect(enc.encode(edit("n1", [{ oldString: "<p>", newString: big + "ab" }]))).toMatchObject({ format: "full" });
+      // Nested growth is now full each time (no patch), never a patch.
+      expect(enc.encode(edit("n1", [{ oldString: "<p>", newString: big + "abc" }]))).toMatchObject({ format: "full" });
+      // Top-level appends still work.
+      const top = new AppendEncoder("t2", "batch_design");
+      top.encode(ops("a"));
+      top.forceFull();
+      top.encode(ops("ab"));
+      expect(top.encode(ops("abc"))).toMatchObject({ format: "append" });
     });
 
     it("returns null when nested content is unchanged", () => {

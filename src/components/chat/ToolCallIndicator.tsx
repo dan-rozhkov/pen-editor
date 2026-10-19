@@ -39,18 +39,16 @@ function errorFromToolOutput(output: unknown): string | undefined {
     if (!output.trimStart().startsWith('{"error"')) return undefined;
     try {
       const parsed: unknown = JSON.parse(output);
-      if (parsed && typeof parsed === "object") {
-        const e = (parsed as { error?: unknown }).error;
-        if (typeof e === "string") return e;
-      }
+      const e = parsed && typeof parsed === "object" ? (parsed as { error?: unknown }).error : undefined;
+      // Valid JSON: an error only with a non-empty string `error` (`{"error":null,...}` is a result).
+      return typeof e === "string" && e !== "" ? e : undefined;
     } catch {
-      /* malformed JSON: still an error, show the raw text */
+      return output; // malformed JSON: still an error, show the raw text
     }
-    return output;
   }
   if (output && typeof output === "object") {
     const e = (output as { error?: unknown }).error;
-    if (typeof e === "string") return e;
+    if (typeof e === "string" && e !== "") return e;
   }
   return undefined;
 }

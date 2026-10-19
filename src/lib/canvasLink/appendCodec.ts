@@ -42,6 +42,19 @@ function diffInto(prev: unknown, next: unknown, path: PatchPath, ops: PatchOp[])
   return prev === next;
 }
 
+const PATCH_COMPARE_MIN_CHARS = 1024;
+
+/** Cheap upper-ish estimate of the serialized ops size, without stringifying `set` values. */
+function opsSize(ops: PatchOp[]): number {
+  let n = 0;
+  for (const op of ops) {
+    n += 24 + op.path.length * 8;
+    if (op.op === "append") n += op.text.length;
+    else n += PATCH_COMPARE_MIN_CHARS; // a set value may be arbitrarily big: take the real comparison
+  }
+  return n;
+}
+
 const BAD = Symbol("bad");
 
 /** Copy-on-write application of one op below `node`; BAD when the path or offset does not fit. */
@@ -83,6 +96,8 @@ export class AppendEncoder {
   private prev: Input | null = null;
   private seq = 0;
   private needFull = false;
+  /** A resync means the receiver may not know "patch" (older bundle): no patch frames from then on. */
+  private noPatch = false;
 
   private readonly toolCallId: string;
   private readonly toolName: string;
@@ -92,16 +107,23 @@ export class AppendEncoder {
     this.toolName = toolName;
   }
 
-  /** The receiver lost track: the next message is "full". */
+  /**
+   * The receiver lost track: the next message is "full". It may be an older tab
+   * that cannot decode "patch" at all (it would answer resync forever), so this
+   * stream sends only "full" and top-level "append" from now on.
+   */
   forceFull(): void {
     this.needFull = true;
+    this.noPatch = true;
   }
 
   /** Returns null when nothing changed since the last message. */
   encode(input: Input): StreamMsg | null {
     const prev = this.prev;
-    // A deep copy: the caller may mutate its object (nested too) between calls.
-    this.prev = structuredClone(input);
+    // No deep copy: the input is the SDK's partial-JSON parse of the call, a fresh
+    // object tree per frame that nothing mutates afterwards (a per-frame clone made
+    // a long stream O(n^2)). The caller must not mutate an input it has passed in.
+    this.prev = input;
     const base = { kind: "stream" as const, toolCallId: this.toolCallId, toolName: this.toolName };
     const full = (): StreamMsg => {
       this.needFull = false;
@@ -111,10 +133,15 @@ export class AppendEncoder {
 
     const top = this.encodeTopLevel(prev, input, base);
     if (top !== "fallback") return top;
+    if (this.noPatch) return full();
     const ops: PatchOp[] = [];
     if (!diffInto(prev, input, [], ops)) return full();
     if (ops.length === 0) return null;
-    if (JSON.stringify(ops).length >= JSON.stringify(input).length) return full();
+    // The size comparison stringifies the whole input: only worth it when the ops
+    // themselves are big (small ops are cheap to send, and a big input stays unscanned).
+    if (opsSize(ops) >= PATCH_COMPARE_MIN_CHARS) {
+      if (JSON.stringify(ops).length >= JSON.stringify(input).length) return full();
+    }
     return { ...base, seq: this.seq++, format: "patch", ops };
   }
 

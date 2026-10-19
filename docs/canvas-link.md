@@ -73,7 +73,10 @@ See `protocol.ts`. Rules:
   the previous and next input; a removed key, a non-prefix string change, a
   type change or a shorter array gives `"full"`, as does a patch not smaller
   than the full JSON. The decoder applies ops copy-on-write and still accepts
-  `"append"`, so a panel and a tab on different bundles interoperate. A bad
+  `"append"`. A tab on an older bundle does not know `"patch"` and answers
+  `resync`; the encoder therefore stops sending `"patch"` for that stream once
+  it got a `resync` (only `"full"` and top-level `"append"` from then on). The
+  first patch to an old tab costs one resync round trip. A bad
   path or an `offset` that differs from the held string length is a mismatch
   (resync, as below). Measured: 25 KB
   stream = 48 KB over IPC (full JSON: 1.5 MB); 1 MB = 1.2 MB (full: 309 MB).
@@ -168,8 +171,9 @@ See `protocol.ts`. Rules:
   tab registers again with the same `tabId` and a new `registrationId`; it is
   usable and the latch does not apply to it.
   A stream dropped by the latch (the tool input was still being written) is
-  reported to the chat (`onStreamLost`): the chat stops the turn and answers that
-  call with the same error; a later `call` for it is never sent to another tab.
+  reported to the chat (`onStreamLost`): the chat stops the turn (no tool output is
+  written, the user sees a toast); a later `call` for it answers the same error and
+  is never sent to another tab.
 - **Stream integrity**: the decoder accepts only `seq` = last + 1 (first message:
   seq 0, "full"); anything else answers `resync` and ignores appends until a
   "full" arrives. While waiting, every ignored append re-sends `resync`, at most

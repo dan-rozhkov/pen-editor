@@ -15,6 +15,9 @@ vi.mock("@/lib/analytics", async (importOriginal) => {
   return { ...actual, track: trackMock };
 });
 
+const { toastErrorMock } = vi.hoisted(() => ({ toastErrorMock: vi.fn() }));
+vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: toastErrorMock }) }));
+
 const OPERATIONS = 'c=I(document, {type: "frame", name: "Remote", width: 100, height: 100})\n';
 
 afterEach(() => {
@@ -44,6 +47,7 @@ describe("useDesignChat in the agent panel", () => {
   beforeEach(() => {
     resetStores();
     trackMock.mockClear();
+    toastErrorMock.mockClear();
   });
 
   it("forwards a streamed batch_design (frames + call), keeps the scene untouched and returns the tab's result", async () => {
@@ -108,7 +112,7 @@ describe("useDesignChat in the agent panel", () => {
     expect(JSON.stringify(bodies[1].messages)).toContain("canvas tab");
   });
 
-  it("a tab that closes while the tool input streams stops the turn at once, answers the call tab-closed and binds no new tab", async () => {
+  it("a tab that closes while the tool input streams stops the turn at once, tells the user, leaves the part alone and binds no new tab", async () => {
     const fake = createFakeCanvasBridge([tab(1)]);
     attachScriptedCanvas(fake, { context: "{}" });
     window.penAgentPanel = { version: 2, canvas: fake.bridge };
@@ -134,10 +138,11 @@ describe("useDesignChat in the agent panel", () => {
       fake.closeTab(1);
     });
     await waitFor(() => expect(result.current.status).toBe("ready"), { timeout: 3000 });
-    await waitFor(() => {
-      const part = result.current.messages.flatMap((m) => m.parts).find((p) => "toolCallId" in p && p.toolCallId === "b1");
-      expect(part).toMatchObject({ state: "output-available", output: expect.stringContaining("The canvas tab was closed.") });
-    });
+    expect(toastErrorMock).toHaveBeenCalledWith("The canvas tab was closed.");
+    // The part is NOT turned into a completed call (its input was truncated).
+    const part = result.current.messages.flatMap((m) => m.parts).find((p) => "toolCallId" in p && p.toolCallId === "b1");
+    expect(part).toBeDefined();
+    expect(part).not.toMatchObject({ state: "output-available" });
     // No auto-continuation, no tab opened or bound.
     await new Promise((r) => setTimeout(r, 50));
     expect(fetchMock).toHaveBeenCalledTimes(1);

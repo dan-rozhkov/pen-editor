@@ -253,6 +253,15 @@ describe("canvas host", () => {
         expect(args[4]).toBeInstanceOf(AbortSignal);
       });
 
+      it("also runs for an empty brief (the local path checks any brief)", async () => {
+        tasteSpy.mockResolvedValue("merged empty");
+        const f = start();
+        f.send({ kind: "call", callId: "t5", toolName: "batch_design", input: { operations: EMBED_OPS }, timeoutMs: 5000, brief: "" });
+        await vi.waitFor(() => expect(resultFor(f.posted, "t5")).toBeDefined());
+        expect(tasteSpy).toHaveBeenCalledTimes(1);
+        expect(tasteSpy.mock.calls[0][3]).toEqual({ brief: "" });
+      });
+
       it("keeps the handler's result when the check throws", async () => {
         tasteSpy.mockRejectedValue(new Error("boom"));
         const f = start();

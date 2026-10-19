@@ -631,7 +631,7 @@ export class PanelClient {
       callId: toolCallId,
       sessionId,
       toolName,
-      timeoutMs: timeoutMs + CALL_TIMEOUT_MARGIN_MS + (brief ? TASTE_CHECK_MARGIN_MS : 0),
+      timeoutMs: timeoutMs + CALL_TIMEOUT_MARGIN_MS + (typeof brief === "string" ? TASTE_CHECK_MARGIN_MS : 0),
       timeoutMessage: `Tool ${toolName} timed out waiting for the canvas tab`,
       startGated: true,
       signal,
@@ -643,7 +643,7 @@ export class PanelClient {
           for (const msg of buffered) this.post(binding.tabId, msg);
           this.post(binding.tabId, { kind: "stream-end", toolCallId, reason: "complete" });
         }
-        return this.post(binding.tabId, { kind: "call", callId, toolName, input, timeoutMs, ...(brief ? { brief } : {}) });
+        return this.post(binding.tabId, { kind: "call", callId, toolName, input, timeoutMs, ...(typeof brief === "string" ? { brief } : {}) });
       },
     });
   }

@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
+import { toast } from "sonner";
 import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { createToolExecutor, type ToolExecutedEvent } from "@sideform/agent-harness/executor";
 import type { RetryState } from "@sideform/agent-harness/retry-fetch";
@@ -34,7 +35,6 @@ import {
   subscribePanelStreamLost,
   withPanelCanvasContext,
 } from "@/lib/canvasLink/panelRuntime";
-import { TAB_CLOSED_ERROR } from "@/lib/canvasLink/panelClient";
 import {
   streamingToolAdapters,
   streamingToolNames,
@@ -795,28 +795,24 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
 
   // Agent panel: the canvas tab closed while a tool's INPUT was still streaming
   // to it. The model would go on writing a call that can no longer run where it
-  // was built (and `callTool` refuses to move it to another tab), so the error
-  // would only surface after the stream ends. Stop the turn now (same path as a
-  // user Stop), then answer the lost call with the tab-closed error. The output
-  // is written only AFTER `stop()` settled the stream: `addToolOutput` on a live
-  // stream would race the SDK's own part updates. `turnStoppedRef` (set by
-  // `clearStreamingToolSession`) keeps `sendAutomaticallyWhen` from resuming.
+  // was built (and `callTool` refuses to move it to another tab). Stop the turn
+  // (like a user Stop: `turnStoppedRef` blocks auto-continuation), record the call
+  // as abandoned so it is never re-dispatched, and tell the user why. The part is
+  // left as the SDK has it: writing an output onto an `input-streaming` /
+  // `output-error` part would turn a truncated or undefined input into a permanent
+  // completed call in the history. Deliberately NOT `clearStreamingToolSession`:
+  // that would also abort unrelated live isolated QA runs and pending taste checks.
   useEffect(() => {
     return subscribePanelStreamLost(sessionId, (toolCallId) => {
-      const call = [...seenStreamingCallsRef.current.values()].find((c) => c.toolCallId === toolCallId);
-      if (!call) return;
-      clearStreamingToolSession();
-      void (async () => {
-        try {
-          await chat.stop();
-          await chat.addToolOutput({ tool: call.toolName, toolCallId, output: TAB_CLOSED_ERROR });
-        } catch {
-          // The transcript was cleared or replaced meanwhile: nothing to write to.
-        }
-      })();
+      for (const [key, call] of seenStreamingCallsRef.current) {
+        if (call.toolCallId === toolCallId) abandonedStreamingToolKeysRef.current.add(key);
+      }
+      turnStoppedRef.current = true;
+      void chat.stop();
+      toast.error("The canvas tab was closed.");
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, clearStreamingToolSession]);
+  }, [sessionId]);
 
   // Observe partial tool input as it streams in and dispatch it to whichever
   // registered adapter (src/lib/streamingTools/) owns that tool name.
