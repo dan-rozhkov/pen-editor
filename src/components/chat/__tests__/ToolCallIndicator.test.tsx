@@ -1,6 +1,10 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import { ToolCallIndicator } from "../ToolCallIndicator";
+import { ChatSessionIdContext } from "../ChatSessionContext";
+import { revealToolTab } from "@/lib/canvasLink/revealToolTab";
+
+vi.mock("@/lib/canvasLink/revealToolTab", () => ({ revealToolTab: vi.fn(async () => {}) }));
 
 afterEach(() => cleanup());
 
@@ -276,5 +280,19 @@ describe("<ToolCallIndicator />", () => {
     );
     expect(screen.getByText("Done")).toBeTruthy();
     expect(screen.queryByText("Error")).toBeNull();
+  });
+});
+
+describe("<ToolCallIndicator /> tab reveal", () => {
+  it("reveals the call's tab and still toggles the details", () => {
+    render(
+      <ChatSessionIdContext.Provider value="chat-1">
+        <ToolCallIndicator part={toolPart({ output: "ok", state: "output-available" })} />
+      </ChatSessionIdContext.Provider>
+    );
+    expect(screen.queryByText("Input")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Get Variables/ }));
+    expect(revealToolTab).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "chat-1", toolCallId: "call-1", toolName: "get_variables" }));
+    expect(screen.getByText("Input")).toBeTruthy();
   });
 });

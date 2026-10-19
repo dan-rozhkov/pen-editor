@@ -7,7 +7,13 @@ export interface PenAgentPanelApi {
   /** version >= 2: the link to the canvas tabs. Absent on an older shell. */
   canvas?: AgentPanelCanvasBridge;
   /** version >= 2: the shell's built-in browser, the same shape as `window.penDesktop.browser`. */
-  browser?: PenDesktopApi["browser"];
+  browser?: NonNullable<PenDesktopApi["browser"]> & {
+    /**
+     * Makes the tab the agent drives the active one: undefined = the shared browser, a string = an
+     * isolated QA session id. Resolves false when there is no such tab (closed). Absent on an older shell.
+     */
+    revealAgentTab?(sessionId?: string): Promise<unknown>;
+  };
 }
 
 declare global {

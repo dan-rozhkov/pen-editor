@@ -1,4 +1,4 @@
-import { createElement, useMemo, useState } from "react";
+import { createElement, useContext, useMemo, useState } from "react";
 import {
   CaretDownIcon,
   DownloadSimpleIcon,
@@ -13,6 +13,9 @@ import { downloadFile, filenameFromUrl } from "@/lib/downloadFile";
 import { extractImageRefs } from "./extractImageUrls";
 import { LikeReferenceButton, type LikeMeta } from "./LikeReferenceButton";
 import { ImagePreview } from "./MessageList";
+import { ChatSessionIdContext } from "./ChatSessionContext";
+import { revealToolTab } from "@/lib/canvasLink/revealToolTab";
+import { useChatStore } from "@/store/chatStore";
 import {
   Tooltip,
   TooltipTrigger,
@@ -107,6 +110,7 @@ interface ToolCallIndicatorProps {
 
 export function ToolCallIndicator({ part, statusLabel, statusError, extraPanes, hint, inputForDisplay }: ToolCallIndicatorProps) {
   const [open, setOpen] = useState(false);
+  const contextSessionId = useContext(ChatSessionIdContext);
   const toolPart = part as AnyToolPart;
   const status = getToolStatus(toolPart);
   const toolName = getToolName(part as Parameters<typeof getToolName>[0]);
@@ -140,7 +144,16 @@ export function ToolCallIndicator({ part, statusLabel, statusError, extraPanes, 
   return (
     <div className="my-0.5">
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          // In the desktop agent panel the chip also brings forward the tab its call runs in.
+          void revealToolTab({
+            sessionId: contextSessionId ?? useChatStore.getState().activeChatId,
+            toolCallId: toolPart.toolCallId,
+            toolName,
+            input: toolPart.input,
+          });
+          setOpen(!open);
+        }}
         className="flex items-center gap-1.5 w-full py-0.5 text-[13px] leading-relaxed text-text-muted hover:text-text-secondary"
       >
         {/* Per-tool icon, so a chip is recognisable before its label is read.

@@ -33,7 +33,7 @@ import { getRequestUserId } from "@/lib/auth/authState";
 import { createChatTransport, CLIENT_CAPABILITIES } from "@/lib/chatTransport";
 import type { ToolHandler } from "../../toolRegistry";
 import { CLOSE_SESSION_TIMEOUT_MS, closeBrowserSession, getBrowserBridge, isDesktopBrowserAvailable, type BrowserBridge } from "./bridge";
-import { isIsolatedQaCall, runSessionId } from "./isolation";
+import { isIsolatedQaCall, rememberRunSession, runSessionId } from "./isolation";
 import { acquireBrowseSlot } from "@/lib/browseRunLimiter";
 import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
 import { checkpointForModel, useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
@@ -171,6 +171,7 @@ export const browseAgent: ToolHandler = async (args, context) => {
       });
     }
     const runSession = runSessionId(context?.sessionId, context?.toolCallId);
+    if (context?.toolCallId) rememberRunSession(context.toolCallId, runSession);
     try {
       return await runBrowseAgent(args, context, runSession, deadlineMs);
     } finally {

@@ -57,3 +57,18 @@ export function runSessionId(chatId: string | undefined, toolCallId: string | un
   const tail = hashString(toolCallId ?? call).slice(0, CHAT_HASH_CHARS);
   return `${prefix}${call.slice(0, room - tail.length - 1)}-${tail}${suffix}`;
 }
+
+const MAX_RUN_SESSIONS = 500;
+const runSessionsByCall = new Map<string, string>();
+
+/** Remembers which isolated session a `browse_agent` call runs in, so its chip can reveal that tab. Bounded, oldest dropped. */
+export function rememberRunSession(toolCallId: string, runSession: string): void {
+  runSessionsByCall.delete(toolCallId);
+  runSessionsByCall.set(toolCallId, runSession);
+  if (runSessionsByCall.size > MAX_RUN_SESSIONS) runSessionsByCall.delete(runSessionsByCall.keys().next().value as string);
+}
+
+/** The isolated session of a `browse_agent` call, or undefined (not isolated, or not remembered). */
+export function runSessionForCall(toolCallId: string): string | undefined {
+  return runSessionsByCall.get(toolCallId);
+}

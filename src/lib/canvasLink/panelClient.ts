@@ -40,6 +40,7 @@ export const PLACE_NODE_TIMEOUT_MS = 30_000;
 export const PRE_START_TIMEOUT_MS = 10 * 60_000;
 const MAX_ENDED_STREAMS = 500;
 const MAX_LAUNCH_OUTCOMES = 100;
+const MAX_CALL_TABS = 500;
 
 const TAB_CLOSED_ERROR_OBJ = { error: "The canvas tab was closed." };
 export const TAB_CLOSED_ERROR = JSON.stringify(TAB_CLOSED_ERROR_OBJ);
@@ -174,6 +175,8 @@ export class PanelClient {
   /** The model each chat last asked for a context with (used when a context is prefetched). */
   private readonly models = new Map<string, string>();
   private readonly latched = new Set<string>();
+  /** Tool call id -> the binding (and chat) the call was sent to. Bounded to `MAX_CALL_TABS`, oldest dropped. */
+  private readonly callTabs = new Map<string, { sessionId: string; binding: Binding }>();
   private readonly streams = new Map<string, Stream>();
   /** Calls whose stream is closed: a late frame for one must not reopen it. */
   private readonly ended = new Set<string>();
@@ -329,9 +332,26 @@ export class PanelClient {
     this.post(tabId, { kind: "launch-ack", launchId, ...(error ? { error } : {}) });
   }
 
+  /**
+   * The canvas tab a tool call was sent to, for revealing it from the chat. Undefined = the call was
+   * never sent (or is no longer remembered); null = it was sent, but its tab is gone (latched).
+   */
+  tabForCall(toolCallId: string): number | null | undefined {
+    const sent = this.callTabs.get(toolCallId);
+    if (!sent) return undefined;
+    return this.latched.has(keyOf(sent.binding)) ? null : sent.binding.tabId;
+  }
+
+  private rememberCallTab(callId: string, sessionId: string, binding: Binding): void {
+    this.callTabs.delete(callId);
+    this.callTabs.set(callId, { sessionId, binding });
+    if (this.callTabs.size > MAX_CALL_TABS) this.callTabs.delete(this.callTabs.keys().next().value as string);
+  }
+
   /** Forgets everything remembered about a chat (its binding, not the tab). Call when the chat is deleted. */
   forgetSession(sessionId: string): void {
     this.dropBinding(sessionId);
+    for (const [callId, sent] of this.callTabs) if (sent.sessionId === sessionId) this.callTabs.delete(callId);
     this.models.delete(sessionId);
     this.notifyChange();
   }
@@ -749,6 +769,7 @@ export class PanelClient {
         binding = b;
         pending.key = keyOf(b);
         pending.tab = b;
+        if (spec.toolName) this.rememberCallTab(callId, spec.sessionId, b);
         this.byEnvelope.set(spec.send(b, callId), callId);
         // The budget runs from the post, or from the tab's `started` for gated
         // calls: binding / openTab() / queue time is not charged to it.

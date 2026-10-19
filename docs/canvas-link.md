@@ -19,6 +19,12 @@ Types: `src/lib/canvasLink/protocol.ts` (pen-editor). Measured basis:
   ALL `browse_*` / `qa_*` tools itself. EVERY other client tool runs in the bound
   canvas tab. A canvas tab is bound or opened only when a tool needs the scene,
   including the `place-node` step of browser tools.
+- **Revealing a tab from a chip** (`src/lib/canvasLink/revealToolTab.ts`) — a click on
+  a tool chip in the panel's chat also activates the tab behind the call. Canvas tools:
+  the canvas tab the call was sent to (`PanelClient.tabForCall`), else the chat's live
+  binding, via `bridge.activateTab`. `browse_*`: `window.penAgentPanel.browser.revealAgentTab(sessionId?)`
+  (optional; undefined = the shared browser, a string = the isolated QA session of that
+  `browse_agent` run; `false` after the run closed = nothing happens). Other panel-local tools: no-op.
 - **Main process** — routes only. It never interprets tool payloads. It knows
   the registered canvas tabs and the one panel per window.
 

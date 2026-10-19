@@ -602,3 +602,25 @@ describe("appendLikedReferences", () => {
     expect(appendLikedReferences("not json", refs)).toBe("not json");
   });
 });
+
+describe("tabForCall", () => {
+  it("returns the tab a call was sent to, undefined for an unknown call", async () => {
+    setup([tab(7, 3)]);
+    attachScriptedCanvas(fake);
+    await client.callTool("s", "batch_design", {}, { toolCallId: "c1", timeoutMs: 1000 });
+    expect(client.tabForCall("c1")).toBe(7);
+    expect(client.tabForCall("nope")).toBeUndefined();
+  });
+
+  it("returns null once the tab is gone (latched), undefined once the chat is forgotten", async () => {
+    setup([tab(1), tab(2)]);
+    attachScriptedCanvas(fake);
+    await client.callTool("s", "batch_get", {}, { toolCallId: "c1", timeoutMs: 1000 });
+    await client.callTool("t", "batch_get", {}, { toolCallId: "c2", timeoutMs: 1000 });
+    expect(client.tabForCall("c1")).toBe(1);
+    client.forgetSession("t");
+    expect(client.tabForCall("c2")).toBeUndefined();
+    fake.closeTab(1);
+    expect(client.tabForCall("c1")).toBeNull();
+  });
+});
