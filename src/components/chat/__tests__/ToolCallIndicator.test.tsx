@@ -235,4 +235,36 @@ describe("<ToolCallIndicator />", () => {
     expect(labels).toEqual(["Setup", "Stage", "Input", "Output"]);
     expect(screen.getByText("pane-two")).toBeTruthy();
   });
+  it("shows Error for an output-available string output of the form {\"error\":...}", () => {
+    render(
+      <ToolCallIndicator
+        part={toolPart({ state: "output-available", output: '{"error":"tab closed"}' })}
+      />,
+    );
+    expect(screen.getByText("Error")).toBeTruthy();
+    expect(screen.queryByText("Done")).toBeNull();
+    fireEvent.click(screen.getByText("Get Variables"));
+    expect(screen.getByText("tab closed")).toBeTruthy();
+  });
+
+  it("shows Error for an object output with a string error", () => {
+    render(
+      <ToolCallIndicator
+        part={toolPart({ state: "output-available", output: { error: "boom" } })}
+      />,
+    );
+    expect(screen.getByText("Error")).toBeTruthy();
+    fireEvent.click(screen.getByText("Get Variables"));
+    expect(screen.getByText("boom")).toBeTruthy();
+  });
+
+  it("keeps Done for a normal output", () => {
+    render(
+      <ToolCallIndicator
+        part={toolPart({ state: "output-available", output: '{"ok":true}' })}
+      />,
+    );
+    expect(screen.getByText("Done")).toBeTruthy();
+    expect(screen.queryByText("Error")).toBeNull();
+  });
 });

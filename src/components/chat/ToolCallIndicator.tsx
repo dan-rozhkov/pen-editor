@@ -29,8 +29,36 @@ type AnyToolPart = {
   errorText?: string;
 };
 
+/**
+ * Tool failures are stored as ordinary `output-available` parts whose output
+ * is `{"error": ...}` (a JSON string from handlers/harness, or an object).
+ * Returns the error message, or undefined for a normal output.
+ */
+function errorFromToolOutput(output: unknown): string | undefined {
+  if (typeof output === "string") {
+    if (!output.trimStart().startsWith('{"error"')) return undefined;
+    try {
+      const parsed: unknown = JSON.parse(output);
+      if (parsed && typeof parsed === "object") {
+        const e = (parsed as { error?: unknown }).error;
+        if (typeof e === "string") return e;
+      }
+    } catch {
+      /* malformed JSON: still an error, show the raw text */
+    }
+    return output;
+  }
+  if (output && typeof output === "object") {
+    const e = (output as { error?: unknown }).error;
+    if (typeof e === "string") return e;
+  }
+  return undefined;
+}
+
 function getToolStatus(part: AnyToolPart): ToolStatus {
-  if (part.state === "output-available") return "completed";
+  if (part.state === "output-available") {
+    return errorFromToolOutput(part.output) !== undefined ? "error" : "completed";
+  }
   if (part.state === "output-error") return "error";
   return "running";
 }
@@ -216,7 +244,9 @@ export function ToolCallIndicator({ part, statusLabel, statusError, extraPanes, 
               </div>
             ) : status === "error" ? (
               <pre className="p-2 rounded bg-red-500/10 font-mono text-[11px] text-red-400 max-h-40 overflow-auto whitespace-pre-wrap break-all">
-                {toolPart.errorText ?? "Unknown error"}
+                {toolPart.errorText ??
+                  errorFromToolOutput(toolPart.output) ??
+                  "Unknown error"}
               </pre>
             ) : (
               <>
