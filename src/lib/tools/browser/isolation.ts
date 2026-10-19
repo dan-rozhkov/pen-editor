@@ -1,4 +1,5 @@
 import { hashString } from "@sideform/browser-agent/loop";
+import type { DesktopBrowserBridge } from "@/lib/desktopBridge";
 import { desktopBrowserBridge, isDesktopBrowserAvailable } from "./bridge";
 
 /** Longest session id the desktop shell accepts (`^[A-Za-z0-9_-]{1,64}$`). */
@@ -15,6 +16,26 @@ let runCounter = 0;
 export function isolatedBrowseAvailable(): boolean {
   return isDesktopBrowserAvailable() && typeof desktopBrowserBridge()?.isolated === "function";
 }
+
+/**
+ * Whether the chat agent can launch and drive an external desktop app
+ * (`browse_open` / `browse_agent` with `app`): the desktop shell exposes
+ * `releaseApp`. Static for a page load (a capability).
+ */
+export function desktopAppsAvailable(): boolean {
+  const bridge = desktopBrowserBridge() as DesktopBrowserBridge | undefined;
+  return typeof bridge?.launchApp === "function" && typeof bridge?.releaseApp === "function";
+}
+
+/** The `app` argument of a browse_open / browse_agent call: a non-empty trimmed string, else undefined. */
+export function appArgOf(args: unknown): string | undefined {
+  const app = typeof args === "object" && args !== null ? (args as { app?: unknown }).app : undefined;
+  const trimmed = typeof app === "string" ? app.trim() : "";
+  return trimmed === "" ? undefined : trimmed;
+}
+
+/** Extra time a launch (native confirm + up to 30 s start) may take on top of a run's normal budget. */
+export const APP_LAUNCH_ALLOWANCE_MS = 80_000;
 
 /**
  * Whether the browser the client uses can run `qa_assert` / final checks: the cloud bridge always can;

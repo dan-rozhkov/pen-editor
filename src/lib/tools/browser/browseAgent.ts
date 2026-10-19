@@ -46,8 +46,9 @@ import { combineSignals } from "@/lib/abortSignals";
 import { createChatTransport, CLIENT_CAPABILITIES } from "@/lib/chatTransport";
 import type { ToolHandler } from "../../toolRegistry";
 import { CLOSE_SESSION_TIMEOUT_MS, closeBrowserSession, getBrowserBridge, isDesktopBrowserAvailable, type BrowserBridge } from "./bridge";
+import { APP_NEEDS_DESKTOP_ERROR } from "./browseOpen";
 import { peBase } from "./shared";
-import { isIsolatedQaCall, rememberRunSession, runSessionId } from "./isolation";
+import { APP_LAUNCH_ALLOWANCE_MS, appArgOf, desktopAppsAvailable, isIsolatedQaCall, rememberRunSession, runSessionId } from "./isolation";
 import { acquireBrowseSlot } from "@/lib/browseRunLimiter";
 import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
 import { checkpointForModel, useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
@@ -397,7 +398,8 @@ export function nestedChatId(sessionId: string | undefined, toolCallId: string |
  */
 export const browseAgent: ToolHandler = async (args, context) => {
   // The tool's outer timeout started now: the QA judge has to end before it.
-  const outerEnd = Date.now() + (context?.timeoutMs ?? BROWSE_AGENT_OUTER_TIMEOUT_MS);
+  const outerEnd =
+    Date.now() + (context?.timeoutMs ?? BROWSE_AGENT_OUTER_TIMEOUT_MS + (appArgOf(args) ? APP_LAUNCH_ALLOWANCE_MS : 0));
   // Stops a started judge request when anything throws after it started (the body or the cleanup): nobody awaits it then.
   const judgeAbort = new AbortController();
   let outcome: RunOutcome;
@@ -417,7 +419,11 @@ const runWithCleanup = async (
   outerEnd: number,
   judgeSignal: AbortSignal,
 ): Promise<RunOutcome> => {
-  if (!isIsolatedQaCall(args)) return runBrowseAgent(args, context, undefined, undefined, outerEnd, judgeSignal);
+  // Confirm + launch of an app must not eat the agent's step budget: the inner deadline grows by the same allowance as the outer timeout.
+  const appAllowance = appArgOf(args) ? APP_LAUNCH_ALLOWANCE_MS : 0;
+  if (!isIsolatedQaCall(args)) {
+    return runBrowseAgent(args, context, undefined, appAllowance ? BROWSE_AGENT_DEADLINE_MS + appAllowance : undefined, outerEnd, judgeSignal);
+  }
   const waitStart = Date.now();
   const slot = await acquireBrowseSlot(context?.signal ?? new AbortController().signal);
   if (!slot) return JSON.stringify({ status: "aborted", steps: 0 });
@@ -430,7 +436,7 @@ const runWithCleanup = async (
     // Final checks (`checks`) run after the loop too: reserve their bound as well.
     const checksReserve = args.checks !== undefined && args.checks !== null ? QA_FINAL_CHECKS_TIMEOUT_MS : 0;
     const deadlineMs =
-      BROWSE_AGENT_DEADLINE_MS - (Date.now() - waitStart) - CHECKPOINT_CALL_TIMEOUT_MS - CLOSE_SESSION_TIMEOUT_MS - checksReserve;
+      BROWSE_AGENT_DEADLINE_MS + appAllowance - (Date.now() - waitStart) - CHECKPOINT_CALL_TIMEOUT_MS - CLOSE_SESSION_TIMEOUT_MS - checksReserve;
     if (deadlineMs < MIN_ISOLATED_RUN_MS) {
       return JSON.stringify({
         status: "error",
@@ -483,6 +489,17 @@ async function clearActEmulation(bridge: BrowserBridge | undefined): Promise<voi
   await withTimeout(async () => void (await bridge?.clearActEmulation?.()), CLEAR_EMULATION_TIMEOUT_MS, undefined);
 }
 
+/** Bound of the run-end app release. */
+const RELEASE_APP_TIMEOUT_MS = 5_000;
+
+/** Hands the browser back from an app a run launched (desktop `releaseApp`). Bounded; never changes the result. */
+async function releaseApp(bridge: BrowserBridge | undefined): Promise<void> {
+  await withTimeout(async () => void (await bridge?.releaseApp?.()), RELEASE_APP_TIMEOUT_MS, undefined);
+}
+
+/** A run whose `app` this run launched (set before the launch call: a launch that timed out may still have started). */
+type AppRun = { launched: boolean };
+
 const runBrowseAgent = async (
   args: Record<string, unknown>,
   context: Parameters<ToolHandler>[1],
@@ -491,10 +508,16 @@ const runBrowseAgent = async (
   outerEnd: number,
   judgeSignal: AbortSignal,
 ): Promise<RunOutcome> => {
+  const appRun = { launched: false };
   try {
-    return await runBrowseAgentBody(args, context, runSession, deadlineMs, outerEnd, judgeSignal);
+    return await runBrowseAgentBody(args, context, runSession, deadlineMs, outerEnd, judgeSignal, appRun);
   } finally {
-    await clearActEmulation(getBrowserBridge(context?.sessionId, runSession));
+    const bridge = getBrowserBridge(context?.sessionId, runSession);
+    await clearActEmulation(bridge);
+    // Only an app THIS run launched: one the chat opened with browse_open stays.
+    // Also when the launch is still pending (timeout, abort): the desktop's
+    // releaseApp cancels a pending launch, so calling it here is correct.
+    if (appRun.launched) await releaseApp(bridge);
   }
 };
 
@@ -505,10 +528,19 @@ const runBrowseAgentBody = async (
   deadlineMs: number | undefined,
   outerEnd: number,
   judgeSignal: AbortSignal,
+  appRun: AppRun,
 ): Promise<RunOutcome> => {
   const goal = typeof args.goal === "string" ? args.goal.trim() : "";
   if (!goal) return JSON.stringify(goalRequiredResult());
   const url = typeof args.url === "string" ? args.url.trim() : "";
+  const app = appArgOf(args) ?? "";
+  if (app) {
+    const refuse = (error: string) => JSON.stringify({ status: "error", steps: 0, error });
+    if (url || (args.setup !== undefined && args.setup !== null) || (args.resume !== undefined && args.resume !== null)) {
+      return refuse("`app` cannot be combined with url, setup or resume: the app is the start, not a page.");
+    }
+    if (!desktopAppsAvailable()) return refuse(APP_NEEDS_DESKTOP_ERROR);
+  }
   // The gate: browse_capture reaches the subagent only on the main agent's
   // explicit `capture: true` (spec 2026-10-15-browse-capture-design.md).
   const captureAllowed = args.capture === true;
@@ -791,10 +823,32 @@ const runBrowseAgentBody = async (
   ): RunOutcome => (settleJudge ? async () => toJson(result, extra, checkpoint, await settleJudge()) : toJson(result, extra, checkpoint, qa));
 
   if (!hasSetup && !hasResume) {
-    const cp = openCheckpoint(true);
+    // An external app cannot be resumed from a browser journal: no checkpoint for an app run.
+    const cp = openCheckpoint(!app);
     try {
       await cp.begin();
-      const result = await session.run(goal, driver, { url: url || undefined, toolCallId });
+      const result = await session.run(
+        goal,
+        driver,
+        app
+          ? {
+              toolCallId,
+              // The pre-open for an app: browse_open { app } through the same executor as the model's own call.
+              setup: async () => {
+                appRun.launched = true;
+                const opened = await executeToolCall(
+                  "browse_open",
+                  { app },
+                  { sessionId: parentSessionId, ...browserContext, toolCallId: `${toolCallId ?? "browse_agent"}:open`, signal },
+                  "browse_agent",
+                );
+                const parsedOpen = parseJsonObject(opened);
+                if (typeof parsedOpen.error === "string") throw new SetupError("open", parsedOpen.error);
+                return opened;
+              },
+            }
+          : { url: url || undefined, toolCallId },
+      );
       const qa = await buildQa(result);
       const settleJudge = await startJudge(qa);
       const checkpoint = await finishCheckpoint(cp, result);

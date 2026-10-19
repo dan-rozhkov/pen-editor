@@ -39,3 +39,14 @@ describe("getToolCallTimeoutMs open_canvas_tab", () => {
     expect(getToolCallTimeoutMs("open_canvas_tab")).toBe(60_000);
   });
 });
+
+describe("getToolCallTimeoutMs app launch", () => {
+  it("gives browse_open 150s and browse_agent +80s only when app is set", () => {
+    window.penDesktop = { onMenuCommand: () => () => {}, browser: {} } as never;
+    expect(getToolCallTimeoutMs("browse_open", { url: "https://a.b" })).toBe(70_000);
+    expect(getToolCallTimeoutMs("browse_open", { app: "Notes" })).toBe(150_000);
+    expect(getToolCallTimeoutMs("browse_open", { app: "  " })).toBe(70_000);
+    expect(getToolCallTimeoutMs("browse_agent", { goal: "x" })).toBe(900_000);
+    expect(getToolCallTimeoutMs("browse_agent", { goal: "x", app: "Notes" })).toBe(980_000);
+  });
+});

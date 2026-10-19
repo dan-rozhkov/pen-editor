@@ -6,7 +6,7 @@ import { withMobbinAuthHeader } from "@/lib/mobbinAuth";
 import { getAgentPanelDocsBridge } from "@/lib/agentPanel";
 import { isPanelCanvasLinkActive } from "@/lib/canvasLink/panelRuntime";
 import { isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";
-import { browseAssertAvailable, isolatedBrowseAvailable } from "@/lib/tools/browser/isolation";
+import { browseAssertAvailable, desktopAppsAvailable, isolatedBrowseAvailable } from "@/lib/tools/browser/isolation";
 
 // Shared by the main chat (hooks/useDesignChat.ts) and the nested browse
 // sub-agent session (lib/tools/browser/browseAgent.ts) so both hit /api/chat
@@ -39,6 +39,8 @@ export const CLIENT_CAPABILITIES = {
   browseIsolation: isolatedBrowseAvailable(),
   // The browser in use supports `assert`: the backend then offers `qa_assert` and browse_agent `checks`.
   browseAssert: browseAssertAvailable(),
+  // The desktop shell can launch and drive an external app (`releaseApp`): the backend then offers `app` on browse_open / browse_agent.
+  browseApps: desktopAppsAvailable(),
   // The desktop agent panel has a canvas bridge: the backend then offers `open_canvas_tab`.
   // Static per page load like the others (a flip would break the prompt cache).
   canvasTabs: isPanelCanvasLinkActive(),

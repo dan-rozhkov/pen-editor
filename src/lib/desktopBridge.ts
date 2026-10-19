@@ -18,6 +18,19 @@ export type DesktopBrowserBridge = BrowserBridge &
      * cloud (Steel) bridge never has it. The result holds no secret.
      */
     fillLogin?(args: { label?: string; submit?: boolean }): Promise<unknown>;
+    /**
+     * Launches an external desktop app (`open({ app })` in the shell) and
+     * binds this sender's (and session's) app-bound commands to it. The
+     * package executor calls it for `browse_open` with `app`.
+     */
+    launchApp?(args: { app: string }): Promise<unknown>;
+    /**
+     * Ends the external app this sender (and session, on an isolated bridge)
+     * launched through `open({ app })`; app-bound commands then go back to the
+     * browser tab. Optional: only shells that can drive apps have it. Together
+     * with `launchApp` it is the `browseApps` client capability.
+     */
+    releaseApp?(): Promise<unknown>;
   };
 
 export interface PenDesktopApi {

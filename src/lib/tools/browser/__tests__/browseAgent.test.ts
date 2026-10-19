@@ -572,6 +572,114 @@ describe("browse_agent QA mode", () => {
   });
 });
 
+describe("browse_agent app", () => {
+  afterEach(() => {
+    delete window.penDesktop;
+  });
+  const ctx = { sessionId: "chat-1", toolCallId: "tc-app" };
+  const appShell = (overrides: Partial<PenDesktopBrowser> = {}) =>
+    setPenDesktop(stubBrowser({ launchApp: async () => ({}), releaseApp: async () => ({ ok: true }), ...overrides }));
+
+  it("pre-opens the app through browse_open { app } and releases it when the run ends", async () => {
+    const releaseApp = vi.fn(async () => ({ ok: true }));
+    appShell({ releaseApp });
+    const open = vi.fn(async () => JSON.stringify({ url: "app://notes", title: "Notes" }));
+    toolHandlers.browse_open = open;
+    const captured = stubFetch([() => textTurn("done")]);
+
+    const out = JSON.parse(await browseAgent({ goal: "Read the first note", app: "Notes" }, ctx));
+
+    expect(out.status).toBe("done");
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open.mock.calls[0]).toEqual([{ app: "Notes" }, expect.objectContaining({ sessionId: "chat-1", toolCallId: "tc-app:open" })]);
+    const first = (captured[0].body.messages as Array<{ parts: Array<{ text?: string }> }>)[0];
+    expect(first.parts[0].text).toContain("app://notes");
+    expect(releaseApp).toHaveBeenCalledTimes(1);
+  });
+
+  it("a failed launch ends the run as setup_failed and still releases", async () => {
+    const releaseApp = vi.fn(async () => ({ ok: true }));
+    appShell({ releaseApp });
+    toolHandlers.browse_open = async () => JSON.stringify({ error: "user declined" });
+    const fetchMock = stubFetch([]);
+
+    const out = JSON.parse(await browseAgent({ goal: "x", app: "Notes" }, ctx));
+
+    expect(out.status).toBe("setup_failed");
+    expect(out.error).toContain("user declined");
+    expect(fetchMock).toHaveLength(0);
+    expect(releaseApp).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["url", { url: "https://example.com" }],
+    ["setup", { setup: { cookies: [] } }],
+    ["resume", { resume: "cp_1" }],
+  ])("refuses app together with %s, without launching or releasing", async (_name, extra) => {
+    const releaseApp = vi.fn(async () => ({ ok: true }));
+    appShell({ releaseApp });
+    const open = vi.fn(async () => "{}");
+    toolHandlers.browse_open = open;
+
+    const out = JSON.parse(await browseAgent({ goal: "x", app: "Notes", ...extra }, ctx));
+
+    expect(out.status).toBe("error");
+    expect(out.error).toContain("`app` cannot be combined");
+    expect(open).not.toHaveBeenCalled();
+    expect(releaseApp).not.toHaveBeenCalled();
+  });
+
+  it("without the desktop browser it refuses before any cloud call", async () => {
+    const open = vi.fn(async () => "{}");
+    toolHandlers.browse_open = open;
+    const fetchMock = stubFetch([]);
+
+    const out = JSON.parse(await browseAgent({ goal: "x", app: "Notes" }, ctx));
+
+    expect(out.status).toBe("error");
+    expect(out.error).toContain("Sideform Desktop");
+    expect(open).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveLength(0);
+  });
+
+  it("refuses at once on a shell that can launch but not release (no launchApp+releaseApp pair)", async () => {
+    setPenDesktop(stubBrowser({ launchApp: async () => ({}) }));
+    const open = vi.fn(async () => "{}");
+    toolHandlers.browse_open = open;
+
+    const out = JSON.parse(await browseAgent({ goal: "x", app: "Notes" }, ctx));
+
+    expect(out.status).toBe("error");
+    expect(out.error).toContain("Sideform Desktop");
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("records no checkpoint journal for an app run", async () => {
+    const startJournal = vi.fn(async () => "jt");
+    const stopJournal = vi.fn(async () => true);
+    appShell({ startJournal, stopJournal });
+    toolHandlers.browse_open = async () => JSON.stringify({ url: "app://notes" });
+    stubFetch([() => textTurn("ok")]);
+
+    const out = JSON.parse(await browseAgent({ goal: "x", app: "Notes" }, ctx));
+
+    expect(out.status).toBe("done");
+    expect(out).not.toHaveProperty("checkpoint");
+    expect(startJournal).not.toHaveBeenCalled();
+  });
+
+  it("a run without app never calls releaseApp", async () => {
+    const releaseApp = vi.fn(async () => ({ ok: true }));
+    appShell({ releaseApp });
+    toolHandlers.browse_open = async () => "{}";
+    stubFetch([() => textTurn("ok")]);
+
+    await browseAgent({ goal: "x", url: "https://example.com" }, ctx);
+
+    expect(releaseApp).not.toHaveBeenCalled();
+  });
+});
+
 describe("nestedChatId", () => {
   it("keeps only safe characters and caps the length", () => {
     const id = nestedChatId("a b/c", `x${"y".repeat(400)}`);

@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { appArgOf, desktopAppsAvailable } from "@/lib/tools/browser/isolation";
+import { getBrowserBridge } from "@/lib/tools/browser/bridge";
 import { browseOpen } from "@/lib/tools/browser/browseOpen";
 import { browseAct, runActionsBatch } from "@/lib/tools/browser/browseAct";
 import { browseFindImages } from "@/lib/tools/browser/browseFindImages";
@@ -93,6 +95,80 @@ describe("browse_open", () => {
     expect(typeof result).toBe("string");
     expect(() => JSON.parse(result)).not.toThrow();
     expect(JSON.parse(result)).toEqual({});
+  });
+});
+
+describe("browse_open app", () => {
+  it("the bridge's launchApp receives { app } and a snapshot is attached; open is not used", async () => {
+    const launchApp = vi.fn(async () => ({ url: "app://notes", title: "Notes" }));
+    const open = vi.fn(async () => ({}));
+    setPenDesktop(stubBrowser({ open, launchApp, releaseApp: async () => ({ ok: true }), snapshot: async () => VALID_SNAPSHOT }));
+
+    const result = JSON.parse(await browseOpen({ app: " Notes " }));
+
+    expect(launchApp).toHaveBeenCalledWith({ app: "Notes" });
+    expect(open).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ url: "app://notes", title: "Notes", snapshot: VALID_SNAPSHOT });
+  });
+
+  it("an isolated session's launchApp is used", async () => {
+    const sessionLaunch = vi.fn(async () => ({ url: "app://notes" }));
+    const isolated = vi.fn(() => stubBrowser({ launchApp: sessionLaunch, releaseApp: async () => ({ ok: true }) }));
+    const launchApp = vi.fn(async () => ({}));
+    setPenDesktop(stubBrowser({ launchApp, releaseApp: async () => ({ ok: true }), isolated }));
+
+    await browseOpen({ app: "Notes" }, { browserSession: "qa-1" });
+
+    expect(isolated).toHaveBeenCalledWith("qa-1");
+    expect(sessionLaunch).toHaveBeenCalledWith({ app: "Notes" });
+    expect(launchApp).not.toHaveBeenCalled();
+  });
+
+  it("returns the bridge object itself (no wrapper)", async () => {
+    const browser = setPenDesktop(stubBrowser({ launchApp: async () => ({}), releaseApp: async () => ({}) }));
+    expect(getBrowserBridge()).toBe(browser);
+  });
+
+  it("a shell without launchApp gets the package's neutral error and no open call", async () => {
+    const open = vi.fn(async () => ({}));
+    setPenDesktop(stubBrowser({ open }));
+
+    const result = JSON.parse(await browseOpen({ app: "Notes" }));
+
+    expect(typeof result.error).toBe("string");
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("without the desktop browser it errors without touching the cloud bridge", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = JSON.parse(await browseOpen({ app: "Notes" }));
+
+    expect(result.error).toContain("Sideform Desktop");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("desktopAppsAvailable / appArgOf", () => {
+  it("is true only when the desktop bridge has BOTH launchApp and releaseApp", () => {
+    expect(desktopAppsAvailable()).toBe(false);
+    setPenDesktop(stubBrowser());
+    expect(desktopAppsAvailable()).toBe(false);
+    setPenDesktop(stubBrowser({ releaseApp: async () => ({}) }));
+    expect(desktopAppsAvailable()).toBe(false);
+    setPenDesktop(stubBrowser({ launchApp: async () => ({}) }));
+    expect(desktopAppsAvailable()).toBe(false);
+    setPenDesktop(stubBrowser({ launchApp: async () => ({}), releaseApp: async () => ({}) }));
+    expect(desktopAppsAvailable()).toBe(true);
+  });
+
+  it("appArgOf returns a trimmed non-empty string only", () => {
+    expect(appArgOf({ app: "  Notes " })).toBe("Notes");
+    expect(appArgOf({ app: "   " })).toBeUndefined();
+    expect(appArgOf({ app: 3 })).toBeUndefined();
+    expect(appArgOf({})).toBeUndefined();
+    expect(appArgOf(undefined)).toBeUndefined();
   });
 });
 

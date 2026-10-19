@@ -24,6 +24,7 @@ import type { UIMessage } from "ai";
 import { setCloudBrowserChat } from "@/lib/cloudBrowser";
 import { isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";
 import { isIsolatedQaCall } from "@/lib/tools/browser/isolation";
+import { APP_LAUNCH_ALLOWANCE_MS, appArgOf } from "@/lib/tools/browser/isolation";
 import { BROWSE_AGENT_OUTER_TIMEOUT_MS } from "@/lib/tools/browser/browseAgent";
 import { extractStreamingToolInputs } from "@/hooks/streamingToolParts";
 import {
@@ -223,8 +224,17 @@ const CLOUD_BROWSE_EXTRA_MS = 60_000;
 // value is 60s above it.
 const CLOUD_BROWSE_TASK_TIMEOUT_MS = browseTaskInnerBoundMs(true) + BROWSE_TASK_OUTER_MARGIN_MS;
 
-export function getToolCallTimeoutMs(toolName: string): number {
+// Launching an external app (`app` argument): the shell asks the user to
+// confirm first and then waits up to 30s for the app to start, on top of the
+// usual navigation + snapshot budget. browse_open gets 150s; browse_agent gets
+// the 80s on top of its own bound (the launch runs inside the run).
+const APP_BROWSE_OPEN_TIMEOUT_MS = 150_000;
+export function getToolCallTimeoutMs(toolName: string, input?: unknown): number {
   const base = TOOL_CALL_TIMEOUT_MS_OVERRIDES[toolName] ?? DEFAULT_TOOL_CALL_TIMEOUT_MS;
+  if (appArgOf(input) !== undefined) {
+    if (toolName === "browse_open") return Math.max(base, APP_BROWSE_OPEN_TIMEOUT_MS);
+    if (toolName === "browse_agent") return base + APP_LAUNCH_ALLOWANCE_MS;
+  }
   if (toolName === "browse_agent") return base;
   if (!toolName.startsWith("browse_") || isDesktopBrowserAvailable()) return base;
   if (toolName === "browse_open") return CLOUD_BROWSE_OPEN_TIMEOUT_MS;
@@ -299,7 +309,7 @@ const withAbortedCheck =
 const executeWithHarness = createToolExecutor<ToolExecutionContext, ToolCallSource>({
   resolveHandler: (toolName) => withAbortedCheck(toolHandlers[toolName]),
   runQueued: runToolCall,
-  timeoutMs: (toolName, _input, ctx) => ctx?.timeoutMs ?? getToolCallTimeoutMs(toolName),
+  timeoutMs: (toolName, _input, ctx) => ctx?.timeoutMs ?? getToolCallTimeoutMs(toolName, _input),
   onExecuted: trackToolExecuted,
 });
 
@@ -506,7 +516,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
           // client reports only failures that never reached it (panelRuntime).
           handlerResult = await panelCallTool(sessionId, toolCall.toolName, toolCall.input, {
             toolCallId: toolCall.toolCallId,
-            timeoutMs: getToolCallTimeoutMs(toolCall.toolName),
+            timeoutMs: getToolCallTimeoutMs(toolCall.toolName, toolCall.input),
             signal: toolAbort.signal,
             // The tab runs the Jev taste check (below, for local calls) and merges its feedback.
             ...(isTasteCheckedTool(toolCall.toolName) && !turnStoppedRef.current
