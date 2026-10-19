@@ -51,6 +51,12 @@ beforeEach(() => {
   });
 });
 
+/** Picks an entry from the header "Add skill" menu. */
+function chooseAddAction(label: "New skill" | "Generate with the agent") {
+  fireEvent.click(screen.getByTestId("skills-page-add"));
+  fireEvent.click(screen.getByRole("menuitem", { name: label }));
+}
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -139,7 +145,7 @@ describe("<SkillsPage />", () => {
 
   it("surfaces a client-side validation error and does not hit the network", async () => {
     render(<SkillsPage onClose={onClose} />);
-    fireEvent.click(screen.getByRole("button", { name: "New skill" }));
+    chooseAddAction("New skill");
 
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Not Valid!" } });
     fireEvent.change(screen.getByLabelText("Instructions"), { target: { value: "do things" } });
@@ -153,7 +159,7 @@ describe("<SkillsPage />", () => {
 
   it("surfaces the store's error when a save fails on the backend", async () => {
     render(<SkillsPage onClose={onClose} />);
-    fireEvent.click(screen.getByRole("button", { name: "New skill" }));
+    chooseAddAction("New skill");
 
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "dup-skill" } });
     fireEvent.change(screen.getByLabelText("Instructions"), { target: { value: "do things" } });
@@ -199,14 +205,14 @@ describe("<SkillsPage />", () => {
       }),
     );
 
-    const toggle = screen.getByRole("switch", { name: "Disable my-skill" }) as HTMLButtonElement;
+    const toggle = screen.getByRole("switch", { name: "Disable my-skill" });
     fireEvent.click(toggle);
 
-    await waitFor(() => expect(toggle.disabled).toBe(true));
+    await waitFor(() => expect(toggle.getAttribute("aria-disabled")).toBe("true"));
     expect((screen.getByRole("button", { name: "Skill options" }) as HTMLButtonElement).disabled).toBe(true);
 
     resolveFetch!(jsonResponse({ skill: skill({ enabled: false }) }));
-    await waitFor(() => expect(toggle.disabled).toBe(false));
+    await waitFor(() => expect(toggle.getAttribute("aria-disabled")).not.toBe("true"));
   });
 
   it("deletes a skill after confirmation", async () => {
@@ -251,7 +257,7 @@ describe("<SkillsPage />", () => {
 
   it("Escape acts like Back: sub-view returns to the list, list closes", () => {
     render(<SkillsPage onClose={onClose} />);
-    fireEvent.click(screen.getByRole("button", { name: "New skill" }));
+    chooseAddAction("New skill");
     expect(screen.getByText("New skill")).toBeTruthy();
     fireEvent.keyDown(screen.getByTestId("skills-page"), { key: "Escape" });
     expect(screen.getByText("Skills")).toBeTruthy();
@@ -274,12 +280,12 @@ describe("<SkillsPage />", () => {
       () => new Promise<Response>((r) => (resolveFetch = r)),
     );
     render(<SkillsPage onClose={onClose} />);
-    fireEvent.click(screen.getByRole("button", { name: "Generate with the agent" }));
+    chooseAddAction("Generate with the agent");
     fireEvent.change(screen.getByLabelText("What should this skill do?"), {
       target: { value: "check contrast" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Generate" }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByTestId("skills-page-back"));
     expect(screen.getByText("Skills")).toBeTruthy();
     resolveFetch(
       jsonResponse({ draft: { name: "contrast", description: "d", body: "b" } }),

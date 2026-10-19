@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { PanelEmptyState } from "@/components/PanelEmptyState";
@@ -330,25 +331,35 @@ export function SkillsPage({ onClose }: SkillsPageProps) {
               onChange={handleFileInputChange}
               aria-label="Upload skill file"
             />
-            <IconButton
-              tooltip="Upload .md"
-              variant="ghost"
-              size="icon"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <UploadSimpleIcon size={16} />
-            </IconButton>
-            <IconButton
-              tooltip="Generate with the agent"
-              variant="ghost"
-              size="icon"
-              onClick={() => setView("generate")}
-            >
-              <MagicWandIcon size={16} />
-            </IconButton>
-            <IconButton tooltip="New skill" variant="ghost" size="icon" onClick={openCreateForm}>
-              <PlusIcon size={16} />
-            </IconButton>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <IconButton
+                    data-testid="skills-page-add"
+                    tooltip="Add skill"
+                    aria-label="Add skill"
+                    variant="ghost"
+                    size="icon"
+                  >
+                    <PlusIcon className="size-4" weight="light" />
+                  </IconButton>
+                }
+              />
+              <DropdownMenuContent align="end" className="min-w-52">
+                <DropdownMenuItem onClick={openCreateForm}>
+                  <PlusIcon size={16} />
+                  New skill
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setView("generate")}>
+                  <MagicWandIcon size={16} />
+                  Generate with the agent
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                  <UploadSimpleIcon size={16} />
+                  Upload .md
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>
         )}
       </div>
@@ -471,23 +482,12 @@ export function SkillsPage({ onClose }: SkillsPageProps) {
                         <span className="truncate text-xs text-text-muted">{skill.description}</span>
                       </button>
 
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={skill.enabled}
+                      <Switch
+                        checked={skill.enabled}
+                        onCheckedChange={() => handleToggleEnabled(skill)}
                         aria-label={skill.enabled ? `Disable ${skill.name}` : `Enable ${skill.name}`}
-                        onClick={() => handleToggleEnabled(skill)}
                         disabled={isPending}
-                        className={`relative h-4 w-7 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
-                          skill.enabled ? "bg-accent-primary" : "bg-secondary"
-                        }`}
-                      >
-                        <span
-                          className={`absolute top-0.5 size-3 rounded-full bg-white transition-transform ${
-                            skill.enabled ? "translate-x-3.5" : "translate-x-0.5"
-                          }`}
-                        />
-                      </button>
+                      />
 
                       <DropdownMenu>
                         <DropdownMenuTrigger
@@ -504,7 +504,6 @@ export function SkillsPage({ onClose }: SkillsPageProps) {
                           }
                         />
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => openEditForm(skill)}>Edit</DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleExport(skill)}>
                             Export .md
                           </DropdownMenuItem>
@@ -540,9 +539,6 @@ export function SkillsPage({ onClose }: SkillsPageProps) {
             />
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={backToList}>
-              Cancel
-            </Button>
             <Button onClick={() => void handleGenerate()} disabled={!prompt.trim() || generating}>
               {generating ? "Generating…" : "Generate"}
             </Button>
@@ -587,9 +583,6 @@ export function SkillsPage({ onClose }: SkillsPageProps) {
             />
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={backToList}>
-              Cancel
-            </Button>
             <Button onClick={() => void handleSaveForm()} disabled={saving}>
               {saving ? "Saving…" : "Save"}
             </Button>
