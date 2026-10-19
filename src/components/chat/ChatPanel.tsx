@@ -33,7 +33,7 @@ import { ChatList } from "./ChatList";
 import { CloudBrowserPanel } from "./CloudBrowserPanel";
 import { releaseCloudBrowser } from "@/lib/cloudBrowser";
 import { useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
-import { SkillsPanel } from "./SkillsPanel";
+import { SkillsPage } from "./SkillsPage";
 import { ContextMeter } from "./ContextMeter";
 import { OpenCodeKeyDialog } from "./OpenCodeKeyDialog";
 import { hasPendingAskUser } from "./pendingAskUser";
@@ -500,7 +500,17 @@ export function ChatPanelContent({
   // position and ChatInput's focus/resize effects need this real visibility
   // signal instead of a boolean that never changes across close/reopen.
   const isChatVisible = isVisible ?? (isAgentsSectionActive && (!isMobile || isPanelOpen));
-  const [isSkillsPanelOpen, setSkillsPanelOpen] = useState(false);
+  const [isSkillsPageOpen, setSkillsPageOpen] = useState(false);
+  // The skills page is tied to the chat it was opened over: if the active chat
+  // changes while it is open (e.g. a launch creates a chat), close it so the
+  // new chat is not hidden behind it. Adjusting state during render rather
+  // than in an effect, per React's "adjusting state when a prop changes"
+  // pattern — no extra committed render with the stale page still visible.
+  const [skillsOpenedOver, setSkillsOpenedOver] = useState(activeChatId);
+  if (activeChatId !== skillsOpenedOver) {
+    setSkillsOpenedOver(activeChatId);
+    if (isSkillsPageOpen) setSkillsPageOpen(false);
+  }
   const isOpenCodeDialogOpen = useOpenCodeKeyDialogStore((s) => s.open);
   const setOpenCodeDialogOpen = useOpenCodeKeyDialogStore((s) => s.setOpen);
   const ensureSkillsHydrated = useUserSkillStore((s) => s.ensureHydrated);
@@ -675,7 +685,8 @@ export function ChatPanelContent({
       type="button"
       variant="ghost"
       size="icon"
-      onClick={() => setSkillsPanelOpen(true)}
+      onClick={() => setSkillsPageOpen((open) => !open)}
+      aria-pressed={isSkillsPageOpen}
       tooltip="Manage skills"
       aria-label="Manage skills"
     >
@@ -715,7 +726,9 @@ export function ChatPanelContent({
         </div>
       )}
 
-      {activeChatId === null ? (
+      {isSkillsPageOpen ? (
+        <SkillsPage onClose={() => setSkillsPageOpen(false)} />
+      ) : activeChatId === null ? (
         <ChatList trailingAction={chatHeaderAction} />
       ) : (
         <OpenChatHeader chatId={activeChatId} trailingAction={chatHeaderAction} />
@@ -729,20 +742,26 @@ export function ChatPanelContent({
           key={chat.id}
           data-testid={`chat-session-${chat.id}`}
           className={
-            chat.id === activeChatId ? "flex-1 min-h-0 flex flex-col" : "hidden"
+            chat.id === activeChatId && !isSkillsPageOpen
+              ? "flex-1 min-h-0 flex flex-col"
+              : "hidden"
           }
         >
           <ChatSession
             sessionId={chat.id}
-            isActive={chat.id === activeChatId}
-            isVisible={isChatVisible}
+            // The skills page covers the chat, so treat every session as
+            // inactive/invisible while it is open: ChatSession then renders
+            // nothing (state stays in its hooks), replies that arrive mark the
+            // chat unread, and on return isActive/isVisible flip back so the
+            // message list re-pins scroll and the composer refocuses.
+            isActive={!isSkillsPageOpen && chat.id === activeChatId}
+            isVisible={!isSkillsPageOpen && isChatVisible}
             composerControls={composerControls}
-            onManageSkills={() => setSkillsPanelOpen(true)}
+            onManageSkills={() => setSkillsPageOpen(true)}
           />
         </div>
       ))}
 
-      <SkillsPanel open={isSkillsPanelOpen} onOpenChange={setSkillsPanelOpen} />
       {/* Mounted once here, not inside `composerControls` — that renderer runs
           once per mounted ChatSession (every open chat tab, not just the
           active one, so switching tabs doesn't reset session state), so a
@@ -750,7 +769,7 @@ export function ChatPanelContent({
           With N open chats that's N stacked backdrops, N focus traps, and N
           copies of `id="opencode-key-dialog-description"` (invalid DOM, and
           aria-describedby only ever resolves to the first). The open/close
-          state already lived at this level for the same reason SkillsPanel's
+          state already lived at this level for the same reason the skills page's
           does. */}
       <OpenCodeKeyDialog
         open={isOpenCodeDialogOpen}

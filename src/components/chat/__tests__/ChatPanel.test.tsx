@@ -504,7 +504,7 @@ describe("<ChatPanelContent /> OpenCode BYOK picker", () => {
   // BRAND NEW one for the newly-active tab — silently discarding whatever
   // the user had typed, and, had a check been in flight, orphaning that
   // fetch's `setState` calls against an unmounted component. Hoisting the
-  // dialog to the `ChatPanelContent` root (this file, next to `SkillsPanel`,
+  // dialog to the `ChatPanelContent` root (this file, next to `SkillsPage`,
   // which already used this exact pattern) makes it a single component
   // instance for the panel's whole lifetime, independent of which tab is
   // active — so it now survives a tab switch intact, which is what this
@@ -583,5 +583,62 @@ describe("ChatPanelContent variants", () => {
     expect(screen.queryByText("Sideform Agent")).toBeNull();
     expect(screen.queryByRole("button", { name: /(Expand|Collapse) panel/ })).toBeNull();
     expect(screen.getAllByRole("button", { name: "Manage skills" })).toHaveLength(1);
+  });
+});
+
+describe("ChatPanelContent skills page", () => {
+  beforeEach(() => {
+    useOpenCodeKeyDialogStore.setState({ open: false });
+    useChatStore.setState({ activeChatId: null });
+  });
+
+  it("opens in place of the chat list, and Back returns to it", () => {
+    render(<ChatPanelContent />);
+    expect(screen.getByTestId("chat-list")).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("manage-skills-button"));
+    expect(screen.getByTestId("skills-page")).toBeTruthy();
+    expect(screen.queryByTestId("chat-list")).toBeNull();
+    expect(screen.getByTestId("manage-skills-button").getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(screen.getByTestId("skills-page-back"));
+    expect(screen.queryByTestId("skills-page")).toBeNull();
+    expect(screen.getByTestId("chat-list")).toBeTruthy();
+  });
+
+  it("hides the open chat while shown, keeps it mounted, and the skills button toggles the page off", () => {
+    useChatStore.setState({ activeChatId: "tab-1" });
+    render(<ChatPanelContent />);
+    expect(screen.getByTestId("chat-session-tab-1").className).not.toContain("hidden");
+
+    fireEvent.click(screen.getByTestId("manage-skills-button"));
+    expect(screen.getByTestId("skills-page")).toBeTruthy();
+    expect(screen.getByTestId("chat-session-tab-1").className).toContain("hidden");
+
+    fireEvent.click(screen.getByTestId("manage-skills-button"));
+    expect(screen.queryByTestId("skills-page")).toBeNull();
+    expect(screen.getByTestId("chat-session-tab-1").className).not.toContain("hidden");
+  });
+
+  it("treats the open chat session as inactive while shown (renders nothing, restores on return)", () => {
+    useChatStore.setState({ activeChatId: "tab-1" });
+    render(<ChatPanelContent />);
+    const session = screen.getByTestId("chat-session-tab-1");
+    expect(session.childElementCount).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByTestId("manage-skills-button"));
+    expect(session.childElementCount).toBe(0);
+
+    fireEvent.click(screen.getByTestId("manage-skills-button"));
+    expect(session.childElementCount).toBeGreaterThan(0);
+  });
+
+  it("closes when the active chat changes underneath it", () => {
+    render(<ChatPanelContent />);
+    fireEvent.click(screen.getByTestId("manage-skills-button"));
+    expect(screen.getByTestId("skills-page")).toBeTruthy();
+
+    act(() => useChatStore.setState({ activeChatId: "tab-1" }));
+    expect(screen.queryByTestId("skills-page")).toBeNull();
   });
 });

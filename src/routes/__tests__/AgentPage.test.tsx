@@ -103,7 +103,7 @@ describe("<AgentPage />", () => {
     expect(plus.nextElementSibling).toBe(skillsInChat);
     expect(screen.getAllByRole("button", { name: "Manage skills" })).toHaveLength(1);
     fireEvent.click(skillsInChat);
-    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(await screen.findByTestId("skills-page")).toBeTruthy();
   });
 
   it("paints the page with the panel surface", () => {

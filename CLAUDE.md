@@ -569,7 +569,7 @@ appear in a turn and the activity endpoint returns nothing.
   `{ id, afterMessageId }` in the scheduling chat, anchored at turn end as
   above; `ChatActivityNote` has exactly one of the two anchors.
 
-### User-authored skills (the Skills panel)
+### User-authored skills (the Skills page)
 
 Three kinds of skill now exist and they are easy to confuse. **Curated** skills
 are git-owned Markdown in the backend repo, read-only, listed by
@@ -593,7 +593,9 @@ draft — Postgres rows behind `/api/user-skills`, scoped to the same anonymous
   lying about state.
 - **`available: false`** (the backend has no user-skills store configured) is
   not an error — it renders as "the feature is off here", distinct from a
-  request that failed, which offers a Retry. Both live in `SkillsPanel.tsx`.
+  request that failed, which offers a Retry. Both live in `SkillsPage.tsx`,
+  which is a page inside the chat panel (it replaces the chat list /
+  open-chat header while shown), not a modal.
 - **`SlashCommandMenu.tsx`** merges the user's *enabled* skills under "Your
   skills" alongside the hardcoded built-ins, so `/my-skill` is discoverable
   where every other skill already was. Only user skills are slash-invocable;
