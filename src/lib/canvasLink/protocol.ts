@@ -5,9 +5,10 @@
  * per-turn `canvasContext` all go through the Electron main process to the
  * canvas tab the chat is bound to. Full description: docs/canvas-link.md.
  *
- * Known limitation: "append" covers only a top-level string field. Growth of
- * a nested value (edit_embed_html's `edits[].…` strings) falls back to
- * "full" on every update. Future work: path-addressed appends.
+ * Stream frame formats: "full" (whole input), "patch" (path-addressed ops: a
+ * string that grew by prefix -> `append`, a new key / array element -> `set`;
+ * anything else is sent "full") and the older top-level "append", which
+ * encoders still use for a grown top-level string and decoders accept.
  *
  * Shared by both sides; keep it free of app imports.
  */
@@ -23,9 +24,18 @@ export interface LinkEnvelope<M extends LinkMsg = LinkMsg> {
   msg: M;
 }
 
+export type PatchPath = Array<string | number>;
+
+export type PatchOp =
+  /** `offset` = length of the string at `path` the receiver must already hold. */
+  | { path: PatchPath; op: "append"; offset: number; text: string }
+  /** A new object key or the next array element (index === current length). */
+  | { path: PatchPath; op: "set"; value: unknown };
+
 /** chat -> canvas: one update of a streaming tool call's partial input. */
 export type StreamMsg =
   | { kind: "stream"; toolCallId: string; toolName: string; seq: number; format: "full"; input: unknown }
+  | { kind: "stream"; toolCallId: string; toolName: string; seq: number; format: "patch"; ops: PatchOp[] }
   | {
       kind: "stream";
       toolCallId: string;
