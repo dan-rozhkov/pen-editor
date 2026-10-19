@@ -5,6 +5,16 @@ html.route-doc #root {
   background-color: var(--color-surface-panel);
 }
 
+/* The app's menus are dark in both themes. On /doc the light theme gets light
+   menus (bubble, slash, block and colour menus, dropdowns), like Notion.
+   Portaled menus live under <body>, so the override sits on <html>. */
+html.route-doc:not(.dark) {
+  --popover: #ffffff;
+  --popover-foreground: oklch(0.205 0 0);
+  --accent: oklch(0.95 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+}
+
 .doc-prose {
   color: var(--color-text-primary);
   font-size: 1rem;
