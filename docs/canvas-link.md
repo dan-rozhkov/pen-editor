@@ -65,8 +65,17 @@ batching.
 
 See `protocol.ts`. Rules:
 
-- **Streaming** uses `format: "append"` (only the growth of one string field);
-  `"full"` for the first update and as the answer to a `resync`. Measured: 25 KB
+- **Streaming** frame formats: `"full"` (first update, answer to a `resync`,
+  and the fallback); `"append"` (growth of one top-level string field, the
+  compact legacy form); `"patch"` (`ops`: path-addressed `append` with
+  `offset`, or `set` for a new key / next array element, so growth nested in
+  `edit_embed_html`'s `edits[i].newString` is incremental). The encoder diffs
+  the previous and next input; a removed key, a non-prefix string change, a
+  type change or a shorter array gives `"full"`, as does a patch not smaller
+  than the full JSON. The decoder applies ops copy-on-write and still accepts
+  `"append"`, so a panel and a tab on different bundles interoperate. A bad
+  path or an `offset` that differs from the held string length is a mismatch
+  (resync, as below). Measured: 25 KB
   stream = 48 KB over IPC (full JSON: 1.5 MB); 1 MB = 1.2 MB (full: 309 MB).
   Per-message latency p50 0.3 ms; node timing equal to local apply.
 - **`call`** carries `timeoutMs` (the chat side's per-tool budget); the canvas
@@ -165,9 +174,6 @@ See `protocol.ts`. Rules:
   seq 0, "full"); anything else answers `resync` and ignores appends until a
   "full" arrives. While waiting, every ignored append re-sends `resync`, at most
   once per 250 ms per `toolCallId`.
-- **Known limitation**: "append" covers only a top-level string field.
-  `edit_embed_html`'s nested `edits[].…` growth falls back to "full" on every
-  update. Future work.
 - **Editability**: a canvas tab hosts everywhere except the shared viewer
   (`/c/:shareId`, `sharedViewStore`): it does not register there, so no read tool
   is published on someone else's shared canvas (no redaction needed). Edit <->

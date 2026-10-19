@@ -87,4 +87,129 @@ describe("append codec", () => {
     expect(enc.encode({ n: { k: 1 }, a: "xy" })).toBeNull();
     expect(enc.encode({ n: { k: 2 }, a: "xy" })).toMatchObject({ format: "full" });
   });
+
+  describe("path-addressed patch", () => {
+    const edit = (nodeId: string, edits: Array<{ oldString: string; newString: string }>) => ({ nodeId, edits });
+
+    it("emits a patch (not full) for growth nested in edits[i].newString", () => {
+      const enc = new AppendEncoder("t1", "edit_embed_html");
+      const big = "x".repeat(200);
+      enc.encode(edit("n1", [{ oldString: "<p>", newString: big }]));
+      const m = enc.encode(edit("n1", [{ oldString: "<p>", newString: big + "yy" }]));
+      expect(m).toMatchObject({
+        format: "patch",
+        ops: [{ path: ["edits", 0, "newString"], op: "append", offset: 200, text: "yy" }],
+      });
+    });
+
+    it("round-trips a simulated edit_embed_html partial-input stream", () => {
+      const enc = new AppendEncoder("t1", "edit_embed_html");
+      const dec = new AppendDecoder();
+      const html = "<div class=\"a\">hello world, this is a longer replacement body</div>".repeat(3);
+      const steps: unknown[] = [{}, { nodeId: "n" }, { nodeId: "n", edits: [] }, { nodeId: "n", edits: [{}] }];
+      for (let i = 1; i <= html.length; i += 7) {
+        steps.push({ nodeId: "n", edits: [{ oldString: "<div>old</div>", newString: html.slice(0, i) }] });
+      }
+      steps.push({ nodeId: "n", edits: [{ oldString: "<div>old</div>", newString: html }, { oldString: "a" }] });
+      for (let i = 1; i <= html.length; i += 11) {
+        steps.push({
+          nodeId: "n",
+          edits: [
+            { oldString: "<div>old</div>", newString: html },
+            { oldString: "a", newString: html.slice(0, i) },
+          ],
+        });
+      }
+      const formats = new Set<string>();
+      const decoded: Array<{ res: unknown; snapshot: unknown }> = [];
+      for (const input of steps) {
+        const snapshot = JSON.parse(JSON.stringify(input));
+        const msg = enc.encode(input as Record<string, unknown>);
+        if (msg === null) continue;
+        formats.add(msg.format);
+        const res = dec.apply(msg);
+        decoded.push({ res, snapshot });
+      }
+      expect(decoded.map((d) => d.res)).toEqual(decoded.map((d) => ({ status: "input", input: d.snapshot })));
+      expect(formats.has("patch")).toBe(true);
+    });
+
+    it("sends a new array element as a set op", () => {
+      const enc = new AppendEncoder("t1", "x");
+      const dec = new AppendDecoder();
+      const first = edit("n1", [{ oldString: "a".repeat(80), newString: "b".repeat(80) }]);
+      dec.apply(enc.encode(first)!);
+      const next = edit("n1", [first.edits[0], { oldString: "c", newString: "d" }]);
+      const m = enc.encode(next)!;
+      expect(m).toMatchObject({ format: "patch", ops: [{ path: ["edits", 1], op: "set", value: { oldString: "c", newString: "d" } }] });
+      expect(dec.apply(m)).toEqual({ status: "input", input: next });
+    });
+
+    it("falls back to full for removal, non-prefix change, type change and shorter arrays", () => {
+      const pad = "p".repeat(100);
+      const base = () => ({ a: pad, list: [pad, pad], o: { k: pad } });
+      const cases: Array<Record<string, unknown>> = [
+        { a: pad, list: [pad, pad] }, // removed key
+        { ...base(), o: { k: "q" + pad } }, // non-prefix nested change
+        { ...base(), list: pad }, // type change
+        { ...base(), list: [pad] }, // shrinking array
+      ];
+      for (const input of cases) {
+        const enc = new AppendEncoder("t1", "x");
+        enc.encode(base());
+        expect(enc.encode(input)).toMatchObject({ format: "full" });
+      }
+    });
+
+    it("falls back to full when the ops are not smaller than the input", () => {
+      const enc = new AppendEncoder("t1", "x");
+      enc.encode({ e: [{ s: "a" }] });
+      expect(enc.encode({ e: [{ s: "ab" }] })).toMatchObject({ format: "full" });
+    });
+
+    it("returns null when nested content is unchanged", () => {
+      const enc = new AppendEncoder("t1", "x");
+      const input = edit("n", [{ oldString: "a", newString: "b" }]);
+      enc.encode(input);
+      expect(enc.encode(structuredClone(input))).toBeNull();
+    });
+
+    it("asks for resync on an offset mismatch or a missing path, then recovers on full", () => {
+      const dec = new AppendDecoder();
+      const head = { kind: "stream" as const, toolCallId: "t1", toolName: "x" };
+      dec.apply({ ...head, seq: 0, format: "full", input: { edits: [{ s: "abc" }] } });
+      const bad = dec.apply({
+        ...head,
+        seq: 1,
+        format: "patch",
+        ops: [{ path: ["edits", 0, "s"], op: "append", offset: 2, text: "z" }],
+      });
+      expect(bad).toEqual({ status: "resync" });
+      const dec2 = new AppendDecoder();
+      dec2.apply({ ...head, seq: 0, format: "full", input: { edits: [] } });
+      expect(
+        dec2.apply({ ...head, seq: 1, format: "patch", ops: [{ path: ["edits", 3, "s"], op: "append", offset: 0, text: "z" }] }),
+      ).toEqual({ status: "resync" });
+      expect(dec.apply({ ...head, seq: 5, format: "full", input: { ok: 1 } })).toEqual({ status: "input", input: { ok: 1 } });
+    });
+
+    it("does not mutate the previous decoded value (copy-on-write)", () => {
+      const dec = new AppendDecoder();
+      const head = { kind: "stream" as const, toolCallId: "t1", toolName: "x" };
+      const r0 = dec.apply({ ...head, seq: 0, format: "full", input: { nodeId: "n", edits: [{ s: "ab" }] } });
+      const r1 = dec.apply({ ...head, seq: 1, format: "patch", ops: [{ path: ["edits", 0, "s"], op: "append", offset: 2, text: "c" }] });
+      expect(r0).toEqual({ status: "input", input: { nodeId: "n", edits: [{ s: "ab" }] } });
+      expect(r1).toEqual({ status: "input", input: { nodeId: "n", edits: [{ s: "abc" }] } });
+    });
+
+    it("still decodes an old-format top-level append frame", () => {
+      const dec = new AppendDecoder();
+      const head = { kind: "stream" as const, toolCallId: "t1", toolName: "x" };
+      dec.apply({ ...head, seq: 0, format: "full", input: { operations: "a=I(", n: 1 } });
+      expect(dec.apply({ ...head, seq: 1, format: "append", field: "operations", offset: 4, append: "doc)" })).toEqual({
+        status: "input",
+        input: { operations: "a=I(doc)", n: 1 },
+      });
+    });
+  });
 });
