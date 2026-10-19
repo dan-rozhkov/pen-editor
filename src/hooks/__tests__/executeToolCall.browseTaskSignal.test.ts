@@ -35,4 +35,14 @@ describe("executeToolCall browse_task cancellation", () => {
     expect(await pending).toContain("error");
     expect(seen?.aborted).toBe(true);
   });
+
+  it("honours a per-call timeoutMs override instead of the tool default", async () => {
+    vi.useFakeTimers();
+    toolHandlers.browse_task = () => new Promise(() => {});
+    const pending = executeToolCall("browse_task", { goal: "x" }, undefined, "chat", {
+      timeoutMs: 1_000,
+    });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(await pending).toContain("error");
+  });
 });

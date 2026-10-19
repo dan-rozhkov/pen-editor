@@ -292,37 +292,18 @@ const withAbortedCheck =
     return handler(args, ctx);
   });
 
-function buildToolExecutor(timeoutMs: (toolName: string) => number) {
-  return createToolExecutor<ToolExecutionContext, ToolCallSource>({
-    resolveHandler: (toolName) => withAbortedCheck(toolHandlers[toolName]),
-    runQueued: runToolCall,
-    timeoutMs,
-    onExecuted: trackToolExecuted,
-  });
-}
-
-const executeWithHarness = buildToolExecutor((toolName) => getToolCallTimeoutMs(toolName));
+// A per-call budget (`ctx.timeoutMs`, set by executeToolCall) wins over the
+// tool's default.
+const executeWithHarness = createToolExecutor<ToolExecutionContext, ToolCallSource>({
+  resolveHandler: (toolName) => withAbortedCheck(toolHandlers[toolName]),
+  runQueued: runToolCall,
+  timeoutMs: (toolName, _input, ctx) => ctx?.timeoutMs ?? getToolCallTimeoutMs(toolName),
+  onExecuted: trackToolExecuted,
+});
 
 export interface ExecuteToolCallOptions {
   /** Per-call budget replacing the tool's default (counted from the start of the queued task). */
   timeoutMs?: number;
-}
-
-// @sideform/agent-harness's `timeoutMs(toolName, input)` does not receive the
-// execution context, so a per-call budget cannot ride in `ctx`. Instead one
-// executor per distinct budget is cached (the canvas link sends the handful of
-// per-tool budgets, never a fresh number per call). Harness follow-up: pass
-// `ctx` to `timeoutMs`, then this map can go.
-const MAX_BUDGET_EXECUTORS = 32;
-const budgetExecutors = new Map<number, ReturnType<typeof buildToolExecutor>>();
-
-function executorForBudget(budget: number): ReturnType<typeof buildToolExecutor> {
-  let executor = budgetExecutors.get(budget);
-  if (!executor) {
-    executor = buildToolExecutor(() => budget);
-    if (budgetExecutors.size < MAX_BUDGET_EXECUTORS) budgetExecutors.set(budget, executor);
-  }
-  return executor;
 }
 
 export function executeToolCall(
@@ -334,7 +315,7 @@ export function executeToolCall(
 ): Promise<string> {
   const budget = options?.timeoutMs;
   if (typeof budget === "number" && Number.isFinite(budget) && budget > 0) {
-    return executorForBudget(budget)(toolName, input, context, source);
+    return executeWithHarness(toolName, input, { ...context, timeoutMs: budget }, source);
   }
   return executeWithHarness(toolName, input, context, source);
 }

@@ -78,6 +78,8 @@ export interface ToolExecutionContext extends HarnessToolExecutionContext {
    * host posts `started` from it.
    */
   onStart?: () => void;
+  /** Per-call budget replacing the tool's default timeout (e.g. from the canvas link). */
+  timeoutMs?: number;
 }
 
 export type ToolHandler = HarnessToolHandler<ToolExecutionContext>;
