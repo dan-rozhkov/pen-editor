@@ -103,7 +103,7 @@ export function BubbleToolbar({ editor }: { editor: Editor }) {
               variant="ghost"
               size="icon-sm"
               aria-pressed={active}
-              className={active ? "bg-popover-foreground/20 text-popover-foreground" : "text-popover-foreground/70"}
+              className={active ? "bg-accent-primary text-white hover:bg-accent-primary/90 hover:text-white" : "text-popover-foreground/70"}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => mark.run(editor)}
             >

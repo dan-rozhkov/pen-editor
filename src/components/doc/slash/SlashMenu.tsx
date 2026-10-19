@@ -61,7 +61,7 @@ export const SlashMenu = forwardRef<SlashMenuHandle, Props>(function SlashMenu({
             onMouseMove={() => setSelected(index)}
             onClick={() => command(item)}
           >
-            <span className="bg-popover-foreground/10 flex size-8 shrink-0 items-center justify-center rounded-md ring-1 [&_svg]:size-4">
+            <span className="bg-popover-foreground/10 flex size-8 shrink-0 items-center justify-center rounded-md [&_svg]:size-4">
               {item.icon}
             </span>
             <span className="min-w-0">

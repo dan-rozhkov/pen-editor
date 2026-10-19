@@ -27,7 +27,7 @@ export function LinkPopover({ editor, active, open, onOpenChange }: Props) {
             variant="ghost"
             size="icon-sm"
             aria-pressed={active}
-            className={active ? "bg-popover-foreground/20 text-popover-foreground" : "text-popover-foreground/70"}
+            className={active ? "bg-accent-primary text-white hover:bg-accent-primary/90 hover:text-white" : "text-popover-foreground/70"}
           >
             <LinkIcon />
           </IconButton>
