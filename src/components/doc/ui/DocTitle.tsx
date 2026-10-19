@@ -25,7 +25,7 @@ export function DocTitle({ value, onChange, onLeave }: Props) {
       placeholder="Untitled"
       value={value}
       spellCheck={false}
-      className="text-text-primary placeholder:text-text-muted/50 mb-2 block w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-[2.5rem] leading-[1.2] font-bold tracking-[-0.02em] outline-none"
+      className="text-text-primary placeholder:text-text-muted/50 mb-1 block w-full resize-none overflow-hidden border-0 bg-transparent px-0.5 py-[3px] text-[2.5rem] leading-[1.2] font-bold outline-none"
       onChange={(event) => onChange(event.target.value.replace(/\n/g, " "))}
       onKeyDown={(event) => {
         const el = event.currentTarget;

@@ -160,7 +160,7 @@ describe("DocPage", () => {
   it("asks before deleting a document", async () => {
     const doc = createDoc({ title: "Doomed", markdown: "x" }, "editor");
     renderDoc(`/doc?id=${doc.id}`);
-    fireEvent.click(screen.getByRole("button", { name: "Documents" }));
+    fireEvent.click(screen.getByRole("button", { name: "Document options" }));
     fireEvent.click(await screen.findByRole("menuitem", { name: /Delete document/ }));
     await screen.findByText("This cannot be undone.");
     expect(getDoc(doc.id)).not.toBeNull();

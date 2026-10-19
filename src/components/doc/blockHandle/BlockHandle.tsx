@@ -54,9 +54,23 @@ function isTopLevel(editor: Editor, el: HTMLElement): boolean {
   return el.isConnected && el.parentElement === editor.view.dom && resolveBlockPos(editor, el) !== null;
 }
 
+const WRAPPERS = new Set(["UL", "OL", "LI", "BLOCKQUOTE"]);
+
+/** The element holding the block's first text line: lists and quotes wrap it in a padded paragraph. */
+function firstLineElement(el: HTMLElement): HTMLElement {
+  let line = el;
+  while (WRAPPERS.has(line.tagName) && line.firstElementChild instanceof HTMLElement && line.firstElementChild.tagName !== "LABEL") {
+    line = line.firstElementChild;
+  }
+  return line;
+}
+
 function targetFor(el: HTMLElement, container: HTMLElement): Target {
-  const style = getComputedStyle(el);
-  const top = handleTop(el.getBoundingClientRect().top, container.getBoundingClientRect().top, firstLineHeight(style.lineHeight, style.fontSize));
+  const line = firstLineElement(el);
+  const style = getComputedStyle(line);
+  // Blocks are padded (Notion rhythm, code-block insets): centre on the text, not the border box.
+  const textTop = line.getBoundingClientRect().top + (parseFloat(style.paddingTop) || 0);
+  const top = handleTop(textTop, container.getBoundingClientRect().top, firstLineHeight(style.lineHeight, style.fontSize));
   return { el, top };
 }
 

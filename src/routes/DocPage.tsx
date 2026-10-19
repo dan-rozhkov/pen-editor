@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CaretDownIcon, CheckIcon, FilePlusIcon, TrashIcon } from "@phosphor-icons/react";
+import { CheckIcon, DotsThreeVerticalIcon, FilePlusIcon, ListIcon, TrashIcon } from "@phosphor-icons/react";
 import type { Editor } from "@tiptap/react";
 import { EditorProviders } from "@/components/EditorProviders";
 import { DocEditor } from "@/components/doc/DocEditor";
@@ -49,12 +49,17 @@ export default function DocPage() {
           </main>
         ) : (
           <>
-            <header className="sticky top-0 z-10 flex items-center gap-2 bg-surface-panel px-3 py-1.5">
+            {/* Same row as the chat header (OpenChatHeader) and the desktop browser bar. */}
+            <header className="sticky top-0 z-10 flex shrink-0 items-center gap-1 border-b border-border-default bg-surface-panel px-2 py-1.5">
               <DropdownMenu>
-                <DropdownMenuTrigger render={<Button variant="ghost" size="sm" aria-label="Documents" className="text-text-muted" />}>
-                  Documents <CaretDownIcon />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="max-h-80 min-w-56 overflow-y-auto">
+                <DropdownMenuTrigger
+                  render={
+                    <IconButton variant="ghost" size="icon" tooltip="Documents">
+                      <ListIcon className="size-4" weight="light" />
+                    </IconButton>
+                  }
+                />
+                <DropdownMenuContent align="start" sideOffset={4} className="max-h-80 min-w-56 overflow-y-auto">
                   {sync.docs.map((doc) => (
                     <DropdownMenuItem key={doc.id} onClick={() => sync.select(doc.id)}>
                       <span className="truncate">{doc.title}</span>
@@ -65,15 +70,25 @@ export default function DocPage() {
                   <DropdownMenuItem onClick={sync.create}>
                     <FilePlusIcon /> New document
                   </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <span className="min-w-0 flex-1 truncate px-1 text-sm font-medium text-text-primary">
+                {sync.title.trim() || "Untitled"}
+              </span>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <IconButton variant="ghost" size="icon" tooltip="Document options">
+                      <DotsThreeVerticalIcon size={16} weight="bold" />
+                    </IconButton>
+                  }
+                />
+                <DropdownMenuContent align="end" sideOffset={4} className="min-w-44">
                   <DropdownMenuItem variant="destructive" onClick={() => setConfirmingDelete(true)}>
                     <TrashIcon /> Delete document
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <span className="min-w-0 flex-1 truncate text-xs text-text-muted">{sync.title.trim() || "Untitled"}</span>
-              <IconButton tooltip="New document" variant="ghost" size="icon-sm" className="text-text-muted" onClick={sync.create}>
-                <FilePlusIcon />
-              </IconButton>
             </header>
             <main className="flex-1 px-6 pb-24 pt-10 sm:px-24 sm:pt-16">
               <div className="mx-auto w-full max-w-[708px]">
