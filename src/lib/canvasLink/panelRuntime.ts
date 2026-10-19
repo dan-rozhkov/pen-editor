@@ -17,6 +17,24 @@ import { PanelClient, type CallFailure, type CallOptions } from "./panelClient";
 
 let client: PanelClient | null = null;
 let clientBridge: unknown = null;
+/** Per chat: who wants to know that a tab closed under a streaming tool call of that chat. */
+const streamLostListeners = new Map<string, Set<(toolCallId: string) => void>>();
+
+/** Subscribes to "the canvas tab closed while `toolCallId`'s input was still streaming" for one chat. */
+export function subscribePanelStreamLost(sessionId: string, cb: (toolCallId: string) => void): () => void {
+  let set = streamLostListeners.get(sessionId);
+  if (!set) streamLostListeners.set(sessionId, (set = new Set()));
+  set.add(cb);
+  return () => {
+    set.delete(cb);
+    if (set.size === 0 && streamLostListeners.get(sessionId) === set) streamLostListeners.delete(sessionId);
+  };
+}
+
+function notifyStreamLost(sessionId: string, toolCallId: string): void {
+  for (const cb of [...(streamLostListeners.get(sessionId) ?? [])]) cb(toolCallId);
+}
+
 let stopChatWatch: (() => void) | null = null;
 
 /** Tells the client to forget every chat that left the store (closed or deleted), or its maps grow forever. */
@@ -118,6 +136,7 @@ export function getPanelClient(): PanelClient | null {
     onCallFailed: trackCanvasCallFailed,
     modelFor: resolveSessionModel,
     onLaunch: (l) => void handleLaunch(l),
+    onStreamLost: notifyStreamLost,
   });
   clientBridge = bridge;
   stopChatWatch = watchChatRemoval(client);

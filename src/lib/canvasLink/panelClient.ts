@@ -27,6 +27,8 @@ import {
 
 /** Added to the per-tool timeout so the canvas tab's own timeout error wins the race. */
 export const CALL_TIMEOUT_MARGIN_MS = 2000;
+/** Extra wait for a call with a `brief`: the tab's taste check (TASTE_CHECK_TIMEOUT_MS, 8 s) + 1 s. */
+export const TASTE_CHECK_MARGIN_MS = 9000;
 export const CONTEXT_TIMEOUT_MS = 2000;
 export const PLACE_NODE_TIMEOUT_MS = 30_000;
 /**
@@ -76,6 +78,11 @@ export interface PanelClientDeps {
   modelFor?: (sessionId: string) => string;
   /** A canvas tab's `launch` (an on-canvas agent entry point). Each `launchId` is delivered once. */
   onLaunch?: (launch: { tabId: number; launchId: string; payload: ChatLaunchMessagePayload }) => void;
+  /**
+   * A tab closed while this call's tool input was still streaming to it (before `callTool`): the
+   * streamed progress is gone, and the call must not run on another tab. Called once per such stream.
+   */
+  onStreamLost?: (sessionId: string, toolCallId: string) => void;
 }
 
 export interface CallOptions {
@@ -83,6 +90,8 @@ export interface CallOptions {
   /** The chat side's per-tool budget; the client waits this + 2 s. */
   timeoutMs: number;
   signal?: AbortSignal;
+  /** Sent with the call so the tab runs the Jev taste check; adds `TASTE_CHECK_MARGIN_MS` to the wait. */
+  brief?: string;
 }
 
 type Outgoing = ChatToCanvasMsg;
@@ -147,6 +156,9 @@ export class PanelClient {
   private readonly onCallFailed?: (failure: CallFailure) => void;
   private readonly onLaunch?: PanelClientDeps["onLaunch"];
   private readonly modelFor?: PanelClientDeps["modelFor"];
+  private readonly onStreamLost?: PanelClientDeps["onStreamLost"];
+  /** Calls whose live stream a closing tab took: `callTool` answers them with the tab-closed error. */
+  private readonly lostStreams = new Set<string>();
   /**
    * Per `launchId`: the outcome of its first handling (null = acked ok, string = acked with that error,
    * undefined = still being handled). A repeated launch (a canvas tab's retry) gets the same ack again
@@ -186,6 +198,7 @@ export class PanelClient {
     this.onCallFailed = deps.onCallFailed;
     this.onLaunch = deps.onLaunch;
     this.modelFor = deps.modelFor;
+    this.onStreamLost = deps.onStreamLost;
     this.unsubscribers = [
       deps.bridge.onTabsChanged((tabs) => {
         this.tabs = tabs;
@@ -200,6 +213,7 @@ export class PanelClient {
     for (const off of this.unsubscribers) off();
     for (const p of [...this.pending.values()]) p.settle(errorResult("The agent panel closed."));
     this.streams.clear();
+    this.lostStreams.clear();
   }
 
   /**
@@ -607,7 +621,9 @@ export class PanelClient {
    * timeout of `timeoutMs + 2 s`, abort).
    */
   callTool(sessionId: string, toolName: string, input: unknown, options: CallOptions): Promise<string> {
-    const { toolCallId, timeoutMs, signal } = options;
+    const { toolCallId, timeoutMs, signal, brief } = options;
+    // The tab that held this call's streamed progress closed: never run it on another tab.
+    if (this.lostStreams.delete(toolCallId)) return Promise.resolve(TAB_CLOSED_ERROR);
     // Close the stream first; if its frames still wait for the tab, flush them before the call.
     const stream = this.streams.get(toolCallId);
     this.endStream(toolCallId, "complete");
@@ -615,7 +631,7 @@ export class PanelClient {
       callId: toolCallId,
       sessionId,
       toolName,
-      timeoutMs: timeoutMs + CALL_TIMEOUT_MARGIN_MS,
+      timeoutMs: timeoutMs + CALL_TIMEOUT_MARGIN_MS + (brief ? TASTE_CHECK_MARGIN_MS : 0),
       timeoutMessage: `Tool ${toolName} timed out waiting for the canvas tab`,
       startGated: true,
       signal,
@@ -627,7 +643,7 @@ export class PanelClient {
           for (const msg of buffered) this.post(binding.tabId, msg);
           this.post(binding.tabId, { kind: "stream-end", toolCallId, reason: "complete" });
         }
-        return this.post(binding.tabId, { kind: "call", callId, toolName, input, timeoutMs });
+        return this.post(binding.tabId, { kind: "call", callId, toolName, input, timeoutMs, ...(brief ? { brief } : {}) });
       },
     });
   }
@@ -892,14 +908,25 @@ export class PanelClient {
     }
     // The closed document's context must not be sent to the next turn.
     for (const [sessionId, b] of [...this.bindings]) if (keyOf(b) === key) this.dropBinding(sessionId);
+    const lost: Array<[string, string]> = [];
     for (const [toolCallId, s] of [...this.streams]) {
       if (s.binding && keyOf(s.binding) === key) {
         this.streams.delete(toolCallId);
         this.markEnded(toolCallId);
+        this.lostStreams.add(toolCallId);
+        if (this.lostStreams.size > MAX_ENDED_STREAMS) this.lostStreams.delete(this.lostStreams.values().next().value as string);
+        lost.push([s.sessionId, toolCallId]);
       }
     }
     for (const p of [...this.pending.values()]) {
       if (p.key === key) p.settle(p.isContext ? "" : TAB_CLOSED_ERROR, "tab_gone");
+    }
+    for (const [sessionId, toolCallId] of lost) {
+      try {
+        this.onStreamLost?.(sessionId, toolCallId);
+      } catch {
+        // An observer must not break the latch.
+      }
     }
     this.requestMissingSelections();
     this.notifyChange();

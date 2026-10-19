@@ -108,6 +108,43 @@ describe("useDesignChat in the agent panel", () => {
     expect(JSON.stringify(bodies[1].messages)).toContain("canvas tab");
   });
 
+  it("a tab that closes while the tool input streams stops the turn at once, answers the call tab-closed and binds no new tab", async () => {
+    const fake = createFakeCanvasBridge([tab(1)]);
+    attachScriptedCanvas(fake, { context: "{}" });
+    window.penAgentPanel = { version: 2, canvas: fake.bridge };
+    const sessionId = "lost-chat";
+    const first = controlledSse();
+    const fetchMock = vi.fn(async () => (fetchMock.mock.calls.length === 1 ? first.response : textTurn()));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useDesignChat({ sessionId }));
+    act(() => result.current.setInput("build"));
+    await act(async () => void result.current.sendMessage());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      first.push({ type: "start" });
+      first.push({ type: "start-step" });
+      first.push({ type: "tool-input-start", toolCallId: "b1", toolName: "batch_design" });
+      first.push({ type: "tool-input-delta", toolCallId: "b1", inputTextDelta: '{"operations":"c=I(document, {type: ' });
+    });
+    await waitFor(() => expect(fake.kinds()).toContain("stream"));
+
+    // The tab closes; the model has NOT finished the input (the stream stays open).
+    await act(async () => {
+      fake.closeTab(1);
+    });
+    await waitFor(() => expect(result.current.status).toBe("ready"), { timeout: 3000 });
+    await waitFor(() => {
+      const part = result.current.messages.flatMap((m) => m.parts).find((p) => "toolCallId" in p && p.toolCallId === "b1");
+      expect(part).toMatchObject({ state: "output-available", output: expect.stringContaining("The canvas tab was closed.") });
+    });
+    // No auto-continuation, no tab opened or bound.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fake.openTab).not.toHaveBeenCalled();
+    expect(fake.ofKind("call")).toHaveLength(0);
+  });
+
   it("sends an existing canvas tab's context on the first message of a new chat (passive bind, no tab opened)", async () => {
     const fake = createFakeCanvasBridge([tab(1)]);
     attachScriptedCanvas(fake, { context: '{"roots":[{"id":"existing"}]}' });

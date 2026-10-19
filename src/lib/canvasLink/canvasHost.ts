@@ -10,6 +10,8 @@ import { isChatDisabled } from "@/lib/chatMode";
 import { executeToolCall } from "@/hooks/useDesignChat";
 import { getStreamingToolAdapter, streamingToolAdapters } from "@/lib/streamingTools";
 import { isSerializedTool } from "@/lib/toolCallQueue";
+import { runTasteCheckForToolCall } from "@/lib/tools/tasteCheck";
+import { hasTouchedEmbeds } from "@/lib/tools/tasteCheckRegistry";
 import { toolHandlers } from "@/lib/toolRegistry";
 import { canMutateScene } from "@/lib/webmcp/registerTools";
 import { useSceneStore } from "@/store/sceneStore";
@@ -244,7 +246,7 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
               return errorResult(NOT_EDITABLE_MESSAGE);
             }
             // The budget counts from the start of the queued task (executeToolCall).
-            return executeToolCall(
+            const result = await executeToolCall(
               msg.toolName,
               msg.input,
               {
@@ -259,6 +261,20 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
               "canvas-link",
               { timeoutMs: msg.timeoutMs }
             );
+            // Jev taste check: the touched-embed registry was filled by the handler above, in this process.
+            if (
+              msg.brief &&
+              (msg.toolName === "batch_design" || msg.toolName === "edit_embed_html") &&
+              !signal.aborted &&
+              hasTouchedEmbeds(msg.callId)
+            ) {
+              try {
+                return await runTasteCheckForToolCall(msg.toolName, msg.callId, result, { brief: msg.brief }, signal);
+              } catch {
+                return result; // fail-open: the handler's real result stands
+              }
+            }
+            return result;
           },
           () => {
             const left = streams.get(msg.callId);
