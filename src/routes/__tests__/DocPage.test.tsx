@@ -31,7 +31,30 @@ describe("DocPage", () => {
     const [doc] = listDocs();
     await waitFor(() => expect(screen.getByTestId("location").textContent).toContain(`id=${doc.id}`));
     expect(screen.getByTestId("location").textContent).toContain("chat=off");
-    expect((screen.getByLabelText("Title") as HTMLInputElement).value).toBe("Untitled");
+    expect((screen.getByLabelText("Title") as HTMLTextAreaElement).value).toBe("Untitled");
+  });
+
+  it("has a title field in the page and no fixed formatting toolbar", async () => {
+    const doc = createDoc({ title: "Notes", markdown: "body" }, "editor");
+    renderDoc(`/doc?id=${doc.id}`);
+    await screen.findByLabelText("Document");
+    expect(screen.getByLabelText("Title").tagName).toBe("TEXTAREA");
+    expect(screen.queryByRole("toolbar")).toBeNull();
+  });
+
+  it("saves the title typed in the page", async () => {
+    const doc = createDoc({ title: "Notes", markdown: "body" }, "editor");
+    renderDoc(`/doc?id=${doc.id}`);
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Renamed" } });
+    await waitFor(() => expect(getDoc(doc.id)?.title).toBe("Renamed"), { timeout: 1500 });
+  });
+
+  it("moves focus from the title into the editor on Enter", async () => {
+    const doc = createDoc({ title: "Notes", markdown: "body" }, "editor");
+    renderDoc(`/doc?id=${doc.id}`);
+    const editable = await screen.findByLabelText("Document");
+    fireEvent.keyDown(screen.getByLabelText("Title"), { key: "Enter" });
+    await waitFor(() => expect(document.activeElement).toBe(editable));
   });
 
   it("loads the document from ?id= and sets the page title", async () => {
@@ -39,7 +62,7 @@ describe("DocPage", () => {
     const target = createDoc({ title: "Target", markdown: "# Hello\n\nworld" }, "editor");
     createDoc({ title: "Newest", markdown: "new" }, "editor");
     renderDoc(`/doc?id=${target.id}`);
-    expect((screen.getByLabelText("Title") as HTMLInputElement).value).toBe("Target");
+    expect((screen.getByLabelText("Title") as HTMLTextAreaElement).value).toBe("Target");
     await waitFor(() => expect(screen.getByRole("heading", { name: "Hello" })).toBeTruthy());
     expect(document.title).toBe("Target");
   });

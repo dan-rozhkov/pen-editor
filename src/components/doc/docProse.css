@@ -8,24 +8,23 @@ html.route-doc #root {
 .doc-prose {
   color: var(--color-text-primary);
   font-size: 1rem;
-  line-height: 1.7;
+  line-height: 1.5;
   outline: none;
   min-height: 60dvh;
 }
-.doc-prose > * + * { margin-top: 0.85em; }
-.doc-prose h1 { font-size: 1.875rem; line-height: 1.25; font-weight: 650; margin-top: 1.6em; letter-spacing: -0.015em; }
-.doc-prose h2 { font-size: 1.4rem; line-height: 1.3; font-weight: 620; margin-top: 1.5em; letter-spacing: -0.01em; }
-.doc-prose h3 { font-size: 1.15rem; line-height: 1.4; font-weight: 600; margin-top: 1.3em; }
+.doc-prose > * + * { margin-top: 3px; }
+.doc-prose h1 { font-size: 1.875em; line-height: 1.25; font-weight: 600; margin-top: 1.4em; letter-spacing: -0.01em; }
+.doc-prose h2 { font-size: 1.5em; line-height: 1.3; font-weight: 600; margin-top: 1.4em; letter-spacing: -0.005em; }
+.doc-prose h3 { font-size: 1.25em; line-height: 1.35; font-weight: 600; margin-top: 1.4em; }
 .doc-prose > :first-child { margin-top: 0; }
 .doc-prose ul, .doc-prose ol { padding-left: 1.5em; }
 .doc-prose ul { list-style: disc; }
 .doc-prose ol { list-style: decimal; }
 .doc-prose li > p { margin: 0; }
-.doc-prose li + li { margin-top: 0.25em; }
+.doc-prose li + li { margin-top: 3px; }
 .doc-prose blockquote {
-  border-left: 2px solid var(--color-border-light);
-  padding-left: 1em;
-  color: var(--color-text-muted);
+  border-left: 3px solid var(--color-text-primary);
+  padding-left: 14px;
 }
 .doc-prose code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -36,14 +35,15 @@ html.route-doc #root {
 }
 .doc-prose pre {
   background: var(--color-surface-elevated);
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 0.85em 1em;
+  margin-top: 6px;
   overflow-x: auto;
 }
 .doc-prose pre code { background: none; padding: 0; font-size: 0.85rem; }
 .doc-prose hr { border: 0; border-top: 1px solid var(--color-border-default); margin: 1.8em 0; }
 .doc-prose a { text-decoration: underline; text-underline-offset: 2px; }
-.doc-prose p.is-editor-empty:first-child::before {
+.doc-prose .is-empty::before {
   content: attr(data-placeholder);
   color: var(--color-text-muted);
   opacity: 0.6;
@@ -51,6 +51,8 @@ html.route-doc #root {
   height: 0;
   pointer-events: none;
 }
+/* Notion shows the hint on the focused empty line only. */
+.doc-prose:not(.ProseMirror-focused) .is-empty::before { display: none; }
 
 /* Tables, task lists, images (GFM constructs the agent writes). */
 .doc-prose table { border-collapse: collapse; width: 100%; table-layout: fixed; overflow: hidden; }
@@ -71,3 +73,96 @@ html.route-doc #root {
 .doc-prose ul[data-type="taskList"] li[data-checked="true"] > div { color: var(--color-text-muted); text-decoration: line-through; }
 .doc-prose img { max-width: 100%; height: auto; border-radius: 6px; }
 .doc-prose img.ProseMirror-selectednode { outline: 2px solid var(--color-border-light); }
+
+/* ===== Extensions block: toggle, colour, mermaid (owned by docExtensions; keep below other rules) ===== */
+
+/* Notion-like muted shades. Names match docPalette.ts; the document stores names, never hex. */
+.doc-prose {
+  --doc-text-gray: #787774; --doc-text-brown: #9f6b53; --doc-text-orange: #d9730d;
+  --doc-text-yellow: #cb912f; --doc-text-green: #448361; --doc-text-blue: #337ea9;
+  --doc-text-purple: #9065b0; --doc-text-pink: #c14c8a; --doc-text-red: #d44c47;
+  --doc-bg-gray: #f1f1ef; --doc-bg-brown: #f4eeee; --doc-bg-orange: #fbecdd;
+  --doc-bg-yellow: #fbf3db; --doc-bg-green: #edf3ec; --doc-bg-blue: #e7f3f8;
+  --doc-bg-purple: #f6f3f9; --doc-bg-pink: #faf1f5; --doc-bg-red: #fdebec;
+}
+.dark .doc-prose {
+  --doc-text-gray: #9b9b9b; --doc-text-brown: #bf7e71; --doc-text-orange: #ffa344;
+  --doc-text-yellow: #ffdc49; --doc-text-green: #4dab9a; --doc-text-blue: #5e87c9;
+  --doc-text-purple: #9d68d3; --doc-text-pink: #d15796; --doc-text-red: #df5452;
+  --doc-bg-gray: #454b4e; --doc-bg-brown: #434040; --doc-bg-orange: #594a3a;
+  --doc-bg-yellow: #59563b; --doc-bg-green: #354c4b; --doc-bg-blue: #364954;
+  --doc-bg-purple: #443f57; --doc-bg-pink: #533b4c; --doc-bg-red: #594141;
+}
+.doc-prose span[data-color="gray"] { color: var(--doc-text-gray); }
+.doc-prose span[data-color="brown"] { color: var(--doc-text-brown); }
+.doc-prose span[data-color="orange"] { color: var(--doc-text-orange); }
+.doc-prose span[data-color="yellow"] { color: var(--doc-text-yellow); }
+.doc-prose span[data-color="green"] { color: var(--doc-text-green); }
+.doc-prose span[data-color="blue"] { color: var(--doc-text-blue); }
+.doc-prose span[data-color="purple"] { color: var(--doc-text-purple); }
+.doc-prose span[data-color="pink"] { color: var(--doc-text-pink); }
+.doc-prose span[data-color="red"] { color: var(--doc-text-red); }
+.doc-prose span[data-bg] { border-radius: 3px; padding: 0.05em 0.15em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.doc-prose span[data-bg="gray"] { background-color: var(--doc-bg-gray); }
+.doc-prose span[data-bg="brown"] { background-color: var(--doc-bg-brown); }
+.doc-prose span[data-bg="orange"] { background-color: var(--doc-bg-orange); }
+.doc-prose span[data-bg="yellow"] { background-color: var(--doc-bg-yellow); }
+.doc-prose span[data-bg="green"] { background-color: var(--doc-bg-green); }
+.doc-prose span[data-bg="blue"] { background-color: var(--doc-bg-blue); }
+.doc-prose span[data-bg="purple"] { background-color: var(--doc-bg-purple); }
+.doc-prose span[data-bg="pink"] { background-color: var(--doc-bg-pink); }
+.doc-prose span[data-bg="red"] { background-color: var(--doc-bg-red); }
+
+/* Toggle (details): node view is div.doc-details > button + div > summary + div[data-type=detailsContent]. */
+.doc-prose .doc-details { display: flex; align-items: flex-start; gap: 0.25em; }
+.doc-prose .doc-details > button {
+  flex: none;
+  width: 1.5em;
+  height: 1.7em;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+.doc-prose .doc-details > button:hover { background: var(--color-surface-hover); }
+.doc-prose .doc-details > button::before {
+  content: "";
+  border: solid transparent;
+  border-width: 0.3em 0 0.3em 0.45em;
+  border-left-color: currentColor;
+  transition: transform 120ms ease;
+}
+.doc-prose .doc-details.is-open > button::before { transform: rotate(90deg); }
+.doc-prose .doc-details > div { flex: 1; min-width: 0; }
+.doc-prose .doc-details summary { list-style: none; font-weight: 500; }
+.doc-prose .doc-details summary::-webkit-details-marker { display: none; }
+.doc-prose .doc-details summary:has(> br.ProseMirror-trailingBreak:only-child)::before {
+  content: "Toggle";
+  color: var(--color-text-muted);
+  opacity: 0.6;
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+.doc-prose .doc-details [data-type="detailsContent"] { padding-left: 0.25em; }
+.doc-prose .doc-details [data-type="detailsContent"] > * + * { margin-top: 0.6em; }
+
+/* Mermaid: preview when idle, source above the preview while editing. */
+.doc-prose .doc-mermaid {
+  border-radius: 8px;
+  background: var(--color-surface-elevated);
+  padding: 0.5em 0.75em;
+}
+.doc-prose .doc-mermaid-source { padding: 0.5em 0; border-radius: 0; background: none; }
+.doc-prose .doc-mermaid[data-editing="true"] .doc-mermaid-source { border-bottom: 1px solid var(--color-border-default); }
+.doc-prose .doc-mermaid-body { --pele-bg: transparent; --pele-fg: var(--color-text-primary); --pele-muted: var(--color-text-muted); --pele-line: var(--color-text-secondary); --pele-surface: var(--color-surface-panel); --pele-surface-alt: var(--color-surface-hover); --pele-border: var(--color-border-light); --pele-accent: var(--color-accent-primary); --pele-font: var(--font-sans); }
+.doc-prose .doc-mermaid-preview { display: flex; justify-content: center; overflow-x: auto; padding: 0.5em 0; cursor: pointer; }
+.doc-prose .doc-mermaid[data-editing="true"] .doc-mermaid-preview { cursor: default; }
+.doc-prose .doc-mermaid-preview[data-empty="true"] { display: none; }
+.doc-prose .doc-mermaid-body[data-pending="true"] { min-height: 8rem; }
+.doc-prose .doc-mermaid-preview svg { max-width: 100%; height: auto; }
+.doc-prose .doc-mermaid-error, .doc-prose .doc-mermaid-hint { margin: 0.4em 0 0; font-size: 0.8rem; line-height: 1.4; color: var(--color-text-muted); }
+.doc-prose .doc-mermaid-hint[role="button"] { cursor: pointer; }

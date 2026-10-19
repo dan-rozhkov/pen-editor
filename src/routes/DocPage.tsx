@@ -3,7 +3,7 @@ import { CaretDownIcon, CheckIcon, FilePlusIcon, TrashIcon } from "@phosphor-ico
 import type { Editor } from "@tiptap/react";
 import { EditorProviders } from "@/components/EditorProviders";
 import { DocEditor } from "@/components/doc/DocEditor";
-import { DocToolbar } from "@/components/doc/DocToolbar";
+import { DocTitle } from "@/components/doc/ui/DocTitle";
 import { useDocSync } from "@/components/doc/useDocSync";
 import {
   AlertDialog,
@@ -24,7 +24,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/IconButton";
-import { Input } from "@/components/ui/input";
 import { useHtmlRouteClass } from "@/hooks/useHtmlRouteClass";
 
 /**
@@ -50,7 +49,7 @@ export default function DocPage() {
           </main>
         ) : (
           <>
-            <header className="sticky top-0 z-10 flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border-default bg-surface-panel px-3 py-1.5">
+            <header className="sticky top-0 z-10 flex items-center gap-2 bg-surface-panel px-3 py-1.5">
               <DropdownMenu>
                 <DropdownMenuTrigger render={<Button variant="ghost" size="sm" aria-label="Documents" className="text-text-muted" />}>
                   Documents <CaretDownIcon />
@@ -71,23 +70,14 @@ export default function DocPage() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Input
-                aria-label="Title"
-                value={sync.title}
-                onChange={(event) => sync.setTitle(event.target.value)}
-                placeholder="Untitled"
-                className="h-7 min-w-0 flex-1 bg-transparent px-1.5 text-sm font-medium sm:w-48 sm:flex-none md:text-sm"
-              />
-              <span aria-hidden className="mx-1 hidden h-4 w-px shrink-0 bg-border-default sm:block" />
-              <div className="order-last flex w-full flex-wrap sm:order-none sm:w-auto sm:min-w-0 sm:flex-1">
-                <DocToolbar editor={editor} />
-              </div>
+              <span className="min-w-0 flex-1 truncate text-xs text-text-muted">{sync.title.trim() || "Untitled"}</span>
               <IconButton tooltip="New document" variant="ghost" size="icon-sm" className="text-text-muted" onClick={sync.create}>
                 <FilePlusIcon />
               </IconButton>
             </header>
-            <main className="flex-1 px-6 py-10 sm:py-14">
-              <div className="mx-auto w-full max-w-[720px]">
+            <main className="flex-1 px-6 pb-24 pt-10 sm:px-24 sm:pt-16">
+              <div className="mx-auto w-full max-w-[708px]">
+                <DocTitle value={sync.title} onChange={sync.setTitle} onLeave={() => editor?.commands.focus("start")} />
                 <DocEditor
                   key={sync.editorId}
                   markdown={sync.markdown}

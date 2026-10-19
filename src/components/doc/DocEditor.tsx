@@ -1,7 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import Placeholder from "@tiptap/extension-placeholder";
 import { DOC_EXTENSIONS } from "./docExtensions";
+import { SlashCommand } from "./slash/SlashCommand";
+import { BlockHandle } from "./blockHandle/BlockHandle";
+import { BubbleToolbar } from "./ui/BubbleToolbar";
+import { ImagePrompt } from "./ui/ImagePrompt";
 import "./docProse.css";
 
 interface Props {
@@ -13,17 +17,25 @@ interface Props {
   onEditor: (editor: Editor | null) => void;
 }
 
+function placeholderFor({ node }: { node: { type: { name: string }; attrs: Record<string, unknown> } }): string {
+  return node.type.name === "heading" ? `Heading ${node.attrs.level}` : "Write, or press '/' for commands…";
+}
+
 export function DocEditor({ markdown, revision, onMarkdown, onSynced, onEditor }: Props) {
   const handlers = useRef({ onMarkdown, onSynced });
   useEffect(() => {
     handlers.current = { onMarkdown, onSynced };
   });
 
+  // The view exists only after mount ("create"); the overlays read `editor.view.dom`.
+  const [ready, setReady] = useState(false);
   const editor = useEditor({
-    extensions: [...DOC_EXTENSIONS, Placeholder.configure({ placeholder: "Start writing…" })],
+    extensions: [...DOC_EXTENSIONS, SlashCommand, Placeholder.configure({ placeholder: placeholderFor })],
     content: markdown,
     contentType: "markdown",
     editorProps: { attributes: { class: "doc-prose", "aria-label": "Document" } },
+    onCreate: () => setReady(true),
+    onDestroy: () => setReady(false),
     onUpdate: ({ editor: e }) => handlers.current.onMarkdown(e.getMarkdown()),
   });
 
@@ -44,5 +56,17 @@ export function DocEditor({ markdown, revision, onMarkdown, onSynced, onEditor }
     handlers.current.onSynced(editor.getMarkdown());
   }, [editor, markdown, revision]);
 
-  return <EditorContent editor={editor} />;
+  const containerRef = useRef<HTMLDivElement>(null);
+  return (
+    <div ref={containerRef} className="relative">
+      <EditorContent editor={editor} />
+      {editor && ready && (
+        <>
+          <BubbleToolbar editor={editor} />
+          <BlockHandle editor={editor} containerRef={containerRef} />
+          <ImagePrompt editor={editor} />
+        </>
+      )}
+    </div>
+  );
 }
