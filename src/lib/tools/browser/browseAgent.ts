@@ -23,16 +23,30 @@ import {
   applyFinalChecks,
   finalChecksApply,
   parseQaChecks,
+  parseJsonObject,
+  qaJudgeApplies,
+  judgePageOf,
+  applyQaJudge,
+  qaJudgeError,
+  parseQaJudgeVerdict,
+  QA_JUDGE_PAGE_MAX_CHARS,
+  QA_JUDGE_TIMEOUT_MS,
   type QaCheck,
+  type QaJudgePage,
+  type QaJudgeResult,
   type BrowseAgentResult,
 } from "@sideform/browser-agent/agent/session";
+import { executeBrowseTool } from "@sideform/browser-agent/agent/execute";
 import { parsePageFixture, type FixtureNetworkRule } from "@sideform/browser-agent/fixture";
 import { Chat } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai";
 import { getRequestUserId } from "@/lib/auth/authState";
+import { apiFetch, resolveApiUrl } from "@/lib/apiBase";
+import { combineSignals } from "@/lib/abortSignals";
 import { createChatTransport, CLIENT_CAPABILITIES } from "@/lib/chatTransport";
 import type { ToolHandler } from "../../toolRegistry";
 import { CLOSE_SESSION_TIMEOUT_MS, closeBrowserSession, getBrowserBridge, isDesktopBrowserAvailable, type BrowserBridge } from "./bridge";
+import { peBase } from "./shared";
 import { isIsolatedQaCall, rememberRunSession, runSessionId } from "./isolation";
 import { acquireBrowseSlot } from "@/lib/browseRunLimiter";
 import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
@@ -119,20 +133,253 @@ async function boundedQaAssert(
 ): Promise<string> {
   const fail = (message: string) => JSON.stringify({ error: `${QA_ASSERT_TOOL}: ${message}` });
   if (signal.aborted) return fail("aborted.");
+  // A rejection of the assert itself is not a timeout: it goes on to the caller, as before.
+  const out = await withTimeout<{ value: string } | { thrown: unknown } | undefined>(
+    () =>
+      executeQaAssert(input, bridge, recorder).then(
+        (value) => ({ value }),
+        (thrown: unknown) => ({ thrown }),
+      ),
+    QA_FINAL_CHECKS_TIMEOUT_MS,
+    undefined,
+    signal,
+  );
+  if (!out) return fail(signal.aborted ? "aborted." : "timed out.");
+  if ("thrown" in out) throw out.thrown;
+  return out.value;
+}
+
+/** Each page read for the QA judge may take this long. */
+const QA_JUDGE_READ_MS = 5_000;
+/** The server has its own QA_JUDGE_TIMEOUT_MS budget; the client waits a little longer than it. */
+const QA_JUDGE_CLIENT_TIMEOUT_MS = QA_JUDGE_TIMEOUT_MS + 10_000;
+/** The judge request must end this long before the tool's outer timeout (the rest of the run's cleanup runs beside it). */
+const QA_JUDGE_TAIL_MARGIN_MS = 15_000;
+/** With less than this left for the request, the judge is skipped. */
+const QA_JUDGE_MIN_BUDGET_MS = 5_000;
+const QA_JUDGE_TITLE_MAX_CHARS = 1024;
+const QA_JUDGE_URL_MAX_CHARS = 4096;
+const NO_TIME_FOR_JUDGE = "no time left for the judge";
+
+// The judge endpoint's limits (pen-editor-backend), applied on the client so a long run is not refused.
+const JUDGE_SCENARIO_MAX_CHARS = 8000;
+const JUDGE_MAX_STEPS = 30;
+const JUDGE_MAX_CHECKS = 400;
+const JUDGE_STEP_ARGS_MAX_JSON = 2000;
+const JUDGE_STEP_ERROR_MAX_CHARS = 500;
+const JUDGE_CHECK_MAX_JSON = 2000;
+const JUDGE_DIAGNOSTIC_MAX_CHARS = 500;
+/** The route's bodyLimit is 160 KB; the client stays under this. */
+const JUDGE_BODY_MAX_BYTES = 150_000;
+
+type JudgeQa = NonNullable<ReturnType<typeof qaResultOf>>;
+
+/**
+ * Whether the backend has the judge route. "off" (a 404/405/501, `{disabled:true}`, or a 200 that is not a judge answer)
+ * makes later runs skip the page reads and the request; "on" (an answer from the route) makes a failure BEFORE the request
+ * visible as `qa.judge.error`. Per backend base URL; the page lives for one session, so it is never refreshed.
+ */
+type JudgeAvailability = "unknown" | "on" | "off";
+/** A route found missing is looked up again after this long (a deploy may add it). */
+const JUDGE_OFF_TTL_MS = 10 * 60_000;
+const judgeAvailability = new Map<string, { state: JudgeAvailability; at: number }>();
+const judgeBase = () => resolveApiUrl("");
+const judgeAvailabilityOf = (): JudgeAvailability => {
+  const entry = judgeAvailability.get(judgeBase());
+  if (!entry) return "unknown";
+  if (entry.state === "off" && Date.now() - entry.at >= JUDGE_OFF_TTL_MS) {
+    judgeAvailability.delete(judgeBase());
+    return "unknown";
+  }
+  return entry.state;
+};
+/** Test seam: forgets what the app learned about the judge route. */
+export function resetJudgeAvailability(): void {
+  judgeAvailability.clear();
+}
+
+/**
+ * One bounded call: its value, or `onTimeout` when it ran out of time, rejected, or `signal` aborted.
+ * A slow call keeps running in the background; its late result is dropped.
+ */
+async function withTimeout<T>(call: () => Promise<T>, ms: number, onTimeout: T, signal?: AbortSignal): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let onAbort: (() => void) | undefined;
   try {
     return await Promise.race([
-      executeQaAssert(input, bridge, recorder),
-      new Promise<string>((resolve) => {
-        timer = setTimeout(() => resolve(fail("timed out.")), QA_FINAL_CHECKS_TIMEOUT_MS);
-        onAbort = () => resolve(fail("aborted."));
-        signal.addEventListener("abort", onAbort, { once: true });
+      call().catch(() => onTimeout),
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(onTimeout), ms);
+        if (signal) {
+          onAbort = () => resolve(onTimeout);
+          if (signal.aborted) onAbort();
+          else signal.addEventListener("abort", onAbort, { once: true });
+        }
       }),
     ]);
   } finally {
     clearTimeout(timer);
-    if (onAbort) signal.removeEventListener("abort", onAbort);
+    if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+  }
+}
+
+const cutChars = (text: string, max: number): string => (text.length > max ? text.slice(0, max) : text);
+
+/** `value` when its JSON fits `max`; else the JSON as a string cut so that its own JSON fits, ending in an ellipsis. */
+function capJson(value: unknown, max: number): unknown {
+  const json = JSON.stringify(value) ?? "null";
+  if (json.length <= max) return value;
+  let keep = max - 10;
+  let text = `${json.slice(0, keep)}…`;
+  while (JSON.stringify(text).length > max && keep > 0) {
+    keep -= 50;
+    text = `${json.slice(0, Math.max(keep, 0))}…`;
+  }
+  return text;
+}
+
+type JudgeCheck = NonNullable<JudgeQa["checks"]>[number];
+
+/** A check record as the endpoint takes it: `check` over its JSON limit becomes `{ type, cut: true }`; `actual` and `error` are cut. */
+function capCheck(check: JudgeCheck): JudgeCheck {
+  const type = (check.check as { type?: unknown } | undefined)?.type;
+  return {
+    ...check,
+    ...(JSON.stringify(check.check).length > JUDGE_CHECK_MAX_JSON
+      ? { check: { type: typeof type === "string" ? type.slice(0, 100) : "unknown", cut: true } }
+      : {}),
+    ...(typeof check.actual === "string" ? { actual: cutChars(check.actual, JUDGE_DIAGNOSTIC_MAX_CHARS) } : {}),
+    ...(typeof check.error === "string" ? { error: cutChars(check.error, JUDGE_DIAGNOSTIC_MAX_CHARS) } : {}),
+  } as JudgeCheck;
+}
+
+/** Exported for tests. At most `max` checks: every failed one first, then the latest passed ones; the original order is kept. */
+export function limitChecks(checks: JudgeCheck[], max: number): JudgeCheck[] {
+  if (checks.length <= max) return checks;
+  const keep = new Set<number>();
+  for (let i = checks.length - 1; i >= 0 && keep.size < max; i--) if (!checks[i].passed) keep.add(i);
+  for (let i = checks.length - 1; i >= 0 && keep.size < max; i--) keep.add(i);
+  return checks.filter((_, i) => keep.has(i));
+}
+
+/**
+ * The `qa` fields the judge endpoint takes, cut to its limits. Never the verdict, the reason or the outcome,
+ * and no `qa_verdict` step. Where a count limit applies the LAST entries are kept (checks: failed ones first).
+ */
+function judgeQaBody(qa: JudgeQa) {
+  const steps = qa.steps
+    .filter((step) => step.tool !== QA_VERDICT_TOOL)
+    .slice(-JUDGE_MAX_STEPS)
+    .map((step) => ({
+      ...step,
+      ...(step.args !== undefined ? { args: capJson(step.args, JUDGE_STEP_ARGS_MAX_JSON) } : {}),
+      ...(typeof step.error === "string" ? { error: cutChars(step.error, JUDGE_STEP_ERROR_MAX_CHARS) } : {}),
+    }));
+  const diagnostics = (list: string[] | undefined) => list?.map((entry) => cutChars(entry, JUDGE_DIAGNOSTIC_MAX_CHARS));
+  return {
+    steps,
+    ...(qa.stepsDropped !== undefined ? { stepsDropped: qa.stepsDropped } : {}),
+    ...(qa.checks !== undefined ? { checks: limitChecks(qa.checks, JUDGE_MAX_CHECKS).map(capCheck) } : {}),
+    ...(qa.consoleErrors !== undefined ? { consoleErrors: diagnostics(qa.consoleErrors) } : {}),
+    ...(qa.consoleErrorsDropped !== undefined ? { consoleErrorsDropped: qa.consoleErrorsDropped } : {}),
+    ...(qa.failedRequests !== undefined ? { failedRequests: diagnostics(qa.failedRequests) } : {}),
+    ...(qa.failedRequestsDropped !== undefined ? { failedRequestsDropped: qa.failedRequestsDropped } : {}),
+  };
+}
+
+/** The page as the endpoint takes it: text, title and url cut to the endpoint's limits. */
+function judgePageBody(page: QaJudgePage): QaJudgePage {
+  const cutText = page.text.length > QA_JUDGE_PAGE_MAX_CHARS;
+  return {
+    url: cutChars(page.url, QA_JUDGE_URL_MAX_CHARS),
+    title: cutChars(page.title, QA_JUDGE_TITLE_MAX_CHARS),
+    text: cutChars(page.text, QA_JUDGE_PAGE_MAX_CHARS),
+    ...(cutText || page.truncated ? { truncated: true } : {}),
+  };
+}
+
+const utf8Bytes = (text: string): number => new TextEncoder().encode(text).length;
+
+/**
+ * Exported for tests. The request body as JSON, within the route's body limit (JUDGE_BODY_MAX_BYTES of UTF-8). When it is over, in this order:
+ * passed checks are dropped (oldest first), then step args become "…", then the page text is cut further (`truncated` set).
+ */
+export function judgeRequestJson(scenario: string, qaIn: JudgeQa, pageIn: QaJudgePage): string {
+  const qa = judgeQaBody(qaIn);
+  const page = judgePageBody(pageIn);
+  const build = () => JSON.stringify({ scenario: cutChars(scenario, JUDGE_SCENARIO_MAX_CHARS), qa, page });
+  let json = build();
+  const over = () => utf8Bytes((json = build())) > JUDGE_BODY_MAX_BYTES;
+  if (!over()) return json;
+  if (qa.checks) {
+    // The first batch of passed checks goes at once; the real size is re-measured after each batch.
+    while (over()) {
+      const index = qa.checks.findIndex((c) => c.passed);
+      if (index < 0) break;
+      qa.checks.splice(index, 1);
+    }
+  }
+  for (const step of qa.steps) {
+    if (!over()) return json;
+    step.args = "…";
+  }
+  while (over() && page.text.length > 0) {
+    page.text = page.text.slice(0, Math.floor(page.text.length * 0.8));
+    page.truncated = true;
+  }
+  return json;
+}
+
+/**
+ * POST /api/browse/judge (same transport as the chat: base URL and session cookie via apiFetch).
+ * Never rejects: a failure, a timeout or an abort is `{ error }`. A route the backend does not have (404, 405, 501),
+ * `{ disabled: true }` and a 200 that is not a judge answer are "disabled". Records what it learned in `judgeAvailability`.
+ */
+async function askJudgeBackend(
+  body: { scenario: string; qa: JudgeQa; page: QaJudgePage },
+  signals: Array<AbortSignal | undefined>,
+  timeoutMs: number,
+): Promise<QaJudgeResult | "disabled"> {
+  const base = judgeBase();
+  const setAvailability = (state: JudgeAvailability) => judgeAvailability.set(base, { state, at: Date.now() });
+  let timeout: AbortSignal | undefined;
+  let signal: AbortSignal | undefined;
+  try {
+    // Built inside the try: a runtime without these APIs gives `{ error }`, never a rejection.
+    timeout = AbortSignal.timeout(timeoutMs);
+    signal = combineSignals([...signals, timeout]);
+    const res = await apiFetch("/api/browse/judge", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: judgeRequestJson(body.scenario, body.qa, body.page),
+      signal,
+    });
+    if (res.status === 404 || res.status === 405 || res.status === 501) {
+      setAvailability("off");
+      return "disabled";
+    }
+    // Too large says nothing about the route: an error, the state stays.
+    if (res.status === 413) return qaJudgeError("judge request too large");
+    const data = parseJsonObject(await res.text());
+    const judgeShaped = "verdict" in data || "error" in data || "disabled" in data;
+    if (!res.ok) {
+      // A JSON `error` is the judge route's own answer; any other failure says nothing about the route.
+      if (typeof data.error === "string" && data.error) {
+        setAvailability("on");
+        return qaJudgeError(data.error);
+      }
+      return qaJudgeError(`judge responded ${res.status}`);
+    }
+    if (data.disabled === true || !judgeShaped) {
+      setAvailability("off");
+      return "disabled";
+    }
+    setAvailability("on");
+    if (typeof data.error === "string") return qaJudgeError(data.error);
+    const parsed = parseQaJudgeVerdict(data);
+    return parsed.ok ? parsed.value : qaJudgeError(`invalid judge answer: ${parsed.errors.join("; ")}`);
+  } catch (error) {
+    return qaJudgeError(timeout?.aborted ? "judge request timed out" : signal?.aborted ? "aborted" : error);
   }
 }
 
@@ -149,7 +396,28 @@ export function nestedChatId(sessionId: string | undefined, toolCallId: string |
  * wait plus run, and an abort while waiting answers "aborted" with no browser.
  */
 export const browseAgent: ToolHandler = async (args, context) => {
-  if (!isIsolatedQaCall(args)) return runBrowseAgent(args, context, undefined, undefined);
+  // The tool's outer timeout started now: the QA judge has to end before it.
+  const outerEnd = Date.now() + (context?.timeoutMs ?? BROWSE_AGENT_OUTER_TIMEOUT_MS);
+  // Stops a started judge request when anything throws after it started (the body or the cleanup): nobody awaits it then.
+  const judgeAbort = new AbortController();
+  let outcome: RunOutcome;
+  try {
+    outcome = await runWithCleanup(args, context, outerEnd, judgeAbort.signal);
+  } catch (error) {
+    judgeAbort.abort();
+    throw error;
+  }
+  // The QA judge request is awaited only here, after ALL cleanup (viewport reset, session close, slot release).
+  return typeof outcome === "string" ? outcome : outcome();
+};
+
+const runWithCleanup = async (
+  args: Record<string, unknown>,
+  context: Parameters<ToolHandler>[1],
+  outerEnd: number,
+  judgeSignal: AbortSignal,
+): Promise<RunOutcome> => {
+  if (!isIsolatedQaCall(args)) return runBrowseAgent(args, context, undefined, undefined, outerEnd, judgeSignal);
   const waitStart = Date.now();
   const slot = await acquireBrowseSlot(context?.signal ?? new AbortController().signal);
   if (!slot) return JSON.stringify({ status: "aborted", steps: 0 });
@@ -173,7 +441,7 @@ export const browseAgent: ToolHandler = async (args, context) => {
     const runSession = runSessionId(context?.sessionId, context?.toolCallId);
     if (context?.toolCallId) rememberRunSession(context.toolCallId, runSession);
     try {
-      return await runBrowseAgent(args, context, runSession, deadlineMs);
+      return await runBrowseAgent(args, context, runSession, deadlineMs, outerEnd, judgeSignal);
     } finally {
       // Whatever happened inside (a throw during setup parsing included), the
       // session is closed, after the fixture release and before the slot is freed.
@@ -191,6 +459,12 @@ export const browseAgent: ToolHandler = async (args, context) => {
   }
 };
 
+/**
+ * What a run hands to the handler: the result JSON, or (a QA run whose `passed` outcome the judge reviews)
+ * a function that waits for the judge request and returns the JSON. The handler calls it last.
+ */
+type RunOutcome = string | (() => Promise<string>);
+
 /** Below this much deadline left after waiting for a slot, an isolated run is not worth starting. */
 const MIN_ISOLATED_RUN_MS = 60_000;
 
@@ -205,19 +479,8 @@ const CLEAR_EMULATION_TIMEOUT_MS = 5_000;
  * run end or a fixture release.
  */
 async function clearActEmulation(bridge: BrowserBridge | undefined): Promise<void> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    await Promise.race([
-      Promise.resolve(bridge?.clearActEmulation?.()).catch(() => undefined),
-      new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, CLEAR_EMULATION_TIMEOUT_MS);
-      }),
-    ]);
-  } catch {
-    // A reset must not change the run's result.
-  } finally {
-    clearTimeout(timer);
-  }
+  // A reset must not change the run's result: a rejection or a hang is ignored.
+  await withTimeout(async () => void (await bridge?.clearActEmulation?.()), CLEAR_EMULATION_TIMEOUT_MS, undefined);
 }
 
 const runBrowseAgent = async (
@@ -225,9 +488,11 @@ const runBrowseAgent = async (
   context: Parameters<ToolHandler>[1],
   runSession: string | undefined,
   deadlineMs: number | undefined,
-): Promise<string> => {
+  outerEnd: number,
+  judgeSignal: AbortSignal,
+): Promise<RunOutcome> => {
   try {
-    return await runBrowseAgentBody(args, context, runSession, deadlineMs);
+    return await runBrowseAgentBody(args, context, runSession, deadlineMs, outerEnd, judgeSignal);
   } finally {
     await clearActEmulation(getBrowserBridge(context?.sessionId, runSession));
   }
@@ -238,7 +503,9 @@ const runBrowseAgentBody = async (
   context: Parameters<ToolHandler>[1],
   runSession: string | undefined,
   deadlineMs: number | undefined,
-): Promise<string> => {
+  outerEnd: number,
+  judgeSignal: AbortSignal,
+): Promise<RunOutcome> => {
   const goal = typeof args.goal === "string" ? args.goal.trim() : "";
   if (!goal) return JSON.stringify(goalRequiredResult());
   const url = typeof args.url === "string" ? args.url.trim() : "";
@@ -466,6 +733,40 @@ const runBrowseAgentBody = async (
     }
     return qa;
   };
+  /**
+   * The QA judge (spec 2026-10-19-qa-judge-design.md): for a `passed` outcome, reads the final page NOW (the
+   * fixture mocks still live) through the run's own bridge (the isolated session's browser for an isolated run;
+   * not through executeToolCall, so the parent chat's loop guard and analytics never see it), starts the request
+   * WITHOUT awaiting it and returns `settle`, which the handler awaits after ALL cleanup. The job never rejects.
+   * The request ends at least QA_JUDGE_TAIL_MARGIN_MS before the tool's outer timeout.
+   * A judge the backend does not have ("off") costs nothing. A failure before the request shows as `qa.judge.error`
+   * only once the route is known to exist ("on"); otherwise the result stays as it was.
+   */
+  const startJudge = async (qa: Awaited<ReturnType<typeof buildQa>>): Promise<(() => Promise<typeof qa>) | undefined> => {
+    if (!qa || !qaJudgeApplies(qa) || judgeAvailabilityOf() === "off") return undefined;
+    const judgeFailed = (error: string) => async () => (judgeAvailabilityOf() === "on" ? applyQaJudge(qa, { error }) : qa);
+    if (signal?.aborted) return judgeFailed("aborted");
+    const timeLeft = () => outerEnd - Date.now() - QA_JUDGE_TAIL_MARGIN_MS;
+    // Both reads, then the cleanup tail the run reserves, must fit before the margin.
+    if (timeLeft() < 2 * QA_JUDGE_READ_MS + CHECKPOINT_CALL_TIMEOUT_MS + (runSession ? CLOSE_SESSION_TIMEOUT_MS : 0)) return judgeFailed(NO_TIME_FOR_JUDGE);
+    const nested = (name: string, input: Record<string, unknown>) =>
+      withTimeout<string | undefined>(() => executeBrowseTool(bridge, name, input, peBase), QA_JUDGE_READ_MS, undefined, signal);
+    const read = await nested("browse_read", { maxChars: QA_JUDGE_PAGE_MAX_CHARS });
+    if (signal?.aborted) return judgeFailed("aborted");
+    const parsedRead = read === undefined ? {} : parseJsonObject(read);
+    const complete = typeof parsedRead.text === "string" && parsedRead.text !== "" && typeof parsedRead.url === "string" && parsedRead.url !== "";
+    const snapshot = complete ? undefined : await nested("browse_snapshot", {});
+    if (signal?.aborted) return judgeFailed("aborted");
+    const page = judgePageOf(read, snapshot);
+    if ("error" in page) return judgeFailed(page.error);
+    const left = timeLeft();
+    if (left < QA_JUDGE_MIN_BUDGET_MS) return judgeFailed(NO_TIME_FOR_JUDGE);
+    const job = askJudgeBackend({ scenario: goal, qa, page }, [signal, judgeSignal], Math.min(QA_JUDGE_CLIENT_TIMEOUT_MS, left));
+    return async () => {
+      const judged = await job;
+      return judged === "disabled" ? qa : applyQaJudge(qa, judged);
+    };
+  };
   const toJson = (result: BrowseAgentResult, extra: Record<string, unknown>, checkpoint: unknown, qa: Awaited<ReturnType<typeof buildQa>>): string => {
     if (!recorder) return JSON.stringify({ ...result, ...extra, ...(checkpoint ? { checkpoint } : {}) });
     // Key order as the package's runBrowseAgent: `qa` before `error` and `setupStage`; the verdict field is folded into `qa`.
@@ -480,13 +781,24 @@ const runBrowseAgentBody = async (
     });
   };
 
+  /** The run's result: the JSON at once, or (a judge request is pending) a function that waits for the judge first. */
+  const finishJson = (
+    result: BrowseAgentResult,
+    extra: Record<string, unknown>,
+    checkpoint: unknown,
+    qa: Awaited<ReturnType<typeof buildQa>>,
+    settleJudge: Awaited<ReturnType<typeof startJudge>>,
+  ): RunOutcome => (settleJudge ? async () => toJson(result, extra, checkpoint, await settleJudge()) : toJson(result, extra, checkpoint, qa));
+
   if (!hasSetup && !hasResume) {
     const cp = openCheckpoint(true);
     try {
       await cp.begin();
       const result = await session.run(goal, driver, { url: url || undefined, toolCallId });
       const qa = await buildQa(result);
-      return toJson(result, {}, await finishCheckpoint(cp, result), qa);
+      const settleJudge = await startJudge(qa);
+      const checkpoint = await finishCheckpoint(cp, result);
+      return finishJson(result, {}, checkpoint, qa, settleJudge);
     } finally {
       if (!finished) await cp.finish(THREW_RESULT);
     }
@@ -568,7 +880,9 @@ const runBrowseAgentBody = async (
         }),
     });
     const qa = await buildQa(result);
-    return toJson(result, setupApplied ? { setupApplied: true } : {}, await finishCheckpoint(cp, result, releaseFixture), qa);
+    const settleJudge = await startJudge(qa);
+    const checkpoint = await finishCheckpoint(cp, result, releaseFixture);
+    return finishJson(result, setupApplied ? { setupApplied: true } : {}, checkpoint, qa, settleJudge);
   } finally {
     // On the normal path finishCheckpoint already ran. Otherwise (a throw) this
     // still releases the fixture (before the journal stop) and stops the journal.

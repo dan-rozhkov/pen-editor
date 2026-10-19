@@ -27,6 +27,7 @@
  */
 
 import { apiFetch } from "@/lib/apiBase";
+import { combineSignals } from "@/lib/abortSignals";
 import { useSceneStore } from "@/store/sceneStore";
 import type { EmbedNode, FlatSceneNode } from "@/types/scene";
 import { takeTouchedEmbeds } from "./tasteCheckRegistry";
@@ -160,25 +161,6 @@ function capHtml(html: string): string {
 }
 
 /**
- * Combines an optional caller-supplied signal (fires on Stop) with our own
- * internal timeout signal, so the fetch below aborts on whichever comes
- * first. `AbortSignal.any` is the standard combinator (Node 20+ / all
- * evergreen browsers, and available in this project's TS lib target); the
- * manual fallback only matters for a runtime old enough to lack it.
- */
-function combineSignals(a: AbortSignal, b: AbortSignal | undefined): AbortSignal {
-  if (!b) return a;
-  if (typeof AbortSignal.any === "function") return AbortSignal.any([a, b]);
-  if (a.aborted) return a;
-  if (b.aborted) return b;
-  const controller = new AbortController();
-  const onAbort = (source: AbortSignal) => controller.abort(source.reason);
-  a.addEventListener("abort", () => onAbort(a), { once: true });
-  b.addEventListener("abort", () => onAbort(b), { once: true });
-  return controller.signal;
-}
-
-/**
  * Run a taste check for whichever of `nodeIds` are still eligible (embeds
  * with non-empty html and fewer than `MAX_CHECKS_PER_EMBED` completed
  * rounds), reading each node's current `htmlContent`/`name` from the live
@@ -231,7 +213,7 @@ export async function runTasteCheckForEmbeds(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
-        signal: combineSignals(AbortSignal.timeout(TASTE_CHECK_TIMEOUT_MS), signal),
+        signal: combineSignals([AbortSignal.timeout(TASTE_CHECK_TIMEOUT_MS), signal]),
       });
     } catch (err) {
       // A caller-initiated abort (Stop) is not a circuit-breaker failure —
