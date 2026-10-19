@@ -9,7 +9,6 @@ const setInput = vi.fn();
 const setMessages = vi.fn();
 const stop = vi.fn();
 const clearError = vi.fn();
-const removeQueuedMessage = vi.fn();
 
 let mockState: {
   messages: UIMessage[];
@@ -37,8 +36,6 @@ vi.mock("@/hooks/useDesignChat", () => ({
       stop,
       error: state.error,
       clearError,
-      queuedMessages: [],
-      removeQueuedMessage,
     };
   },
 }));
@@ -137,19 +134,15 @@ describe("<ChatPanelContent />", () => {
     expect(screen.queryByLabelText("Send")).toBeNull();
   });
 
-  it("shows a queue-send control alongside Stop while loading with content in the composer", () => {
+  it("shows a send-now control alongside Stop while loading with content in the composer", () => {
     mockState.isLoading = true;
-    mockState.input = "queue me";
+    mockState.input = "send me now";
     render(<ChatPanelContent />);
     expect(screen.getByLabelText("Stop")).toBeTruthy();
-    expect(screen.getByLabelText("Queue message")).toBeTruthy();
+    expect(screen.getByLabelText("Send now")).toBeTruthy();
   });
 
-  // FIX 2 regression: clearing the chat must also drop anything sitting in
-  // the messageQueue, or the auto-drain effect sends a message into the
-  // now-empty session once the in-flight turn finishes.
-  it("clears the message queue when Clear chat is used", () => {
-    useChatStore.getState().enqueueMessage("tab-1", { text: "queued while busy" });
+  it("empties the transcript when Clear chat is used", () => {
     mockState.messages = [
       { id: "u1", role: "user", parts: [{ type: "text", text: "hi" }] },
     ];
@@ -162,7 +155,6 @@ describe("<ChatPanelContent />", () => {
     useChatStore.getState().sessionActions["tab-1"]?.clearChat();
 
     expect(setMessages).toHaveBeenCalledWith([]);
-    expect(useChatStore.getState().messageQueue["tab-1"]).toBeUndefined();
   });
 
   it("drops the chat's browser checkpoints when Clear chat is used", () => {

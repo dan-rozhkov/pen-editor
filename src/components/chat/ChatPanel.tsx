@@ -29,7 +29,6 @@ import { MessageList } from "./MessageList";
 import { ChatSessionIdContext } from "./ChatSessionContext";
 import { ChatInput } from "./ChatInput";
 import { ChatList } from "./ChatList";
-import { QueuedMessagePanel } from "./QueuedMessagePanel";
 import { CloudBrowserPanel } from "./CloudBrowserPanel";
 import { releaseCloudBrowser } from "@/lib/cloudBrowser";
 import { useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
@@ -193,8 +192,6 @@ function ChatSession({
     clearError,
     retryState,
     addToolOutput,
-    queuedMessages,
-    removeQueuedMessage,
     status,
   } = useDesignChat({ sessionId });
 
@@ -244,7 +241,6 @@ function ChatSession({
   const chatTitle = useChatStore(
     (s) => s.chats.find((c) => c.id === sessionId)?.title,
   );
-  const hasQueuedMessages = queuedMessages.length > 0;
 
   // Derives the chat's title from its first user message, once. `applyAutoTitle`
   // itself is a no-op once the chat's `titleIsAuto` flag is cleared, but the ref
@@ -276,7 +272,6 @@ function ChatSession({
     chatId: sessionId,
     isBusy: isLoading,
     awaitingAnswer,
-    hasQueuedMessages,
   });
 
   // Reports new activity — a new assistant reply, or the agent starting to
@@ -328,10 +323,6 @@ function ChatSession({
       },
       clearChat: () => {
         sessionDataRef.current.setMessages([]);
-        // Also drop any messages queued while the agent was busy — otherwise
-        // the auto-drain effect in useDesignChat sends a "cleared" message
-        // into the now-empty session once the in-flight turn finishes.
-        useChatStore.getState().clearMessageQueue(sessionId);
         // An empty transcript has no context usage yet — leaving the old
         // reading would show a stale meter over nothing.
         useChatStore.getState().clearContextTokens(sessionId);
@@ -439,21 +430,9 @@ function ChatSession({
           and when this chat has no live session). */}
       <CloudBrowserPanel chatId={sessionId} />
 
-      {/* Queued-message panel — sits between the transcript and
-          the composer, its bottom 12px hidden under the composer card. When
-          it renders (own `mt-2` matches the composer's usual top margin
-          below), the composer's top margin is dropped so the panel's `-mb-3`
-          overlap isn't undone by a competing positive margin. */}
-      <QueuedMessagePanel
-        queuedMessages={queuedMessages}
-        onRemoveQueued={removeQueuedMessage}
-      />
-
       {/* Composer */}
       <div
-        className={`relative z-10 m-3 shrink-0 overflow-hidden rounded-xl border border-border-default bg-surface-panel shadow-[0_1px_3px_rgba(0,0,0,0.08)] focus-within:border-accent-light ${
-          hasQueuedMessages ? "mt-0" : "mt-2"
-        }`}
+        className="relative z-10 m-3 mt-2 shrink-0 overflow-hidden rounded-xl border border-border-default bg-surface-panel shadow-[0_1px_3px_rgba(0,0,0,0.08)] focus-within:border-accent-light"
       >
         <ChatInput
           sessionId={sessionId}
@@ -648,9 +627,9 @@ export function ChatPanelContent({
         </Tooltip>
       )}
       {/* Stop above always stays available while loading; this button is the
-          mouse/touch affordance for queuing a message on top of a busy agent
-          (Enter already does this) — shown whenever there's content to send,
-          loading or not. */}
+          mouse/touch affordance for sending on top of a busy agent, which
+          interrupts the turn (Enter already does this) — shown whenever
+          there's content to send, loading or not. */}
       {(!isLoading || canSubmit) && (
         <Tooltip>
           <TooltipTrigger
@@ -664,13 +643,15 @@ export function ChatPanelContent({
                     ? "inline-flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-accent-primary text-white hover:bg-accent-primary/90 transition-colors"
                     : "inline-flex size-[30px] shrink-0 items-center justify-center rounded-lg border border-border-default bg-transparent text-text-muted hover:bg-transparent disabled:opacity-100"
                 }
-                aria-label={isLoading ? "Queue message" : "Send"}
+                aria-label={isLoading ? "Send now" : "Send"}
               >
                 <ArrowUpIcon size={18} weight="regular" />
               </button>
             }
           />
-          <TooltipContent>{isLoading ? "Queue message" : "Send"}</TooltipContent>
+          <TooltipContent>
+            {isLoading ? "Stop the agent and send" : "Send"}
+          </TooltipContent>
         </Tooltip>
       )}
     </>

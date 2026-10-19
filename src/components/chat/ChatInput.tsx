@@ -548,12 +548,9 @@ export function ChatInput({
             <TooltipContent>Stop</TooltipContent>
           </Tooltip>
         )}
-        {/* While loading, Stop must stay available at all times, but the
-            queue is the point of this feature — a mouse/touch user needs a
-            visible way to queue a message too, not just Enter. Show Send
-            alongside Stop whenever there's something to submit; it goes
-            through the same `doSubmit` -> onSubmit path, which enqueues
-            instead of sending while the agent is busy. */}
+        {/* While loading, Stop stays available, and a mouse/touch user also
+            gets a visible Send: it goes through the same `doSubmit` ->
+            onSubmit path, which interrupts the turn and sends once it stops. */}
         {!renderFooter && (!isLoading || canSubmit) && (
           <Tooltip>
             <TooltipTrigger
@@ -563,7 +560,7 @@ export function ChatInput({
                   disabled={!canSubmit}
                   className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled transition-colors"
                   aria-label={
-                    isLoading ? "Queue message" : isOnline ? "Send" : OFFLINE_SEND_TITLE
+                    isLoading ? "Send now" : isOnline ? "Send" : OFFLINE_SEND_TITLE
                   }
                 >
                   <PaperPlaneRightIcon size={18} />
@@ -571,7 +568,11 @@ export function ChatInput({
               }
             />
             <TooltipContent>
-              {isLoading ? "Queue message" : isOnline ? "Send" : OFFLINE_SEND_TITLE}
+              {isLoading
+                ? "Stop the agent and send"
+                : isOnline
+                  ? "Send"
+                  : OFFLINE_SEND_TITLE}
             </TooltipContent>
           </Tooltip>
         )}

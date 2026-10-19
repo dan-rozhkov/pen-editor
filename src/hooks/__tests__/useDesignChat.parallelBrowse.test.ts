@@ -116,7 +116,7 @@ describe("parallel isolated QA browse_agent calls", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), { timeout: 3000 });
   });
 
-  it("queues a send while runs are pending instead of sending", async () => {
+  it("a send while runs are pending interrupts them and goes out once they are aborted", async () => {
     stubTurns(callsTurn([{ id: "a", input: { goal: "g", qa: true } }]));
     const { result } = renderHook(() => useDesignChat({ sessionId: "busy-session" }));
     await send(result);
@@ -125,13 +125,14 @@ describe("parallel isolated QA browse_agent calls", () => {
     await act(async () => {
       result.current.sendMessage();
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(result.current.queuedMessages).toHaveLength(1);
-    await act(async () => runs[0].finish("{}"));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3), { timeout: 3000 });
+    expect(runs[0].signal?.aborted).toBe(true);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), { timeout: 3000 });
+    const body = String((fetchMock.mock.calls[1] as unknown as [unknown, RequestInit])[1].body);
+    expect(body).toContain("next");
+    await act(async () => runs[0].finish('{"status":"aborted"}'));
   });
 
-  it("Stop with a queued message: the message goes out once the runs settle", async () => {
+  it("Stop after an interrupting send still delivers the message once the runs settle", async () => {
     stubTurns(callsTurn([{ id: "a", input: { goal: "g", qa: true } }]));
     const { result } = renderHook(() => useDesignChat({ sessionId: "stopq-session" }));
     await send(result);
@@ -139,16 +140,15 @@ describe("parallel isolated QA browse_agent calls", () => {
     act(() => result.current.setInput("after stop"));
     await act(async () => {
       result.current.sendMessage();
+      result.current.stop();
     });
-    act(() => result.current.stop());
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    await act(async () => runs[0].finish('{"status":"aborted"}'));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), { timeout: 3000 });
     const body = String((fetchMock.mock.calls[1] as unknown as [unknown, RequestInit])[1].body);
     expect(body).toContain("after stop");
+    await act(async () => runs[0].finish('{"status":"aborted"}'));
   });
 
-  it("a failed continuation after the runs: the error stays and the held message stays queued", async () => {
+  it("a failed request after an interrupting send keeps the error and does not resend", async () => {
     fetchMock = vi.fn(async () => {
       const n = fetchMock.mock.calls.length;
       if (n === 1) return callsTurn([{ id: "a", input: { goal: "g", qa: true } }]);
@@ -162,11 +162,9 @@ describe("parallel isolated QA browse_agent calls", () => {
     await act(async () => {
       result.current.sendMessage();
     });
-    await act(async () => runs[0].finish("{}"));
     await waitFor(() => expect(result.current.status).toBe("error"), { timeout: 4000 });
     await new Promise((r) => setTimeout(r, 100));
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(result.current.queuedMessages).toHaveLength(1);
   });
 
   it("a provider-executed tool part without output never keeps the chat busy", async () => {
@@ -190,7 +188,6 @@ describe("parallel isolated QA browse_agent calls", () => {
       result.current.sendMessage();
     });
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2));
-    expect(result.current.queuedMessages).toHaveLength(0);
   });
 
   it("Clear chat (setMessages([])) aborts live runs", async () => {

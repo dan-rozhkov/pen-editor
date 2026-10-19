@@ -12,8 +12,8 @@ vi.mock("@/lib/cloudBrowser", () => ({
 }));
 
 const SESSION = { liveViewUrl: "https://live.example/v/1", expiresAt: null };
-const BUSY = { isBusy: true, awaitingAnswer: false, hasQueuedMessages: false };
-const IDLE = { isBusy: false, awaitingAnswer: false, hasQueuedMessages: false };
+const BUSY = { isBusy: true, awaitingAnswer: false };
+const IDLE = { isBusy: false, awaitingAnswer: false };
 
 function setup(initial = BUSY) {
   return renderHook(
@@ -55,13 +55,6 @@ describe("useReleaseCloudBrowserWhenDone", () => {
   it("does not release while awaiting an ask_user answer", () => {
     const { rerender } = setup();
     rerender({ ...IDLE, awaitingAnswer: true });
-    act(() => void vi.advanceTimersByTime(RELEASE_IDLE_MS * 5));
-    expect(release).not.toHaveBeenCalled();
-  });
-
-  it("does not release while messages are queued", () => {
-    const { rerender } = setup();
-    rerender({ ...IDLE, hasQueuedMessages: true });
     act(() => void vi.advanceTimersByTime(RELEASE_IDLE_MS * 5));
     expect(release).not.toHaveBeenCalled();
   });

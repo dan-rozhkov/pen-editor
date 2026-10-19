@@ -172,10 +172,10 @@ describe("<ChatInput />", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("still calls onSubmit on Enter while loading — the caller queues it", () => {
-    // While the agent is busy, Enter no longer no-ops: useDesignChat's
-    // sendPayload queues the message and returns true so the composer
-    // clears, showing up in the queue stack instead of failing silently.
+  it("still calls onSubmit on Enter while loading — the caller interrupts and sends it", () => {
+    // While the agent is busy, Enter does not no-op: useDesignChat's
+    // sendPayload stops the turn, sends the message once the stop settles and
+    // returns true so the composer clears.
     const onSubmit = vi.fn(() => true);
     render(<Harness onSubmit={onSubmit} isLoading initialInput="ready" />);
     const textarea = screen.getByRole("textbox");
@@ -193,29 +193,28 @@ describe("<ChatInput />", () => {
     expect(screen.queryByLabelText("Send")).toBeNull();
   });
 
-  // FIX 4: the point of the queue feature is that mouse/touch users need a
-  // visible way to submit-to-queue too, not just Enter. When the agent is
-  // busy AND there's content in the composer, a queue-send control must sit
-  // alongside Stop (which stays available at all times).
-  it("shows a queue-send control alongside Stop while loading with content present", () => {
+  // Mouse/touch users need a visible way to send on top of a busy agent, not
+  // just Enter. When the agent is busy AND there's content in the composer, a
+  // send-now control must sit alongside Stop (which stays available).
+  it("shows a send-now control alongside Stop while loading with content present", () => {
     const stop = vi.fn();
     const onSubmit = vi.fn(() => true);
     render(
-      <Harness onSubmit={onSubmit} isLoading stop={stop} initialInput="queue me" />
+      <Harness onSubmit={onSubmit} isLoading stop={stop} initialInput="send me now" />
     );
 
     expect(screen.getByLabelText("Stop")).toBeTruthy();
-    const queueBtn = screen.getByLabelText("Queue message") as HTMLButtonElement;
-    expect(queueBtn.disabled).toBe(false);
+    const sendNowBtn = screen.getByLabelText("Send now") as HTMLButtonElement;
+    expect(sendNowBtn.disabled).toBe(false);
 
-    fireEvent.click(queueBtn);
-    expect(onSubmit).toHaveBeenCalledWith({ text: "queue me", images: undefined });
+    fireEvent.click(sendNowBtn);
+    expect(onSubmit).toHaveBeenCalledWith({ text: "send me now", images: undefined });
   });
 
-  it("does not show a queue-send control while loading with an empty composer", () => {
+  it("does not show a send-now control while loading with an empty composer", () => {
     render(<Harness onSubmit={vi.fn()} isLoading stop={vi.fn()} />);
     expect(screen.getByLabelText("Stop")).toBeTruthy();
-    expect(screen.queryByLabelText("Queue message")).toBeNull();
+    expect(screen.queryByLabelText("Send now")).toBeNull();
   });
 
   it("surfaces the slash-command menu when the input is a slash query", () => {

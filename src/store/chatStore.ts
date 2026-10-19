@@ -5,7 +5,7 @@ import { releaseCloudBrowser } from "@/lib/cloudBrowser";
 import { useBrowseCheckpointStore } from "./browseCheckpointStore";
 import { subscribeOpenCodeKey } from "@/lib/opencodeKey";
 import { mergeChangesByEvent, type ChangeDetail } from "@/lib/memoryActivity";
-import type { AttachedImage, ChatLaunchPayload, QueuedChatMessage } from "@/types/chat";
+import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
 
 /** Stable empty reference so the per-session selector never returns a fresh
  * array for chats without attachments (which would re-render on every store
@@ -50,10 +50,6 @@ function mergeNoteChanges(existing: ChatActivityNote, incoming: ChatActivityNote
 
 /** Stable empty reference for chats with no activity notes. Never mutated. */
 export const NO_ACTIVITY_NOTES: ChatActivityNote[] = [];
-
-/** Stable empty reference for sessions with no queued messages, for the same
- * reason as NO_ATTACHED_IMAGES. Never mutated. */
-export const NO_QUEUED_MESSAGES: QueuedChatMessage[] = [];
 
 /** Copy of the liked map with `chatId` set to `next`, or dropped when empty. */
 function withChatLikes(
@@ -134,15 +130,6 @@ interface ChatState {
   /** AbortControllers keyed by chat id — managed outside React */
   abortControllers: Record<string, AbortController>;
   launchQueue: Record<string, ChatLaunchPayload | undefined>;
-  /**
-   * Messages the user submitted while the agent was busy (chat status
-   * "submitted"/"streaming"), keyed by chat id, in FIFO send order. Distinct
-   * from `launchQueue` (a one-shot payload used to fan a single send out to
-   * extra parallel chats) — this is a genuine per-chat queue that can hold
-   * several pending messages, drained one at a time as the session returns
-   * to "ready".
-   */
-  messageQueue: Record<string, QueuedChatMessage[]>;
   /** Export/clear handlers published by each mounted session, keyed by chat id */
   sessionActions: Record<string, ChatSessionActions>;
   /**
@@ -201,11 +188,6 @@ interface ChatState {
   ) => void;
   queueLaunchPayload: (chatId: string, payload: ChatLaunchPayload) => void;
   consumeLaunchPayload: (chatId: string) => ChatLaunchPayload | undefined;
-
-  enqueueMessage: (chatId: string, payload: ChatLaunchPayload) => void;
-  peekNextMessage: (chatId: string) => QueuedChatMessage | undefined;
-  removeQueuedMessage: (chatId: string, id: string) => void;
-  clearMessageQueue: (chatId: string) => void;
 
   registerAbortController: (chatId: string, controller: AbortController) => void;
   unregisterAbortController: (chatId: string) => void;
@@ -282,12 +264,6 @@ function generateChatId(): string {
   return `tab-${Date.now()}-${nextChatCounter++}`;
 }
 
-let nextMessageIdCounter = 1;
-
-function generateQueuedMessageId(): string {
-  return `qmsg-${Date.now()}-${nextMessageIdCounter++}`;
-}
-
 function makeChat(
   id: string,
   title: string,
@@ -346,7 +322,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   activeChatId: initialChatId,
   abortControllers: {},
   launchQueue: {},
-  messageQueue: {},
   sessionActions: {},
   attachedImages: {},
   likedReferences: {},
@@ -404,7 +379,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       activeChatId,
       abortControllers,
       launchQueue,
-      messageQueue,
       attachedImages,
       likedReferences,
       contextTokens,
@@ -430,8 +404,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const model = normalizeModel(localStorage.getItem("chat-model"));
       const newLaunchQueue = { ...launchQueue };
       delete newLaunchQueue[chatId];
-      const newMessageQueue = { ...messageQueue };
-      delete newMessageQueue[chatId];
       const newAttachedImages = { ...attachedImages };
       delete newAttachedImages[chatId];
       const newLikedReferences = { ...likedReferences };
@@ -450,7 +422,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         parallelCount,
         abortControllers: newControllers,
         launchQueue: newLaunchQueue,
-        messageQueue: newMessageQueue,
         attachedImages: newAttachedImages,
         likedReferences: newLikedReferences,
         contextTokens: newContextTokens,
@@ -462,14 +433,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const newChats = chats.filter((c) => c.id !== chatId);
     const newControllers = { ...abortControllers };
     const newLaunchQueue = { ...launchQueue };
-    const newMessageQueue = { ...messageQueue };
     const newAttachedImages = { ...attachedImages };
     const newContextTokens = { ...contextTokens };
     const newLikedReferences = { ...likedReferences };
     delete newLikedReferences[chatId];
     delete newControllers[chatId];
     delete newLaunchQueue[chatId];
-    delete newMessageQueue[chatId];
     delete newAttachedImages[chatId];
     delete newContextTokens[chatId];
     const newActivityNotes = { ...activityNotes };
@@ -484,7 +453,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       activeChatId: newActiveChatId,
       abortControllers: newControllers,
       launchQueue: newLaunchQueue,
-      messageQueue: newMessageQueue,
       attachedImages: newAttachedImages,
       likedReferences: newLikedReferences,
       contextTokens: newContextTokens,
@@ -623,46 +591,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return { launchQueue: nextQueue };
     });
     return payload;
-  },
-
-  enqueueMessage: (chatId, payload) => {
-    const queued: QueuedChatMessage = { id: generateQueuedMessageId(), payload };
-    set((s) => ({
-      messageQueue: {
-        ...s.messageQueue,
-        [chatId]: [...(s.messageQueue[chatId] ?? []), queued],
-      },
-    }));
-  },
-
-  peekNextMessage: (chatId) => {
-    const queue = get().messageQueue[chatId];
-    return queue && queue.length > 0 ? queue[0] : undefined;
-  },
-
-  removeQueuedMessage: (chatId, id) => {
-    set((s) => {
-      const queue = s.messageQueue[chatId];
-      if (!queue) return s;
-      const next = queue.filter((m) => m.id !== id);
-      if (next.length === queue.length) return s;
-      const nextQueue = { ...s.messageQueue };
-      if (next.length === 0) {
-        delete nextQueue[chatId];
-      } else {
-        nextQueue[chatId] = next;
-      }
-      return { messageQueue: nextQueue };
-    });
-  },
-
-  clearMessageQueue: (chatId) => {
-    set((s) => {
-      if (!s.messageQueue[chatId]) return s;
-      const nextQueue = { ...s.messageQueue };
-      delete nextQueue[chatId];
-      return { messageQueue: nextQueue };
-    });
   },
 
   registerAbortController: (chatId: string, controller: AbortController) => {

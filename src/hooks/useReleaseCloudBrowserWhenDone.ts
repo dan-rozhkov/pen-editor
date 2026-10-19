@@ -13,21 +13,19 @@ export const RELEASE_IDLE_MS = 3 * 60_000;
 
 /**
  * Releases the chat's cloud browser once the agent's work has really ended: not
- * streaming, not paused on an ask_user answer, nothing queued. Runs from the
+ * streaming, not paused on an ask_user answer. Runs from the
  * always-mounted part of ChatPanel so background chats release too.
  */
 export function useReleaseCloudBrowserWhenDone({
   chatId,
   isBusy,
   awaitingAnswer,
-  hasQueuedMessages,
 }: {
   chatId: string;
   isBusy: boolean;
   awaitingAnswer: boolean;
-  hasQueuedMessages: boolean;
 }): void {
-  const working = isBusy || awaitingAnswer || hasQueuedMessages;
+  const working = isBusy || awaitingAnswer;
   // Only a working -> idle edge counts, so a chat that merely mounts idle
   // (or re-renders) never triggers a release.
   const wasWorkingRef = useRef(false);

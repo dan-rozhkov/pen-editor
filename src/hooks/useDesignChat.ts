@@ -14,14 +14,13 @@ import { createChatTransport, resolveChatApiUrl, CLIENT_CAPABILITIES } from "@/l
 import { resolveSessionModel } from "@/lib/sessionModel";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { buildSceneContext } from "@/lib/canvasLink/sceneContext";
-import { useChatStore, NO_QUEUED_MESSAGES } from "@/store/chatStore";
+import { useChatStore } from "@/store/chatStore";
 import { toolHandlers, type ToolExecutionContext, type ToolHandler } from "@/lib/toolRegistry";
 import { runToolCall } from "@/lib/toolCallQueue";
 import { runTasteCheckForToolCall } from "@/lib/tools/tasteCheck";
 import { hasTouchedEmbeds } from "@/lib/tools/tasteCheckRegistry";
 import type { ChatLaunchPayload } from "@/types/chat";
 import type { UIMessage } from "ai";
-import { hasPendingAskUser } from "@/components/chat/pendingAskUser";
 import { setCloudBrowserChat } from "@/lib/cloudBrowser";
 import { isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";
 import { isIsolatedQaCall } from "@/lib/tools/browser/isolation";
@@ -355,6 +354,32 @@ function cloneLaunchPayload(payload: ChatLaunchPayload): ChatLaunchPayload {
   };
 }
 
+/** True when the last assistant message has a tool call with its input complete
+ * but no output yet (`input-available`). A request carrying one fails the
+ * backend's tool-result check; `input-streaming` parts are dropped by
+ * `convertToModelMessages` and do not count. */
+export function hasUnresolvedToolCalls(messages: UIMessage[]): boolean {
+  const last = messages.at(-1);
+  if (!last || last.role !== "assistant") return false;
+  return last.parts.some(
+    (p) =>
+      (p.type.startsWith("tool-") || p.type === "dynamic-tool") &&
+      "state" in p &&
+      p.state === "input-available" &&
+      !("providerExecuted" in p && p.providerExecuted),
+  );
+}
+
+/** Two sends that landed during one interrupt, as one message: texts joined by
+ * a blank line, images concatenated. */
+function mergePayloads(first: ChatLaunchPayload, second: ChatLaunchPayload): ChatLaunchPayload {
+  const images = [...(first.images ?? []), ...(second.images ?? [])].map((image) => ({ ...image }));
+  return {
+    text: [first.text.trim(), second.text.trim()].filter(Boolean).join("\n\n"),
+    images: images.length > 0 ? images : undefined,
+  };
+}
+
 // One instance: the offline error carries no per-attempt information, and a
 // stable identity keeps it from re-rendering consumers that memo on `error`.
 const OFFLINE_SEND_ERROR = new Error(OFFLINE_MESSAGE);
@@ -380,8 +405,8 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   // itself is DERIVED from this plus live connectivity (see `offlineError`
   // below) rather than stored: an "you are offline" banner is stale the
   // moment the connection is back, so nothing has to clear it — in
-  // particular the queued-message drain effect doesn't, which is what keeps
-  // that effect free of setState.
+  // particular the send-drain effect doesn't, which is what keeps that
+  // effect free of setState.
   const [offlineSendRefused, setOfflineSendRefused] = useState(false);
 
   // Non-null while the transport is auto-retrying a network failure; drives
@@ -417,13 +442,18 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   // Isolated QA browse_agent runs started by this session and not yet settled.
   // Their onToolCall returns at once (like ask_user) so several run together,
   // which lets the stream finish and `chat.status` read "ready" while they work.
-  // The count keeps the session reading as busy: status/isLoading, Send (queues)
-  // and the queue drain all key off it, or a new request would go out with
-  // unresolved tool parts. Auto-continuation needs no gate: the SDK sends once
+  // The count keeps the session reading as busy: status/isLoading, Send (which
+  // interrupts) and the send drain all key off it, or a new request would go
+  // out with unresolved tool parts. Auto-continuation needs no gate: the SDK sends once
   // every tool call of the step has an output (addToolOutput below).
   // The ONE source of "tool work is open": toolCallId -> abort of each live run.
   // `parallelBrowseRuns` mirrors its size for rendering; callbacks read the ref.
   const livePendingRunsRef = useRef<Map<string, LiveRun>>(new Map());
+  // A message sent while the agent was busy: the send interrupts the turn (same
+  // as Stop) and parks the message here until the stop settles; the drain
+  // effect below delivers it. Two sends during one interrupt are merged. A user
+  // Stop, Clear chat/rollback and unmount drop it.
+  const pendingInterruptSendRef = useRef<ChatLaunchPayload | null>(null);
   const [parallelBrowseRuns, setParallelBrowseRuns] = useState(0);
 
   const chat = useChat({
@@ -506,7 +536,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       // "tool-input-available"`), so keeping this call in that await chain
       // is what keeps `chat.status` at "streaming" for as long as the check
       // takes (bounded by its own internal timeout). That in turn is what
-      // the queue-drain effect / Send / Rollback / Clear chat all key off to
+      // the send-drain effect / Send / Rollback / Clear chat all key off to
       // tell "turn in flight" apart from "turn done" — a detached check
       // whose output arrived after `status` had already gone "ready" used to
       // let all of those act on a turn that still had an unresolved tool
@@ -606,6 +636,9 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const { setMessages: setChatMessages } = chat;
   const setMessages = useCallback(
     (update: UIMessage[] | ((prev: UIMessage[]) => UIMessage[])): void => {
+      // Replacing the history (Clear chat, rollback) retires a send parked
+      // behind an interrupt: it was written against the old transcript.
+      pendingInterruptSendRef.current = null;
       // The SDK's own latest state feeds the updater; the abort is a side effect
       // of computing the next list (idempotent, so a repeated call is harmless).
       setChatMessages((prev) => {
@@ -625,29 +658,14 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     [setChatMessages]
   );
 
-  // Drives re-running the queued-payload effect below once connectivity
-  // returns (see the effect for why offline must not consume the queue).
+  // Drives re-running the send-drain effect below once connectivity returns
+  // (see the effect for why offline must not consume a pending send).
   const isOnline = useOnlineStatus();
 
   // Register/unregister abort capability for this session
   const registerAbortController = useChatStore((s) => s.registerAbortController);
   const unregisterAbortController = useChatStore((s) => s.unregisterAbortController);
   const consumeLaunchPayload = useChatStore((s) => s.consumeLaunchPayload);
-  const enqueueMessage = useChatStore((s) => s.enqueueMessage);
-  const peekNextMessage = useChatStore((s) => s.peekNextMessage);
-  const removeQueuedMessageAction = useChatStore((s) => s.removeQueuedMessage);
-  const queuedMessages = useChatStore(
-    (s) => s.messageQueue[sessionId] ?? NO_QUEUED_MESSAGES,
-  );
-  const removeQueuedMessage = useCallback(
-    (id: string) => removeQueuedMessageAction(sessionId, id),
-    [removeQueuedMessageAction, sessionId],
-  );
-  // True while an ask_user question is unanswered — the auto-send effect below
-  // must not dequeue the next message on top of a paused turn awaiting a form
-  // answer (the composer itself is also disabled for typing/submitting while
-  // this is true, via ChatInput's `awaitingAnswer` prop).
-  const awaitingAnswer = hasPendingAskUser(chat.messages);
   // Live isolated runs (render-time mirror of livePendingRunsRef).
   const toolsBusy = parallelBrowseRuns > 0;
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -745,7 +763,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     }
   }, [sessionId]);
 
-  // Any new request (a user send, the queue drain, a network retry) re-arms
+  // Any new request (a user send, the send drain, a network retry) re-arms
   // auto-continuation — see `turnStoppedRef`.
   useEffect(() => {
     if (chat.status === "submitted") turnStoppedRef.current = false;
@@ -769,6 +787,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       unregisterAbortController(sessionId);
       // Unmount cleanup: nothing else observes this session's streaming-tool
       // state once the hook is gone, so clear it here too.
+      pendingInterruptSendRef.current = null;
       clearStreamingToolSession();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -928,7 +947,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   }, [chat.status, chat.messages, sessionId]);
 
   // Hands a payload to the transport. Writes no React state of its own, so
-  // the queue-drain effect below can call it directly without triggering a
+  // the send-drain effect below can call it directly without triggering a
   // cascading render (react-hooks/set-state-in-effect). Callers are
   // responsible for the preconditions `sendPayload` checks: connectivity and
   // a chat that is actually ready to take a message.
@@ -968,6 +987,12 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     [chat]
   );
 
+  // Same as the user's Stop: drop in-flight streaming-tool state, then stop.
+  const abortTurn = useCallback(() => {
+    clearStreamingToolSession();
+    void chat.stop();
+  }, [chat, clearStreamingToolSession]);
+
   const sendPayload = useCallback(
     (payload: ChatLaunchPayload): boolean => {
       const text = payload.text.trim();
@@ -981,40 +1006,53 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
         setOfflineSendRefused(true);
         return false;
       }
-      // Tool work still open (isolated QA runs, any tool part without an output)
-      // means the next request would carry unresolved tool parts: queue instead,
-      // even after a failed request.
-      if (livePendingRunsRef.current.size > 0) {
-        enqueueMessage(sessionId, payload);
+      // The agent is busy: live isolated QA runs, or a request in flight. The
+      // send interrupts the turn exactly like Stop and the message is parked
+      // until the stop settles (the drain effect below). The caller (ChatInput)
+      // treats `true` as "accepted" and clears the composer. A second send
+      // during the same interrupt is merged into the first: nothing is dropped.
+      if (
+        livePendingRunsRef.current.size > 0 ||
+        chat.status === "submitted" ||
+        chat.status === "streaming" ||
+        chat.status === "error"
+      ) {
+        // An errored chat with live runs never returns to "ready" on its own.
+        if (chat.status === "error") chat.clearError();
+        const pending = pendingInterruptSendRef.current;
+        pendingInterruptSendRef.current = pending
+          ? mergePayloads(pending, payload)
+          : cloneLaunchPayload(payload);
+        abortTurn();
         return true;
       }
-      // A failed request leaves the chat in "error" status; clear it so the
-      // user can retry instead of the chat being stuck.
-      if (chat.status === "error") {
-        chat.clearError();
-      } else if (chat.status === "submitted" || chat.status === "streaming") {
-        // The agent is busy — queue instead of dropping the message. The
-        // caller (ChatInput) treats a `true` return as "accepted" and clears
-        // the composer, even though nothing was sent to the network yet.
-        enqueueMessage(sessionId, payload);
-        return true;
-      } else if (chat.status !== "ready") {
+      if (chat.status !== "ready") {
         return false;
+      }
+      // A parked send goes out first, in one message with this one.
+      const parked = pendingInterruptSendRef.current;
+      if (parked) {
+        pendingInterruptSendRef.current = null;
+        const merged = mergePayloads(parked, payload);
+        // Its tool output may still be on the way (see the drain effect):
+        // park the merged message again and let the effect send it.
+        if (hasUnresolvedToolCalls(chat.messages)) {
+          pendingInterruptSendRef.current = merged;
+          return true;
+        }
+        return deliverPayload(merged);
       }
       return deliverPayload(payload);
     },
-    [chat, deliverPayload, enqueueMessage, sessionId]
+    [chat, abortTurn, deliverPayload]
   );
 
-  // Drains, at most once per "ready" transition, either the one-shot
-  // launchQueue (a parallel-tab fan-out payload) or — with lower priority —
-  // the user-facing messageQueue (messages submitted via Enter while the
-  // agent was busy). Both live in the same effect, with an early `return`
-  // right after the launchQueue send, so the two can never both fire a send
-  // in the same tick: if a launch payload was pending, it wins and the
-  // messageQueue isn't even inspected until the next "ready" transition
-  // (which the send itself will eventually cause, once the follow-up
-  // request settles).
+  // Sends, at most once per "ready" transition, a message parked by an
+  // interrupting send (`pendingInterruptSendRef`) or — after it — the one-shot
+  // launchQueue (a parallel-tab fan-out payload). Both live in the same effect
+  // with an early `return` after each send, so the two can never both fire in
+  // the same tick: the user's own message wins, and the launch payload goes out
+  // on the next "ready" (which the send itself will eventually cause).
   useEffect(() => {
     if (chat.status !== "ready" || !isOnline || isOffline()) {
       // Consuming while offline would delete the queued payload from the
@@ -1036,6 +1074,18 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       return;
     }
 
+    const interruptSend = pendingInterruptSendRef.current;
+    if (interruptSend) {
+      // After `chat.stop()` the SDK reports "ready" before an awaited
+      // `onToolCall` has written its (aborted) output. Sending now would carry
+      // an `input-available` part with no output, so wait: the late
+      // `addToolOutput` changes `chat.messages` and reruns this effect.
+      if (hasUnresolvedToolCalls(chat.messages)) return;
+      pendingInterruptSendRef.current = null;
+      deliverPayload(interruptSend);
+      return;
+    }
+
     const queuedPayload = consumeLaunchPayload(sessionId);
     if (queuedPayload) {
       // `deliverPayload`, not `sendPayload`: every precondition sendPayload
@@ -1043,59 +1093,13 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
       // established above, and going straight to the transport keeps this
       // effect from writing React state.
       deliverPayload(cloneLaunchPayload(queuedPayload));
-      return;
-    }
-
-    if (awaitingAnswer) {
-      // Don't dequeue on top of a turn paused for an ask_user answer.
-      return;
-    }
-
-    // Guard against a narrow race: answering an ask_user question via
-    // addToolOutput synchronously flips its tool part to "output-available"
-    // (so `awaitingAnswer` above already reads false), but the SDK's own
-    // automatic-continuation effect only flips chat.status away from "ready"
-    // in a later microtask. In that window this effect could otherwise fire
-    // a queued send at the same moment the SDK auto-continues the turn,
-    // producing two overlapping requests.
-    // `lastAssistantMessageIsCompleteWithToolCalls` returns true exactly when
-    // the SDK is about to auto-send (last assistant message's last step has
-    // one or more non-provider-executed tool calls and all are resolved) —
-    // that's the same predicate `sendAutomaticallyWhen` uses above. When it's
-    // false — no tool calls in the last step (an ordinary finished turn) or a
-    // tool call still unresolved — the SDK will not auto-continue, so it's
-    // safe to drain a queued message here. Skipping this tick when it's true
-    // is not a lost send: once the SDK's follow-up request settles, status
-    // returns to "ready" and reruns this effect with the predicate now false.
-    // Not after a Stop: `sendAutomaticallyWhen` is gated by `turnStoppedRef`, so
-    // no continuation is coming and a message held for the runs must go out now.
-    if (!turnStoppedRef.current && lastAssistantMessageIsCompleteWithToolCalls({ messages: chat.messages })) {
-      return;
-    }
-
-    const next = peekNextMessage(sessionId);
-    if (!next) {
-      return;
-    }
-
-    const sent = deliverPayload(cloneLaunchPayload(next.payload));
-    if (sent) {
-      // Only drop it from the queue once it's actually been handed off —
-      // sendPayload can return false (offline race, re-entered "busy" state,
-      // etc.), and dropping the item unconditionally on a peek would lose the
-      // message forever. Leaving it queued on failure keeps FIFO order intact
-      // and gets it retried on the next "ready" transition.
-      removeQueuedMessage(next.id);
     }
   }, [
     chat.status,
     chat.messages,
     isOnline,
-    awaitingAnswer,
     toolsBusy,
     consumeLaunchPayload,
-    peekNextMessage,
-    removeQueuedMessage,
     deliverPayload,
     sessionId,
   ]);
@@ -1129,13 +1133,14 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   // partially-applied mutation would keep rendering after the stream that
   // produced it was cancelled.
   const stop = useCallback(() => {
-    clearStreamingToolSession();
-    chat.stop();
-  }, [chat, clearStreamingToolSession]);
+    // A message parked by an interrupting send survives a Stop: the user sent
+    // it explicitly and the composer is already cleared.
+    abortTurn();
+  }, [abortTurn]);
 
   // Derived, not stored: the offline banner is exactly "a send was refused
   // and we are still offline". Coming back online retires it on its own, so
-  // no send path — user-facing or the queue drain — has to clear it.
+  // no send path — user-facing or the send drain — has to clear it.
   const offlineError =
     offlineSendRefused && !isOnline ? OFFLINE_SEND_ERROR : undefined;
 
@@ -1158,7 +1163,5 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     setMessages,
     retryState,
     addToolOutput: chat.addToolOutput,
-    queuedMessages,
-    removeQueuedMessage,
   };
 }

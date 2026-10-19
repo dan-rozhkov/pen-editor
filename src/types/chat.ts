@@ -10,9 +10,3 @@ export interface ChatLaunchPayload {
   text: string;
   images?: AttachedImage[];
 }
-
-/** A message the user submitted while the agent was busy, queued in send order. */
-export interface QueuedChatMessage {
-  id: string;
-  payload: ChatLaunchPayload;
-}
