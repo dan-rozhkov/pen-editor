@@ -1,3 +1,4 @@
+import { crc32, deflateSync } from "node:zlib";
 import { test, expect, type Page } from "@playwright/test";
 import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
 import { sampleTraceJson } from "../src/components/trace/__fixtures__/sampleTrace";
@@ -116,6 +117,50 @@ const setupFailed = variant((t) => {
   t.qa = { outcome: "setup_failed", reason: "The browser could not be started.", steps: [], checks: [] };
 });
 
+/** A solid-colour PNG data URL of the given size (the trace parser accepts only png/jpeg/webp). */
+function solidPng(width: number, height: number): string {
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const out = Buffer.alloc(body.length + 8);
+    out.writeUInt32BE(data.length, 0);
+    body.copy(out, 4);
+    out.writeUInt32BE(crc32(body), body.length + 4);
+    return out;
+  };
+  const head = Buffer.alloc(13);
+  head.writeUInt32BE(width, 0);
+  head.writeUInt32BE(height, 4);
+  head.set([8, 2, 0, 0, 0], 8);
+  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(width * 3, 0xe6)]);
+  const raw = Buffer.concat(Array.from({ length: height }, () => row));
+  const png = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", head), chunk("IDAT", deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
+  return `data:image/png;base64,${png.toString("base64")}`;
+}
+// Recorded size deliberately wrong (landscape): the box must follow the image's own proportions.
+const narrowScreenshot = variant((t) => {
+  const src = solidPng(600, 1200);
+  t.frames.forEach((f) => Object.assign(f, { src, width: 640, height: 400 }));
+});
+
+async function openNarrow(page: Page) {
+  await openTrace(page, "light", narrowScreenshot);
+  await expect(frame(page)).toHaveAttribute("data-frame-id", "0");
+  await expect.poll(() => frame(page).evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth)).toBe(600);
+}
+
+test("sizes the frame box to a narrow screenshot's own proportions", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openNarrow(page);
+  await expect
+    .poll(async () => {
+      const box = await frame(page).boundingBox();
+      return box ? box.width / box.height : 0;
+    })
+    .toBeCloseTo(0.5, 1);
+  const box = (await frame(page).boundingBox())!;
+  expect(Math.abs(box.width / box.height - 0.5)).toBeLessThan(0.02);
+});
+
 test("saves the state captures when asked", async ({ page }) => {
   const dir = process.env.TRACE_SCREENSHOT_DIR;
   test.skip(!dir, "set TRACE_SCREENSHOT_DIR to save captures");
@@ -196,4 +241,7 @@ test("saves the state captures when asked", async ({ page }) => {
   await doc.waitForLoadState("load");
   await expect(doc.getByText("Result", { exact: false }).first()).toBeVisible();
   await shot("14-open-result-doc", doc);
+
+  await openNarrow(page);
+  await shot("17-narrow-screenshot");
 });

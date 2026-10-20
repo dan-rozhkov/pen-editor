@@ -2,7 +2,6 @@ import { InfoIcon } from "@phosphor-icons/react";
 import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
 import { memo } from "react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { canOpenResult, resultText } from "./resultDoc";
 import { browserLabel, formatDuration, traceDuration } from "./traceModel";
@@ -26,9 +25,9 @@ export const RunDetails = memo(function RunDetails({ trace }: { trace: BrowseTra
       <PopoverTrigger
         render={
           // No tooltip: it would pop up again when focus returns to the trigger after the popover closes.
-          <Button type="button" variant="ghost" size="icon" aria-label={problems ? "Run details, has errors" : "Run details"} className={cn("relative", problems && "text-destructive hover:text-destructive")}>
+          <Button type="button" variant="ghost" size="icon" aria-label={problems ? "Run details, has errors" : "Run details"} className="relative">
             <InfoIcon className="size-4" weight="light" />
-            {problems && <span aria-hidden className="absolute end-1 top-1 size-1.5 rounded-full bg-destructive" />}
+            {problems && <span aria-hidden data-testid="run-details-dot" className="absolute -end-0.5 -top-0.5 size-2 rounded-full bg-destructive ring-2 ring-surface-panel" />}
           </Button>
         }
       />

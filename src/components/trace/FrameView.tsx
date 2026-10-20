@@ -19,11 +19,19 @@ function Empty({ title, hint }: { title: string; hint: string }) {
   );
 }
 
+/** Natural sizes of loaded frames, cached per src so revisiting a frame does not jump. */
+const measuredSizes = new Map<string, { width: number; height: number }>();
+
 export const FrameView = memo(function FrameView({ frame, startedAt, position }: Props) {
   // Remember which source failed, so a new frame gets a fresh attempt.
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const broken = frame !== undefined && failedSrc === frame.src;
-  const ratio = frame?.width && frame.height ? frame.width / frame.height : 1.6;
+  // The loaded image's own proportions win; the recorded size is only the first guess.
+  const [, setMeasuredTick] = useState(0);
+  const known = frame ? measuredSizes.get(frame.src) : undefined;
+  const guess = frame?.width && frame.height ? frame.width / frame.height : 1.6;
+  const ratio = known ? known.width / known.height : guess;
+  const naturalWidth = known?.width ?? frame?.width;
 
   return (
     <section aria-label="Frame" className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-base">
@@ -52,9 +60,16 @@ export const FrameView = memo(function FrameView({ frame, startedAt, position }:
               src={frame.src}
               alt={`${KIND_LABEL[frame.kind]} at ${formatOffset(frame.at - startedAt)}`}
               onError={() => setFailedSrc(frame.src)}
+              onLoad={(e) => {
+                const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
+                if (w > 0 && h > 0 && measuredSizes.get(frame.src)?.width !== w) {
+                  measuredSizes.set(frame.src, { width: w, height: h });
+                  setMeasuredTick((n) => n + 1);
+                }
+              }}
               data-testid="trace-frame"
               data-frame-id={frame.id}
-              style={{ width: `min(100cqw, calc(100cqh * ${ratio}))`, maxWidth: frame.width ? frame.width * 2 : undefined, aspectRatio: String(ratio) }}
+              style={{ width: `min(100cqw, calc(100cqh * ${ratio}))`, maxWidth: naturalWidth ? naturalWidth * 2 : undefined, aspectRatio: String(ratio) }}
               className="rounded-lg bg-white object-contain shadow-[0_1px_2px_rgb(0_0_0/0.06),0_8px_24px_-8px_rgb(0_0_0/0.18)] outline outline-1 -outline-offset-1 outline-[oklch(0_0_0/0.1)] dark:outline-[oklch(1_0_0/0.1)]"
             />
           ) : broken ? (

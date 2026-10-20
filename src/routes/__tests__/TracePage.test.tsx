@@ -16,7 +16,14 @@ describe("TracePage", () => {
     renderTrace();
     expect(screen.getByRole("status", { name: "Loading trace" })).toBeTruthy();
     await screen.findByRole("heading", { level: 1, name: /free trial/ });
-    expect(screen.getByTestId("trace-outcome").textContent).toContain("QA failed");
+    const badge = screen.getByTestId("trace-outcome");
+    expect(badge.textContent).toContain("QA failed");
+    expect(badge.className).toContain("h-7");
+    expect(badge.className).toContain("border-border-default");
+    expect(badge.className).toContain("text-text-primary");
+    expect(badge.className).not.toContain("bg-destructive");
+    const icon = badge.querySelector("svg");
+    expect(icon?.getAttribute("class")).toContain("text-destructive");
     expect(within(screen.getByRole("region", { name: "Steps" })).getAllByRole("button")).toHaveLength(8);
     expect(document.title).toMatch(/^Trace · Check that a visitor can start a free trial/);
     // The result is a document, not page text.
@@ -78,9 +85,26 @@ describe("TracePage", () => {
     renderTrace();
     await screen.findByTestId("trace-frame");
     const row = stepButton(1);
-    expect(row.className).toContain("items-start");
+    expect(row.className).toContain("items-baseline");
     expect(row.className).not.toContain("items-center");
     expect(row.querySelectorAll('[class*="leading-[18px]"]').length).toBeGreaterThanOrEqual(3);
+    const cells = Array.from(row.children) as HTMLElement[];
+    for (const cell of [cells[0], cells[2]]) {
+      expect(cell.className).toContain("text-[13px]");
+      expect(cell.className).toContain("tabular-nums");
+    }
+    expect(within(row).getByTestId("step-title").className).toContain("h-[18px]");
+  });
+
+  it("sizes the frame from the loaded image, not the recorded size", async () => {
+    renderTrace();
+    const img = (await screen.findByTestId("trace-frame")) as HTMLImageElement;
+    expect(img.style.aspectRatio).toBe("1.6 / 1"); // first guess: the recorded size
+    Object.defineProperty(img, "naturalWidth", { configurable: true, value: 600 });
+    Object.defineProperty(img, "naturalHeight", { configurable: true, value: 1200 });
+    fireEvent.load(img);
+    expect(screen.getByTestId("trace-frame").style.aspectRatio).toBe("0.5 / 1");
+    expect(screen.getByTestId("trace-frame").style.maxWidth).toBe("1200px"); // twice the natural width
   });
 
   it("hides and shows the details panel, keeps its tab, and remembers the choice", async () => {
@@ -111,7 +135,12 @@ describe("TracePage", () => {
   it("flags problems on the run details button and hides Failed at zero", async () => {
     renderTrace();
     await screen.findByRole("heading", { level: 1 });
-    expect(screen.getByRole("button", { name: "Run details, has errors" }).className).toContain("text-destructive");
+    const info = screen.getByRole("button", { name: "Run details, has errors" });
+    expect(info.className).not.toContain("text-destructive");
+    expect(info.querySelector("svg")?.getAttribute("class")).not.toContain("text-destructive");
+    const dot = within(info).getByTestId("run-details-dot");
+    expect(dot.className).toContain("bg-destructive");
+    expect(dot.className).toContain("ring-surface-panel");
     cleanup();
     const clean = sampleTraceJson() as { steps: { ok: boolean; error?: string }[] };
     clean.steps.forEach((st) => {

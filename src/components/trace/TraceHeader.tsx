@@ -1,12 +1,11 @@
 import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
 import { SquareHalfBottomIcon } from "@phosphor-icons/react";
 import { memo } from "react";
-import { Badge } from "@/components/ui/badge";
-import { IconButton } from "@/components/ui/IconButton";
 import { cn } from "@/lib/utils";
+import { IconButton } from "@/components/ui/IconButton";
 import { ResultButton } from "./ResultButton";
 import { RunDetails } from "./RunDetails";
-import { TONE_BADGE } from "./tone";
+import { TONE_ICON } from "./tone";
 import { describeOutcome, goalFirstLine } from "./traceModel";
 
 interface Props {
@@ -17,6 +16,7 @@ interface Props {
 
 export const TraceHeader = memo(function TraceHeader({ trace, detailsOpen, onToggleDetails }: Props) {
   const outcome = describeOutcome(trace);
+  const { Icon: OutcomeIcon, className: iconClass } = TONE_ICON[outcome.tone];
   const title = goalFirstLine(trace.goal);
   return (
     <header className="shrink-0 border-b border-border-default bg-surface-panel">
@@ -25,10 +25,13 @@ export const TraceHeader = memo(function TraceHeader({ trace, detailsOpen, onTog
         <h1 className="min-w-0 flex-1 truncate px-1 text-sm font-medium text-text-primary" title={trace.goal}>
           {title}
         </h1>
-        <Badge className={cn("h-5 shrink-0 px-2 text-[11px]", TONE_BADGE[outcome.tone])} data-testid="trace-outcome">
-          <span aria-hidden className="size-1.5 rounded-full bg-current" />
+        <span
+          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border-default bg-surface-panel px-2 text-xs font-medium whitespace-nowrap text-text-primary dark:bg-secondary/30"
+          data-testid="trace-outcome"
+        >
+          <OutcomeIcon aria-hidden weight="fill" className={cn("size-3.5", iconClass)} />
           {outcome.label}
-        </Badge>
+        </span>
         <RunDetails trace={trace} />
         <ResultButton trace={trace} />
         <IconButton

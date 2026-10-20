@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { keepInView } from "./keepInView";
-import { TONE_BADGE } from "./tone";
+import { TONE_BADGE, TONE_ICON } from "./tone";
 import {
   describeCheck,
   describeOutcome,
@@ -109,9 +109,9 @@ function QaPanel({ trace }: { trace: BrowseTrace }) {
             {qa.checks.map((check, i) => (
               <li key={i} className="flex items-start gap-2 rounded-lg bg-surface-elevated px-3 py-2">
                 {check.passed ? (
-                  <CheckCircleIcon weight="fill" aria-label="Passed" className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <CheckCircleIcon weight="fill" aria-label="Passed" className={cn("mt-0.5 size-4 shrink-0", TONE_ICON.success.className)} />
                 ) : (
-                  <XCircleIcon weight="fill" aria-label="Failed" className="mt-0.5 size-4 shrink-0 text-destructive" />
+                  <XCircleIcon weight="fill" aria-label="Failed" className={cn("mt-0.5 size-4 shrink-0", TONE_ICON.danger.className)} />
                 )}
                 <div className="min-w-0 text-xs/relaxed">
                   <p className="font-medium break-words text-text-primary">{describeCheck(check.check)}</p>
