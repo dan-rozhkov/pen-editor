@@ -327,15 +327,6 @@ html.route-showcase #root {
   background-color: var(--color-surface-panel);
 }
 
-/* "/doc" scrolls as a normal page (sticky header, window-positioned menus),
-   so it drops the fixed-viewport lock too. */
-html.route-doc,
-html.route-doc body,
-html.route-doc #root {
-  height: auto;
-  overflow: visible;
-}
-
 /* "/agent" (desktop agent panel): the whole page is the panel surface in both
    themes, so the chat matches the desktop island colour edge to edge. */
 html.route-agent,

@@ -9,7 +9,7 @@ import {
   SparkleIcon,
 } from "@phosphor-icons/react";
 import { PanelEmptyState } from "@/components/PanelEmptyState";
-import { messageToMarkdown } from "@/lib/chatExport";
+import { messageToClipboardText } from "@/lib/chatExport";
 import { SimpleMarkdown } from "./SimpleMarkdown";
 import { ToolCallIndicator } from "./ToolCallIndicator";
 import { BrowseAgentIndicator } from "./BrowseAgentIndicator";
@@ -152,9 +152,15 @@ function MessageCopyButton({ msg }: { msg: UIMessage }) {
 
   useEffect(() => () => clearTimeout(resetTimeoutRef.current), []);
 
+  const text = messageToClipboardText(msg);
+
+  // Nothing to copy (tool-only turn, image-only message): no button, so the
+  // clipboard is never overwritten with an empty string.
+  if (!text) return null;
+
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(messageToMarkdown(msg));
+      await navigator.clipboard.writeText(text);
       setCopied(true);
       clearTimeout(resetTimeoutRef.current);
       resetTimeoutRef.current = setTimeout(() => setCopied(false), 1500);

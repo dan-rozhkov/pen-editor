@@ -102,6 +102,17 @@ export function messageToMarkdown(msg: UIMessage): string {
   return sections.join("\n\n");
 }
 
+/**
+ * Plain text for the per-message "Copy" button: only the text parts. No role
+ * heading, reasoning, attachments or tool calls. A user message joins its parts
+ * like its bubble does; an assistant message's parts are separate blocks.
+ */
+export function messageToClipboardText(msg: UIMessage): string {
+  return msg.parts
+    .flatMap((part) => (part.type === "text" && part.text ? [part.text] : []))
+    .join(msg.role === "user" ? "" : "\n\n");
+}
+
 /** Serialize an entire chat (list of messages) to a Markdown document. */
 export function chatToMarkdown(messages: UIMessage[], title?: string): string {
   const header = `# ${title || "Chat"}`;

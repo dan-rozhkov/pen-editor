@@ -39,7 +39,7 @@ export default function DocPage() {
 
   return (
     <EditorProviders>
-      <div className="flex min-h-dvh flex-col bg-surface-panel text-text-primary">
+      <div className="flex h-dvh flex-col overflow-hidden bg-surface-panel text-text-primary">
         {sync.id === null ? (
           <main className="flex flex-1 flex-col items-center justify-center gap-3">
             <p className="text-sm text-text-muted">No documents yet.</p>
@@ -50,7 +50,7 @@ export default function DocPage() {
         ) : (
           <>
             {/* Same row as the chat header (OpenChatHeader) and the desktop browser bar. */}
-            <header className="sticky top-0 z-10 flex shrink-0 items-center gap-1 border-b border-border-default bg-surface-panel px-2 py-1.5">
+            <header className="flex shrink-0 items-center gap-1 border-b border-border-default bg-surface-panel px-2 py-1.5">
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
@@ -90,7 +90,7 @@ export default function DocPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
             </header>
-            <main className="flex-1 px-6 pb-24 pt-10 sm:px-24 sm:pt-16">
+            <main className="layers-scrollbar min-h-0 flex-1 overflow-y-auto px-6 pb-24 pt-10 sm:px-24 sm:pt-16">
               <div className="mx-auto w-full max-w-[708px]">
                 <DocTitle value={sync.title} onChange={sync.setTitle} onLeave={() => editor?.commands.focus("start")} />
                 <DocEditor
