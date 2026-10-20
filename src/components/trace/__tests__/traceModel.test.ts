@@ -122,8 +122,6 @@ describe("buildTimeline", () => {
     expect(timeline.span).toBe(9000);
     expect(timeline.frames[0]!.pct).toBeCloseTo((1950 / 9000) * 100);
     expect(timeline.steps[4]).toMatchObject({ ok: false });
-    expect(timeline.ticks.map((t) => t.pct)).toEqual([0, 25, 50, 75, 100]);
-    expect(timeline.ticks[4]!.label).toBe("0:09.0");
   });
 
   it("copes with an empty run", () => {

@@ -52,6 +52,11 @@ export interface PenDesktopApi {
     save(payload: BrowseTraceSavePayload): Promise<BrowseTraceSaveResult>;
     read(id: string): Promise<{ trace: BrowseTrace } | { error: string }>;
   };
+  /**
+   * Opens a Markdown document (by its docStore id) in a Document tab. Exposed on the
+   * /trace page only; older shells lack it.
+   */
+  docs?: { open(docId: string): Promise<{ ok: boolean; error?: string }> };
   setDocumentTitle?(title: string): void;
   /** true when the desktop agent layout flag is on: the editor tab is chatless. */
   agentLayout?: boolean;

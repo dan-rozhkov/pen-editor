@@ -1,23 +1,7 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sampleTraceJson } from "@/components/trace/__fixtures__/sampleTrace";
-import TracePage from "@/routes/TracePage";
-
-function renderTrace(url = "/trace/sample-trace-1") {
-  return render(
-    <MemoryRouter initialEntries={[url]}>
-      <Routes>
-        <Route path="/trace/:id" element={<TracePage />} />
-      </Routes>
-    </MemoryRouter>,
-  );
-}
-
-const answer = (response: Partial<Response>) => vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(response)));
-const serveSample = () => answer({ ok: true, status: 200, json: async () => sampleTraceJson() });
-const frameId = () => screen.getByTestId("trace-frame").getAttribute("data-frame-id");
-const stepButton = (n: number) => within(screen.getByRole("region", { name: "Steps" })).getAllByRole("button")[n - 1]!;
+import { answer, frameId, renderTrace, serveSample, stepButton } from "@/components/trace/__tests__/traceTestUtils";
 
 describe("TracePage", () => {
   beforeEach(() => serveSample());
@@ -34,6 +18,10 @@ describe("TracePage", () => {
     expect(screen.getByTestId("trace-outcome").textContent).toContain("QA failed");
     expect(within(screen.getByRole("region", { name: "Steps" })).getAllByRole("button")).toHaveLength(8);
     expect(document.title).toMatch(/^Trace · Check that a visitor can start a free trial/);
+    // The result is a document, not page text.
+    expect(screen.queryByText(/Result:/)).toBeNull();
+    expect(screen.queryByText("The trial button is missing on the pricing page.")).toBeNull();
+    expect(screen.getByRole("button", { name: "Open result" })).toBeTruthy();
   });
 
   it("selects a step's last frame and toggles before/after", async () => {
@@ -138,6 +126,6 @@ describe("TracePage", () => {
     renderTrace();
     expect(await screen.findByText("No steps were recorded.")).toBeTruthy();
     expect(screen.getByText("No frames were captured in this run.")).toBeTruthy();
-    expect(screen.getByText("No frame for this step")).toBeTruthy();
+    expect(screen.getByText(/^No frame for this step/)).toBeTruthy();
   });
 });

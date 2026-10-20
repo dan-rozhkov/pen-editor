@@ -3,14 +3,26 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Filmstrip } from "./Filmstrip";
 import { FrameView, type FrameMode } from "./FrameView";
 import { Inspector } from "./Inspector";
+import { frameAtTraceTime, playheadOfStep, sortedSteps, stepAtPlayTime, stepAtTraceTime, traceTimeToPlayTime } from "./playback";
+import { usePlayback } from "./usePlayback";
 import { StepList } from "./StepList";
 import { TraceHeader } from "./TraceHeader";
 import { beforeFrameOfStep, buildStepRows, lastFrameOfStep, sortedFrames, stepOfFrame, stepsWithProblems } from "./traceModel";
 
-/** Keys that belong to the widget in focus (tabs use the arrows, fields use everything). */
-function ownsKeys(target: EventTarget | null): boolean {
+/** Keys the playhead slider handles itself; the rest (Space, B) go to the page. */
+const SLIDER_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
+
+/** Keys that belong to the widget in focus (tabs and menus use the arrows, fields use everything). */
+function ownsKeys(target: EventTarget | null, key: string): boolean {
   if (!(target instanceof HTMLElement)) return false;
-  return !!target.closest('[role="tablist"], input, textarea, select, [contenteditable="true"]');
+  if (target.closest('[role="tablist"], [role="menu"], [role^="menuitem"], input, textarea, select, [contenteditable="true"]')) return true;
+  return SLIDER_KEYS.has(key) && !!target.closest('[role="slider"]');
+}
+
+/** Controls that Space presses: it must not also toggle playback. Navigation buttons (`data-space-plays`) do not count. */
+function pressedBySpace(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement) || target.closest("[data-space-plays]")) return false;
+  return !!target.closest('button, a[href], summary, [role="menu"], [role^="menuitem"], [role="button"], [role="tab"], [role="switch"], [role="checkbox"]');
 }
 
 export function TraceViewer({ trace }: { trace: BrowseTrace }) {
@@ -29,23 +41,78 @@ export function TraceViewer({ trace }: { trace: BrowseTrace }) {
   const beforeFrame = useMemo(() => (stepIndex === null ? undefined : beforeFrameOfStep(trace, stepIndex)), [stepIndex, trace]);
   const shown = mode === "before" && step ? beforeFrame : afterFrame;
 
-  const selectStep = useCallback((index: number) => {
-    setStepIndex(index);
-    setFrameId(null);
-  }, []);
+  const position = useMemo(() => {
+    const at = shown ? frames.findIndex((f) => f.id === shown.id) : -1;
+    return at >= 0 ? { index: at, total: frames.length } : null;
+  }, [shown, frames]);
+  const ordered = useMemo(() => sortedSteps(trace), [trace]);
+  // Playback drives the selection: the step running at the playhead and the frame on screen then.
+  const followTime = useCallback(
+    (time: number, scheduled?: number) => {
+      // Per-step pacing names the step itself; real time reads it off the clock.
+      const running = scheduled ?? stepAtTraceTime(ordered, time);
+      if (running !== undefined) setStepIndex(running);
+      setFrameId(frameAtTraceTime(frames, time)?.id ?? null);
+    },
+    [ordered, frames],
+  );
+  const { pause, seek, play, setSpeed, setPace, schedule, ...player } = usePlayback(trace, followTime);
+
+  const togglePlay = useCallback(() => {
+    if (player.playing) {
+      pause();
+      return;
+    }
+    setMode("after");
+    play();
+  }, [player.playing, pause, play]);
+  // Per-step pacing names the step by play time, so steps that share a start stay separate.
+  const perStep = schedule.mode === "step";
+  // Every manual choice stops playback and puts the playhead on what was chosen.
+  const selectStep = useCallback(
+    (index: number) => {
+      pause();
+      const own = perStep ? schedule.segments.find((seg) => seg.stepIndex === index) : undefined;
+      if (own) seek(own.traceStart, own.playStart);
+      else {
+        const at = playheadOfStep(trace, ordered, index);
+        if (at !== undefined) seek(at);
+      }
+      setStepIndex(index);
+      setFrameId(null);
+    },
+    [trace, ordered, pause, seek, perStep, schedule],
+  );
   const selectFrame = useCallback(
     (frame: BrowseTraceFrame) => {
-      const owner = stepOfFrame(trace, frame);
-      if (owner !== undefined) setStepIndex(owner);
+      pause();
+      seek(frame.at);
+      // The step the clock shows at the frame's time: what playback would pick there, so Play does not jump.
+      const running = (perStep ? stepAtPlayTime(schedule, traceTimeToPlayTime(schedule, frame.at)) : undefined) ?? stepAtTraceTime(ordered, frame.at) ?? stepOfFrame(trace, frame);
+      if (running !== undefined) setStepIndex(running);
       setFrameId(frame.id);
       setMode("after");
     },
-    [trace],
+    [trace, ordered, pause, seek, perStep, schedule],
+  );
+  const seekTo = useCallback(
+    (time: number) => {
+      pause();
+      seek(time);
+      followTime(time, perStep ? stepAtPlayTime(schedule, traceTimeToPlayTime(schedule, time)) : undefined);
+    },
+    [pause, seek, followTime, perStep, schedule],
   );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || ownsKeys(e.target)) return;
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || ownsKeys(e.target, e.key)) return;
+      if (e.key === " ") {
+        if (pressedBySpace(e.target)) return;
+        e.preventDefault();
+        if (!e.repeat) togglePlay();
+        return;
+      }
       const position = trace.steps.findIndex((s) => s.index === stepIndex);
       const go = (next: number) => {
         const target = trace.steps[Math.min(trace.steps.length - 1, Math.max(0, next))];
@@ -61,11 +128,18 @@ export function TraceViewer({ trace }: { trace: BrowseTrace }) {
         e.preventDefault();
       }
     };
+    // A navigation button would press itself on Space release, selecting its step again.
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === " " && e.target instanceof HTMLElement && e.target.closest("[data-space-plays]")) e.preventDefault();
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [trace, stepIndex, step, selectStep]);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [trace, stepIndex, step, selectStep, togglePlay]);
 
-  const shownIndex = shown ? frames.findIndex((f) => f.id === shown.id) : -1;
   return (
     <div className="flex h-dvh flex-col bg-surface-base text-text-primary">
       <TraceHeader trace={trace} />
@@ -76,11 +150,21 @@ export function TraceViewer({ trace }: { trace: BrowseTrace }) {
         flagged={flagged}
         onSelectFrame={selectFrame}
         onSelectStep={selectStep}
+        player={{
+          time: player.time,
+          playing: player.playing,
+          speed: player.speed,
+          pace: player.pace,
+          onTogglePlay: togglePlay,
+          onSeek: seekTo,
+          onSpeedChange: setSpeed,
+          onPaceChange: setPace,
+        }}
       />
       {/* Steps and the frame side by side; the details panel runs full width under them. Under 900px all stack. */}
       <main
         className={
-          "grid min-h-0 flex-1 grid-cols-1 overflow-y-auto " +
+          "grid min-h-0 flex-1 auto-rows-max grid-cols-1 overflow-y-auto " +
           "min-[900px]:grid-cols-[minmax(15rem,19rem)_minmax(0,1fr)] min-[900px]:grid-rows-[minmax(0,1fr)] min-[900px]:overflow-hidden"
         }
       >
@@ -93,7 +177,7 @@ export function TraceViewer({ trace }: { trace: BrowseTrace }) {
             onModeChange={setMode}
             frame={shown}
             startedAt={trace.startedAt}
-            position={shownIndex >= 0 ? { index: shownIndex, total: frames.length } : null}
+            position={position}
             hasStep={!!step}
           />
         </div>

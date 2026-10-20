@@ -1,6 +1,7 @@
-import { CheckCircleIcon, XCircleIcon } from "@phosphor-icons/react";
-import { useEffect, useRef } from "react";
+import { XCircleIcon } from "@phosphor-icons/react";
+import { memo, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
+import { keepInView } from "./keepInView";
 import { formatDuration, type StepRow } from "./traceModel";
 
 interface Props {
@@ -11,11 +12,11 @@ interface Props {
   onSelect(index: number): void;
 }
 
-export function StepList({ rows, selected, flagged, onSelect }: Props) {
+export const StepList = memo(function StepList({ rows, selected, flagged, onSelect }: Props) {
   const listRef = useRef<HTMLOListElement>(null);
   useEffect(() => {
     // Keyboard navigation moves the selection; keep the row in view.
-    listRef.current?.querySelector<HTMLElement>('[aria-current="step"]')?.scrollIntoView?.({ block: "nearest" });
+    keepInView(listRef.current?.querySelector<HTMLElement>('[aria-current="step"]'));
   }, [selected]);
 
   return (
@@ -34,10 +35,11 @@ export function StepList({ rows, selected, flagged, onSelect }: Props) {
               <li key={step.index}>
                 <button
                   type="button"
+                  data-space-plays
                   aria-current={active ? "step" : undefined}
                   onClick={() => onSelect(step.index)}
                   className={cn(
-                    "group relative grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 rounded-lg px-2 py-2 text-start outline-none",
+                    "group relative grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 rounded-lg px-2 py-1.5 text-start outline-none",
                     "focus-visible:ring-2 focus-visible:ring-accent-primary/60",
                     active ? "bg-accent-selection" : "hover:bg-secondary dark:hover:bg-secondary/50",
                   )}
@@ -51,20 +53,16 @@ export function StepList({ rows, selected, flagged, onSelect }: Props) {
                       )}
                     </span>
                     {summary && <span className="block truncate text-xs text-text-muted">{summary}</span>}
+                    <span aria-hidden className="mt-1 block h-0.5 overflow-hidden rounded-full bg-surface-elevated">
+                      <span
+                        className={cn("block h-full origin-left rounded-full", step.ok ? "bg-accent-primary" : "bg-destructive")}
+                        style={{ width: `${Math.max(2, ratio * 100)}%` }}
+                      />
+                    </span>
                   </span>
                   <span className="flex items-center gap-1.5 text-xs tabular-nums text-text-secondary">
                     {formatDuration(durationMs)}
-                    {step.ok ? (
-                      <CheckCircleIcon weight="fill" className="size-3.5 text-emerald-600 dark:text-emerald-400" aria-label="Succeeded" />
-                    ) : (
-                      <XCircleIcon weight="fill" className="size-3.5 text-destructive" aria-label="Failed" />
-                    )}
-                  </span>
-                  <span aria-hidden className="col-start-2 col-end-4 h-[3px] overflow-hidden rounded-full bg-surface-elevated">
-                    <span
-                      className={cn("block h-full origin-left rounded-full", step.ok ? "bg-accent-primary" : "bg-destructive")}
-                      style={{ width: `${Math.max(2, ratio * 100)}%` }}
-                    />
+                    {!step.ok && <XCircleIcon weight="fill" className="size-3.5 text-destructive" aria-label="Failed" />}
                   </span>
                 </button>
               </li>
@@ -74,4 +72,4 @@ export function StepList({ rows, selected, flagged, onSelect }: Props) {
       )}
     </section>
   );
-}
+});

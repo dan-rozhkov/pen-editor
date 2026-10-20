@@ -33,6 +33,16 @@ export function formatOffset(ms: number): string {
   return `+${minutes}:${String(Math.floor(rest / 10)).padStart(2, "0")}.${rest % 10}`;
 }
 
+/** The offset without the sign, as a clock: "0:03.2". */
+export function formatClock(ms: number): string {
+  return formatOffset(ms).slice(1);
+}
+
+/** The first line of a goal, or "Untitled run". */
+export function goalFirstLine(goal: string): string {
+  return goal.trim().split(/\r?\n/)[0]!.trim() || "Untitled run";
+}
+
 /** "browse_act" -> "act"; other names stay as they are. */
 export function toolLabel(tool: string): string {
   return tool.replace(/^browse_/, "");
@@ -40,7 +50,7 @@ export function toolLabel(tool: string): string {
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
-function clip(text: string, max = 80): string {
+export function clip(text: string, max = 80): string {
   const flat = text.replace(/\s+/g, " ").trim();
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
@@ -197,22 +207,22 @@ export interface Timeline {
   span: number;
   frames: { frame: BrowseTraceFrame; pct: number }[];
   steps: { index: number; startPct: number; widthPct: number; ok: boolean }[];
-  ticks: { pct: number; label: string }[];
 }
 
 function clampPct(value: number): number {
   return Math.min(100, Math.max(0, value));
 }
 
+/** The last moment of the run: the end, or the latest frame or step end if one lies beyond it. */
+export function traceEnd(trace: BrowseTrace): number {
+  return Math.max(trace.startedAt, trace.endedAt, ...trace.frames.map((f) => f.at), ...trace.steps.map((s) => s.endedAt));
+}
+
 export function buildTimeline(trace: BrowseTrace): Timeline {
-  const lastActivity = Math.max(trace.endedAt, ...trace.frames.map((f) => f.at), ...trace.steps.map((s) => s.endedAt));
-  const span = Math.max(1, lastActivity - trace.startedAt);
+  const span = Math.max(1, traceEnd(trace) - trace.startedAt);
   const pct = (at: number) => clampPct(((at - trace.startedAt) / span) * 100);
-  // 4 equal ticks plus the end read well without a ruler's clutter.
-  const ticks = [0, 1, 2, 3, 4].map((i) => ({ pct: i * 25, label: formatOffset((span * i) / 4).replace("+", "") }));
   return {
     span,
-    ticks,
     frames: sortedFrames(trace).map((frame) => ({ frame, pct: pct(frame.at) })),
     steps: trace.steps.map((step) => {
       const startPct = pct(step.startedAt);
@@ -256,7 +266,7 @@ export function prettyJson(value: unknown): string {
 
 /** The document title: "Trace · <goal>" with the goal cut short. */
 export function traceTitle(goal: string): string {
-  return `Trace · ${clip(goal || "Untitled run", 60)}`;
+  return `Trace · ${clip(goalFirstLine(goal), 60)}`;
 }
 
 // ---- QA and log rows -------------------------------------------------------

@@ -1,9 +1,10 @@
 import { CheckCircleIcon, XCircleIcon } from "@phosphor-icons/react";
 import type { BrowseTrace, BrowseTraceLogEntry } from "@sideform/browser-agent/agent/session";
-import type { ReactNode } from "react";
+import { memo, useEffect, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { keepInView } from "./keepInView";
 import { TONE_BADGE } from "./tone";
 import {
   describeCheck,
@@ -12,13 +13,12 @@ import {
   parseNetworkEntry,
 } from "./traceModel";
 
-function Empty({ icon, title, hint }: { icon: ReactNode; title: string; hint?: string }) {
+function Empty({ title, hint }: { title: string; hint?: string }) {
   return (
-    <div className="flex flex-col items-center gap-1.5 px-4 py-10 text-center">
-      <span className="text-text-disabled [&>svg]:size-7">{icon}</span>
-      <p className="text-sm font-medium text-text-secondary">{title}</p>
-      {hint && <p className="max-w-60 text-pretty text-xs text-text-muted">{hint}</p>}
-    </div>
+    <p className="px-1 py-2 text-xs text-text-muted">
+      {title}
+      {hint && <span className="text-text-disabled"> · {hint}</span>}
+    </p>
   );
 }
 
@@ -32,16 +32,21 @@ interface LogProps {
 }
 
 function LogPanel({ trace, entries, droppedCount, selectedStep, kind, onSelectStep }: LogProps) {
+  const listRef = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    // Playback moves the selected step; keep its first entry in view.
+    keepInView(listRef.current?.querySelector<HTMLElement>('[aria-current="step"]'));
+  }, [selectedStep]);
   if (entries.length === 0) {
     return kind === "console" ? (
-      <Empty icon={<CheckCircleIcon weight="light" />} title="No console errors" hint="The page logged nothing at error level during this run." />
+      <Empty title="No console errors" hint="The page logged nothing at error level during this run." />
     ) : (
-      <Empty icon={<CheckCircleIcon weight="light" />} title="No failed requests" hint="Every request the page made succeeded." />
+      <Empty title="No failed requests" hint="Every request the page made succeeded." />
     );
   }
   return (
     <>
-      <ul className="-mx-1 space-y-0.5">
+      <ul ref={listRef} className="-mx-1 space-y-0.5">
         {entries.map((entry, i) => {
           const net = kind === "network" ? parseNetworkEntry(entry.text) : null;
           const linked = entry.stepIndex !== undefined;
@@ -51,6 +56,8 @@ function LogPanel({ trace, entries, droppedCount, selectedStep, kind, onSelectSt
               <button
                 type="button"
                 disabled={!linked}
+                data-space-plays
+                aria-current={current ? "step" : undefined}
                 onClick={() => entry.stepIndex !== undefined && onSelectStep(entry.stepIndex)}
                 className={cn(
                   "grid w-full grid-cols-[3.5rem_minmax(0,1fr)] gap-2 rounded-md px-1 py-1.5 text-start outline-none",
@@ -83,7 +90,7 @@ function LogPanel({ trace, entries, droppedCount, selectedStep, kind, onSelectSt
 
 function QaPanel({ trace }: { trace: BrowseTrace }) {
   const qa = trace.qa;
-  if (!qa) return <Empty icon={<CheckCircleIcon weight="light" />} title="Not a QA run" hint="QA verdicts, checks and the judge appear here for runs started in QA mode." />;
+  if (!qa) return <Empty title="Not a QA run" hint="QA verdicts, checks and the judge appear here for runs started in QA mode." />;
   const outcome = describeOutcome(trace);
   const judge = qa.judge;
   return (
@@ -147,11 +154,11 @@ interface Props {
   onSelectStep(index: number): void;
 }
 
-export function Inspector({ trace, selectedStep, onSelectStep }: Props) {
+export const Inspector = memo(function Inspector({ trace, selectedStep, onSelectStep }: Props) {
   const failedChecks = trace.qa?.checks?.filter((c) => !c.passed).length ?? 0;
   return (
     <Tabs defaultValue="console" className="min-h-0 flex-1 gap-0 bg-surface-panel">
-      <div className="shrink-0 px-3 pt-3 pb-2">
+      <div className="shrink-0 px-2 py-1.5">
         <TabsList aria-label="Details">
           <TabsTrigger value="console">
             Console <Count n={trace.console.length} />
@@ -164,15 +171,15 @@ export function Inspector({ trace, selectedStep, onSelectStep }: Props) {
           </TabsTrigger>
         </TabsList>
       </div>
-      <TabsContent value="console" className="min-h-0 overflow-y-auto px-3 pt-1 pb-4">
+      <TabsContent value="console" className="min-h-0 overflow-y-auto px-2 pb-3">
         <LogPanel trace={trace} entries={trace.console} droppedCount={trace.dropped?.console} selectedStep={selectedStep} kind="console" onSelectStep={onSelectStep} />
       </TabsContent>
-      <TabsContent value="network" className="min-h-0 overflow-y-auto px-3 pt-1 pb-4">
+      <TabsContent value="network" className="min-h-0 overflow-y-auto px-2 pb-3">
         <LogPanel trace={trace} entries={trace.network} droppedCount={trace.dropped?.network} selectedStep={selectedStep} kind="network" onSelectStep={onSelectStep} />
       </TabsContent>
-      <TabsContent value="qa" className="min-h-0 overflow-y-auto px-4 pt-2 pb-4">
+      <TabsContent value="qa" className="min-h-0 overflow-y-auto px-3 pb-3">
         <QaPanel trace={trace} />
       </TabsContent>
     </Tabs>
   );
-}
+});
