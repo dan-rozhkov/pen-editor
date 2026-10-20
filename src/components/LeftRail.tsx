@@ -60,7 +60,7 @@ const SECTIONS: {
   { section: "slides", testid: "rail-slides", title: "Slides", icon: <CardsIcon size={20} weight="light" /> },
   { section: "agents", testid: "rail-agents", title: "Agents", icon: <SparkleIcon size={20} weight="light" /> },
   { section: "toolbox", testid: "rail-toolbox", title: "Plugins", icon: <PuzzlePieceIcon size={20} weight="light" /> },
-  { section: "components", testid: "rail-components", title: "Components", icon: <CubeIcon size={20} weight="light" /> },
+  { section: "components", testid: "rail-components", title: "Slots", icon: <CubeIcon size={20} weight="light" /> },
   { section: "comments", testid: "rail-comments", title: "Threads", icon: <ChatCircleIcon size={20} weight="light" /> },
 ];
 
