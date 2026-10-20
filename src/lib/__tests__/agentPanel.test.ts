@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isAgentPanelHost, isAgentRoutePath, isDocRoutePath } from "../agentPanel";
+import { isAgentPanelHost, isAgentRoutePath, isDocRoutePath, isTraceRoutePath } from "../agentPanel";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -39,5 +39,15 @@ describe("isDocRoutePath", () => {
     expect(isDocRoutePath("/docs", "/")).toBe(false);
     expect(isDocRoutePath("/x/doc", "/x/")).toBe(true);
     expect(isDocRoutePath("/doc", "/x/")).toBe(false);
+  });
+});
+
+describe("isTraceRoutePath", () => {
+  it("matches /trace/<id> only, basename-aware", () => {
+    expect(isTraceRoutePath("/trace/abc", "/")).toBe(true);
+    expect(isTraceRoutePath("/trace/", "/")).toBe(false);
+    expect(isTraceRoutePath("/trace", "/")).toBe(false);
+    expect(isTraceRoutePath("/x/trace/abc", "/x/")).toBe(true);
+    expect(isTraceRoutePath("/trace/abc", "/x/")).toBe(false);
   });
 });

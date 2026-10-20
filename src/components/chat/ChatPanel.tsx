@@ -137,7 +137,7 @@ function OpenChatHeader({
                 size="icon"
                 tooltip="Chat options"
               >
-                <DotsThreeVerticalIcon size={16} weight="bold" />
+                <DotsThreeVerticalIcon className="size-4" weight="bold" />
               </IconButton>
             }
           />

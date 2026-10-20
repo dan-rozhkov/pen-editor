@@ -71,3 +71,9 @@ export function isAgentRoutePath(pathname: string, base: string = import.meta.en
 export function isDocRoutePath(pathname: string, base: string = import.meta.env.BASE_URL || "/"): boolean {
   return isRoutePath(pathname, "doc", base);
 }
+
+/** True when `pathname` is the canvas-less /trace/<id> route (basename-aware). */
+export function isTraceRoutePath(pathname: string, base: string = import.meta.env.BASE_URL || "/"): boolean {
+  const prefix = base.endsWith("/") ? base.slice(0, -1) : base;
+  return pathname.startsWith(`${prefix}/trace/`) && pathname.length > prefix.length + "/trace/".length;
+}
