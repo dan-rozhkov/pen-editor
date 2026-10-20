@@ -24,6 +24,10 @@ const AgentPage = lazy(() => import("@/routes/AgentPage"));
 // Tiptap must stay out of the showcase and editor chunks.
 const DocPage = lazy(() => import("@/routes/DocPage"));
 
+// The browse-run trace viewer at "/trace/:id" (desktop tab or plain browser).
+// Lazy, and it must never import App, Pixi or the chat.
+const TracePage = lazy(() => import("@/routes/TracePage"));
+
 // Accounts (Better Auth). Lazy for the same reason as the editor: the auth
 // client must not weigh on the showcase entry bundle, and all three pages are
 // only reachable on deployments where /api/auth-config reports accounts on.
@@ -67,6 +71,14 @@ export function AppRouter() {
           element={
             <Suspense fallback={null}>
               <DocPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/trace/:id"
+          element={
+            <Suspense fallback={null}>
+              <TracePage />
             </Suspense>
           }
         />
