@@ -183,15 +183,6 @@ export function lastFrameOfStep(trace: BrowseTrace, stepIndex: number): BrowseTr
   return earlier[earlier.length - 1];
 }
 
-/** The frame to compare against: the latest one taken before the step started. */
-export function beforeFrameOfStep(trace: BrowseTrace, stepIndex: number): BrowseTraceFrame | undefined {
-  const step = trace.steps.find((s) => s.index === stepIndex);
-  if (!step) return undefined;
-  const after = lastFrameOfStep(trace, stepIndex);
-  const earlier = sortedFrames(trace).filter((f) => f.at <= step.startedAt && f.id !== after?.id && f.stepIndex !== stepIndex);
-  return earlier[earlier.length - 1];
-}
-
 /** The step a frame should select: its own, else the step running (or last finished) at that time. */
 export function stepOfFrame(trace: BrowseTrace, frame: BrowseTraceFrame): number | undefined {
   if (frame.stepIndex !== undefined && trace.steps.some((s) => s.index === frame.stepIndex)) return frame.stepIndex;

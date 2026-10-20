@@ -42,10 +42,11 @@ export function installFakeClock() {
   });
   vi.stubGlobal("cancelAnimationFrame", (id: number) => queue.delete(id));
   return {
-    advance(ms: number) {
-      for (let left = ms; left > 0; left -= 16) {
+    /** Runs the queued frames `frameMs` apart (a slow frame skips ahead, so long spans can use big frames). */
+    advance(ms: number, frameMs = 16) {
+      for (let left = ms; left > 0; left -= frameMs) {
         act(() => {
-          now += Math.min(16, left);
+          now += Math.min(frameMs, left);
           const due = [...queue.values()];
           queue.clear();
           due.forEach((cb) => cb(now));

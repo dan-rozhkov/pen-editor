@@ -39,15 +39,15 @@ export const StepList = memo(function StepList({ rows, selected, flagged, onSele
                   aria-current={active ? "step" : undefined}
                   onClick={() => onSelect(step.index)}
                   className={cn(
-                    "group relative grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 rounded-lg px-2 py-1.5 text-start outline-none",
+                    "group relative grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 rounded-lg px-2 py-1.5 text-start outline-none",
                     "focus-visible:ring-2 focus-visible:ring-accent-primary/60",
                     active ? "bg-accent-selection" : "hover:bg-secondary dark:hover:bg-secondary/50",
                   )}
                 >
-                  <span className="text-end text-[11px] tabular-nums text-text-muted">{step.index + 1}</span>
+                  <span className="text-end text-[11px] leading-[18px] tabular-nums text-text-muted">{step.index + 1}</span>
                   <span className="min-w-0">
-                    <span className="flex items-center gap-1.5">
-                      <span className="truncate text-[13px] font-medium text-text-primary">{label}</span>
+                    <span className="flex h-[18px] items-center gap-1.5">
+                      <span className="truncate text-[13px] leading-[18px] font-medium text-text-primary">{label}</span>
                       {flagged.has(step.index) && step.ok && (
                         <span title="Console or network problems" className="size-1.5 shrink-0 rounded-full bg-amber-500" />
                       )}
@@ -60,7 +60,7 @@ export const StepList = memo(function StepList({ rows, selected, flagged, onSele
                       />
                     </span>
                   </span>
-                  <span className="flex items-center gap-1.5 text-xs tabular-nums text-text-secondary">
+                  <span className="flex h-[18px] items-center gap-1.5 text-xs leading-[18px] tabular-nums text-text-secondary">
                     {formatDuration(durationMs)}
                     {!step.ok && <XCircleIcon weight="fill" className="size-3.5 text-destructive" aria-label="Failed" />}
                   </span>

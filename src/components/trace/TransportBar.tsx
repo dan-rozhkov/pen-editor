@@ -61,8 +61,14 @@ export function TransportBar({ playing, offset, span, speed, pace, onTogglePlay,
   const Icon = playing ? PauseIcon : PlayIcon;
   return (
     <div role="toolbar" aria-label="Playback" className="flex items-center gap-1 px-2 py-1.5">
-      <IconButton tooltip={playing ? "Pause" : "Play"} shortcut="Space" variant="ghost" size="icon" onClick={onTogglePlay}>
-        <Icon className="size-4" weight="fill" />
+      <IconButton
+        tooltip={playing ? "Pause" : "Play"}
+        shortcut="Space"
+        variant="secondary"
+        size="icon"
+        onClick={onTogglePlay}
+      >
+        <Icon className="size-4" weight="light" />
       </IconButton>
       <p className="px-1 text-xs tabular-nums text-text-muted" data-testid="playback-time" aria-label="Playhead time">
         <span className="text-text-secondary">{formatClock(offset)}</span> / {formatClock(span)}

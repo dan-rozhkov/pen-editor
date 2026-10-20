@@ -8,6 +8,7 @@ describe("TracePage", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    localStorage.removeItem("pen.trace.detailsOpen");
     delete (window as { penDesktop?: unknown }).penDesktop;
   });
 
@@ -24,19 +25,37 @@ describe("TracePage", () => {
     expect(screen.getByRole("button", { name: "Open result" })).toBeTruthy();
   });
 
-  it("selects a step's last frame and toggles before/after", async () => {
+  it("keeps the header to one row and puts the run facts in a popover", async () => {
+    renderTrace();
+    await screen.findByRole("heading", { level: 1 });
+    expect(document.querySelector("dl")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Run details/ }));
+    const facts = within(document.querySelector("dl") as HTMLElement);
+    for (const term of ["Duration", "Steps", "Failed", "Started"]) expect(facts.getByText(term)).toBeTruthy();
+    expect(facts.getByText("Failed").nextElementSibling?.className).toContain("text-destructive");
+    expect(facts.getByText("Steps").nextElementSibling?.textContent).toBe("8");
+  });
+
+  it("shows the run error in the popover", async () => {
+    answer({ ok: true, status: 200, json: async () => ({ ...(sampleTraceJson() as object), error: "launch timed out" }) });
+    renderTrace();
+    await screen.findByRole("heading", { level: 1 });
+    fireEvent.click(screen.getByRole("button", { name: /^Run details/ }));
+    const popup = document.querySelector("dl")?.parentElement as HTMLElement;
+    expect(within(popup).getByText(/Error:/).closest("p")?.textContent).toContain("launch timed out");
+  });
+
+  it("selects a step's last frame, without before/after buttons", async () => {
     renderTrace();
     await screen.findByTestId("trace-frame");
     expect(frameId()).toBe("0");
     fireEvent.click(stepButton(4)); // step index 3
     expect(frameId()).toBe("2");
-    fireEvent.click(screen.getByRole("button", { name: "before" }));
-    expect(frameId()).toBe("1");
-    fireEvent.click(screen.getByRole("button", { name: "after" }));
-    expect(frameId()).toBe("2");
+    expect(screen.queryByRole("button", { name: /^(before|after)$/i })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Compare" })).toBeNull();
   });
 
-  it("steps with the arrow keys and toggles with B", async () => {
+  it("steps with the arrow keys; B does nothing", async () => {
     renderTrace();
     await screen.findByTestId("trace-frame");
     fireEvent.keyDown(window, { key: "ArrowRight" });
@@ -49,8 +68,79 @@ describe("TracePage", () => {
     expect(stepButton(8).getAttribute("aria-current")).toBe("step");
     fireEvent.keyDown(window, { key: "ArrowRight" }); // stays on the last step
     expect(stepButton(8).getAttribute("aria-current")).toBe("step");
+    const before = frameId();
     fireEvent.keyDown(window, { key: "b" });
-    expect(screen.getByRole("button", { name: "before" }).getAttribute("aria-pressed")).toBe("true");
+    expect(stepButton(8).getAttribute("aria-current")).toBe("step");
+    expect(frameId()).toBe(before);
+  });
+
+  it("aligns every step row to the top, on one line height", async () => {
+    renderTrace();
+    await screen.findByTestId("trace-frame");
+    const row = stepButton(1);
+    expect(row.className).toContain("items-start");
+    expect(row.className).not.toContain("items-center");
+    expect(row.querySelectorAll('[class*="leading-[18px]"]').length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("hides and shows the details panel, keeps its tab, and remembers the choice", async () => {
+    localStorage.removeItem("pen.trace.detailsOpen");
+    renderTrace();
+    await screen.findByTestId("trace-frame");
+    const toggle = () => screen.getByRole("button", { name: "Details panel" });
+    expect(toggle().getAttribute("aria-pressed")).toBe("true");
+    expect(toggle().hasAttribute("aria-expanded")).toBe(false);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /Network/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Network/ }));
+    fireEvent.click(toggle());
+    expect(screen.queryByRole("tab", { name: /Network/ })).toBeNull(); // hidden, so not accessible
+    expect(toggle().getAttribute("aria-pressed")).toBe("false");
+    expect(localStorage.getItem("pen.trace.detailsOpen")).toBe("false");
+    fireEvent.click(toggle());
+    expect(screen.getByRole("tab", { name: /Network/ }).getAttribute("aria-selected")).toBe("true"); // same tab as before
+    fireEvent.click(toggle());
+    cleanup();
+    renderTrace(); // a new viewer starts hidden
+    await screen.findByTestId("trace-frame");
+    expect(screen.queryByRole("tab", { name: /Console/ })).toBeNull();
+    fireEvent.click(toggle());
+    expect(screen.getByRole("tab", { name: /Console/ })).toBeTruthy();
+    expect(localStorage.getItem("pen.trace.detailsOpen")).toBe("true");
+  });
+
+  it("flags problems on the run details button and hides Failed at zero", async () => {
+    renderTrace();
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.getByRole("button", { name: "Run details, has errors" }).className).toContain("text-destructive");
+    cleanup();
+    const clean = sampleTraceJson() as { steps: { ok: boolean; error?: string }[] };
+    clean.steps.forEach((st) => {
+      st.ok = true;
+      delete st.error;
+    });
+    answer({ ok: true, status: 200, json: async () => clean });
+    renderTrace();
+    await screen.findByRole("heading", { level: 1 });
+    fireEvent.click(screen.getByRole("button", { name: "Run details" }));
+    expect(within(document.querySelector("dl") as HTMLElement).queryByText("Failed")).toBeNull();
+  });
+
+  it("leaves the arrow keys to an open popover", async () => {
+    renderTrace();
+    await screen.findByTestId("trace-frame");
+    fireEvent.click(screen.getByRole("button", { name: /^Run details/ }));
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowRight" });
+    expect(stepButton(1).getAttribute("aria-current")).toBe("step");
+  });
+
+  it("opens the details when storage is blocked", async () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    renderTrace();
+    await screen.findByTestId("trace-frame");
+    expect(screen.getByRole("tab", { name: /Console/ })).toBeTruthy();
+    vi.restoreAllMocks();
   });
 
   it("leaves arrow keys to the tab list", async () => {

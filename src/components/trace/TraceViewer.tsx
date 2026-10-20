@@ -1,21 +1,22 @@
 import type { BrowseTrace, BrowseTraceFrame } from "@sideform/browser-agent/agent/session";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { cn } from "@/lib/utils";
 import { Filmstrip } from "./Filmstrip";
-import { FrameView, type FrameMode } from "./FrameView";
+import { FrameView } from "./FrameView";
 import { Inspector } from "./Inspector";
 import { frameAtTraceTime, playheadOfStep, sortedSteps, stepAtPlayTime, stepAtTraceTime, traceTimeToPlayTime } from "./playback";
 import { usePlayback } from "./usePlayback";
 import { StepList } from "./StepList";
 import { TraceHeader } from "./TraceHeader";
-import { beforeFrameOfStep, buildStepRows, lastFrameOfStep, sortedFrames, stepOfFrame, stepsWithProblems } from "./traceModel";
+import { buildStepRows, lastFrameOfStep, sortedFrames, stepOfFrame, stepsWithProblems } from "./traceModel";
 
-/** Keys the playhead slider handles itself; the rest (Space, B) go to the page. */
+/** Keys the playhead slider handles itself; the rest (Space) go to the page. */
 const SLIDER_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
 
 /** Keys that belong to the widget in focus (tabs and menus use the arrows, fields use everything). */
 function ownsKeys(target: EventTarget | null, key: string): boolean {
   if (!(target instanceof HTMLElement)) return false;
-  if (target.closest('[role="tablist"], [role="menu"], [role^="menuitem"], input, textarea, select, [contenteditable="true"]')) return true;
+  if (target.closest('[role="tablist"], [role="dialog"], [role="menu"], [role^="menuitem"], input, textarea, select, [contenteditable="true"]')) return true;
   return SLIDER_KEYS.has(key) && !!target.closest('[role="slider"]');
 }
 
@@ -25,21 +26,41 @@ function pressedBySpace(target: EventTarget | null): boolean {
   return !!target.closest('button, a[href], summary, [role="menu"], [role^="menuitem"], [role="button"], [role="tab"], [role="switch"], [role="checkbox"]');
 }
 
+const DETAILS_KEY = "pen.trace.detailsOpen";
+
+/** Whether the details panel shows, remembered per viewer; open by default. */
+function useDetailsOpen(): [boolean, () => void] {
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem(DETAILS_KEY) !== "false";
+    } catch {
+      return true;
+    }
+  });
+  const toggle = useCallback(() => {
+    const next = !open;
+    setOpen(next);
+    try {
+      localStorage.setItem(DETAILS_KEY, String(next));
+    } catch {
+      // The choice just will not outlive this page.
+    }
+  }, [open]);
+  return [open, toggle];
+}
+
 export function TraceViewer({ trace }: { trace: BrowseTrace }) {
   const rows = useMemo(() => buildStepRows(trace), [trace]);
   const flagged = useMemo(() => stepsWithProblems(trace), [trace]);
   const frames = useMemo(() => sortedFrames(trace), [trace]);
   const [stepIndex, setStepIndex] = useState<number | null>(trace.steps[0]?.index ?? null);
   const [frameId, setFrameId] = useState<number | null>(null);
-  const [mode, setMode] = useState<FrameMode>("after");
+  const [detailsOpen, toggleDetails] = useDetailsOpen();
 
-  const step = trace.steps.find((s) => s.index === stepIndex);
-  const afterFrame = useMemo(() => {
+  const shown = useMemo(() => {
     if (frameId !== null) return frames.find((f) => f.id === frameId);
     return stepIndex === null ? frames[0] : lastFrameOfStep(trace, stepIndex);
   }, [frames, frameId, stepIndex, trace]);
-  const beforeFrame = useMemo(() => (stepIndex === null ? undefined : beforeFrameOfStep(trace, stepIndex)), [stepIndex, trace]);
-  const shown = mode === "before" && step ? beforeFrame : afterFrame;
 
   const position = useMemo(() => {
     const at = shown ? frames.findIndex((f) => f.id === shown.id) : -1;
@@ -63,7 +84,6 @@ export function TraceViewer({ trace }: { trace: BrowseTrace }) {
       pause();
       return;
     }
-    setMode("after");
     play();
   }, [player.playing, pause, play]);
   // Per-step pacing names the step by play time, so steps that share a start stay separate.
@@ -91,7 +111,6 @@ export function TraceViewer({ trace }: { trace: BrowseTrace }) {
       const running = (perStep ? stepAtPlayTime(schedule, traceTimeToPlayTime(schedule, frame.at)) : undefined) ?? stepAtTraceTime(ordered, frame.at) ?? stepOfFrame(trace, frame);
       if (running !== undefined) setStepIndex(running);
       setFrameId(frame.id);
-      setMode("after");
     },
     [trace, ordered, pause, seek, perStep, schedule],
   );
@@ -123,10 +142,6 @@ export function TraceViewer({ trace }: { trace: BrowseTrace }) {
       else if (e.key === "ArrowRight") go(position + 1);
       else if (e.key === "Home") go(0);
       else if (e.key === "End") go(trace.steps.length - 1);
-      else if ((e.key === "b" || e.key === "B") && step) {
-        setMode((m) => (m === "after" ? "before" : "after"));
-        e.preventDefault();
-      }
     };
     // A navigation button would press itself on Space release, selecting its step again.
     const onKeyUp = (e: KeyboardEvent) => {
@@ -138,14 +153,14 @@ export function TraceViewer({ trace }: { trace: BrowseTrace }) {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [trace, stepIndex, step, selectStep, togglePlay]);
+  }, [trace, stepIndex, selectStep, togglePlay]);
 
   return (
     <div className="flex h-dvh flex-col bg-surface-base text-text-primary">
-      <TraceHeader trace={trace} />
+      <TraceHeader trace={trace} detailsOpen={detailsOpen} onToggleDetails={toggleDetails} />
       <Filmstrip
         trace={trace}
-        selectedFrameId={afterFrame?.id}
+        selectedFrameId={shown?.id}
         selectedStep={stepIndex}
         flagged={flagged}
         onSelectFrame={selectFrame}
@@ -173,16 +188,14 @@ export function TraceViewer({ trace }: { trace: BrowseTrace }) {
         </div>
         <div className="order-1 flex min-h-0 flex-col min-[900px]:order-none">
           <FrameView
-            mode={mode}
-            onModeChange={setMode}
             frame={shown}
             startedAt={trace.startedAt}
             position={position}
-            hasStep={!!step}
           />
         </div>
       </main>
-      <div className="flex h-72 min-h-0 min-w-0 shrink-0 flex-col border-t border-border-default">
+      {/* Hidden, not unmounted: the selected tab and the scroll position survive. */}
+      <div hidden={!detailsOpen} className={cn("h-72 min-h-0 min-w-0 shrink-0 flex-col border-t border-border-default", detailsOpen && "flex")}>
         <Inspector trace={trace} selectedStep={stepIndex} onSelectStep={selectStep} />
       </div>
     </div>

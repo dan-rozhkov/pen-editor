@@ -39,6 +39,16 @@ describe("trace playback", () => {
     vi.restoreAllMocks();
   });
 
+  it("keeps the play button on a gray fill in both states", async () => {
+    await openTrace();
+    for (const label of ["Play", "Pause"]) {
+      const button = screen.getByRole("button", { name: label });
+      expect(button.className).toContain("bg-secondary");
+      expect(button.className).toContain("hover:bg-secondary/80");
+      fireEvent.click(button);
+    }
+  });
+
   it("starts paused at 1x in real time, with the time readout", async () => {
     await openTrace();
     expect(isPlaying()).toBe(false);
@@ -76,7 +86,7 @@ describe("trace playback", () => {
   it("stops at the end and restarts from the beginning when played again", async () => {
     await openTrace();
     fireEvent.click(playButton());
-    clock.advance(9000);
+    clock.advance(9000, 500);
     expect(isPlaying()).toBe(false);
     expect(currentStep()).toBe(8);
     expect(frameId()).toBe("5");
@@ -114,12 +124,10 @@ describe("trace playback", () => {
     }
   });
 
-  it("ignores key repeat for Space and passes B through the playhead", async () => {
+  it("ignores key repeat for Space", async () => {
     await openTrace();
     fireEvent.keyDown(document.body, { key: " ", repeat: true });
     expect(isPlaying()).toBe(false);
-    fireEvent.keyDown(slider(), { key: "b" });
-    expect(screen.getByRole("button", { name: "before" }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("toggles with Space on the playhead itself, and ignores the page keys while a menu is open", async () => {
@@ -194,13 +202,13 @@ describe("trace playback", () => {
     await choose("Pace", "Per step");
     expect(choice("Pace")).toBe("Per step");
     fireEvent.click(playButton());
-    clock.advance(1600); // real time would still be in step 0
+    clock.advance(1600, 200); // real time would still be in step 0
     expect(currentStep()).toBe(2);
-    clock.advance(1500);
+    clock.advance(1500, 100);
     expect(currentStep()).toBe(3);
     await choose("Pace", "Real time");
     expect(isPlaying()).toBe(true);
-    clock.advance(10_000);
+    clock.advance(10_000, 1000);
     expect(isPlaying()).toBe(false);
     expect(currentStep()).toBe(8);
   });

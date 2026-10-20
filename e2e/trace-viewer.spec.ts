@@ -22,10 +22,8 @@ test("renders the steps and switches frames", async ({ page }) => {
 
   await steps.nth(3).click();
   await expect(frame(page)).toHaveAttribute("data-frame-id", "2");
-  await page.getByRole("button", { name: "before" }).click();
-  await expect(frame(page)).toHaveAttribute("data-frame-id", "1");
+  await expect(page.getByRole("button", { name: /^(before|after)$/i })).toHaveCount(0);
 
-  await page.getByRole("button", { name: "after" }).click();
   await page.keyboard.press("ArrowRight");
   await expect(steps.nth(4)).toHaveAttribute("aria-current", "step");
   await expect(frame(page)).toHaveAttribute("data-frame-id", "3");
@@ -67,6 +65,17 @@ test("shows the QA tab", async ({ page }) => {
   await openTrace(page);
   await page.getByRole("tab", { name: /QA/ }).click();
   await expect(page.getByText("Text “Start free trial” is visible")).toBeVisible();
+});
+
+test("hides and shows the details panel, and remembers it", async ({ page }) => {
+  await openTrace(page);
+  const toggle = page.getByRole("button", { name: "Details panel" });
+  await toggle.click();
+  await expect(page.getByRole("tab", { name: /Console/ })).toBeHidden();
+  await page.reload();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await toggle.click();
+  await expect(page.getByRole("tab", { name: /Console/ })).toBeVisible();
 });
 
 test("shows a not-found state", async ({ page }) => {
@@ -150,8 +159,16 @@ test("saves the state captures when asked", async ({ page }) => {
   await shot("06-network-tab");
 
   await stepButtons.nth(4).click();
-  await page.getByRole("button", { name: "before" }).click();
-  await shot("07-step-failed-before");
+  await shot("07-step-failed");
+
+  await page.getByRole("button", { name: "Details panel" }).click();
+  await shot("15-details-hidden");
+  await page.getByRole("button", { name: "Details panel" }).click();
+  await page.getByRole("button", { name: /^Run details/ }).click();
+  await expect(page.getByRole("dialog").getByText("Duration")).toBeVisible();
+  await expect(page.locator("[data-slot=popover-content][data-open]")).toBeVisible();
+  await shot("16-run-details-popover");
+  await page.keyboard.press("Escape");
 
   await openTrace(page, "light", passedRun);
   await shot("08-passed-run");

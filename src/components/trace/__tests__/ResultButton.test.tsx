@@ -28,13 +28,17 @@ describe("ResultButton", () => {
     expect(button()).toBeNull();
   });
 
-  it("shows the result line in the header only when the button cannot open it", () => {
-    const { unmount } = render(<TraceHeader trace={sampleTrace} />);
+  it("shows the result in the run details only when the button cannot open it", () => {
+    const header = () => render(<TraceHeader trace={sampleTrace} detailsOpen onToggleDetails={() => {}} />);
+    const { unmount } = header();
+    fireEvent.click(screen.getByRole("button", { name: /^Run details/ }));
+    expect(screen.getByText("Duration")).toBeTruthy();
     expect(screen.queryByText(/Result:/)).toBeNull();
     unmount();
     setDesktop({ onMenuCommand: () => () => {} });
-    render(<TraceHeader trace={sampleTrace} />);
-    expect(screen.getByText(/Result:/).closest("p")?.getAttribute("title")).toBe("The trial button is missing on the pricing page.");
+    header();
+    fireEvent.click(screen.getByRole("button", { name: /^Run details/ }));
+    expect(screen.getByText(/Result:/).closest("p")?.textContent).toContain("The trial button is missing on the pricing page.");
   });
 
   it("creates a document and opens /doc?id= on the web, and reuses it the second time", () => {

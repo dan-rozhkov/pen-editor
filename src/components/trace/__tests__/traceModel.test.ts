@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sampleTrace } from "../__fixtures__/sampleTrace";
 import {
-  beforeFrameOfStep,
   browserLabel,
   buildStepRows,
   buildTimeline,
@@ -101,12 +100,6 @@ describe("frame selection", () => {
   it("falls back to the latest earlier frame for a step without its own", () => {
     expect(lastFrameOfStep(sampleTrace, 1)?.id).toBe(0);
     expect(lastFrameOfStep(sampleTrace, 99)).toBeUndefined();
-  });
-
-  it("uses the latest frame before the step started as the before frame", () => {
-    expect(beforeFrameOfStep(sampleTrace, 3)?.id).toBe(1);
-    expect(beforeFrameOfStep(sampleTrace, 2)?.id).toBe(0);
-    expect(beforeFrameOfStep(sampleTrace, 0)).toBeUndefined();
   });
 
   it("maps a frame back to a step", () => {
