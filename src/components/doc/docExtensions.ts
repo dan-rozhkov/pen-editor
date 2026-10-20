@@ -23,6 +23,8 @@ export const DOC_EXTENSIONS = [
   DocCodeBlock,
   DocStrike,
   Markdown,
+  // The editor's own node view (TableView, used while `resizable` is off) already renders the
+  // div.tableWrapper that scrolls sideways when the columns outgrow the document column.
   Table,
   TableRow,
   TableHeader,

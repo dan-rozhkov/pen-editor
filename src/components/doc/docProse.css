@@ -77,17 +77,46 @@ html.route-doc #root {
 /* Notion shows the hint on the focused empty line only. */
 .doc-prose:not(.ProseMirror-focused) .is-empty::before { display: none; }
 
-/* Tables, task lists, images (GFM constructs the agent writes). */
-.doc-prose table { border-collapse: collapse; width: 100%; table-layout: fixed; overflow: hidden; }
+/* Tables (GFM constructs the agent writes). The wrapper scrolls sideways; the page never does. Its padding is
+   room reserved for the hover controls (column grip on top, "+" bars right and below), so they never cover
+   cell text or the next block. */
+.doc-prose .tableWrapper { overflow-x: auto; max-width: 100%; }
+/* The controls are `hidden sm:block` (Tailwind sm = 40rem), so the room is reserved only where they show. */
+@media (min-width: 40rem) {
+  .doc-prose .tableWrapper { padding: 8px 20px 20px 0; }
+}
+/* Separate borders (not collapsed): the table box owns its outer lines, so the wrapper's overflow clip and
+   scrollbar logic never see a half-pixel of collapsed border sticking out. Same 1px grid as before. */
+.doc-prose table {
+  border-collapse: separate;
+  border-spacing: 0;
+  border-top: 1px solid var(--color-border-default);
+  border-left: 1px solid var(--color-border-default);
+  width: 100%;
+  table-layout: auto;
+}
 .doc-prose th, .doc-prose td {
-  border: 1px solid var(--color-border-default);
+  border-right: 1px solid var(--color-border-default);
+  border-bottom: 1px solid var(--color-border-default);
   padding: 7px 8px;
+  min-width: 120px;
   vertical-align: top;
   text-align: left;
+  position: relative;
 }
 .doc-prose th { background: var(--color-surface-elevated); font-weight: 600; }
 .doc-prose td > p, .doc-prose th > p { margin: 0; padding: 0; }
-.doc-prose .selectedCell { background: var(--color-surface-elevated); }
+/* prosemirror-tables marks the cells of a CellSelection: a translucent blue wash, no native text selection. */
+.doc-prose .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--color-accent-primary) 16%, transparent);
+  pointer-events: none;
+}
+.doc-prose .selectedCell *::selection, .doc-prose .selectedCell::selection { background: transparent; }
+
+/* Task lists, images. */
 .doc-prose ul[data-type="taskList"] { list-style: none; padding-left: 2px; }
 .doc-prose ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.5em; }
 .doc-prose ul[data-type="taskList"] li > label { flex: none; padding-top: 0.35em; user-select: none; }

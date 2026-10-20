@@ -4,6 +4,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { DOC_EXTENSIONS } from "./docExtensions";
 import { SlashCommand } from "./slash/SlashCommand";
 import { BlockHandle } from "./blockHandle/BlockHandle";
+import { TableControls } from "./table/TableControls";
 import { BubbleToolbar } from "./ui/BubbleToolbar";
 import { ImagePrompt } from "./ui/ImagePrompt";
 import "./docProse.css";
@@ -79,6 +80,7 @@ export function DocEditor({ markdown, revision, onMarkdown, onSynced, onEditor }
         <>
           <BubbleToolbar editor={editor} />
           <BlockHandle editor={editor} containerRef={containerRef} />
+          <TableControls editor={editor} containerRef={containerRef} />
           <ImagePrompt editor={editor} />
         </>
       )}

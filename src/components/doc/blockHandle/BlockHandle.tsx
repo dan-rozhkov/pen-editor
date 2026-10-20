@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/IconButton";
 import { TURN_INTO_ITEMS, turnInto } from "../ui/blockTransforms";
+import { skipBaseUiOpen } from "../ui/baseUi";
 import { ColorPanel } from "../ui/ColorPanel";
 import { firstLineHeight, handleTop, nearBlock, topLevelChild } from "./blockGeometry";
 import { blockHasText, deleteBlock, resolveBlockPos, duplicateBlock, endBlockDrag, insertBelowAndOpenSlash, selectBlockText, startBlockDrag } from "./blockCommands";
@@ -43,11 +44,6 @@ function hoveredBlock(editor: Editor, event: MouseEvent): HTMLElement | null {
   const blockPos = $pos.depth >= 1 ? $pos.before(1) : $pos.nodeAfter ? hit.pos : -1;
   const dom = blockPos >= 0 ? view.nodeDOM(blockPos) : null;
   return dom instanceof HTMLElement && nearBlock(dom.getBoundingClientRect(), event.clientY) ? dom : null;
-}
-
-/** Base UI's trigger toggles the menu itself; the grip is a drag source and our onClick is the only toggle. */
-function skipBaseUiOpen(event: unknown) {
-  (event as { preventBaseUIHandler?: () => void }).preventBaseUIHandler?.();
 }
 
 function isTopLevel(editor: Editor, el: HTMLElement): boolean {
