@@ -53,7 +53,9 @@
   tab-size: 2;
 }
 .doc-prose pre code { background: none; color: inherit; padding: 0; border-radius: 0; font-size: inherit; }
-.doc-prose hr { border: 0; border-top: 1px solid var(--color-border-default); margin: 6px 0; }
+.doc-prose hr { border: 0; border-top: 1px solid var(--color-border-default); margin: 24px 0; }
+/* Equal space above and below: a heading's own margin-top would collapse into the hr's and win. */
+.doc-prose hr + * { margin-top: 0; }
 .doc-prose a {
   color: inherit;
   text-decoration: underline;
