@@ -153,7 +153,7 @@ function IndicatorButton({
             variant="ghost"
             aria-label="Filtered column, edit filter"
             data-table-control
-            className="absolute z-[9] h-auto min-w-0 rounded-sm border border-accent-primary bg-surface-panel p-0 text-accent-primary hover:bg-secondary [&_svg:not([class*='size-'])]:size-3.5"
+            className="absolute z-[9] h-auto min-w-0 rounded-sm bg-transparent p-0 text-foreground hover:bg-secondary [&_svg:not([class*='size-'])]:size-3.5"
             style={place(item.placed)}
             // Keep the editor's focus and selection until the popover input takes over.
             onMouseDown={(event: React.MouseEvent) => event.preventDefault()}

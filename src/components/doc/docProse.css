@@ -105,8 +105,6 @@
 @media (min-width: 40rem) {
   .doc-prose th { padding-right: 28px; }
 }
-/* A filtered column's header stays marked even when the pointer is elsewhere. */
-.doc-prose th[data-filtered] { color: var(--color-accent-primary); box-shadow: inset 0 -2px 0 var(--color-accent-primary); }
 .doc-prose td > p, .doc-prose th > p { margin: 0; padding: 0; }
 /* prosemirror-tables marks the cells of a CellSelection: a translucent blue wash, no native text selection. */
 .doc-prose .selectedCell::after {

@@ -45,7 +45,7 @@ interface Props {
 }
 
 const HEAD_CLASS =
-  "absolute z-10 h-auto min-w-0 rounded-sm border border-transparent bg-surface-panel/90 p-0 text-text-muted hover:bg-secondary hover:text-foreground aria-expanded:bg-secondary aria-expanded:text-foreground data-filtered:border-accent-primary data-filtered:text-accent-primary [&_svg:not([class*='size-'])]:size-3.5";
+  "absolute z-10 h-auto min-w-0 rounded-sm border border-transparent bg-surface-panel/90 p-0 text-text-muted hover:bg-secondary hover:text-foreground aria-expanded:bg-secondary aria-expanded:text-foreground data-filtered:text-foreground [&_svg:not([class*='size-'])]:size-3.5";
 
 /** The caret button in a header cell: sort, filter, move and delete for that column. */
 export function ColumnHeaderMenu({ editor, tablePos, col, placed, menu, actions, setMenu, closeIf, run }: Props) {
