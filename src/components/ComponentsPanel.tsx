@@ -199,8 +199,8 @@ export function ComponentsPanel() {
           className="pointer-events-none absolute top-[26px] left-5 -translate-y-1/2 text-text-muted"
         />
         <Input
-          aria-label="Search components"
-          placeholder="Search components…"
+          aria-label="Search slots"
+          placeholder="Search slots…"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           className="h-7 pl-7"
@@ -212,12 +212,12 @@ export function ComponentsPanel() {
       <div className="flex-1 overflow-y-auto px-2 pb-3">
         {rows.length === 0 ? (
           <PanelEmptyState icon={<CubeIcon aria-hidden size={28} weight="light" />}>
-            No components yet. Ask the agent to extract one from a screen.
+            No slots yet. Ask the agent to extract one from a screen.
           </PanelEmptyState>
         ) : visible.length === 0 ? (
-          <PanelEmptyState icon={null}>No components found.</PanelEmptyState>
+          <PanelEmptyState icon={null}>No slots found.</PanelEmptyState>
         ) : (
-          <ul aria-label="Components" className="flex flex-col gap-2">
+          <ul aria-label="Slots" className="flex flex-col gap-2">
             {visible.map((row) => (
               <ComponentRowView
                 key={row.master.key}

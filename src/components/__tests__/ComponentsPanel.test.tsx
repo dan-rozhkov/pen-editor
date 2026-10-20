@@ -39,7 +39,7 @@ afterEach(() => cleanup());
 describe("<ComponentsPanel />", () => {
   it("shows an empty state without components", () => {
     render(<ComponentsPanel />);
-    expect(screen.getByText(/No components yet/)).toBeTruthy();
+    expect(screen.getByText(/No slots yet/)).toBeTruthy();
   });
 
   it("lists components with status badge, usage count and description", async () => {
@@ -58,12 +58,12 @@ describe("<ComponentsPanel />", () => {
     await defineBtn();
     await defineComponent({ key: "card", name: "Card", html: CARD_HTML, description: "Content box" });
     render(<ComponentsPanel />);
-    const search = screen.getByRole("textbox", { name: "Search components" });
+    const search = screen.getByRole("textbox", { name: "Search slots" });
     fireEvent.change(search, { target: { value: "content" } });
     expect(screen.queryByTestId("component-row-btn")).toBeNull();
     expect(screen.getByTestId("component-row-card")).toBeTruthy();
     fireEvent.change(search, { target: { value: "zzz" } });
-    expect(screen.getByText("No components found.")).toBeTruthy();
+    expect(screen.getByText("No slots found.")).toBeTruthy();
   });
 
   it("warns about duplicate keys", async () => {
