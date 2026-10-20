@@ -159,7 +159,7 @@ function IndicatorButton({
             // Keep the editor's focus and selection until the popover input takes over.
             onMouseDown={(event: React.MouseEvent) => event.preventDefault()}
           >
-            <FunnelSimpleIcon weight="fill" />
+            <FunnelSimpleIcon />
           </Button>
         }
       />

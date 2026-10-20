@@ -77,7 +77,7 @@ export function ColumnHeaderMenu({ editor, tablePos, col, placed, menu, actions,
                 setMenu(menu === "head" ? null : "head");
               }}
             >
-              {filtered ? <FunnelSimpleIcon weight="fill" /> : <CaretDownIcon weight={CHEVRON_WEIGHT} />}
+              {filtered ? <FunnelSimpleIcon /> : <CaretDownIcon weight={CHEVRON_WEIGHT} />}
             </Button>
           }
         />
