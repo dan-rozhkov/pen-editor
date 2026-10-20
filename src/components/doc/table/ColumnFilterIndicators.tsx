@@ -3,8 +3,9 @@ import type { Editor } from "@tiptap/react";
 import { FunnelSimpleIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import type { Transaction } from "@tiptap/pm/state";
-import { FilterPopoverContent } from "./ColumnHeaderMenu";
+import { FILTER_ICON_NO_BG, FilterPopoverContent } from "./ColumnHeaderMenu";
 import { tableFilterKey } from "./tableFilter";
 import { headButton, place, relativeTo, visibleSpan, type Placed } from "./tableGeometry";
 
@@ -153,7 +154,7 @@ function IndicatorButton({
             variant="ghost"
             aria-label="Filtered column, edit filter"
             data-table-control
-            className="absolute z-[9] h-auto min-w-0 rounded-sm bg-transparent p-0 text-foreground hover:bg-secondary [&_svg:not([class*='size-'])]:size-3.5"
+            className={cn("absolute z-[9] h-auto min-w-0 rounded-sm p-0 text-foreground [&_svg:not([class*='size-'])]:size-3.5", FILTER_ICON_NO_BG)}
             style={place(item.placed)}
             // Keep the editor's focus and selection until the popover input takes over.
             onMouseDown={(event: React.MouseEvent) => event.preventDefault()}

@@ -48,6 +48,10 @@ interface Props {
 const HEAD_CLASS =
   "absolute z-10 h-auto min-w-0 rounded-sm border border-transparent bg-surface-panel/90 p-0 text-text-muted hover:bg-secondary hover:text-foreground aria-expanded:bg-secondary aria-expanded:text-foreground data-filtered:text-foreground [&_svg:not([class*='size-'])]:size-3.5";
 
+/** A filtered column's funnel is a bare icon: no background at rest, on hover or while its menu is open. */
+export const FILTER_ICON_NO_BG =
+  "bg-transparent hover:bg-transparent dark:hover:bg-transparent aria-expanded:bg-transparent dark:aria-expanded:bg-transparent";
+
 /** The caret button in a header cell: sort, filter, move and delete for that column. */
 export function ColumnHeaderMenu({ editor, tablePos, col, placed, menu, actions, setMenu, closeIf, run }: Props) {
   const filtered = getColumnFilters(editor, tablePos)[col] !== undefined;
@@ -61,7 +65,7 @@ export function ColumnHeaderMenu({ editor, tablePos, col, placed, menu, actions,
               aria-label={filtered ? "Column menu, filtered" : "Column menu"}
               data-table-control
               data-filtered={filtered ? "" : undefined}
-              className={HEAD_CLASS}
+              className={cn(HEAD_CLASS, filtered && FILTER_ICON_NO_BG)}
               style={place(placed)}
               onPointerDown={skipBaseUiOpen}
               onMouseDown={(event: unknown) => {
@@ -159,6 +163,7 @@ function FilterForm({ editor, tablePos, col, onDone }: { editor: Editor; tablePo
           type="button"
           variant="ghost"
           size="xs"
+          className="text-xs"
           disabled={value === ""}
           onClick={() => {
             setValue("");
