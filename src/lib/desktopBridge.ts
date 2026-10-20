@@ -43,7 +43,16 @@ export type DesktopBrowserBridge = BrowserBridge &
     releaseApp?(): Promise<unknown>;
   };
 
+/** Desktop sign-in through the system browser (docs: pen-editor-backend desktop-sign-in spec). Optional: older shells lack it. */
+export interface DesktopAuthApi {
+  /** Opens the system browser on /auth/desktop; the token comes back through `onToken`. */
+  signIn(): void;
+  /** Delivers `{ token, verifier }` once per completed browser sign-in. Returns the unsubscribe. */
+  onToken(cb: (payload: { token: string; verifier: string }) => void): () => void;
+}
+
 export interface PenDesktopApi {
+  auth?: DesktopAuthApi;
   /**
    * Local browse-run traces (pen-editor-desktop traceStore). Optional: older shells lack it.
    * `read` returns `{ trace }` with data-URL frames, or `{ error }`.

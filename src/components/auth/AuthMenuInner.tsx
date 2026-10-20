@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { appHref, signInHref, stripBase } from "@/lib/auth/paths";
+import { desktopAuth } from "@/lib/auth/desktopAuth";
 import { signOut, useSession } from "@/lib/auth/session";
 import {
   DropdownMenu,
@@ -22,19 +23,29 @@ export default function AuthMenuInner({ variant }: { variant: AuthMenuVariant })
     // Editor: new tab, so an unsaved document is never navigated away from;
     // the session then reaches this tab through Better Auth's cross-tab sync.
     const inEditor = variant === "toolbar";
+    const className = cn(
+      "inline-flex shrink-0 items-center rounded-full font-medium transition-colors",
+      FOCUS,
+      variant === "showcase"
+        ? "bg-surface-elevated px-4 py-2 text-sm text-text-muted hover:bg-surface-hover hover:text-text-primary"
+        : "h-6 px-2.5 text-xs text-text-primary hover:bg-surface-hover",
+    );
+    // Desktop shell: sign in through the system browser instead of an in-app page.
+    const desktop = desktopAuth();
+    if (desktop) {
+      return (
+        <button type="button" onClick={() => desktop.signIn()} className={className}>
+          Sign in
+        </button>
+      );
+    }
     const href = inEditor ? signInHref("/account") : signInHref(stripBase(window.location.pathname));
     return (
       <a
         href={href}
         target={inEditor ? "_blank" : undefined}
         rel={inEditor ? "noopener" : undefined}
-        className={cn(
-          "inline-flex shrink-0 items-center rounded-full font-medium transition-colors",
-          FOCUS,
-          variant === "showcase"
-            ? "bg-surface-elevated px-4 py-2 text-sm text-text-muted hover:bg-surface-hover hover:text-text-primary"
-            : "h-6 px-2.5 text-xs text-text-primary hover:bg-surface-hover",
-        )}
+        className={className}
       >
         Sign in
       </a>

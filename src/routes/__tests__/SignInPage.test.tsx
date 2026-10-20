@@ -4,10 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { currentLocation, renderAuthPage } from "@/test/renderAuthPage";
 import {
   authClientMock,
+  clearDesktopAuth,
   CONFIG_ALL,
   resetAuthMocks,
   setMockSession,
   stubAuthConfig,
+  stubDesktopAuth,
   USER,
 } from "@/test/authMocks";
 
@@ -282,5 +284,26 @@ describe("<SignInPage /> base path", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+});
+
+describe("<SignInPage /> inside the desktop shell", () => {
+  afterEach(clearDesktopAuth);
+
+  it("shows only Continue in browser, which starts the system-browser sign-in", async () => {
+    const desktop = stubDesktopAuth();
+    await open();
+    press("Continue in browser");
+    expect(desktop.signIn).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText("Email")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Continue with Google" })).toBeNull();
+  });
+
+  it("still shows Continue / Sign out for a signed-in user", async () => {
+    stubDesktopAuth();
+    setMockSession(USER);
+    await open();
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Continue in browser" })).toBeNull();
   });
 });

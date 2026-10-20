@@ -26,7 +26,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe.each(["/agent", "/doc", "/trace/abc"])("startBridges on the %s route", (route) => {
+describe.each(["/agent", "/doc", "/trace/abc", "/auth/desktop"])("startBridges on the %s route", (route) => {
   it("starts no bridge at all", async () => {
     vi.stubEnv("VITE_MCP_WS_TOKEN", "secret-token");
     (window as unknown as { penDesktop: unknown }).penDesktop = {};

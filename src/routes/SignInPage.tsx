@@ -10,6 +10,7 @@ import {
   TextField,
 } from "@/components/auth/authUi";
 import { authClient } from "@/lib/auth/authClient";
+import { desktopAuth } from "@/lib/auth/desktopAuth";
 import { useAuthConfig } from "@/lib/auth/authConfig";
 import { describeActionError, describeRedirectError } from "@/lib/auth/errors";
 import { appHref } from "@/lib/auth/paths";
@@ -208,6 +209,18 @@ export default function SignInPage() {
             Sign out
           </AuthButton>
         </div>
+      </AuthShell>
+    );
+  }
+
+  // Inside the desktop shell Google refuses an embedded browser and a magic link opens in the system
+  // browser, so the only honest option is to sign in there.
+  const desktop = desktopAuth();
+  if (desktop) {
+    return (
+      <AuthShell title="Sign in to Sideform">
+        <p className="mb-4 text-sm text-text-muted">Sign-in opens in your browser, then returns here.</p>
+        <AuthButton onClick={() => desktop.signIn()}>Continue in browser</AuthButton>
       </AuthShell>
     );
   }

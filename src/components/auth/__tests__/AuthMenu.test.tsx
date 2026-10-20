@@ -3,11 +3,13 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 
 import {
   authClientMock,
+  clearDesktopAuth,
   CONFIG_ALL,
   CONFIG_OFF,
   resetAuthMocks,
   setMockSession,
   stubAuthConfig,
+  stubDesktopAuth,
   USER,
 } from "@/test/authMocks";
 
@@ -72,6 +74,19 @@ describe("<AuthMenu />", () => {
     const link = await screen.findByRole("link", { name: "Sign in" });
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toBe("noopener");
+  });
+
+  it("in the desktop shell signs in through the system browser instead of a link", async () => {
+    const desktop = stubDesktopAuth();
+    try {
+      stubAuthConfig(CONFIG_ALL);
+      render(<AuthMenu variant="toolbar" />);
+      fireEvent.click(await screen.findByRole("button", { name: "Sign in" }));
+      expect(desktop.signIn).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
+    } finally {
+      clearDesktopAuth();
+    }
   });
 
   it("shows an avatar menu with Account and Sign out when signed in", async () => {

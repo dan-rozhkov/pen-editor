@@ -35,6 +35,8 @@ const TracePage = lazy(() => import("@/routes/TracePage"));
 const SignInPage = lazy(() => import("@/routes/SignInPage"));
 const ConsentPage = lazy(() => import("@/routes/ConsentPage"));
 const AccountPage = lazy(() => import("@/routes/AccountPage"));
+// Browser half of the desktop shell's sign-in (/auth/desktop). No editor/Pixi imports.
+const DesktopAuthPage = lazy(() => import("@/routes/DesktopAuthPage"));
 
 // Public legal/support documents: static, no auth, no backend.
 const PrivacyPage = lazy(() => import("@/routes/legal/PrivacyPage"));
@@ -96,6 +98,14 @@ export function AppRouter() {
           element={
             <Suspense fallback={null}>
               <SignInPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/auth/desktop"
+          element={
+            <Suspense fallback={null}>
+              <DesktopAuthPage />
             </Suspense>
           }
         />

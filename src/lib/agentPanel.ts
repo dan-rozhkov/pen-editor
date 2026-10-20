@@ -1,10 +1,12 @@
-import type { BrowseTraceSavePayload, BrowseTraceSaveResult, PenDesktopApi } from "@/lib/desktopBridge";
+import type { BrowseTraceSavePayload, BrowseTraceSaveResult, DesktopAuthApi, PenDesktopApi } from "@/lib/desktopBridge";
 import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
 import type { AgentPanelCanvasBridge } from "@/lib/canvasLink/protocol";
 
 /** Preload API of the agent panel view (docs/canvas-link.md). */
 export interface PenAgentPanelApi {
   version: number;
+  /** Desktop sign-in through the system browser; same shape as `window.penDesktop.auth`. Absent on an older shell. */
+  auth?: DesktopAuthApi;
   /** version >= 2: the link to the canvas tabs. Absent on an older shell. */
   canvas?: AgentPanelCanvasBridge;
   /** version >= 2: the shell's built-in browser, the same shape as `window.penDesktop.browser`. */
@@ -94,4 +96,9 @@ export function isDocRoutePath(pathname: string, base: string = import.meta.env.
 export function isTraceRoutePath(pathname: string, base: string = import.meta.env.BASE_URL || "/"): boolean {
   const prefix = base.endsWith("/") ? base.slice(0, -1) : base;
   return pathname.startsWith(`${prefix}/trace/`) && pathname.length > prefix.length + "/trace/".length;
+}
+
+/** True when `pathname` is the canvas-less /auth/desktop hand-off page (basename-aware). */
+export function isAuthDesktopRoutePath(pathname: string, base: string = import.meta.env.BASE_URL || "/"): boolean {
+  return isRoutePath(pathname, "auth/desktop", base);
 }
