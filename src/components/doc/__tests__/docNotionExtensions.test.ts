@@ -1,11 +1,8 @@
-import { Editor, type JSONContent } from "@tiptap/core";
-import { describe, expect, it } from "vitest";
+import type { Editor, JSONContent } from "@tiptap/core";
+import { afterEach, describe, expect, it } from "vitest";
 import { DocDetails } from "@/components/doc/extensions/docDetails";
-import { DOC_EXTENSIONS, getActiveDocColor } from "@/components/doc/docExtensions";
-
-function makeEditor(markdown: string): Editor {
-  return new Editor({ extensions: DOC_EXTENSIONS, content: markdown, contentType: "markdown" });
-}
+import { destroyLoaded, makeEditor, parseTwice } from "@/components/doc/ui/__tests__/editorFixture";
+import { getActiveDocColor } from "@/components/doc/docExtensions";
 
 function roundTrip(markdown: string): string {
   const editor = makeEditor(markdown);
@@ -14,19 +11,7 @@ function roundTrip(markdown: string): string {
   return out;
 }
 
-/** Parse twice: load -> getMarkdown -> load again -> getMarkdown must agree, and both docs must satisfy the schema. */
-function parseTwice(markdown: string): string {
-  const first = makeEditor(markdown);
-  first.state.doc.check();
-  const once = first.getMarkdown();
-  first.destroy();
-  const second = makeEditor(once);
-  second.state.doc.check();
-  const twice = second.getMarkdown();
-  second.destroy();
-  expect(twice).toBe(once);
-  return once;
-}
+afterEach(destroyLoaded);
 
 const TOGGLE = "<details>\n<summary>Title</summary>\n\nBody text\n\n</details>";
 const OPEN_TOGGLE = "<details open>\n<summary>Open **one**</summary>\n\nBody\n\n</details>";

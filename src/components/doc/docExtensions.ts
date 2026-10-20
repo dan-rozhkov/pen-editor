@@ -1,12 +1,13 @@
 import Image from "@tiptap/extension-image";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import Strike from "@tiptap/extension-strike";
-import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
+import { TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
 import { Markdown } from "@tiptap/markdown";
 import StarterKit from "@tiptap/starter-kit";
 import { DocTableFilter } from "./table/tableFilter";
 import { DocCodeBlock } from "./extensions/docCodeBlock";
 import { DocColorMark, getActiveDocColor } from "./extensions/docColor";
+import { DocPropertyKeys, DocTable, PropertyKey, PropertyList, PropertyRow, PropertyValue } from "./extensions/docProperties";
 import { DocDetails, DocDetailsContent, DocDetailsSummary } from "./extensions/docDetails";
 
 // Cmd+Shift+S is the desktop menu's "Export as .json". Strike's default chord is
@@ -26,7 +27,7 @@ export const DOC_EXTENSIONS = [
   Markdown,
   // The editor's own node view (TableView, used while `resizable` is off) already renders the
   // div.tableWrapper that scrolls sideways when the columns outgrow the document column.
-  Table,
+  DocTable,
   TableRow,
   TableHeader,
   TableCell,
@@ -38,6 +39,11 @@ export const DOC_EXTENSIONS = [
   DocDetailsSummary,
   DocDetailsContent,
   DocColorMark,
+  PropertyList,
+  PropertyRow,
+  PropertyKey,
+  PropertyValue,
+  DocPropertyKeys,
 ];
 
 export { getActiveDocColor };

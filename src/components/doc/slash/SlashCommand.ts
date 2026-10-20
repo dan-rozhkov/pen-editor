@@ -1,10 +1,11 @@
 import { Extension, ReactRenderer } from "@tiptap/react";
-import { PluginKey } from "@tiptap/pm/state";
 import Suggestion from "@tiptap/suggestion";
+import { SlashCommandKey } from "./slashKey";
 import { SlashMenu, type SlashMenuHandle } from "./SlashMenu";
-import { filterSlashItems, runSlashItem, type SlashItem } from "./slashItems";
+import { isInPropertyCell } from "../extensions/docProperties";
+import { filterSlashItems, runSlashItem, slashItemsAt, type SlashItem } from "./slashItems";
 
-export const SlashCommandKey = new PluginKey("slashCommand");
+export { SlashCommandKey };
 
 /** "/" at the start of a block or after a space opens the block menu. Not inside code. */
 export const SlashCommand = Extension.create({
@@ -17,8 +18,13 @@ export const SlashCommand = Extension.create({
         pluginKey: SlashCommandKey,
         char: "/",
         allowedPrefixes: [" "],
-        allow: ({ state, range }) => !state.doc.resolve(range.from).parent.type.spec.code,
-        items: ({ query }) => filterSlashItems(query),
+        allow: ({ state, range }) => {
+          const $from = state.doc.resolve(range.from);
+          if ($from.parent.type.spec.code) return false;
+          // A property key/value is one line of inline text: a block inserted there would split the list.
+          return !isInPropertyCell($from);
+        },
+        items: ({ query, editor }) => filterSlashItems(query, slashItemsAt(editor.state.selection.$from)),
         command: ({ editor, range, props }) => runSlashItem(editor, range, props),
         render: () => {
           let renderer: ReactRenderer<SlashMenuHandle> | null = null;

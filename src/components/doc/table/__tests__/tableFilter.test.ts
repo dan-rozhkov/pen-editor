@@ -215,7 +215,7 @@ describe("table filter: columns changed without a remap", () => {
   });
 
   it("keeps a filter on a column whose header is empty and duplicated", () => {
-    make("|  |  |\n| --- | --- |\n| a | b |");
+    make("|  |  |  |\n| --- | --- | --- |\n| a | b | c |");
     setColumnFilter(editor, 0, 1, "b");
     editor.commands.insertContentAt(textPos("a") + 1, "x");
     expect(getColumnFilters(editor, 0)).toEqual({ 1: "b" });

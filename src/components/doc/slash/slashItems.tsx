@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Editor, Range } from "@tiptap/react";
-import { ImageIcon, MinusIcon, TableIcon, TreeStructureIcon } from "@phosphor-icons/react";
+import type { ResolvedPos } from "@tiptap/pm/model";
+import { ImageIcon, ListDashesIcon, MinusIcon, TableIcon, TreeStructureIcon } from "@phosphor-icons/react";
 import { TURN_INTO_ITEMS } from "../ui/blockTransforms";
 
 /** The image URL popover (`ImagePrompt`) listens for this on the editor DOM. */
@@ -12,6 +13,8 @@ export interface SlashItem {
   hint: string;
   keywords: string[];
   icon: ReactNode;
+  /** Cannot live inside a table cell or header (a nested table, or a list that would split the table). */
+  hideInTable?: boolean;
   /** The caller removes the "/query" range first (`runSlashItem`). */
   run: (editor: Editor, chain: ReturnType<Editor["chain"]>) => void;
 }
@@ -61,8 +64,18 @@ export const SLASH_ITEMS: SlashItem[] = [
     title: "Table",
     hint: "3 × 3 with a header row",
     keywords: ["grid", "rows", "columns"],
+    hideInTable: true,
     icon: <TableIcon />,
     run: (_editor, chain) => chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
+  },
+  {
+    id: "properties",
+    title: "Properties",
+    hint: "Field and value pairs",
+    keywords: ["properties", "fields", "property", "key value", "свойства"],
+    hideInTable: true,
+    icon: <ListDashesIcon />,
+    run: (_editor, chain) => chain.insertPropertyList().run(),
   },
   {
     id: "image",
@@ -76,6 +89,15 @@ export const SLASH_ITEMS: SlashItem[] = [
     },
   },
 ];
+
+/** The items that make sense at `$pos`: block items that cannot live in a table cell are dropped there. */
+export function slashItemsAt($pos: ResolvedPos, items: SlashItem[] = SLASH_ITEMS): SlashItem[] {
+  let inTable = false;
+  for (let depth = $pos.depth; depth > 0; depth -= 1) inTable = inTable || TABLE_CELLS.has($pos.node(depth).type.name);
+  return inTable ? items.filter((item) => !item.hideInTable) : items;
+}
+
+const TABLE_CELLS = new Set(["tableCell", "tableHeader"]);
 
 /** Case-insensitive; title prefix first, then title substring, then keywords. */
 export function filterSlashItems(query: string, items: SlashItem[] = SLASH_ITEMS): SlashItem[] {

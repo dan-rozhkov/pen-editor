@@ -7,10 +7,13 @@ function blockAt(editor: Editor, pos: number) {
   return node ? { node, end: pos + node.nodeSize } : null;
 }
 
-/** Leaf/atom blocks (image, divider) have no text: "turn into" and colour do not apply to them. */
+/**
+ * Leaf/atom blocks (image, divider) have no text: "turn into" and colour do not apply to them.
+ * Neither does a property list: its cells are fixed key/value pairs, so a transform would silently fail.
+ */
 export function blockHasText(editor: Editor, pos: number): boolean {
   const node = editor.state.doc.nodeAt(pos);
-  return !!node && !node.isLeaf && !node.isAtom;
+  return !!node && !node.isLeaf && !node.isAtom && node.type.name !== "propertyList";
 }
 
 /**

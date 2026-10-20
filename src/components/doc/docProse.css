@@ -220,3 +220,79 @@
 .doc-prose .doc-mermaid-preview svg { max-width: 100%; height: auto; }
 .doc-prose .doc-mermaid-error, .doc-prose .doc-mermaid-hint { margin: 0.4em 0 0; font-size: 0.8rem; line-height: 1.4; color: var(--color-text-muted); }
 .doc-prose .doc-mermaid-hint[role="button"] { cursor: pointer; }
+
+/* Property list (Notion page properties): rows of muted key + value, no borders. The row icon is a node view
+   span (inferred from the value, not stored); chips are the ordinary data-bg highlight. */
+.doc-prose .doc-property-list { margin: 4px 0; }
+.doc-prose .doc-property-rows { display: flex; flex-direction: column; gap: 3px; }
+.doc-prose .doc-property-row { position: relative; display: flex; align-items: flex-start; min-height: 34px; }
+.doc-prose .doc-property-cells { display: contents; }
+/* React node views put the real contentDOM in an inner div; it must not break the flex layout above. */
+.doc-prose .doc-property-rows > [data-node-view-content-react],
+.doc-prose .doc-property-cells > [data-node-view-content-react] { display: contents; }
+.doc-prose .doc-property-icon {
+  position: absolute;
+  left: 2px;
+  top: 9px;
+  display: inline-flex;
+  color: var(--color-text-muted);
+  pointer-events: none;
+  user-select: none;
+}
+.doc-prose [data-type="property-key"] {
+  flex: 0 0 172px;
+  box-sizing: border-box;
+  padding: 5px 12px 5px 28px;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.doc-prose [data-type="property-value"] {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 5px 8px;
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.doc-prose [data-type="property-value"]:has(> br.ProseMirror-trailingBreak:only-child)::before {
+  content: "Empty";
+  float: left;
+  height: 0;
+  color: var(--color-text-muted);
+  opacity: 0.6;
+  pointer-events: none;
+}
+.doc-prose [data-type="property-value"] span[data-bg] { padding: 1px 6px; margin-right: 6px; border-radius: 4px; font-weight: inherit; }
+.doc-prose [data-type="property-value"] a { margin-right: 6px; }
+.doc-prose [data-type="property-value"] a::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  vertical-align: -2px;
+  background-color: var(--color-text-muted);
+  -webkit-mask: var(--doc-page-icon) center / contain no-repeat;
+  mask: var(--doc-page-icon) center / contain no-repeat;
+}
+.doc-prose .doc-property-list {
+  --doc-page-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'><path d='M213.66 82.34l-56-56A8 8 0 0 0 152 24H56a16 16 0 0 0-16 16v176a16 16 0 0 0 16 16h144a16 16 0 0 0 16-16V88a8 8 0 0 0-2.34-5.66ZM160 51.31 188.69 80H160ZM200 216H56V40h88v48a8 8 0 0 0 8 8h48Zm-32-80a8 8 0 0 1-8 8H96a8 8 0 0 1 0-16h64a8 8 0 0 1 8 8Zm0 32a8 8 0 0 1-8 8H96a8 8 0 0 1 0-16h64a8 8 0 0 1 8 8Z'/></svg>");
+}
+.doc-prose .doc-property-add {
+  display: block;
+  padding: 5px 8px 5px 28px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.doc-prose .doc-property-add:hover { background: var(--color-surface-hover); }
+/* View-only editor: no way to add a row. */
+.doc-prose[contenteditable="false"] .doc-property-add { display: none; }
+@media (max-width: 480px) {
+  .doc-prose [data-type="property-key"] { flex-basis: 120px; }
+}

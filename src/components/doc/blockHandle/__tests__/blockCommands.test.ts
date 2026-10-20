@@ -54,6 +54,13 @@ describe("block commands", () => {
     expect(editor.state.doc.child(1).textContent).toBe("/");
   });
 
+  it("blockHasText is false for a property list, so Turn into is not offered", () => {
+    editor = makeEditor("|  |  |\n| --- | --- |\n| a | b |\n\ntail");
+    expect(topTypes(editor)).toEqual(["propertyList", "paragraph"]);
+    expect(blockHasText(editor, posOf(0))).toBe(false);
+    expect(blockHasText(editor, posOf(1))).toBe(true);
+  });
+
   it("selectBlockText selects the whole text of the block", () => {
     editor = makeEditor("one\n\ntwo words\n\nthree");
     selectBlockText(editor, posOf(1));
