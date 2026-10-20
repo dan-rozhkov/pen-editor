@@ -1,4 +1,5 @@
 import type { BrowseTraceSavePayload, BrowseTraceSaveResult, PenDesktopApi } from "@/lib/desktopBridge";
+import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
 import type { AgentPanelCanvasBridge } from "@/lib/canvasLink/protocol";
 
 /** Preload API of the agent panel view (docs/canvas-link.md). */
@@ -21,6 +22,13 @@ export interface PenAgentPanelApi {
     save(payload: BrowseTraceSavePayload): Promise<BrowseTraceSaveResult>;
     /** Opens or focuses the trace tab for `id`. */
     open(id: string): Promise<{ ok: boolean; error?: string }>;
+    /** Open trace tabs in strip order. Absent on a shell that cannot list them. */
+    listTabs?(): Promise<{ tabs: { traceId: string; title: string; active: boolean }[] } | { error: string }>;
+    /**
+     * The stored trace (the shape `penDesktop.traces.read` returns). `{ frames: false }` skips the frame
+     * images: `frame.src` stays the stored asset path. Absent on an older shell.
+     */
+    read?(id: string, opts?: { frames?: boolean }): Promise<{ trace: BrowseTrace } | { error: string }>;
   };
 }
 
@@ -40,6 +48,16 @@ declare global {
 export function getAgentPanelDocsBridge(): AgentPanelDocsBridge | undefined {
   const docs = window.penAgentPanel?.docs;
   return typeof docs?.open === "function" ? docs : undefined;
+}
+
+type PanelTraces = NonNullable<PenAgentPanelApi["traces"]>;
+/** `traces` with `listTabs` and `read` both present. */
+export type TraceTabsBridge = PanelTraces & Required<Pick<PanelTraces, "listTabs" | "read">>;
+
+/** The panel's trace-tab bridge (list + read), or undefined when the shell lacks either function. */
+export function getAgentPanelTraceTabsBridge(): TraceTabsBridge | undefined {
+  const traces = window.penAgentPanel?.traces;
+  return typeof traces?.listTabs === "function" && typeof traces.read === "function" ? (traces as TraceTabsBridge) : undefined;
 }
 
 /** The panel's canvas bridge, or undefined (web, dev build, shell older than panel version 2). */

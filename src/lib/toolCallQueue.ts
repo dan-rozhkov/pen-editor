@@ -64,6 +64,9 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   "doc_read",
   "doc_edit",
   "doc_open",
+  // Panel-local trace tabs: read-only bridge calls, no scene.
+  "trace_list",
+  "trace_read",
   // The three browse_* tools (docs/superpowers/specs/2026-09-18-builtin-
   // browser-design.md) are thin forwarders onto the desktop shell's
   // BrowserController — they never touch the scene graph. `browse_open` in

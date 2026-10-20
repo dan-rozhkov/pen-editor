@@ -60,6 +60,8 @@ const EXPECTED_CLIENT_TOOLS = [
   "doc_read",
   "doc_edit",
   "doc_open",
+  "trace_list",
+  "trace_read",
   "publish_to_showcase",
   "remove_background",
   "vectorize_image",

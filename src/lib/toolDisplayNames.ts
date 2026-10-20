@@ -74,6 +74,8 @@ export const toolDisplayNames: Record<string, string> = {
   doc_read: "Read Document",
   doc_edit: "Edit Document",
   doc_open: "Open Document",
+  trace_list: "List Trace Tabs",
+  trace_read: "Read Trace",
   publish_to_showcase: "Publish to Showcase",
   read_design_repo: "View Repo",
   read_repo_files: "Read Repo Files",

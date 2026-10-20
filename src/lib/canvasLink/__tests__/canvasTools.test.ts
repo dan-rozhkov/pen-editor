@@ -7,6 +7,7 @@ const PANEL = [
   "analyze_image",
   "open_canvas_tab",
   "doc_list", "doc_create", "doc_read", "doc_edit", "doc_open",
+  "trace_list", "trace_read",
   "get_guidelines",
   "get_style_guide",
   "get_style_guide_tags",
@@ -46,7 +47,7 @@ describe("tool placement", () => {
 
   it("fixed panel-local set is exact (browse_*/qa_*/doc_* come by prefix)", () => {
     expect([...PANEL_LOCAL_FIXED_TOOL_NAMES].sort()).toEqual(
-      PANEL.filter((n) => !/^(browse|qa|doc)_/.test(n)).sort()
+      PANEL.filter((n) => !/^(browse|qa|doc|trace)_/.test(n)).sort()
     );
   });
 });

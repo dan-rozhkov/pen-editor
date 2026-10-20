@@ -25,6 +25,7 @@ import { booleanOperation } from "./tools/booleanOperation";
 import { getGuidelines, getStyleGuide, getStyleGuideTags } from "./tools/staticTools";
 import { analyzeImage } from "./tools/analyzeImage";
 import { openCanvasTab } from "./tools/openCanvasTab";
+import { traceList, traceRead } from "./tools/traceTools";
 import { docList, docCreate, docRead, docEdit, docOpen } from "./tools/docTools";
 import { generateImage, generateFrameImage } from "./tools/generateImage";
 import { setExportSettings } from "./tools/setExportSettings";
@@ -161,6 +162,10 @@ export const toolHandlers: Record<string, ToolHandler> = {
   doc_read: docRead,
   doc_edit: docEdit,
   doc_open: docOpen,
+  // Panel-local, read-only: open browse-run trace tabs (canvasTools.ts "trace_" prefix); advertised
+  // only with clientCapabilities.traceTabs. NOT in mcpToolNames.ts / WebMCP / plugins.
+  trace_list: traceList,
+  trace_read: traceRead,
   publish_to_showcase: publishToShowcase,
   remove_background: removeBackground,
   vectorize_image: vectorizeImage,

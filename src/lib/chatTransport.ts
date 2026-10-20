@@ -3,7 +3,7 @@ import type { RetryState } from "@sideform/agent-harness/retry-fetch";
 import { credentialsMode, isOffline, OFFLINE_MESSAGE, resolveApiUrl } from "@/lib/apiBase";
 import { getOpenCodeKey } from "@/lib/opencodeKey";
 import { withMobbinAuthHeader } from "@/lib/mobbinAuth";
-import { getAgentPanelDocsBridge } from "@/lib/agentPanel";
+import { getAgentPanelDocsBridge, getAgentPanelTraceTabsBridge } from "@/lib/agentPanel";
 import { isPanelCanvasLinkActive } from "@/lib/canvasLink/panelRuntime";
 import { isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";
 import { browseAssertAvailable, desktopAppsAvailable, isolatedBrowseAvailable } from "@/lib/tools/browser/isolation";
@@ -46,6 +46,8 @@ export const CLIENT_CAPABILITIES = {
   canvasTabs: isPanelCanvasLinkActive(),
   // The desktop panel can open markdown document tabs: the backend then offers doc_*.
   docTabs: getAgentPanelDocsBridge() !== undefined,
+  // The desktop panel can list and read open browse-run trace tabs: the backend then offers trace_list / trace_read.
+  traceTabs: getAgentPanelTraceTabsBridge() !== undefined,
 } as const;
 
 // Whether `model` is an OpenCode BYOK route (pen-editor-backend
