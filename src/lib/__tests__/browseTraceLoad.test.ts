@@ -28,6 +28,7 @@ describe("loadBrowseTrace (cloud)", () => {
 
   it.each([
     [{ ok: false, status: 404 }, "not-found"],
+    [{ ok: false, status: 400 }, "not-found"],
     [{ ok: false, status: 500 }, "error"],
     [{ ok: true, status: 200, json: async () => ({ format: "other" }) }, "invalid"],
     [{ ok: true, status: 200, json: async () => Promise.reject(new Error("bad json")) }, "invalid"],

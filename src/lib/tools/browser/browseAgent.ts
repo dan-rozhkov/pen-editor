@@ -17,6 +17,7 @@ import {
   qaResultOf,
   createStepRecorder,
   createBrowseTraceRecorder,
+  mergeCarriedDialogs,
   QA_ASSERT_TOOL,
   QA_FINAL_CHECKS_TIMEOUT_MS,
   executeQaAssert,
@@ -51,7 +52,7 @@ import { APP_NEEDS_DESKTOP_ERROR } from "./browseOpen";
 import { peBase } from "./shared";
 import { APP_LAUNCH_ALLOWANCE_MS, appArgOf, desktopAppsAvailable, isIsolatedQaCall, rememberRunSession, runSessionId } from "./isolation";
 import { acquireBrowseSlot } from "@/lib/browseRunLimiter";
-import { saveBrowseTrace } from "@/lib/browseTraces";
+import { canSaveBrowseTrace, saveBrowseTrace } from "@/lib/browseTraces";
 import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
 import { checkpointForModel, useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
 
@@ -476,6 +477,9 @@ type RunOutcome = string | (() => Promise<string>);
 /** Below this much deadline left after waiting for a slot, an isolated run is not worth starting. */
 const MIN_ISOLATED_RUN_MS = 60_000;
 
+/** Bound of a QA run's final trace screenshot. */
+const FINAL_FRAME_TIMEOUT_MS = 4_000;
+
 /** Bound of the run-end viewport reset, as the package's runBrowseAgent. */
 const CLEAR_EMULATION_TIMEOUT_MS = 5_000;
 
@@ -499,17 +503,29 @@ async function releaseApp(bridge: BrowserBridge | undefined): Promise<void> {
   await withTimeout(async () => void (await bridge?.releaseApp?.()), RELEASE_APP_TIMEOUT_MS, undefined);
 }
 
-/** A page screenshot as a trace frame (a data URL). Throws or gives undefined when there is none; the recorder bounds it and ignores a failure. */
-async function captureTraceFrame(bridge: BrowserBridge): Promise<{ imageData: string; width?: number; height?: number } | undefined> {
-  const out = (await bridge.screenshot?.({})) as { imageData?: unknown; width?: unknown; height?: unknown } | null | undefined;
-  const raw = typeof out?.imageData === "string" ? out.imageData.trim() : "";
-  const imageData = raw.startsWith("data:image/") ? raw : RAW_IMAGE_PREFIXES.map(([magic, type]) => (raw.startsWith(magic) ? `data:image/${type};base64,${raw}` : "")).find(Boolean);
-  if (!imageData) return undefined;
-  return { imageData, ...(typeof out?.width === "number" ? { width: out.width } : {}), ...(typeof out?.height === "number" ? { height: out.height } : {}) };
+/**
+ * A page screenshot as a trace frame. The recorder normalizes the image itself. The screenshot drains the page's pending
+ * JS dialogs like every controller command: they go back as `dialogs`, for the recorder to hand to the tool output.
+ * Throws or gives undefined when there is none; the recorder bounds it and ignores a failure.
+ */
+async function captureTraceFrame(bridge: BrowserBridge): Promise<{ imageData: string; width?: number; height?: number; dialogs?: unknown[] } | undefined> {
+  const out = (await bridge.screenshot?.({})) as { imageData?: unknown; width?: unknown; height?: unknown; dialogs?: unknown } | null | undefined;
+  if (typeof out?.imageData !== "string" || out.imageData === "") return undefined;
+  return {
+    imageData: out.imageData,
+    ...(typeof out.width === "number" ? { width: out.width } : {}),
+    ...(typeof out.height === "number" ? { height: out.height } : {}),
+    ...(Array.isArray(out.dialogs) && out.dialogs.length > 0 ? { dialogs: out.dialogs } : {}),
+  };
 }
 
-/** Base64 starts of the raw image formats a bridge may return without a data-URL prefix. */
-const RAW_IMAGE_PREFIXES: ReadonlyArray<readonly [string, string]> = [["/9j/", "jpeg"], ["iVBOR", "png"], ["UklGR", "webp"]];
+/** `mergeCarriedDialogs` for a tool output that is a JSON string or an already-parsed object. */
+function withCarriedDialogs<T>(output: T, dialogs: readonly unknown[] | undefined): T | string {
+  if (typeof output === "string") return mergeCarriedDialogs(output, dialogs);
+  if (!dialogs || dialogs.length === 0 || !output || typeof output !== "object" || Array.isArray(output)) return output;
+  const own = (output as { dialogs?: unknown }).dialogs;
+  return { ...output, dialogs: [...(Array.isArray(own) ? own : []), ...dialogs] };
+}
 
 /** A run whose `app` this run launched (set before the launch call: a launch that timed out may still have started). */
 type AppRun = { launched: boolean };
@@ -595,11 +611,14 @@ const runBrowseAgentBody = async (
   const recorder = qaOn ? createStepRecorder() : undefined;
   // The run trace (spec 2026-10-20-browse-run-trace-design.md): steps, a frame after each page-changing step, QA at the end.
   const desktopRun = isDesktopBrowserAvailable();
-  const traceRecorder = createBrowseTraceRecorder({
-    goal,
-    labels: { browser: desktopRun ? "desktop" : "cloud", mode: qaOn ? "qa" : "task" },
-    ...(typeof bridge?.screenshot === "function" ? { capture: () => captureTraceFrame(bridge) } : {}),
-  });
+  // A desktop shell without a save bridge (older) cannot keep a trace: no recorder, so no screenshots are taken either.
+  const traceRecorder = canSaveBrowseTrace(desktopRun)
+    ? createBrowseTraceRecorder({
+        goal,
+        labels: { browser: desktopRun ? "desktop" : "cloud", mode: qaOn ? "qa" : "task" },
+        ...(typeof bridge?.screenshot === "function" ? { capture: () => captureTraceFrame(bridge) } : {}),
+      })
+    : undefined;
 
   const parentSessionId = context?.sessionId;
   // Isolated QA run (spec 2026-10-17-isolated-parallel-browse-design.md): its own
@@ -640,10 +659,10 @@ const runBrowseAgentBody = async (
     executeTool: async (call, { signal }) => {
       // Guard-refused calls never reach here, so the trail holds model calls that ran.
       let end: ReturnType<NonNullable<typeof recorder>["onToolCall"]> | undefined;
-      let traceEnd: ReturnType<typeof traceRecorder.onToolCall> | undefined;
+      let traceEnd: ReturnType<NonNullable<typeof traceRecorder>["onToolCall"]> | undefined;
       try {
         end = recorder?.onToolCall(call);
-        traceEnd = traceRecorder.onToolCall(call);
+        traceEnd = traceRecorder?.onToolCall(call, { signal });
       } catch {
         // An observer must not change the run.
       }
@@ -661,8 +680,9 @@ const runBrowseAgentBody = async (
               );
         end?.({ output });
         // Awaited: the step frame must show the page right after this step.
-        await traceEnd?.({ output }).catch(() => undefined);
-        return output;
+        const carried = await traceEnd?.({ output }).catch(() => undefined);
+        // The trace screenshot drained dialogs the model has not seen yet: put them into its result.
+        return withCarriedDialogs(output, carried?.dialogs);
       } catch (err) {
         end?.({ error: err });
         await traceEnd?.({ error: err }).catch(() => undefined);
@@ -783,6 +803,7 @@ const runBrowseAgentBody = async (
    */
   const buildQa = async (result: BrowseAgentResult) => {
     if (!recorder) return undefined;
+    await takeFinalFrame(result);
     let qa = qaResultOf(result, recorder.steps(), recorder.extras());
     if (finalChecks && finalChecksApply(qa)) {
       const finalResults = await runFinalChecks(bridge ?? INERT_BRIDGE, finalChecks, recorder);
@@ -790,6 +811,17 @@ const runBrowseAgentBody = async (
       qa = applyFinalChecks({ ...qa, ...recorder.extras() }, finalResults);
     }
     return qa;
+  };
+  /**
+   * The QA run's "final" trace frame: one screenshot of the page as the run left it, before the final checks, the
+   * judge's read and the cleanup. Not for a run that was stopped, ran out of time or never started. Bounded; a
+   * failure is ignored. The dialogs the screenshot drains are dropped: the run is over, no tool result is left to carry them.
+   */
+  const takeFinalFrame = async (result: BrowseAgentResult) => {
+    if (!traceRecorder || typeof bridge?.screenshot !== "function" || signal?.aborted) return;
+    if (result.status === "aborted" || result.status === "timeout" || result.status === "setup_failed") return;
+    const shot = await withTimeout(() => captureTraceFrame(bridge).catch(() => undefined), FINAL_FRAME_TIMEOUT_MS, undefined, signal);
+    if (shot) traceRecorder.addFrame({ imageData: shot.imageData, kind: "final", width: shot.width, height: shot.height });
   };
   /**
    * The QA judge (spec 2026-10-19-qa-judge-design.md): for a `passed` outcome, reads the final page NOW (the
@@ -852,7 +884,7 @@ const runBrowseAgentBody = async (
   ): RunOutcome =>
     async () => {
       const finalQa = settleJudge ? await settleJudge() : qa;
-      const saved = await saveBrowseTrace(
+      const saved = traceRecorder && await saveBrowseTrace(
         traceRecorder.finish({
           status: result.status,
           ...(typeof result.answer === "string" ? { answer: result.answer } : {}),
@@ -860,6 +892,7 @@ const runBrowseAgentBody = async (
           ...(finalQa ? { qa: finalQa } : {}),
         }),
         desktopRun,
+        { outerEnd, signal },
       );
       return toJson(result, saved ? { ...extra, trace: saved } : extra, checkpoint, finalQa);
     };

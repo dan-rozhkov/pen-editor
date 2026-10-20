@@ -726,7 +726,7 @@ describe("browse_agent run trace", () => {
     const save = vi.fn(async () => ({ id: "local-1" }));
     const screenshot = vi.fn(async () => ({ imageData: JPEG, width: 10, height: 20 }));
     setPenDesktop(stubBrowser({ screenshot }));
-    window.penDesktop!.traces = { save };
+    window.penDesktop!.traces = { save, read: async () => ({ error: "n/a" }) };
     openThenDone();
     try {
       const out = JSON.parse(await browseAgent({ goal: "x", url: "https://shop.test" }, ctx));
@@ -736,6 +736,50 @@ describe("browse_agent run trace", () => {
       expect(payload[0].manifest.labels).toEqual({ browser: "desktop", mode: "task" });
       expect(payload[0].manifest.frames).toHaveLength(2);
       expect(payload[0].assets.map((a) => a.path)).toEqual(["frames/0.jpg", "frames/1.jpg"]);
+    } finally {
+      delete window.penDesktop;
+    }
+  });
+
+  it("an alert drained by the trace screenshot still reaches the tool result", async () => {
+    const dialogs = [{ type: "alert", message: "Saved!" }];
+    setPenDesktop(stubBrowser({ screenshot: async () => ({ imageData: JPEG, width: 10, height: 20, dialogs }) }));
+    window.penDesktop!.traces = { save: async () => ({ id: "local-2" }), read: async () => ({ error: "n/a" }) };
+    toolHandlers.browse_open = vi.fn(async () => JSON.stringify({ ok: true, dialogs: [{ type: "confirm", message: "own" }] }));
+    const captured = stubFetch([() => toolTurn("browse_open", { url: "https://shop.test/cart" }, "c1"), () => textTurn("done")]);
+    try {
+      await browseAgent({ goal: "x" }, ctx);
+      const seen = JSON.parse(outputOf(captured, 1, "c1"));
+      expect(seen.dialogs).toEqual([{ type: "confirm", message: "own" }, ...dialogs]);
+    } finally {
+      delete window.penDesktop;
+    }
+  });
+
+  it("qa run on the desktop: one final frame is taken at the end", async () => {
+    const screenshot = vi.fn(async () => ({ imageData: JPEG }));
+    setPenDesktop(stubBrowser({ screenshot }));
+    window.penDesktop!.traces = { save: async () => ({ id: "local-3" }), read: async () => ({ error: "n/a" }) };
+    toolHandlers.browse_open = vi.fn(async () => "{}");
+    stubFetch([() => toolTurn("qa_verdict", { verdict: "pass", reason: "ok" }, "c2")]);
+    const save = vi.spyOn(window.penDesktop!.traces!, "save");
+    try {
+      await browseAgent({ goal: "Check", qa: true }, ctx);
+      const payload = save.mock.calls[0]![0];
+      expect(payload.manifest.frames.map((f) => f.kind)).toEqual(["final"]);
+    } finally {
+      delete window.penDesktop;
+    }
+  });
+
+  it("a desktop shell without a save bridge takes no screenshots", async () => {
+    const screenshot = vi.fn(async () => ({ imageData: JPEG }));
+    setPenDesktop(stubBrowser({ screenshot }));
+    openThenDone();
+    try {
+      const out = JSON.parse(await browseAgent({ goal: "x", url: "https://shop.test" }, ctx));
+      expect(out).not.toHaveProperty("trace");
+      expect(screenshot).not.toHaveBeenCalled();
     } finally {
       delete window.penDesktop;
     }

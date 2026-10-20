@@ -264,12 +264,23 @@ describe("<BrowseAgentIndicator /> checkpoints", () => {
       expect(open).toHaveBeenCalledWith("tr-1");
     });
 
+    it("a cloud trace opens the viewer route even in the desktop panel", () => {
+      const open = vi.fn();
+      const winOpen = vi.fn();
+      vi.stubGlobal("open", winOpen);
+      window.penAgentPanel = { version: 2, traces: { save: vi.fn(), open } };
+      withTrace({ id: "tr-4", source: "cloud" });
+      fireEvent.click(screen.getByText("View trace"));
+      expect(open).not.toHaveBeenCalled();
+      expect(winOpen).toHaveBeenCalledWith(`${import.meta.env.BASE_URL}trace/tr-4?src=cloud`, "_blank", "noopener");
+    });
+
     it("a cloud trace without the panel opens the viewer route in a new tab", () => {
       const winOpen = vi.fn();
       vi.stubGlobal("open", winOpen);
       withTrace({ id: "tr-2", source: "cloud" });
       fireEvent.click(screen.getByText("View trace"));
-      expect(winOpen).toHaveBeenCalledWith("/trace/tr-2?src=cloud", "_blank", "noopener");
+      expect(winOpen).toHaveBeenCalledWith(`${import.meta.env.BASE_URL}trace/tr-2?src=cloud`, "_blank", "noopener");
     });
 
     it("a local trace without the panel bridge shows no button", () => {

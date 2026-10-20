@@ -1,5 +1,6 @@
 import { FilmStripIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
+import type { SavedTrace } from "@/lib/browseTraces";
 import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
 import { ToolCallIndicator } from "./ToolCallIndicator";
 import { redactBrowseSetupInput } from "@/lib/tools/browser/redactBrowseSetupInput";
@@ -76,21 +77,22 @@ const QA_LABELS: Record<string, string> = {
 };
 
 /** The `trace` field the handler adds to the result: where the stored run trace lives. */
-function traceOf(v: unknown): { id: string; source: "local" | "cloud" } | undefined {
+function traceOf(v: unknown): SavedTrace | undefined {
   const t = asRecord(v);
   if (!t || typeof t.id !== "string" || t.id === "") return undefined;
   return t.source === "local" || t.source === "cloud" ? { id: t.id, source: t.source } : undefined;
 }
 
 /**
- * How "View trace" opens the trace: the desktop agent panel opens a trace tab; the web opens the
- * viewer route for a cloud trace. A local trace without the panel bridge has no viewer (undefined).
+ * How "View trace" opens the trace. A local trace needs the desktop panel (it opens a trace tab); a cloud trace opens
+ * the viewer route in a new browser tab, also from the panel. A local trace without the panel bridge has no viewer.
  */
-function traceOpener(trace: { id: string; source: "local" | "cloud" }): (() => void) | undefined {
+function traceOpener(trace: SavedTrace): (() => void) | undefined {
+  if (trace.source === "cloud") {
+    return () => void window.open(`${import.meta.env.BASE_URL}trace/${encodeURIComponent(trace.id)}?src=cloud`, "_blank", "noopener");
+  }
   const open = window.penAgentPanel?.traces?.open;
-  if (open) return () => void open.call(window.penAgentPanel?.traces, trace.id).catch(() => undefined);
-  if (trace.source === "cloud") return () => void window.open(`/trace/${encodeURIComponent(trace.id)}?src=cloud`, "_blank", "noopener");
-  return undefined;
+  return open ? () => void open.call(window.penAgentPanel?.traces, trace.id).catch(() => undefined) : undefined;
 }
 
 /**

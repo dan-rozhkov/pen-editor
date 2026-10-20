@@ -3,7 +3,6 @@ import type { BrowserBridge } from "@sideform/browser-agent/loop";
 import { getCommands, runCommand } from "@/lib/commands/registry";
 import { useDocumentStore } from "@/store/documentStore";
 import type { CanvasHostBridge } from "@/lib/canvasLink/protocol";
-import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
 
 /** What `traces.save` takes: `splitTraceAssets` output (frames moved out of the manifest). */
 export interface BrowseTraceSavePayload {
@@ -47,17 +46,15 @@ export type DesktopBrowserBridge = BrowserBridge &
 export interface PenDesktopApi {
   /**
    * Local browse-run traces (pen-editor-desktop traceStore). Optional: older shells lack it.
-   * `read` (viewer) is added next to `save`.
+   * `read` returns `{ trace }` with data-URL frames, or `{ error }`.
    */
   traces?: {
     save(payload: BrowseTraceSavePayload): Promise<BrowseTraceSaveResult>;
-    // read(id) lives here (added by the trace viewer).
+    read(id: string): Promise<{ trace: BrowseTrace } | { error: string }>;
   };
   setDocumentTitle?(title: string): void;
   /** true when the desktop agent layout flag is on: the editor tab is chatless. */
   agentLayout?: boolean;
-  /** Local browse-run traces (desktop userData). `read` returns `{ trace }` with data-URL frames, or `{ error }`. */
-  traces?: { read(id: string): Promise<{ trace: BrowseTrace } | { error: string }> };
   /** Canvas link host bridge (desktop agent layout only); see docs/canvas-link.md. */
   canvasHost?: CanvasHostBridge;
   onMenuCommand(cb: (commandId: string) => void): () => void;
