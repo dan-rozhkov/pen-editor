@@ -189,7 +189,7 @@ export function ComponentsPanel() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-[49px] shrink-0 items-center gap-2 border-b border-border-default px-4 py-3">
-        <h2 className="flex-1 text-sm font-medium text-text-primary">Components</h2>
+        <h2 className="flex-1 text-sm font-medium text-text-primary">Slots</h2>
         <span className="text-[11px] text-text-muted">{rows.length}</span>
       </div>
       <div className="relative px-3 pt-3 pb-2">
