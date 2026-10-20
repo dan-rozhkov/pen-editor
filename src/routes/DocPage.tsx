@@ -79,7 +79,7 @@ export default function DocPage() {
                 <DropdownMenuTrigger
                   render={
                     <IconButton variant="ghost" size="icon" tooltip="Document options">
-                      <DotsThreeVerticalIcon size={16} weight="bold" />
+                      <DotsThreeVerticalIcon className="size-4" weight="bold" />
                     </IconButton>
                   }
                 />
