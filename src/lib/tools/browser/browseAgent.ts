@@ -16,6 +16,7 @@ import {
   executeQaVerdict,
   qaResultOf,
   createStepRecorder,
+  createBrowseTraceRecorder,
   QA_ASSERT_TOOL,
   QA_FINAL_CHECKS_TIMEOUT_MS,
   executeQaAssert,
@@ -50,6 +51,7 @@ import { APP_NEEDS_DESKTOP_ERROR } from "./browseOpen";
 import { peBase } from "./shared";
 import { APP_LAUNCH_ALLOWANCE_MS, appArgOf, desktopAppsAvailable, isIsolatedQaCall, rememberRunSession, runSessionId } from "./isolation";
 import { acquireBrowseSlot } from "@/lib/browseRunLimiter";
+import { saveBrowseTrace } from "@/lib/browseTraces";
 import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
 import { checkpointForModel, useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
 
@@ -497,6 +499,18 @@ async function releaseApp(bridge: BrowserBridge | undefined): Promise<void> {
   await withTimeout(async () => void (await bridge?.releaseApp?.()), RELEASE_APP_TIMEOUT_MS, undefined);
 }
 
+/** A page screenshot as a trace frame (a data URL). Throws or gives undefined when there is none; the recorder bounds it and ignores a failure. */
+async function captureTraceFrame(bridge: BrowserBridge): Promise<{ imageData: string; width?: number; height?: number } | undefined> {
+  const out = (await bridge.screenshot?.({})) as { imageData?: unknown; width?: unknown; height?: unknown } | null | undefined;
+  const raw = typeof out?.imageData === "string" ? out.imageData.trim() : "";
+  const imageData = raw.startsWith("data:image/") ? raw : RAW_IMAGE_PREFIXES.map(([magic, type]) => (raw.startsWith(magic) ? `data:image/${type};base64,${raw}` : "")).find(Boolean);
+  if (!imageData) return undefined;
+  return { imageData, ...(typeof out?.width === "number" ? { width: out.width } : {}), ...(typeof out?.height === "number" ? { height: out.height } : {}) };
+}
+
+/** Base64 starts of the raw image formats a bridge may return without a data-URL prefix. */
+const RAW_IMAGE_PREFIXES: ReadonlyArray<readonly [string, string]> = [["/9j/", "jpeg"], ["iVBOR", "png"], ["UklGR", "webp"]];
+
 /** A run whose `app` this run launched (set before the launch call: a launch that timed out may still have started). */
 type AppRun = { launched: boolean };
 
@@ -579,6 +593,13 @@ const runBrowseAgentBody = async (
     }
   }
   const recorder = qaOn ? createStepRecorder() : undefined;
+  // The run trace (spec 2026-10-20-browse-run-trace-design.md): steps, a frame after each page-changing step, QA at the end.
+  const desktopRun = isDesktopBrowserAvailable();
+  const traceRecorder = createBrowseTraceRecorder({
+    goal,
+    labels: { browser: desktopRun ? "desktop" : "cloud", mode: qaOn ? "qa" : "task" },
+    ...(typeof bridge?.screenshot === "function" ? { capture: () => captureTraceFrame(bridge) } : {}),
+  });
 
   const parentSessionId = context?.sessionId;
   // Isolated QA run (spec 2026-10-17-isolated-parallel-browse-design.md): its own
@@ -619,8 +640,10 @@ const runBrowseAgentBody = async (
     executeTool: async (call, { signal }) => {
       // Guard-refused calls never reach here, so the trail holds model calls that ran.
       let end: ReturnType<NonNullable<typeof recorder>["onToolCall"]> | undefined;
+      let traceEnd: ReturnType<typeof traceRecorder.onToolCall> | undefined;
       try {
         end = recorder?.onToolCall(call);
+        traceEnd = traceRecorder.onToolCall(call);
       } catch {
         // An observer must not change the run.
       }
@@ -637,9 +660,12 @@ const runBrowseAgentBody = async (
                 "browse_agent",
               );
         end?.({ output });
+        // Awaited: the step frame must show the page right after this step.
+        await traceEnd?.({ output }).catch(() => undefined);
         return output;
       } catch (err) {
         end?.({ error: err });
+        await traceEnd?.({ error: err }).catch(() => undefined);
         throw err;
       }
     },
@@ -813,14 +839,30 @@ const runBrowseAgentBody = async (
     });
   };
 
-  /** The run's result: the JSON at once, or (a judge request is pending) a function that waits for the judge first. */
+  /**
+   * The run's result: a function the handler awaits after ALL cleanup. It waits for the judge (if one is pending), then
+   * closes the trace with the final qa (judge included), stores it and adds `trace: { id, source }` when that worked.
+   */
   const finishJson = (
     result: BrowseAgentResult,
     extra: Record<string, unknown>,
     checkpoint: unknown,
     qa: Awaited<ReturnType<typeof buildQa>>,
     settleJudge: Awaited<ReturnType<typeof startJudge>>,
-  ): RunOutcome => (settleJudge ? async () => toJson(result, extra, checkpoint, await settleJudge()) : toJson(result, extra, checkpoint, qa));
+  ): RunOutcome =>
+    async () => {
+      const finalQa = settleJudge ? await settleJudge() : qa;
+      const saved = await saveBrowseTrace(
+        traceRecorder.finish({
+          status: result.status,
+          ...(typeof result.answer === "string" ? { answer: result.answer } : {}),
+          ...(typeof result.error === "string" ? { error: result.error } : {}),
+          ...(finalQa ? { qa: finalQa } : {}),
+        }),
+        desktopRun,
+      );
+      return toJson(result, saved ? { ...extra, trace: saved } : extra, checkpoint, finalQa);
+    };
 
   if (!hasSetup && !hasResume) {
     // An external app cannot be resumed from a browser journal: no checkpoint for an app run.

@@ -1,4 +1,4 @@
-import type { PenDesktopApi } from "@/lib/desktopBridge";
+import type { BrowseTraceSavePayload, BrowseTraceSaveResult, PenDesktopApi } from "@/lib/desktopBridge";
 import type { AgentPanelCanvasBridge } from "@/lib/canvasLink/protocol";
 
 /** Preload API of the agent panel view (docs/canvas-link.md). */
@@ -16,6 +16,12 @@ export interface PenAgentPanelApi {
   };
   /** The shell's markdown document tabs (/doc). Absent on a shell without doc tabs. */
   docs?: AgentPanelDocsBridge;
+  /** Local browse-run traces. Absent on a shell without trace tabs. */
+  traces?: {
+    save(payload: BrowseTraceSavePayload): Promise<BrowseTraceSaveResult>;
+    /** Opens or focuses the trace tab for `id`. */
+    open(id: string): Promise<{ ok: boolean; error?: string }>;
+  };
 }
 
 /** Opens or activates the doc tab that shows `docId`. Resolves after the tab exists. */

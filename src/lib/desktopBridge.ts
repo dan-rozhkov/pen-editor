@@ -2,6 +2,16 @@ import type { BrowserBridge } from "@sideform/browser-agent/loop";
 import { getCommands, runCommand } from "@/lib/commands/registry";
 import { useDocumentStore } from "@/store/documentStore";
 import type { CanvasHostBridge } from "@/lib/canvasLink/protocol";
+import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
+
+/** What `traces.save` takes: `splitTraceAssets` output (frames moved out of the manifest). */
+export interface BrowseTraceSavePayload {
+  manifest: BrowseTrace;
+  assets: { path: string; dataUrl: string; contentType: string }[];
+}
+
+/** The shell's answer to a trace save: the stored id, or an error text. Never throws. */
+export type BrowseTraceSaveResult = { id: string } | { error: string };
 
 /**
  * Bridge to the Electron shell (pen-editor-desktop). The desktop preload
@@ -34,6 +44,14 @@ export type DesktopBrowserBridge = BrowserBridge &
   };
 
 export interface PenDesktopApi {
+  /**
+   * Local browse-run traces (pen-editor-desktop traceStore). Optional: older shells lack it.
+   * `read` (viewer) is added next to `save`.
+   */
+  traces?: {
+    save(payload: BrowseTraceSavePayload): Promise<BrowseTraceSaveResult>;
+    // read(id) lives here (added by the trace viewer).
+  };
   setDocumentTitle?(title: string): void;
   /** true when the desktop agent layout flag is on: the editor tab is chatless. */
   agentLayout?: boolean;

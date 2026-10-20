@@ -26,10 +26,20 @@ interface Captured {
   headers: Headers;
 }
 
+/** Bodies POSTed to /api/browse/traces (the cloud trace upload); reset before each test. */
+let tracePosts: Array<Record<string, unknown>> = [];
+/** The status the stubbed trace upload answers with (503 = the upload fails, so the result has no `trace`). */
+let traceUploadStatus = 503;
+
 /** Stubs global fetch with one scripted response per call; records requests. */
 function stubFetch(script: Array<() => Response | Promise<Response>>) {
   const captured: Captured[] = [];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    // The run trace upload is not a chat request either.
+    if (String(input).includes("/api/browse/traces")) {
+      tracePosts.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ id: "cloud-trace-1" }), { status: traceUploadStatus });
+    }
     // The checkpoint journal talks to the cloud browser: not a chat request, no script entry.
     if (String(input).includes("/api/browser/")) {
       return new Response(JSON.stringify({ result: { error: "no cloud browser in this test" } }), {
@@ -56,6 +66,8 @@ let saved: Record<string, ToolHandler | undefined>;
 const stubbed = ["browse_open", "browse_capture", "browse_fill_login", "batch_design"];
 
 beforeEach(() => {
+  tracePosts = [];
+  traceUploadStatus = 503;
   setChatModel("google/gemini-2.5-flash");
   saved = Object.fromEntries(stubbed.map((n) => [n, toolHandlers[n]]));
   clearOpenCodeKey();
@@ -677,6 +689,68 @@ describe("browse_agent app", () => {
     await browseAgent({ goal: "x", url: "https://example.com" }, ctx);
 
     expect(releaseApp).not.toHaveBeenCalled();
+  });
+});
+
+describe("browse_agent run trace", () => {
+  const ctx = { sessionId: "chat-1", toolCallId: "tc-t" };
+  const JPEG = `data:image/jpeg;base64,${"/9j/".repeat(40)}`;
+  const openThenDone = () => {
+    toolHandlers.browse_open = vi.fn(async () => JSON.stringify({ ok: true }));
+    stubFetch([() => toolTurn("browse_open", { url: "https://shop.test/cart" }, "c1"), () => textTurn("done")]);
+  };
+
+  it("cloud run: records the steps, uploads the manifest and adds trace to the result", async () => {
+    traceUploadStatus = 200;
+    openThenDone();
+    const out = JSON.parse(await browseAgent({ goal: "Look at the cart", url: "https://shop.test" }, ctx));
+    expect(out.trace).toEqual({ id: "cloud-trace-1", source: "cloud" });
+    expect(tracePosts).toHaveLength(1);
+    const { manifest, assets } = tracePosts[0] as { manifest: Record<string, unknown>; assets: unknown[] };
+    expect(manifest).toMatchObject({ goal: "Look at the cart", status: "done", labels: { browser: "cloud", mode: "task" } });
+    expect((manifest.steps as Array<{ tool: string }>).map((x) => x.tool)).toEqual(["browse_open", "browse_open"]); // the start page, then the model's call
+    expect(assets).toEqual([]);
+  });
+
+  it("a failed upload only logs: the result has no trace field", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    openThenDone();
+    const out = JSON.parse(await browseAgent({ goal: "x", url: "https://shop.test" }, ctx));
+    expect(out).not.toHaveProperty("trace");
+    expect(out.status).toBe("done");
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("desktop run: frames come from the run bridge screenshot and go to traces.save", async () => {
+    const save = vi.fn(async () => ({ id: "local-1" }));
+    const screenshot = vi.fn(async () => ({ imageData: JPEG, width: 10, height: 20 }));
+    setPenDesktop(stubBrowser({ screenshot }));
+    window.penDesktop!.traces = { save };
+    openThenDone();
+    try {
+      const out = JSON.parse(await browseAgent({ goal: "x", url: "https://shop.test" }, ctx));
+      expect(out.trace).toEqual({ id: "local-1", source: "local" });
+      expect(tracePosts).toHaveLength(0);
+      const payload = save.mock.calls[0] as unknown as [{ manifest: { labels: unknown; frames: unknown[] }; assets: Array<{ path: string }> }];
+      expect(payload[0].manifest.labels).toEqual({ browser: "desktop", mode: "task" });
+      expect(payload[0].manifest.frames).toHaveLength(2);
+      expect(payload[0].assets.map((a) => a.path)).toEqual(["frames/0.jpg", "frames/1.jpg"]);
+    } finally {
+      delete window.penDesktop;
+    }
+  });
+
+  it("qa run: the trace carries the final qa", async () => {
+    traceUploadStatus = 200;
+    toolHandlers.browse_open = vi.fn(async () => "{}");
+    stubFetch([
+      () => toolTurn("browse_open", { url: "https://shop.test" }, "c1"),
+      () => toolTurn("qa_verdict", { verdict: "pass", reason: "ok" }, "c2"),
+    ]);
+    const out = JSON.parse(await browseAgent({ goal: "Check", qa: true }, ctx));
+    expect(out.trace.source).toBe("cloud");
+    expect(tracePosts[0].manifest).toMatchObject({ labels: { mode: "qa" }, qa: { outcome: "passed", reason: "ok" } });
   });
 });
 

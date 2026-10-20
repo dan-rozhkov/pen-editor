@@ -1,3 +1,5 @@
+import { FilmStripIcon } from "@phosphor-icons/react";
+import { Button } from "@/components/ui/button";
 import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
 import { ToolCallIndicator } from "./ToolCallIndicator";
 import { redactBrowseSetupInput } from "@/lib/tools/browser/redactBrowseSetupInput";
@@ -73,6 +75,24 @@ const QA_LABELS: Record<string, string> = {
   aborted: "Stopped",
 };
 
+/** The `trace` field the handler adds to the result: where the stored run trace lives. */
+function traceOf(v: unknown): { id: string; source: "local" | "cloud" } | undefined {
+  const t = asRecord(v);
+  if (!t || typeof t.id !== "string" || t.id === "") return undefined;
+  return t.source === "local" || t.source === "cloud" ? { id: t.id, source: t.source } : undefined;
+}
+
+/**
+ * How "View trace" opens the trace: the desktop agent panel opens a trace tab; the web opens the
+ * viewer route for a cloud trace. A local trace without the panel bridge has no viewer (undefined).
+ */
+function traceOpener(trace: { id: string; source: "local" | "cloud" }): (() => void) | undefined {
+  const open = window.penAgentPanel?.traces?.open;
+  if (open) return () => void open.call(window.penAgentPanel?.traces, trace.id).catch(() => undefined);
+  if (trace.source === "cloud") return () => void window.open(`/trace/${encodeURIComponent(trace.id)}?src=cloud`, "_blank", "noopener");
+  return undefined;
+}
+
 /**
  * Chat chip for `browse_agent`: ToolCallIndicator plus the Setup and Stage
  * panes (under the collapse), the preparing phase and the setup failure. Output it
@@ -130,7 +150,10 @@ export function BrowseAgentIndicator({ part }: { part: AnyPart }) {
     });
   }
 
-  return (
+  const trace = traceOf(out?.trace);
+  const openTrace = trace ? traceOpener(trace) : undefined;
+
+  const indicator = (
     <ToolCallIndicator
       part={part}
       statusLabel={statusLabel}
@@ -138,5 +161,15 @@ export function BrowseAgentIndicator({ part }: { part: AnyPart }) {
       extraPanes={extraPanes}
       inputForDisplay={redactBrowseSetupInput(part.input)}
     />
+  );
+  if (!openTrace) return indicator;
+  return (
+    <>
+      {indicator}
+      <Button variant="ghost" size="xs" className="mb-1.5 text-text-muted" onClick={openTrace}>
+        <FilmStripIcon aria-hidden />
+        View trace
+      </Button>
+    </>
   );
 }

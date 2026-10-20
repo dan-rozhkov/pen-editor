@@ -1,10 +1,12 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { BrowseAgentIndicator } from "../BrowseAgentIndicator";
 import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
 
 afterEach(() => {
   cleanup();
+  delete window.penAgentPanel;
+  vi.unstubAllGlobals();
   useBrowseAgentPhaseStore.setState({ phases: {} });
 });
 
@@ -239,5 +241,40 @@ describe("<BrowseAgentIndicator /> checkpoints", () => {
     const out = JSON.stringify({ status: "done", answer: "x", steps: 1 });
     render(<BrowseAgentIndicator part={part({ state: "output-available", input: { goal: "g" }, output: out })} />);
     expect(screen.getByText("Done")).toBeTruthy();
+  });
+
+  describe("View trace", () => {
+    const withTrace = (trace: unknown) =>
+      render(
+        <BrowseAgentIndicator
+          part={part({ state: "output-available", input: { goal: "g" }, output: JSON.stringify({ status: "done", steps: 1, trace }) })}
+        />,
+      );
+
+    it("no trace field: no button", () => {
+      render(<BrowseAgentIndicator part={part({ state: "output-available", input: { goal: "g" }, output: JSON.stringify({ status: "done" }) })} />);
+      expect(screen.queryByText("View trace")).toBeNull();
+    });
+
+    it("the desktop panel opens the trace tab, for a local trace too", () => {
+      const open = vi.fn(async () => ({ ok: true }));
+      window.penAgentPanel = { version: 2, traces: { save: vi.fn(), open } };
+      withTrace({ id: "tr-1", source: "local" });
+      fireEvent.click(screen.getByText("View trace"));
+      expect(open).toHaveBeenCalledWith("tr-1");
+    });
+
+    it("a cloud trace without the panel opens the viewer route in a new tab", () => {
+      const winOpen = vi.fn();
+      vi.stubGlobal("open", winOpen);
+      withTrace({ id: "tr-2", source: "cloud" });
+      fireEvent.click(screen.getByText("View trace"));
+      expect(winOpen).toHaveBeenCalledWith("/trace/tr-2?src=cloud", "_blank", "noopener");
+    });
+
+    it("a local trace without the panel bridge shows no button", () => {
+      withTrace({ id: "tr-3", source: "local" });
+      expect(screen.queryByText("View trace")).toBeNull();
+    });
   });
 });
