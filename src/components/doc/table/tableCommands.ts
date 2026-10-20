@@ -2,6 +2,7 @@ import type { Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import { CellSelection } from "@tiptap/pm/tables";
+import { cellText, deleteMap, insertMap, moveMap, tagColumnRemap, tagSameTable, type ColumnRemap } from "./tableFilter";
 
 export type ColumnAlign = "left" | "center" | "right";
 
@@ -56,11 +57,21 @@ function clearCell(cell: PMNode): PMNode {
 }
 
 /** Replaces the table with the given rows; puts the cursor in cell (selRow, selCol). One transaction. */
-function commit(editor: Editor, tablePos: number, info: TableInfo, rows: PMNode[][], selRow: number, selCol: number): boolean {
+function commit(
+  editor: Editor,
+  tablePos: number,
+  info: TableInfo,
+  rows: PMNode[][],
+  selRow: number,
+  selCol: number,
+  columns?: Omit<ColumnRemap, "tablePos" | "cols">,
+): boolean {
   const { schema, state } = editor;
   const rowType = schema.nodes.tableRow;
   const newTable = info.node.type.create(info.node.attrs, rows.map((cells) => rowType.create(null, cells)), info.node.marks);
   const tr = state.tr.replaceWith(tablePos, tablePos + info.node.nodeSize, newTable);
+  if (columns) tagColumnRemap(tr, { tablePos, cols: rows[0].length, ...columns });
+  else tagSameTable(tr, tablePos);
   let pos = tablePos + 1;
   for (let r = 0; r < selRow; r++) pos += tr.doc.nodeAt(pos)?.nodeSize ?? 0;
   pos += 1;
@@ -160,14 +171,14 @@ export function insertColumn(editor: Editor, tablePos: number, col: number, side
     cells.splice(index, 0, cell);
     rows.push(cells);
   }
-  return commit(editor, tablePos, info, rows, 0, index);
+  return commit(editor, tablePos, info, rows, 0, index, { map: insertMap(index) });
 }
 
 export function deleteColumn(editor: Editor, tablePos: number, col: number): boolean {
   const info = readEditable(editor, tablePos);
   if (!info || !inRange(col, info.rows[0].length) || info.rows[0].length < 2) return false;
   const rows = info.rows.map((cells) => cells.filter((_, i) => i !== col));
-  return commit(editor, tablePos, info, rows, 0, Math.min(col, rows[0].length - 1));
+  return commit(editor, tablePos, info, rows, 0, Math.min(col, rows[0].length - 1), { map: deleteMap(col) });
 }
 
 export function moveColumn(editor: Editor, tablePos: number, from: number, to: number): boolean {
@@ -180,7 +191,7 @@ export function moveColumn(editor: Editor, tablePos: number, from: number, to: n
     next.splice(to, 0, moved);
     return next;
   });
-  return commit(editor, tablePos, info, rows, 0, to);
+  return commit(editor, tablePos, info, rows, 0, to, { map: moveMap(from, to) });
 }
 
 export function duplicateColumn(editor: Editor, tablePos: number, col: number): boolean {
@@ -191,7 +202,7 @@ export function duplicateColumn(editor: Editor, tablePos: number, col: number): 
     next.splice(col + 1, 0, cells[col]);
     return next;
   });
-  return commit(editor, tablePos, info, rows, 0, col + 1);
+  return commit(editor, tablePos, info, rows, 0, col + 1, { map: insertMap(col + 1) });
 }
 
 export function clearColumn(editor: Editor, tablePos: number, col: number): boolean {
@@ -226,6 +237,53 @@ export function setColumnAlign(editor: Editor, tablePos: number, col: number, al
   return true;
 }
 
+export type SortDirection = "asc" | "desc";
+
+const NUMBER_RE = /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i;
+const THOUSANDS_RE = /^[-+]?\d{1,3}(,\d{3})+(\.\d+)?$/;
+
+/**
+ * A cell's number, or null when it is not one. Accepted: plain decimals, thousands separators (`1,200`, spaces,
+ * no-break and narrow spaces), one leading currency symbol ($ € £ ₽ ¥) after an optional sign, a trailing `%`.
+ */
+export function parseCellNumber(text: string): number | null {
+  const compact = text.replace(/[\s\u00a0\u202f]/g, "");
+  const bare = compact.replace(/^([-+]?)[$€£₽¥]/, "$1").replace(/%$/, "");
+  const plain = THOUSANDS_RE.test(bare) ? bare.replace(/,/g, "") : bare;
+  return NUMBER_RE.test(plain) ? Number(plain) : null;
+}
+
+/**
+ * Orders two non-empty texts ascending by `localeCompare` (numeric collation, base sensitivity). Numbers are
+ * compared by the caller, and only when the WHOLE column is numeric: mixing the two rules in one comparator is
+ * not transitive. Empty texts go last in both directions (the caller's job).
+ */
+export function compareCellText(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
+
+/**
+ * Reorders the body rows by one column (one transaction). The header row stays first, empty cells go last in
+ * both directions, equal keys keep their order. False when nothing would change. The cursor lands in the
+ * column's header cell: a body row could be hidden by a filter.
+ */
+export function sortColumn(editor: Editor, tablePos: number, col: number, dir: SortDirection): boolean {
+  const info = readEditable(editor, tablePos);
+  if (!info || !inRange(col, info.rows[0].length) || info.rows.length < 3) return false;
+  const sign = dir === "asc" ? 1 : -1;
+  const keyed = info.rows.slice(1).map((cells, index) => {
+    const text = cellText(cells[col]).trim();
+    return { cells, index, text, value: parseCellNumber(text) };
+  });
+  const numeric = keyed.every((k) => k.text === "" || k.value !== null);
+  keyed.sort((x, y) => {
+    if (x.text === "" || y.text === "") return (x.text === "" ? 1 : 0) - (y.text === "" ? 1 : 0) || x.index - y.index;
+    return sign * (numeric ? (x.value ?? 0) - (y.value ?? 0) : compareCellText(x.text, y.text)) || x.index - y.index;
+  });
+  if (keyed.every((k, i) => k.index === i)) return false;
+  return commit(editor, tablePos, info, [info.rows[0], ...keyed.map((k) => k.cells)], 0, col);
+}
+
 export function appendRow(editor: Editor, tablePos: number): boolean {
   const info = readEditable(editor, tablePos);
   if (!info) return false;
@@ -244,7 +302,7 @@ export function appendColumn(editor: Editor, tablePos: number): boolean {
     if (!cell) return false;
     rows.push([...info.rows[r], cell]);
   }
-  return commit(editor, tablePos, info, rows, 0, index);
+  return commit(editor, tablePos, info, rows, 0, index, { map: (col) => col });
 }
 
 export function rowActions(editor: Editor, tablePos: number, row: number) {
@@ -264,12 +322,14 @@ export function rowActions(editor: Editor, tablePos: number, row: number) {
 }
 
 export function columnActions(editor: Editor, tablePos: number, col: number) {
-  const none = { align: false, insertBefore: false, insertAfter: false, moveLeft: false, moveRight: false, duplicate: false, clear: false, delete: false };
+  const none = { align: false, sort: false, filter: false, insertBefore: false, insertAfter: false, moveLeft: false, moveRight: false, duplicate: false, clear: false, delete: false };
   const info = readEditable(editor, tablePos);
   if (!info || !inRange(col, info.rows[0].length)) return none;
   const cols = info.rows[0].length;
   return {
     align: true,
+    sort: info.rows.length > 2,
+    filter: true,
     insertBefore: true,
     insertAfter: true,
     moveLeft: col > 0,

@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 /** A rect in plain numbers (DOMRect subset), so the helpers run without layout. */
 export interface Box {
   left: number;
@@ -26,6 +28,9 @@ export const ROW_GRIP_OVERHANG = 5;
 export const BAR_SIZE = 14;
 /** Gap between the table and its "+" bars; BAR_GAP + BAR_SIZE must fit the wrapper's reserved padding (20px). */
 export const BAR_GAP = 3;
+
+/** Inline style that puts a control at a placed rect (the overlay is absolutely positioned). */
+export const place = (p: Placed): CSSProperties => ({ left: p.left, top: p.top, width: p.width, height: p.height });
 
 export interface HoveredCell {
   table: HTMLTableElement;
@@ -98,4 +103,20 @@ export function addColumnBar(table: Box, visible: { right: number }, limit: numb
     width: BAR_SIZE,
     height: table.bottom - table.top,
   };
+}
+
+/** Side of the square header-menu button. */
+export const HEAD_BUTTON_SIZE = 20;
+/** Gap between the header button and the right edge of its cell. */
+export const HEAD_BUTTON_INSET = 4;
+
+/**
+ * Header-menu button: right edge of the header cell, vertically centred in it. The cell's right edge is clipped
+ * to the visible span; null when the column is scrolled (mostly) out of view.
+ */
+export function headButton(cell: Box, visible: { left: number; right: number }): Placed | null {
+  const right = Math.min(cell.right, visible.right) - HEAD_BUTTON_INSET;
+  const left = right - HEAD_BUTTON_SIZE;
+  if (left < Math.max(cell.left, visible.left)) return null;
+  return { left, top: (cell.top + cell.bottom) / 2 - HEAD_BUTTON_SIZE / 2, width: HEAD_BUTTON_SIZE, height: HEAD_BUTTON_SIZE };
 }

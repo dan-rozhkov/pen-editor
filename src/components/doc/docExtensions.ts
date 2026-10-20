@@ -4,6 +4,7 @@ import Strike from "@tiptap/extension-strike";
 import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
 import { Markdown } from "@tiptap/markdown";
 import StarterKit from "@tiptap/starter-kit";
+import { DocTableFilter } from "./table/tableFilter";
 import { DocCodeBlock } from "./extensions/docCodeBlock";
 import { DocColorMark, getActiveDocColor } from "./extensions/docColor";
 import { DocDetails, DocDetailsContent, DocDetailsSummary } from "./extensions/docDetails";
@@ -29,6 +30,7 @@ export const DOC_EXTENSIONS = [
   TableRow,
   TableHeader,
   TableCell,
+  DocTableFilter,
   TaskList,
   TaskItem.configure({ nested: true }),
   Image,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState, type CSSProperties, type RefObject } from "react";
 import type { Editor } from "@tiptap/react";
 import {
   ArrowDownIcon,
@@ -28,8 +28,10 @@ import {
   addColumnBar,
   addRowBar,
   columnGrip,
+  headButton,
   hoveredCell,
   isTableControl,
+  place,
   relativeTo,
   rowGrip,
   visibleSpan,
@@ -37,6 +39,9 @@ import {
   type Placed,
 } from "./tableGeometry";
 import { skipBaseUiOpen } from "../ui/baseUi";
+import { ColumnHeaderMenu, type HeaderMenuKind } from "./ColumnHeaderMenu";
+import { ColumnFilterIndicators } from "./ColumnFilterIndicators";
+import { FILTERED_ROW_CLASS, tableFilterKey } from "./tableFilter";
 import {
   appendColumn,
   appendRow,
@@ -69,11 +74,12 @@ interface Props {
 interface Layout {
   rowGrip: Placed;
   columnGrip: Placed | null;
+  headButton: Placed | null;
   rowBar: Placed;
   columnBar: Placed;
 }
 
-type MenuKind = "row" | "col";
+type MenuKind = "row" | "col" | HeaderMenuKind;
 
 /** The document position directly before the table, re-resolved from its DOM on every use (null once detached). */
 function resolveTablePos(editor: Editor, table: HTMLTableElement): number | null {
@@ -105,6 +111,7 @@ function measure(hit: HoveredCell, container: HTMLElement): Layout | null {
   return {
     rowGrip: rowGrip(relativeTo(box(rowEl.getBoundingClientRect()), origin), visible),
     columnGrip: columnGrip(relativeTo(box(headCell.getBoundingClientRect()), origin), tableBox.top, visible),
+    headButton: headButton(relativeTo(box(headCell.getBoundingClientRect()), origin), visible),
     rowBar: addRowBar(tableBox, visible),
     columnBar: addColumnBar(tableBox, visible, Math.min(container.clientWidth, wrapperBox.right)),
   };
@@ -112,8 +119,6 @@ function measure(hit: HoveredCell, container: HTMLElement): Layout | null {
 
 const sameHit = (a: HoveredCell | null, b: HoveredCell | null) =>
   a === b || (!!a && !!b && a.table === b.table && a.row === b.row && a.col === b.col);
-
-const place = (p: Placed): CSSProperties => ({ left: p.left, top: p.top, width: p.width, height: p.height });
 
 const samePlaced = (a: Placed | null, b: Placed | null) =>
   a === b || (!!a && !!b && a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height);
@@ -124,6 +129,7 @@ const sameLayout = (a: Layout | null, b: Layout | null) =>
     !!b &&
     samePlaced(a.rowGrip, b.rowGrip) &&
     samePlaced(a.columnGrip, b.columnGrip) &&
+    samePlaced(a.headButton, b.headButton) &&
     samePlaced(a.rowBar, b.rowBar) &&
     samePlaced(a.columnBar, b.columnBar));
 
@@ -176,7 +182,16 @@ const ALIGNS: { align: ColumnAlign; label: string; icon: React.ReactNode }[] = [
 ];
 
 /** Notion's table handles: row/column grips with menus, and "+" bars that append a row or column. */
-export function TableControls({ editor, containerRef }: Props) {
+export function TableControls(props: Props) {
+  return (
+    <>
+      <ColumnFilterIndicators editor={props.editor} containerRef={props.containerRef} />
+      <HoverControls {...props} />
+    </>
+  );
+}
+
+function HoverControls({ editor, containerRef }: Props) {
   const [hit, setHit] = useState<HoveredCell | null>(null);
   const [layout, setLayout] = useState<Layout | null>(null);
   const [menu, setMenu] = useState<MenuKind | null>(null);
@@ -184,6 +199,8 @@ export function TableControls({ editor, containerRef }: Props) {
   const menuRef = useRef<MenuKind | null>(null);
   /** Re-checks whether the pointer is still over the table or its controls; set by the listener effect. */
   const recheckRef = useRef<() => void>(() => {});
+  /** Filters live in the editor state, not here: bump a render when they change so the header button follows. */
+  const [, bump] = useReducer((n: number) => n + 1, 0);
   /** The one way to change the menu: the ref is written together with the state, so handlers never read a stale one. */
   const setMenuBoth = useCallback((next: MenuKind | null) => {
     menuRef.current = next;
@@ -198,7 +215,9 @@ export function TableControls({ editor, containerRef }: Props) {
       const nextLayout = next && container ? measure(next, container) : null;
       const value = nextLayout ? next : null;
       // A menu cannot outlive what it hangs off.
-      if (menuRef.current && (!value || (menuRef.current === "col" && !nextLayout?.columnGrip))) {
+      const anchored = menuRef.current === "col" ? nextLayout?.columnGrip : nextLayout?.headButton;
+      const needsAnchor = menuRef.current === "col" || menuRef.current === "head" || menuRef.current === "filter";
+      if (menuRef.current && (!value || (needsAnchor && !anchored))) {
         menuRef.current = null;
         setMenu(null);
       }
@@ -273,11 +292,25 @@ export function TableControls({ editor, containerRef }: Props) {
         const rows = current.table.rows;
         const clamped = { ...current, row: Math.min(current.row, rows.length - 1) };
         clamped.col = Math.min(clamped.col, (rows[0]?.cells.length ?? 1) - 1);
-        show(rows.length ? clamped : null);
+        // A row the filter just hid is no hover target; an open menu falls back to the (never hidden) header.
+        if (rows[clamped.row]?.classList.contains(FILTERED_ROW_CLASS)) clamped.row = menuRef.current ? 0 : -1;
+        show(rows.length && clamped.row >= 0 ? clamped : null);
       });
     };
+    let filterTables = tableFilterKey.getState(editor.state)?.tables;
     const onTransaction = ({ transaction }: { transaction: { docChanged: boolean } }) => {
-      if (!transaction.docChanged) return;
+      // The array only changes with the filters themselves, not with every edit or selection move.
+      const nextTables = tableFilterKey.getState(editor.state)?.tables;
+      const filtersChanged = nextTables !== filterTables;
+      if (filtersChanged) {
+        filterTables = nextTables;
+        bump();
+      }
+      if (!transaction.docChanged && !filtersChanged) return;
+      if (!transaction.docChanged) {
+        remeasure();
+        return;
+      }
       // The open menu targets a row/column by index; after any document change that may be another one.
       if (menuRef.current) setMenuBoth(null);
       if (!hitRef.current) return;
@@ -314,7 +347,9 @@ export function TableControls({ editor, containerRef }: Props) {
   const ready = editor.isEditable && !!hit && !!layout;
   const tablePos = ready ? resolveTablePos(editor, hit.table) : null;
   // A menu cannot outlive what it hangs off: without this, a stale `menu` blocks every later hover.
-  const menuAnchored = menu === null || (tablePos !== null && (menu === "row" || !!layout?.columnGrip));
+  const menuAnchored =
+    menu === null ||
+    (tablePos !== null && (menu === "row" || (menu === "col" ? !!layout?.columnGrip : !!layout?.headButton)));
   const activeMenu = menuAnchored ? menu : null;
 
   if (!ready || tablePos === null) return null;
@@ -328,6 +363,7 @@ export function TableControls({ editor, containerRef }: Props) {
   // Menu state is read only while a menu is open.
   const rows = activeMenu === "row" ? rowActions(editor, tablePos, row) : null;
   const cols = activeMenu === "col" ? columnActions(editor, tablePos, col) : null;
+  const headActions = activeMenu === "head" ? columnActions(editor, tablePos, col) : null;
   const currentAlign = activeMenu === "col" ? getColumnAlign(editor, tablePos, col) : null;
 
   const openMenu = (kind: MenuKind) => (event: unknown) => {
@@ -338,6 +374,9 @@ export function TableControls({ editor, containerRef }: Props) {
     if (kind === "row") selectRow(editor, pos, row);
     else selectColumn(editor, pos, col);
     setMenuBoth(kind);
+  };
+  const closeIf = (kind: HeaderMenuKind) => {
+    if (menuRef.current === kind) setMenuBoth(null);
   };
   // Keep the editor selection (and its CellSelection) when pressing a control.
   const keepFocus = (event: { preventDefault: () => void }) => event.preventDefault();
@@ -415,6 +454,20 @@ export function TableControls({ editor, containerRef }: Props) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+      )}
+
+      {layout.headButton && (
+        <ColumnHeaderMenu
+          editor={editor}
+          tablePos={tablePos}
+          col={col}
+          placed={layout.headButton}
+          menu={activeMenu}
+          actions={headActions}
+          setMenu={setMenuBoth}
+          closeIf={closeIf}
+          run={run}
+        />
       )}
 
       <Button

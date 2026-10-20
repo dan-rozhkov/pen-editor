@@ -7,6 +7,9 @@ import {
   columnGrip,
   GRIP_LENGTH,
   GRIP_THICKNESS,
+  HEAD_BUTTON_INSET,
+  HEAD_BUTTON_SIZE,
+  headButton,
   hoveredCell,
   isTableControl,
   relativeTo,
@@ -116,5 +119,24 @@ describe("add bars", () => {
   });
   it("column bar never passes the limit (a scrolled-wide table)", () => {
     expect(addColumnBar(table, { right: 800 }, 800).left).toBe(800 - BAR_SIZE);
+  });
+});
+
+describe("headButton", () => {
+  const visible = { left: 0, right: 500 };
+
+  it("sits at the right edge of the header cell, vertically centred", () => {
+    const b = headButton({ left: 100, top: 10, right: 240, bottom: 50 }, visible);
+    expect(b).toEqual({ left: 240 - HEAD_BUTTON_INSET - HEAD_BUTTON_SIZE, top: 30 - HEAD_BUTTON_SIZE / 2, width: HEAD_BUTTON_SIZE, height: HEAD_BUTTON_SIZE });
+  });
+
+  it("is clipped to the visible span", () => {
+    const b = headButton({ left: 400, top: 0, right: 700, bottom: 30 }, visible);
+    expect(b?.left).toBe(500 - HEAD_BUTTON_INSET - HEAD_BUTTON_SIZE);
+  });
+
+  it("is null when the column is scrolled out of view", () => {
+    expect(headButton({ left: -300, top: 0, right: -10, bottom: 30 }, visible)).toBeNull();
+    expect(headButton({ left: 505, top: 0, right: 700, bottom: 30 }, visible)).toBeNull();
   });
 });

@@ -17,10 +17,12 @@ import {
   insertRow,
   moveColumn,
   moveRow,
+  parseCellNumber,
   rowActions,
   selectColumn,
   selectRow,
   setColumnAlign,
+  sortColumn,
   tableAround,
 } from "../tableCommands";
 
@@ -324,6 +326,123 @@ describe("table commands: align no-op and availability", () => {
   it("columnActions.align is true for an editable table", () => {
     const t = make();
     expect(columnActions(editor, t, 1).align).toBe(true);
+    expect(columnActions(editor, t, 1).filter).toBe(true);
+  });
+});
+
+const NAMES = (names: string[], extra = "") =>
+  `| Name | Qty |\n| --- | --- |\n${names.map((n, i) => `| ${n} | ${extra || i} |`).join("\n")}`;
+
+/** First-column cell texts of the body rows, in document order. */
+function firstColumn(): string[] {
+  return rows().slice(2).map((r) => r.split("|")[1].trim());
+}
+
+describe("table commands: sortColumn", () => {
+  it.each([
+    ["asc", ["apple", "Banana", "cherry"]],
+    ["desc", ["cherry", "Banana", "apple"]],
+  ] as const)("sorts text %s, ignoring case", (dir, expected) => {
+    const t = make(NAMES(["cherry", "apple", "Banana"]));
+    expect(sortColumn(editor, t, 0, dir)).toBe(true);
+    expect(firstColumn()).toEqual(expected);
+  });
+
+  it("keeps the header row first", () => {
+    const t = make(NAMES(["b", "a"]));
+    sortColumn(editor, t, 0, "asc");
+    expect(rows()[0]).toBe("| Name | Qty |");
+  });
+
+  it.each([
+    ["asc", ["2", "10", "100"]],
+    ["desc", ["100", "10", "2"]],
+  ] as const)("compares numbers by value %s (not as text)", (dir, expected) => {
+    const t = make("| N |\n| --- |\n| 10 |\n| 100 |\n| 2 |");
+    sortColumn(editor, t, 0, dir);
+    expect(firstColumn()).toEqual(expected);
+  });
+
+  it("falls back to text compare when one cell is not a number, numeric-aware", () => {
+    const t = make("| N |\n| --- |\n| item 10 |\n| item 2 |\n| 5 |");
+    sortColumn(editor, t, 0, "asc");
+    expect(firstColumn()).toEqual(["5", "item 2", "item 10"]);
+  });
+
+  it.each(["asc", "desc"] as const)("puts empty cells last when sorting %s", (dir) => {
+    const t = make("| N | K |\n| --- | --- |\n|  | e |\n| b | x |\n| a | y |");
+    sortColumn(editor, t, 0, dir);
+    expect(rows().slice(2).map((r) => r.split("|")[2].trim()).pop()).toBe("e");
+  });
+
+  it.each([
+    [["1.5", "1.10", "1.7a"]],
+    [["1.7a", "1.10", "1.5"]],
+  ])("sorts a mixed column by one text rule and a second sort changes nothing (%j)", (input) => {
+    const t = make(`| N |\n| --- |\n${input.map((v) => `| ${v} |`).join("\n")}`);
+    sortColumn(editor, t, 0, "asc");
+    expect(firstColumn()).toEqual(["1.5", "1.7a", "1.10"]);
+    expect(sortColumn(editor, t, 0, "asc")).toBe(false);
+  });
+
+  it.each([
+    [["950", "1,200", "80"], ["80", "950", "1,200"]],
+    [["-5", "-10", "3"], ["-10", "-5", "3"]],
+    [["$1,000", "€20", "5%"], ["5%", "€20", "$1,000"]],
+    [["1 200", "950", "80"], ["80", "950", "1 200"]],
+  ])("reads %j as numbers", (input, expected) => {
+    const t = make(`| N |\n| --- |\n${input.map((v) => `| ${v} |`).join("\n")}`);
+    sortColumn(editor, t, 0, "asc");
+    expect(firstColumn()).toEqual(expected);
+  });
+
+  it.each([
+    ["950", 950],
+    ["1,200.5", 1200.5],
+    ["-$5", -5],
+    ["12%", 12],
+    ["1\u202f000", 1000],
+    ["1,5", null],
+    ["12a", null],
+    ["", null],
+  ])("parseCellNumber(%j)", (text, expected) => {
+    expect(parseCellNumber(text)).toBe(expected);
+  });
+
+  it("is stable for equal keys", () => {
+    const t = make("| K | V |\n| --- | --- |\n| a | 1 |\n| A | 2 |\n| a | 3 |");
+    sortColumn(editor, t, 0, "desc");
+    expect(rows().slice(2).map((r) => r.split("|")[2].trim())).toEqual(["1", "2", "3"]);
+  });
+
+  it("moves whole rows and is one undo step", () => {
+    const t = make(NAMES(["b", "a"]));
+    const before = editor.getMarkdown();
+    sortColumn(editor, t, 0, "asc");
+    expect(rows().slice(2)).toEqual(["| a | 1 |", "| b | 0 |"]);
+    expectUndoRestores(before);
+  });
+
+  it("keeps inline marks of the moved cells", () => {
+    const t = make("| N |\n| --- |\n| **b** |\n| *a* |");
+    sortColumn(editor, t, 0, "asc");
+    expect(rows().slice(2)).toEqual(["| *a* |", "| **b** |"]);
+  });
+
+  it("returns false and leaves the document alone when the order does not change", () => {
+    const t = make(NAMES(["a", "b"]));
+    const before = editor.state.doc;
+    expect(sortColumn(editor, t, 0, "asc")).toBe(false);
+    expect(editor.state.doc).toBe(before);
+  });
+
+  it("refuses a bad column, a header-only table and a non-table position", () => {
+    const t = make(NAMES(["b", "a"]));
+    expect(sortColumn(editor, t, 5, "asc")).toBe(false);
+    expect(sortColumn(editor, 1, 0, "asc")).toBe(false);
+    const single = make("| N |\n| --- |\n| a |");
+    expect(sortColumn(editor, single, 0, "asc")).toBe(false);
+    expect(columnActions(editor, single, 0).sort).toBe(false);
   });
 });
 
@@ -350,5 +469,6 @@ describe("table commands: refusals", () => {
     expect(rowActions(editor, p, 1).delete).toBe(false);
     expect(columnActions(editor, p, 0).delete).toBe(false);
     expect(columnActions(editor, p, 0).align).toBe(false);
+    expect(columnActions(editor, p, 0).filter).toBe(false);
   });
 });
