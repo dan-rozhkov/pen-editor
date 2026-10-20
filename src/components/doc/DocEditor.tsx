@@ -27,17 +27,32 @@ export function DocEditor({ markdown, revision, onMarkdown, onSynced, onEditor }
     handlers.current = { onMarkdown, onSynced };
   });
 
-  // The view exists only after mount ("create"); the overlays read `editor.view.dom`.
-  const [ready, setReady] = useState(false);
   const editor = useEditor({
     extensions: [...DOC_EXTENSIONS, SlashCommand, Placeholder.configure({ placeholder: placeholderFor })],
     content: markdown,
     contentType: "markdown",
     editorProps: { attributes: { class: "doc-prose", "aria-label": "Document" } },
-    onCreate: () => setReady(true),
-    onDestroy: () => setReady(false),
     onUpdate: ({ editor: e }) => handlers.current.onMarkdown(e.getMarkdown()),
   });
+
+  // The view exists only after "create"; the overlays read `editor.view.dom`. Listen on
+  // the live instance itself: in StrictMode the `onCreate` option fired for an instance
+  // that was destroyed right after, and a shared flag then hid the overlays.
+  const [createdEditor, setCreatedEditor] = useState<Editor | null>(null);
+  useEffect(() => {
+    if (!editor) return;
+    let active = true;
+    const onCreate = () => active && setCreatedEditor(editor);
+    const onUnmount = () => setCreatedEditor(null);
+    editor.on("create", onCreate);
+    editor.on("unmount", onUnmount);
+    if (editor.isInitialized) queueMicrotask(onCreate);
+    return () => {
+      active = false;
+      editor.off("create", onCreate);
+      editor.off("unmount", onUnmount);
+    };
+  }, [editor]);
 
   useEffect(() => {
     onEditor(editor);
@@ -60,7 +75,7 @@ export function DocEditor({ markdown, revision, onMarkdown, onSynced, onEditor }
   return (
     <div ref={containerRef} className="relative">
       <EditorContent editor={editor} />
-      {editor && ready && (
+      {editor && editor === createdEditor && (
         <>
           <BubbleToolbar editor={editor} />
           <BlockHandle editor={editor} containerRef={containerRef} />

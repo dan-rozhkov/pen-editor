@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { formatShortcut } from "@/lib/commands/shortcutFormat";
 import { cn } from "@/lib/utils";
 import { applyLink } from "./linkHref";
-import { MENU_INPUT, POPOVER_SURFACE } from "./menuSurface";
+import { bubbleToggleClass, MENU_INPUT, POPOVER_SURFACE } from "./menuSurface";
 
 interface Props {
   editor: Editor;
@@ -25,9 +25,9 @@ export function LinkPopover({ editor, active, open, onOpenChange }: Props) {
             tooltip="Link"
             shortcut={formatShortcut(["mod", "K"])}
             variant="ghost"
-            size="icon-sm"
+            size="icon"
             aria-pressed={active}
-            className={active ? "bg-accent-primary text-white hover:bg-accent-primary/90 hover:text-white" : "text-popover-foreground/70"}
+            className={bubbleToggleClass(active)}
           >
             <LinkIcon />
           </IconButton>
