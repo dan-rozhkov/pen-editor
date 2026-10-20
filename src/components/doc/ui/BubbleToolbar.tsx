@@ -24,7 +24,7 @@ import { bubbleVisible, createHolds } from "./bubbleRules";
 import { activeBlockLabel, TURN_INTO_ITEMS, turnInto } from "./blockTransforms";
 import { ColorPanel } from "./ColorPanel";
 import { LinkPopover } from "./LinkPopover";
-import { BUBBLE_ICON_BUTTON, bubbleToggleClass, MENU_SURFACE, POPOVER_SURFACE } from "./menuSurface";
+import { BUBBLE_HOVER, bubbleToggleClass, MENU_SURFACE, POPOVER_SURFACE } from "./menuSurface";
 import { cn } from "@/lib/utils";
 
 const MARKS = [
@@ -81,7 +81,7 @@ export function BubbleToolbar({ editor }: { editor: Editor }) {
     >
       <div role="toolbar" aria-label="Text formatting" className={cn(MENU_SURFACE, "flex items-center gap-1 rounded-xl p-1.5")}>
         <DropdownMenu onOpenChange={changeTurn}>
-          <DropdownMenuTrigger render={<Button variant="ghost" aria-label="Turn into" className="h-9 rounded-lg px-3 text-sm text-popover-foreground [&_svg]:size-4" />}>
+          <DropdownMenuTrigger render={<Button variant="ghost" aria-label="Turn into" className={cn(BUBBLE_HOVER, "h-9 rounded-lg px-3 text-sm text-popover-foreground [&_svg]:size-4")} />}>
             {state.block} <CaretDownIcon />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" finalFocus={false} className="w-auto min-w-44">
@@ -123,7 +123,7 @@ export function BubbleToolbar({ editor }: { editor: Editor }) {
         >
           <PopoverTrigger
             render={
-              <IconButton tooltip="Colour" variant="ghost" size="icon" className={cn(BUBBLE_ICON_BUTTON, "text-popover-foreground/70")}>
+              <IconButton tooltip="Colour" variant="ghost" size="icon" className={bubbleToggleClass(false)}>
                 <PaletteIcon />
               </IconButton>
             }

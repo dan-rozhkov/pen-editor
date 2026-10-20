@@ -201,7 +201,12 @@ export function BlockHandle({ editor, containerRef }: Props) {
           }
         />
         <DropdownMenuContent align="start" side="bottom" finalFocus={false} className="w-auto min-w-44">
-          <DropdownMenuItem variant="destructive" onClick={closeAnd((pos) => deleteBlock(editor, pos))}>
+          {/* Red icon only: label and highlight match the other items. */}
+          <DropdownMenuItem
+            variant="destructive"
+            className="data-[variant=destructive]:text-popover-foreground data-[variant=destructive]:focus:text-popover-foreground data-[variant=destructive]:focus:bg-accent dark:data-[variant=destructive]:focus:bg-accent"
+            onClick={closeAnd((pos) => deleteBlock(editor, pos))}
+          >
             <TrashIcon /> Delete
           </DropdownMenuItem>
           <DropdownMenuItem onClick={closeAnd((pos) => duplicateBlock(editor, pos))}>
