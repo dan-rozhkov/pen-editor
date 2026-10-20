@@ -2,6 +2,7 @@ import { CameraIcon, FlagIcon } from "@phosphor-icons/react";
 import type { BrowseTrace, BrowseTraceFrame } from "@sideform/browser-agent/agent/session";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { EmptyNote, FRAME_SURFACE, StatusDot } from "./parts";
 import type { Playback } from "./usePlayback";
 import { keepInView } from "./keepInView";
 import { TimelineAxis } from "./TimelineAxis";
@@ -56,7 +57,7 @@ interface ThumbsProps {
 const Thumbnails = memo(function Thumbnails({ trace, timeline, lefts, selectedFrameId, flagged, onSelectFrame }: ThumbsProps) {
   const count = timeline.frames.length;
   return count === 0 ? (
-    <p className="flex h-[52px] items-center text-xs text-text-muted">No frames were captured in this run.</p>
+    <EmptyNote title="No frames were captured in this run." className="flex h-[52px] items-center" />
   ) : (
     <div className="relative" style={{ height: THUMB_H + 4 }}>
       {timeline.frames.map(({ frame }, i) => {
@@ -86,14 +87,14 @@ const Thumbnails = memo(function Thumbnails({ trace, timeline, lefts, selectedFr
               loading="lazy"
               decoding="async"
               draggable={false}
-              className="size-full rounded-md bg-white object-cover object-top outline outline-1 -outline-offset-1 outline-[oklch(0_0_0/0.1)] dark:outline-[oklch(1_0_0/0.1)]"
+              className={cn("size-full rounded-md object-cover object-top", FRAME_SURFACE)}
             />
             {Kind && (
               <span className="absolute start-1 bottom-1 flex size-4 items-center justify-center rounded bg-black/60 text-white">
                 <Kind weight="fill" className="size-2.5" />
               </span>
             )}
-            {bad && <span className="absolute end-1 top-1 size-2 rounded-full bg-destructive ring-2 ring-white dark:ring-black/60" />}
+            {bad && <StatusDot tone="danger" className="absolute end-1 top-1 size-2 ring-2 ring-white dark:ring-black/60" />}
           </button>
         );
       })}

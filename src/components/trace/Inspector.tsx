@@ -1,11 +1,9 @@
-import { CheckCircleIcon, XCircleIcon } from "@phosphor-icons/react";
 import type { BrowseTrace, BrowseTraceLogEntry } from "@sideform/browser-agent/agent/session";
 import { memo, useEffect, useRef } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { keepInView } from "./keepInView";
-import { TONE_BADGE, TONE_ICON } from "./tone";
+import { BAR_ROW, Count, EmptyNote, OutcomeBadge, RowButton, SectionHeading, ToneIcon } from "./parts";
 import {
   describeCheck,
   describeOutcome,
@@ -14,12 +12,7 @@ import {
 } from "./traceModel";
 
 function Empty({ title, hint }: { title: string; hint?: string }) {
-  return (
-    <p className="px-1 py-2 text-xs text-text-muted">
-      {title}
-      {hint && <span className="text-text-disabled"> · {hint}</span>}
-    </p>
-  );
+  return <EmptyNote title={title} hint={hint} className="px-1 py-2" />;
 }
 
 interface LogProps {
@@ -53,17 +46,11 @@ function LogPanel({ trace, entries, droppedCount, selectedStep, kind, onSelectSt
           const current = linked && entry.stepIndex === selectedStep;
           return (
             <li key={`${entry.at}-${i}`}>
-              <button
-                type="button"
+              <RowButton
+                active={current}
                 disabled={!linked}
-                data-space-plays
-                aria-current={current ? "step" : undefined}
                 onClick={() => entry.stepIndex !== undefined && onSelectStep(entry.stepIndex)}
-                className={cn(
-                  "grid w-full grid-cols-[3.5rem_minmax(0,1fr)] gap-2 rounded-md px-1 py-1.5 text-start outline-none",
-                  "focus-visible:ring-2 focus-visible:ring-accent-primary/60 enabled:hover:bg-secondary dark:enabled:hover:bg-secondary/50",
-                  current && "bg-accent-selection",
-                )}
+                className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-2 px-1 py-1.5"
               >
                 <span className="pt-px text-[11px] tabular-nums text-text-muted">{formatOffset(entry.at - trace.startedAt)}</span>
                 <span className="min-w-0 space-y-0.5">
@@ -78,7 +65,7 @@ function LogPanel({ trace, entries, droppedCount, selectedStep, kind, onSelectSt
                   )}
                   {linked && <span className="block text-[11px] text-text-muted">Step {entry.stepIndex! + 1}</span>}
                 </span>
-              </button>
+              </RowButton>
             </li>
           );
         })}
@@ -96,23 +83,17 @@ function QaPanel({ trace }: { trace: BrowseTrace }) {
   return (
     <div className="space-y-5">
       <section className="space-y-1.5">
-        <Badge className={cn("h-6 px-2.5 text-xs", TONE_BADGE[outcome.tone])}>{outcome.label}</Badge>
-        {qa.reason ? <p className="text-pretty text-sm text-text-primary">{qa.reason}</p> : <p className="text-xs text-text-muted">The agent gave no reason.</p>}
+        <OutcomeBadge tone={outcome.tone} label={outcome.label} />
+        {qa.reason ? <p className="text-pretty text-sm text-text-primary">{qa.reason}</p> : <EmptyNote title="The agent gave no reason." />}
       </section>
 
       <section className="space-y-2">
-        <h3 className="text-xs font-medium text-text-muted">
-          Checks <span className="tabular-nums">{qa.checks?.length ?? 0}</span>
-        </h3>
+        <SectionHeading count={qa.checks?.length ?? 0}>Checks</SectionHeading>
         {qa.checks && qa.checks.length > 0 ? (
           <ul className="space-y-1.5">
             {qa.checks.map((check, i) => (
               <li key={i} className="flex items-start gap-2 rounded-lg bg-surface-elevated px-3 py-2">
-                {check.passed ? (
-                  <CheckCircleIcon weight="fill" aria-label="Passed" className={cn("mt-0.5 size-4 shrink-0", TONE_ICON.success.className)} />
-                ) : (
-                  <XCircleIcon weight="fill" aria-label="Failed" className={cn("mt-0.5 size-4 shrink-0", TONE_ICON.danger.className)} />
-                )}
+                <ToneIcon tone={check.passed ? "success" : "danger"} label={check.passed ? "Passed" : "Failed"} className="mt-0.5 size-4 shrink-0" />
                 <div className="min-w-0 text-xs/relaxed">
                   <p className="font-medium break-words text-text-primary">{describeCheck(check.check)}</p>
                   {(check.actual || check.error) && <p className="break-words text-text-muted">{check.error ?? check.actual}</p>}
@@ -122,18 +103,18 @@ function QaPanel({ trace }: { trace: BrowseTrace }) {
             ))}
           </ul>
         ) : (
-          <p className="text-xs text-text-muted">No checks ran.</p>
+          <EmptyNote title="No checks ran." />
         )}
       </section>
 
       {judge && (
         <section className="space-y-1.5">
-          <h3 className="text-xs font-medium text-text-muted">Judge</h3>
+          <SectionHeading>Judge</SectionHeading>
           {"error" in judge ? (
             <p className="rounded-lg bg-destructive/8 px-3 py-2 text-xs/relaxed break-words text-destructive">The judge did not finish: {judge.error}</p>
           ) : (
             <div className="space-y-1.5 rounded-lg bg-surface-elevated px-3 py-2">
-              <Badge className={cn("h-5", TONE_BADGE[judge.verdict === "pass" ? "success" : judge.verdict === "fail" ? "danger" : "warning"])}>{judge.verdict}</Badge>
+              <OutcomeBadge size="sm" tone={judge.verdict === "pass" ? "success" : judge.verdict === "fail" ? "danger" : "warning"} label={judge.verdict} />
               <p className="text-pretty text-xs/relaxed text-text-secondary">{judge.reason}</p>
             </div>
           )}
@@ -142,10 +123,6 @@ function QaPanel({ trace }: { trace: BrowseTrace }) {
       {qa.stepsDropped ? <p className="text-xs text-text-muted">{qa.stepsDropped} earlier QA steps are not listed.</p> : null}
     </div>
   );
-}
-
-function Count({ n }: { n: number }) {
-  return <span className="tabular-nums text-text-muted">{n}</span>;
 }
 
 interface Props {
@@ -158,7 +135,7 @@ export const Inspector = memo(function Inspector({ trace, selectedStep, onSelect
   const failedChecks = trace.qa?.checks?.filter((c) => !c.passed).length ?? 0;
   return (
     <Tabs defaultValue="console" className="min-h-0 flex-1 gap-0 bg-surface-panel">
-      <div className="shrink-0 px-2 py-1.5">
+      <div className={cn(BAR_ROW, "shrink-0")}>
         <TabsList aria-label="Details">
           <TabsTrigger value="console">
             Console <Count n={trace.console.length} />

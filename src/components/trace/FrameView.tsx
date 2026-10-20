@@ -1,5 +1,7 @@
 import type { BrowseTraceFrame } from "@sideform/browser-agent/agent/session";
 import { memo, useState } from "react";
+import { cn } from "@/lib/utils";
+import { BAR_ROW, EmptyNote, FRAME_SURFACE } from "./parts";
 import { formatOffset } from "./traceModel";
 
 interface Props {
@@ -11,13 +13,8 @@ interface Props {
 
 const KIND_LABEL: Record<BrowseTraceFrame["kind"], string> = { step: "After step", screenshot: "Screenshot", final: "Final state" };
 
-function Empty({ title, hint }: { title: string; hint: string }) {
-  return (
-    <p className="max-w-80 text-pretty text-center text-xs text-text-muted">
-      {title} · {hint}
-    </p>
-  );
-}
+/** Centered, narrow layout for the frame area's notes. */
+const EMPTY_CLASS = "max-w-80 text-pretty text-center";
 
 /** Natural sizes of loaded frames, cached per src so revisiting a frame does not jump. */
 const measuredSizes = new Map<string, { width: number; height: number }>();
@@ -35,7 +32,7 @@ export const FrameView = memo(function FrameView({ frame, startedAt, position }:
 
   return (
     <section aria-label="Frame" className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-base">
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-4 gap-y-2 px-2 py-1.5">
+      <div className={cn(BAR_ROW, "shrink-0 justify-end")}>
         {frame && (
           <p className="flex items-center gap-2 text-xs tabular-nums text-text-muted">
             <span data-testid="frame-offset">{formatOffset(frame.at - startedAt)}</span>
@@ -70,14 +67,12 @@ export const FrameView = memo(function FrameView({ frame, startedAt, position }:
               data-testid="trace-frame"
               data-frame-id={frame.id}
               style={{ width: `min(100cqw, calc(100cqh * ${ratio}))`, maxWidth: naturalWidth ? naturalWidth * 2 : undefined, aspectRatio: String(ratio) }}
-              className="rounded-lg bg-white object-contain shadow-[0_1px_2px_rgb(0_0_0/0.06),0_8px_24px_-8px_rgb(0_0_0/0.18)] outline outline-1 -outline-offset-1 outline-[oklch(0_0_0/0.1)] dark:outline-[oklch(1_0_0/0.1)]"
+              className={cn("rounded-lg object-contain shadow-[0_1px_2px_rgb(0_0_0/0.06),0_8px_24px_-8px_rgb(0_0_0/0.18)]", FRAME_SURFACE)}
             />
           ) : broken ? (
-            <div className="text-center text-xs text-text-muted">
-              <p>This frame could not be loaded · The image file may have been removed.</p>
-            </div>
+            <EmptyNote title="This frame could not be loaded" hint="The image file may have been removed." className={EMPTY_CLASS} />
           ) : (
-            <Empty title="No frame for this step" hint="Steps such as snapshot or read do not capture the page." />
+            <EmptyNote title="No frame for this step" hint="Steps such as snapshot or read do not capture the page." className={EMPTY_CLASS} />
           )}
         </div>
       </div>

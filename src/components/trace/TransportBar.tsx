@@ -2,6 +2,7 @@ import { CaretDownIcon, PauseIcon, PlayIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/IconButton";
+import { BAR_ROW } from "./parts";
 import { PACE_MODES, SPEEDS, type PaceMode, type Speed } from "./playback";
 import { formatClock } from "./traceModel";
 
@@ -60,7 +61,7 @@ interface Props {
 export function TransportBar({ playing, offset, span, speed, pace, onTogglePlay, onSpeedChange, onPaceChange }: Props) {
   const Icon = playing ? PauseIcon : PlayIcon;
   return (
-    <div role="toolbar" aria-label="Playback" className="flex items-center gap-1 px-2 py-1.5">
+    <div role="toolbar" aria-label="Playback" className={BAR_ROW}>
       <IconButton
         tooltip={playing ? "Pause" : "Play"}
         shortcut="Space"
