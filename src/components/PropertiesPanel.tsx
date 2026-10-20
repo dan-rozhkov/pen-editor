@@ -40,6 +40,7 @@ import {
 } from "@/lib/showcasePublish";
 import { CaretRightIcon } from "@phosphor-icons/react";
 import clsx from "clsx";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 // Chevron icon for expand/collapse
 const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
@@ -50,7 +51,7 @@ const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
       "text-text-muted",
       expanded && "rotate-90",
     )}
-    weight="bold"
+    weight={CHEVRON_WEIGHT}
   />
 );
 

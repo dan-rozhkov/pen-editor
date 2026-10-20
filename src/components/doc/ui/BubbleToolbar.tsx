@@ -26,6 +26,7 @@ import { ColorPanel } from "./ColorPanel";
 import { LinkPopover } from "./LinkPopover";
 import { BUBBLE_HOVER, bubbleToggleClass, MENU_SURFACE, POPOVER_SURFACE } from "./menuSurface";
 import { cn } from "@/lib/utils";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 const MARKS = [
   { name: "bold", label: "Bold", keys: ["mod", "B"], icon: <TextBIcon />, run: (e: Editor) => e.chain().focus().toggleBold().run() },
@@ -82,7 +83,7 @@ export function BubbleToolbar({ editor }: { editor: Editor }) {
       <div role="toolbar" aria-label="Text formatting" className={cn(MENU_SURFACE, "flex items-center gap-1 rounded-xl p-1.5")}>
         <DropdownMenu onOpenChange={changeTurn}>
           <DropdownMenuTrigger render={<Button variant="ghost" aria-label="Turn into" className={cn(BUBBLE_HOVER, "h-9 rounded-lg px-3 text-sm text-popover-foreground [&_svg]:size-4")} />}>
-            {state.block} <CaretDownIcon />
+            {state.block} <CaretDownIcon weight={CHEVRON_WEIGHT} />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" finalFocus={false} className="w-auto min-w-44">
             {TURN_INTO_ITEMS.map((item) => (

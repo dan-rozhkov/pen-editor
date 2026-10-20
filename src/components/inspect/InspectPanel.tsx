@@ -21,12 +21,13 @@ import { BoxModelDiagram } from "./BoxModelDiagram";
 import { InspectRow } from "./InspectRow";
 import { CodeSection } from "./CodeSection";
 import { DevExportAddButton, DevExportSection } from "./DevExportSection";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
   <CaretRightIcon
     size={12}
     className={clsx("w-3 h-3 transition-transform duration-250 ease-smooth-out", "text-text-muted", expanded && "rotate-90")}
-    weight="bold"
+    weight={CHEVRON_WEIGHT}
   />
 );
 

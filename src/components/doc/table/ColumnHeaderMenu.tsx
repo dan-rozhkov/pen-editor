@@ -26,6 +26,7 @@ import { MENU_INPUT, POPOVER_SURFACE } from "../ui/menuSurface";
 import { deleteColumn, moveColumn, sortColumn, type columnActions } from "./tableCommands";
 import { filterSummary, getColumnFilters, setColumnFilter } from "./tableFilter";
 import { place, type Placed } from "./tableGeometry";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 export type HeaderMenuKind = "head" | "filter";
 
@@ -72,7 +73,7 @@ export function ColumnHeaderMenu({ editor, tablePos, col, placed, menu, actions,
                 setMenu(menu === "head" ? null : "head");
               }}
             >
-              {filtered ? <FunnelSimpleIcon weight="fill" /> : <CaretDownIcon />}
+              {filtered ? <FunnelSimpleIcon weight="fill" /> : <CaretDownIcon weight={CHEVRON_WEIGHT} />}
             </Button>
           }
         />

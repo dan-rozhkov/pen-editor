@@ -8,6 +8,7 @@ import type {
   ShowcasePlatform,
   ShowcaseSort,
 } from "@/lib/showcase";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 interface ShowcaseFilterBarProps {
   sort: ShowcaseSort;
@@ -179,6 +180,7 @@ export function ShowcaseFilterBar({
             <CaretDownIcon
               aria-hidden="true"
               className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-text-muted"
+              weight={CHEVRON_WEIGHT}
             />
           </div>
         </div>
@@ -204,6 +206,7 @@ export function ShowcaseFilterBar({
           <CaretDownIcon
             aria-hidden="true"
             className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-text-muted"
+            weight={CHEVRON_WEIGHT}
           />
         </div>
       </div>

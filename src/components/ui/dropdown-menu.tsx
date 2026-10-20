@@ -5,6 +5,7 @@ import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 
 import { cn } from "@/lib/utils";
 import { CaretRightIcon, CheckIcon } from "@phosphor-icons/react";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
   return <MenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
@@ -122,7 +123,7 @@ function DropdownMenuSubTrigger({
       {...props}
     >
       {children}
-      <CaretRightIcon className="ml-auto" />
+      <CaretRightIcon className="ml-auto" weight={CHEVRON_WEIGHT} />
     </MenuPrimitive.SubmenuTrigger>
   );
 }

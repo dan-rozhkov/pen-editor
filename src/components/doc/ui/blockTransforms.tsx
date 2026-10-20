@@ -12,6 +12,7 @@ import {
   TextHTwoIcon,
   TextTIcon,
 } from "@phosphor-icons/react";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 export interface TurnIntoItem {
   id: string;
@@ -94,7 +95,7 @@ export const TURN_INTO_ITEMS: TurnIntoItem[] = [
     label: "Toggle list",
     hint: "Hide content inside a toggle",
     keywords: ["details", "collapse", "accordion", "toggle"],
-    icon: <CaretRightIcon />,
+    icon: <CaretRightIcon weight={CHEVRON_WEIGHT} />,
     isActive: (e) => e.isActive("details"),
     apply: (c) => c.clearNodes().setDetails(),
   },

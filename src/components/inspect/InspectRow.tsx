@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { CaretRightIcon } from "@phosphor-icons/react";
 import { writeTextToClipboard } from "@/utils/clipboard";
 import type { InspectValue } from "@/lib/inspect/buildInspectData";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 async function copy(label: string, value: string) {
   const ok = await writeTextToClipboard(value);
@@ -85,8 +86,8 @@ export function InspectRow({ row }: { row: InspectValue }) {
         <span className="flex items-center gap-1 min-w-0">
           <CaretRightIcon
             size={10}
-            weight="bold"
             className={clsx("text-text-muted transition-transform duration-250 ease-smooth-out shrink-0", expanded && "rotate-90")}
+            weight={CHEVRON_WEIGHT}
           />
           <span className="text-xs text-text-primary truncate">{token.name}</span>
         </span>

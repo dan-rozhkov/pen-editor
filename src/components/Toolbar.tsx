@@ -43,6 +43,7 @@ import {
   XIcon,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 const MCP_STATUS_LABEL: Record<"off" | "connecting" | "connected", string> = {
   off: "MCP disconnected",
@@ -172,7 +173,7 @@ export function FileMenu() {
           render={<Button variant="ghost" size="default" className="h-7 text-sm" />}
         >
           File
-          <CaretDownIcon className="size-3 text-muted-foreground" />
+          <CaretDownIcon className="size-3 text-muted-foreground" weight={CHEVRON_WEIGHT} />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" sideOffset={4} className="min-w-56">
           <DropdownMenuItem onClick={() => void openDocument()}>

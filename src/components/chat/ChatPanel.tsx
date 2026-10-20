@@ -56,6 +56,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { ChatLaunchPayload } from "@/types/chat";
 import { chatToMarkdown, chatFilename, downloadMarkdown } from "@/lib/chatExport";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 const PARALLEL_COUNT_OPTIONS = [
   { value: "1", label: "x1" },
@@ -614,7 +615,7 @@ export function ChatPanelContent({
             >
               <LightningIcon className="size-4" />
               <span>x{parallelCount}</span>
-              <CaretDownIcon className="size-3" />
+              <CaretDownIcon className="size-3" weight={CHEVRON_WEIGHT} />
             </Button>
           }
         />

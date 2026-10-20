@@ -21,6 +21,7 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 type ToolStatus = "running" | "completed" | "error";
 
@@ -185,6 +186,7 @@ export function ToolCallIndicator({ part, statusLabel, statusError, extraPanes, 
         <CaretDownIcon
           size={10}
           className={`transition-transform duration-250 ease-smooth-out shrink-0 ${open ? "" : "-rotate-90"}`}
+          weight={CHEVRON_WEIGHT}
         />
       </button>
       {status === "completed" && imageUrls.length > 0 && (

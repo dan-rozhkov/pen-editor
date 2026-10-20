@@ -10,6 +10,7 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { CaretDownIcon, XIcon, CheckIcon } from "@phosphor-icons/react";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 const Combobox = ComboboxPrimitive.Root;
 
@@ -29,7 +30,7 @@ function ComboboxTrigger({
       {...props}
     >
       {children}
-      <CaretDownIcon className="text-muted-foreground size-3.5 pointer-events-none" />
+      <CaretDownIcon className="text-muted-foreground size-3.5 pointer-events-none" weight={CHEVRON_WEIGHT} />
     </ComboboxPrimitive.Trigger>
   );
 }

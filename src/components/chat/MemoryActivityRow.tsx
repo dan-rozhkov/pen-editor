@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { BrainIcon, CaretDownIcon } from "@phosphor-icons/react";
 import { formatChange, type ChangeDetail } from "@/lib/memoryActivity";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 // "The agent changed itself" row. Shared by the in-turn `memory` /
 // `skill_manage` successes and the background-review notes, so a self-change
@@ -36,6 +37,7 @@ export function MemoryActivityRow({ changes }: { changes?: ChangeDetail[] }) {
         <CaretDownIcon
           size={10}
           className={`transition-transform duration-250 ease-smooth-out shrink-0 ${open ? "" : "-rotate-90"}`}
+          weight={CHEVRON_WEIGHT}
         />
       </button>
       {open && (

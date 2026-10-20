@@ -17,6 +17,7 @@ import {
 import clsx from "clsx";
 import type { SceneNode, LayoutProperties } from "../../types/scene";
 import type { EmbedLayerKind } from "@/lib/embedLayerTree";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 // Auto-layout alignment icon — shows 2 outlined bars positioned according to layout settings
 const AutoLayoutIcon = ({ layout }: { layout: LayoutProperties }) => {
@@ -194,6 +195,6 @@ export const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
       "text-text-muted",
       expanded && "rotate-90",
     )}
-    weight="bold"
+    weight={CHEVRON_WEIGHT}
   />
 );

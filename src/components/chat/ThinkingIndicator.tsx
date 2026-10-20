@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { CaretDownIcon } from "@phosphor-icons/react";
 import { SimpleMarkdown } from "./SimpleMarkdown";
 import { Shimmer } from "@/components/ai-elements/shimmer";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 interface ReasoningPart {
   type: "reasoning";
@@ -72,6 +73,7 @@ export function ThinkingIndicator({ part }: ThinkingIndicatorProps) {
         <CaretDownIcon
           size={10}
           className={`transition-transform duration-250 ease-smooth-out shrink-0 ${open ? "" : "-rotate-90"}`}
+          weight={CHEVRON_WEIGHT}
         />
       </button>
       {open && (

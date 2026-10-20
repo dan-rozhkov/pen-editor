@@ -14,6 +14,7 @@ import { useEditorModeStore } from "@/store/editorModeStore";
 import { useDevModeStore } from "@/store/devModeStore";
 import { formatShortcut } from "@/lib/commands/shortcutFormat";
 import { getCanvasViewportCenter, getCanvasViewportMetrics } from "@/utils/canvasViewport";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 const ZOOM_PRESETS = [25, 50, 75, 100, 125, 150, 200, 300];
 
@@ -53,7 +54,7 @@ export function PageControls() {
             }
           >
             {currentZoom}%
-            <CaretDownIcon className="size-3.5 text-muted-foreground" />
+            <CaretDownIcon className="size-3.5 text-muted-foreground" weight={CHEVRON_WEIGHT} />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" sideOffset={4} className="min-w-32">
             <DropdownMenuItem onClick={handleFitToContent} data-testid="page-zoom-fit">

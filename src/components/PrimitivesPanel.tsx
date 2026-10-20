@@ -27,6 +27,7 @@ import { ImageOpsTools } from "./canvas/ImageOpsTools";
 import { SpeakerNotesCard } from "./SpeakerNotesCard";
 import { TOOL_STYLES } from "./toolStyles";
 import type { PrimitivesVariant, ToolStyle } from "./toolStyles";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 export type { PrimitivesVariant, ToolStyle };
 
@@ -80,7 +81,7 @@ function ToolDropdownGroup({
                 isSubGroupActive ? style.active : style.inactive
               }`}
             >
-              <CaretDownIcon size={12} className={style.caret} weight="bold" />
+              <CaretDownIcon size={12} className={style.caret} weight={CHEVRON_WEIGHT} />
             </IconButton>
           }
         />
@@ -237,7 +238,7 @@ export function PrimitivesPanel({ variant = "floating" }: PrimitivesPanelProps =
 
   if (compact) {
     return (
-      <div data-testid="primitives-panel" className="flex items-center gap-0.5">
+      <div data-testid="primitives-panel" className="flex items-center gap-2">
         {tools}
       </div>
     );
@@ -245,7 +246,7 @@ export function PrimitivesPanel({ variant = "floating" }: PrimitivesPanelProps =
 
   return (
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2">
-      <div className="flex items-center gap-1 p-1.5 bg-surface-panel border border-border-default rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
+      <div className="flex items-center gap-2 p-1.5 bg-surface-panel border border-border-default rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
         {tools}
       </div>
     </div>

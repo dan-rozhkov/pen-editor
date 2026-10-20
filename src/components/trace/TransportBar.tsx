@@ -5,6 +5,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { BAR_ROW } from "./parts";
 import { PACE_MODES, SPEEDS, type PaceMode, type Speed } from "./playback";
 import { formatClock } from "./traceModel";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 const PACE_LABEL: Record<PaceMode, string> = { realtime: "Real time", step: "Per step" };
 const speedLabel = (speed: Speed): string => `${speed}×`;
@@ -26,7 +27,7 @@ function ChoiceMenu<T extends string>({ title, value, options, onChange }: MenuP
         render={
           <Button type="button" variant="ghost" size="sm" aria-label={`${title}: ${current}`} className="gap-1 px-2 text-text-secondary">
             {current}
-            <CaretDownIcon className="size-3" weight="bold" />
+            <CaretDownIcon className="size-3" weight={CHEVRON_WEIGHT} />
           </Button>
         }
       />

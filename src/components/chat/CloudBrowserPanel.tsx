@@ -11,6 +11,7 @@ import { expireCloudBrowser, releaseCloudBrowser } from "@/lib/cloudBrowser";
 import { isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 const MAX_TIMER_MS = 2 ** 31 - 1;
 
@@ -94,7 +95,7 @@ export function CloudBrowserPanel({ chatId }: { chatId: string }) {
           aria-expanded={!collapsed}
           onClick={() => setCollapsed((c) => !c)}
         >
-          {collapsed ? <CaretDownIcon /> : <CaretUpIcon />}
+          {collapsed ? <CaretDownIcon weight={CHEVRON_WEIGHT} /> : <CaretUpIcon weight={CHEVRON_WEIGHT} />}
         </Button>
       </div>
       {!collapsed && (

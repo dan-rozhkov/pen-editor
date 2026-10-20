@@ -3,6 +3,7 @@ import { CaretLeftIcon, CaretRightIcon, XIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { IconButton } from "./ui/IconButton";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 const navButtonClass =
   "group relative size-9 p-0 rounded-lg transition-none outline-none text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary disabled:opacity-30";
@@ -74,7 +75,7 @@ export function PresentOverlay() {
           size="lg"
           className={navButtonClass}
         >
-          <CaretLeftIcon size={40} className="size-6" weight="light" />
+          <CaretLeftIcon size={40} className="size-6" weight={CHEVRON_WEIGHT} />
         </IconButton>
         <span
           data-testid="present-counter"
@@ -92,7 +93,7 @@ export function PresentOverlay() {
           size="lg"
           className={navButtonClass}
         >
-          <CaretRightIcon size={40} className="size-6" weight="light" />
+          <CaretRightIcon size={40} className="size-6" weight={CHEVRON_WEIGHT} />
         </IconButton>
         <IconButton
           data-testid="present-exit"

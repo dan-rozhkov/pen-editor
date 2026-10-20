@@ -3,6 +3,7 @@ import { Select as SelectPrimitive } from "@base-ui/react/select";
 
 import { cn } from "@/lib/utils";
 import { CaretDownIcon, CheckIcon, CaretUpIcon } from "@phosphor-icons/react";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 const Select = SelectPrimitive.Root;
 
@@ -47,7 +48,7 @@ function SelectTrigger({
       {children}
       <SelectPrimitive.Icon
         render={
-          <CaretDownIcon className="text-muted-foreground size-3.5 pointer-events-none" />
+          <CaretDownIcon className="text-muted-foreground size-3.5 pointer-events-none" weight={CHEVRON_WEIGHT} />
         }
       />
     </SelectPrimitive.Trigger>
@@ -166,7 +167,7 @@ function SelectScrollUpButton({
       )}
       {...props}
     >
-      <CaretUpIcon />
+      <CaretUpIcon weight={CHEVRON_WEIGHT} />
     </SelectPrimitive.ScrollUpArrow>
   );
 }
@@ -184,7 +185,7 @@ function SelectScrollDownButton({
       )}
       {...props}
     >
-      <CaretDownIcon />
+      <CaretDownIcon weight={CHEVRON_WEIGHT} />
     </SelectPrimitive.ScrollDownArrow>
   );
 }

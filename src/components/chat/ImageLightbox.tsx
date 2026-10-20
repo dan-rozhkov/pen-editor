@@ -6,6 +6,7 @@ import {
   TooltipContent,
 } from "@/components/ui/tooltip";
 import { LikeReferenceButton, type LikeMeta } from "./LikeReferenceButton";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 interface ImageLightboxProps {
   urls: string[];
@@ -87,7 +88,7 @@ export function ImageLightbox({
                   aria-label="Previous image"
                   className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
                 >
-                  <CaretLeftIcon size={24} />
+                  <CaretLeftIcon size={24} weight={CHEVRON_WEIGHT} />
                 </button>
               }
             />
@@ -104,7 +105,7 @@ export function ImageLightbox({
                   aria-label="Next image"
                   className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
                 >
-                  <CaretRightIcon size={24} />
+                  <CaretRightIcon size={24} weight={CHEVRON_WEIGHT} />
                 </button>
               }
             />
