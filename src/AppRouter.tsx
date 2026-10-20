@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 
+import { RouteFallback } from "@/components/RouteFallback";
 import { AuthBootstrap } from "@/components/auth/AuthBootstrap";
 import { ShowcasePage } from "@/components/showcase/ShowcasePage";
 import { RouteTracker } from "@/lib/analytics/RouteTracker";
@@ -53,7 +54,7 @@ export function AppRouter() {
         <Route
           path="/app"
           element={
-            <Suspense fallback={null}>
+            <Suspense fallback={<RouteFallback />}>
               <EditorApp />
             </Suspense>
           }
@@ -61,7 +62,7 @@ export function AppRouter() {
         <Route
           path="/agent"
           element={
-            <Suspense fallback={null}>
+            <Suspense fallback={<RouteFallback />}>
               <AgentPage />
             </Suspense>
           }
@@ -69,7 +70,7 @@ export function AppRouter() {
         <Route
           path="/doc"
           element={
-            <Suspense fallback={null}>
+            <Suspense fallback={<RouteFallback />}>
               <DocPage />
             </Suspense>
           }
@@ -77,7 +78,7 @@ export function AppRouter() {
         <Route
           path="/trace/:id"
           element={
-            <Suspense fallback={null}>
+            <Suspense fallback={<RouteFallback />}>
               <TracePage />
             </Suspense>
           }
@@ -85,7 +86,7 @@ export function AppRouter() {
         <Route
           path="/c/:shareId"
           element={
-            <Suspense fallback={null}>
+            <Suspense fallback={<RouteFallback />}>
               <SharedCanvasPage />
             </Suspense>
           }

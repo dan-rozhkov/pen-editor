@@ -36,9 +36,12 @@ interface LeftSidebarBaseProps {
   renderHeader?: () => ReactNode;
   /** The Agents pane; injected so hosts without a chat never import it. */
   renderAgents?: (active: boolean) => ReactNode;
+  /** The host renders a header row above the whole editor (CanvasHeader):
+   * expanded panes start below it instead of at the window top. */
+  topInset?: boolean;
 }
 
-export function LeftSidebarBase({ hiddenSections, renderHeader, renderAgents }: LeftSidebarBaseProps) {
+export function LeftSidebarBase({ hiddenSections, renderHeader, renderAgents, topInset = false }: LeftSidebarBaseProps) {
   const rawActiveSection = useLeftSidebarStore((s) => s.activeSection);
   const isSharedView = useSharedViewStore((s) => s.isSharedView);
   // Must agree with LeftRail's derivation (same shared helper) — otherwise
@@ -68,6 +71,7 @@ export function LeftSidebarBase({ hiddenSections, renderHeader, renderAgents }: 
   // the panel. `display: none` keeps it visually absent and unable to
   // capture pointer events, same as the `hidden` idiom used elsewhere below.
   const isMobileClosed = isMobile && !isPanelOpen;
+  const expandedTop = topInset && !isMobile ? "top-[var(--canvas-header-h,0px)]" : "top-0";
 
   return (
     <div
@@ -88,7 +92,7 @@ export function LeftSidebarBase({ hiddenSections, renderHeader, renderAgents }: 
       {/* Pages and Slides share the document header; Agents has its own header
           (inside the chat). Gated on !isMobileClosed: only the Agents subtree
           below needs to stay mounted while the mobile panel is closed. */}
-      {!isMobileClosed && (activeSection === "pages" || activeSection === "slides") && (
+      {!isMobileClosed && renderHeader && (activeSection === "pages" || activeSection === "slides") && (
         <div className="flex flex-row items-center gap-0 pr-1">
           <div className="flex-1 min-w-0">
             {renderHeader?.()}
@@ -96,7 +100,7 @@ export function LeftSidebarBase({ hiddenSections, renderHeader, renderAgents }: 
         </div>
       )}
       {!isMobileClosed && (activeSection === "pages" || activeSection === "slides") && (
-        <div className="px-2 pb-2 flex items-center gap-1">
+        <div className={`px-2 pb-2 flex items-center gap-1 ${renderHeader ? "" : "pt-2"}`}>
           <EditableText
             value={displayName}
             onCommit={(name) => setFileName(name + extension)}
@@ -176,7 +180,7 @@ export function LeftSidebarBase({ hiddenSections, renderHeader, renderAgents }: 
           <div
             className={
               isPanelExpanded
-                ? "fixed top-0 left-14 right-0 bottom-0 z-[60] flex flex-col bg-surface-panel"
+                ? `fixed ${expandedTop} left-14 right-0 bottom-0 z-[60] flex flex-col bg-surface-panel`
                 : "absolute inset-0 flex flex-col"
             }
           >
@@ -189,7 +193,7 @@ export function LeftSidebarBase({ hiddenSections, renderHeader, renderAgents }: 
           <div
             className={
               isPanelExpanded
-                ? "fixed top-0 left-14 right-0 bottom-0 z-[60] flex flex-col bg-surface-panel"
+                ? `fixed ${expandedTop} left-14 right-0 bottom-0 z-[60] flex flex-col bg-surface-panel`
                 : "absolute inset-0 flex flex-col"
             }
           >
@@ -202,7 +206,7 @@ export function LeftSidebarBase({ hiddenSections, renderHeader, renderAgents }: 
           <div
             className={
               isPanelExpanded
-                ? "fixed top-0 left-14 right-0 bottom-0 z-[60] flex flex-col bg-surface-panel"
+                ? `fixed ${expandedTop} left-14 right-0 bottom-0 z-[60] flex flex-col bg-surface-panel`
                 : "absolute inset-0 flex flex-col"
             }
           >

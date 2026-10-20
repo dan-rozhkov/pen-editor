@@ -133,7 +133,7 @@ export function TimelineAxis({ timeline, startedAt, offset, selectedStep, onSele
           <span aria-hidden className="absolute inset-y-0 start-1/2 w-0.5 -translate-x-1/2 rounded-full bg-text-primary group-focus-visible/playhead:bg-accent-primary" />
           <span
             aria-hidden
-            className="absolute -top-0.5 start-1/2 size-2.5 -translate-x-1/2 rounded-full bg-text-primary ring-2 ring-surface-panel group-focus-visible/playhead:bg-accent-primary group-focus-visible/playhead:ring-accent-primary/40"
+            className="absolute -top-0.5 start-1/2 size-2.5 -translate-x-1/2 rounded-full bg-text-primary ring-2 ring-surface-panel group-focus-visible/playhead:ring-ring"
           />
         </div>
       </div>

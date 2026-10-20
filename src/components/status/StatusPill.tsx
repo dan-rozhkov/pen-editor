@@ -13,7 +13,7 @@ export function StatusPill({ testId, children }: StatusPillProps) {
   return (
     <div
       data-testid={testId}
-      className="absolute top-2 inset-x-0 z-50 flex justify-center pointer-events-none px-2"
+      className="absolute top-[calc(var(--canvas-header-h,0px)+0.5rem)] inset-x-0 z-50 flex justify-center pointer-events-none px-2"
     >
       <div className="pointer-events-none flex items-center gap-2 rounded-full border border-border-default bg-surface-panel px-3 py-1.5 text-xs text-text-muted shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
         {children}

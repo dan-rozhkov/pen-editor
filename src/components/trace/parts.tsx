@@ -26,7 +26,7 @@ export function OutcomeBadge({
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border-default bg-surface-panel px-2 text-xs font-medium whitespace-nowrap text-text-primary dark:bg-secondary/30",
+        "inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-surface-panel px-2 text-xs font-medium whitespace-nowrap text-text-primary dark:bg-secondary/30",
         size === "sm" ? "h-6" : "h-7",
         className,
       )}
@@ -83,7 +83,7 @@ export function RowButton({ active, className, ...rest }: { active: boolean } & 
       data-space-plays
       aria-current={active ? "step" : undefined}
       className={cn(
-        "w-full rounded-md text-start outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60",
+        "w-full rounded-md text-start outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active ? "bg-accent-selection" : "enabled:hover:bg-secondary dark:enabled:hover:bg-secondary/50",
         className,
       )}

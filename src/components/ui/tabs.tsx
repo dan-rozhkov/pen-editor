@@ -58,7 +58,7 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
       data-slot="tabs-trigger"
       className={cn(
         // Base
-        "gap-1.5 rounded-md border border-transparent px-2 h-6 text-xs/relaxed font-medium [&_svg:not([class*='size-'])]:size-3.5 focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring text-muted-foreground hover:text-foreground relative inline-flex flex-1 items-center justify-center whitespace-nowrap focus-visible:ring-[3px] focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "gap-1.5 rounded-md border border-transparent px-2 h-6 text-xs/relaxed font-medium [&_svg:not([class*='size-'])]:size-3.5 focus-visible:border-ring focus-visible:ring-ring focus-visible:outline-ring text-muted-foreground hover:text-foreground relative inline-flex flex-1 items-center justify-center whitespace-nowrap focus-visible:ring-[3px] focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         // Vertical
         "group-data-vertical/tabs:py-[calc(--spacing(1.25))] group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start",
         // Default variant active

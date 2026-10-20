@@ -156,7 +156,7 @@ export function TraceViewer({ trace }: { trace: BrowseTrace }) {
   }, [trace, stepIndex, selectStep, togglePlay]);
 
   return (
-    <div className="flex h-dvh flex-col bg-surface-base text-text-primary">
+    <div className="flex h-dvh flex-col bg-surface-panel text-text-primary">
       <TraceHeader trace={trace} detailsOpen={detailsOpen} onToggleDetails={toggleDetails} />
       <Filmstrip
         trace={trace}

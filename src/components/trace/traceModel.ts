@@ -255,9 +255,9 @@ export function prettyJson(value: unknown): string {
   }
 }
 
-/** The document title: "Trace · <goal>" with the goal cut short. */
+/** The document title: the goal, cut short (doc and canvas tabs use the plain name too). */
 export function traceTitle(goal: string): string {
-  return `Trace · ${clip(goalFirstLine(goal), 60)}`;
+  return clip(goalFirstLine(goal), 60);
 }
 
 // ---- QA and log rows -------------------------------------------------------

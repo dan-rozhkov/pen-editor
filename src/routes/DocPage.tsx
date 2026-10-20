@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckIcon, DotsThreeVerticalIcon, FilePlusIcon, ListIcon, TrashIcon } from "@phosphor-icons/react";
+import { CheckIcon, DotsThreeVerticalIcon, FilePlusIcon, FileTextIcon, ListIcon, TrashIcon } from "@phosphor-icons/react";
 import type { Editor } from "@tiptap/react";
 import { EditorProviders } from "@/components/EditorProviders";
 import { DocEditor } from "@/components/doc/DocEditor";
@@ -23,6 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { EmptyState } from "@/components/ui/empty-state";
 import { IconButton } from "@/components/ui/IconButton";
 import { useHtmlRouteClass } from "@/hooks/useHtmlRouteClass";
 
@@ -41,11 +42,17 @@ export default function DocPage() {
     <EditorProviders>
       <div className="flex h-dvh flex-col overflow-hidden bg-surface-panel text-text-primary">
         {sync.id === null ? (
-          <main className="flex flex-1 flex-col items-center justify-center gap-3">
-            <p className="text-sm text-text-muted">No documents yet.</p>
-            <Button variant="outline" onClick={sync.create}>
-              <FilePlusIcon /> New document
-            </Button>
+          <main className="flex flex-1 flex-col items-center justify-center px-4">
+            <EmptyState
+              icon={<FileTextIcon weight="light" />}
+              title="No documents yet"
+              description="Create a document to start writing."
+              action={
+                <Button variant="outline" onClick={sync.create}>
+                  <FilePlusIcon /> New document
+                </Button>
+              }
+            />
           </main>
         ) : (
           <>

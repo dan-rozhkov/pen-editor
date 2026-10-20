@@ -1,11 +1,5 @@
 /* Scoped typography for the /doc editor, Notion-like. Theme tokens for text and surfaces; code keeps
    Notion's neutral translucent greys and red (with a .dark variant). */
-html.route-doc,
-html.route-doc body,
-html.route-doc #root {
-  background-color: var(--color-surface-panel);
-}
-
 .doc-prose {
   color: var(--color-text-primary);
   font-size: 1rem;
@@ -47,7 +41,7 @@ html.route-doc #root {
   border-radius: 4px;
   padding: 0.2em 0.4em;
 }
-.dark .doc-prose code { color: #ff7369; }
+.dark .doc-prose :not(pre) > code { color: #ff7369; }
 .doc-prose pre {
   background: rgba(135, 131, 120, 0.08);
   border-radius: 4px;

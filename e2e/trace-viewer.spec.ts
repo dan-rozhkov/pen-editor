@@ -31,7 +31,7 @@ test("renders the steps and switches frames", async ({ page }) => {
 
   await page.getByRole("button", { name: /^Frame 5,/ }).click();
   await expect(frame(page)).toHaveAttribute("data-frame-id", "4");
-  await expect(page).toHaveTitle(/^Trace · Check that a visitor/);
+  await expect(page).toHaveTitle(/^Check that a visitor/);
 });
 
 test("plays the run and pauses with Space", async ({ page }) => {

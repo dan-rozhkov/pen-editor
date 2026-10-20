@@ -2,7 +2,8 @@ import { CameraIcon, FlagIcon } from "@phosphor-icons/react";
 import type { BrowseTrace, BrowseTraceFrame } from "@sideform/browser-agent/agent/session";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { EmptyNote, FRAME_SURFACE, StatusDot } from "./parts";
+import { EmptyState } from "@/components/ui/empty-state";
+import { FRAME_SURFACE, StatusDot } from "./parts";
 import type { Playback } from "./usePlayback";
 import { keepInView } from "./keepInView";
 import { TimelineAxis } from "./TimelineAxis";
@@ -57,7 +58,9 @@ interface ThumbsProps {
 const Thumbnails = memo(function Thumbnails({ trace, timeline, lefts, selectedFrameId, flagged, onSelectFrame }: ThumbsProps) {
   const count = timeline.frames.length;
   return count === 0 ? (
-    <EmptyNote title="No frames were captured in this run." className="flex h-[52px] items-center" />
+    <div className="flex min-h-[52px] items-center justify-center">
+      <EmptyState size="panel" title="No frames were captured in this run" />
+    </div>
   ) : (
     <div className="relative" style={{ height: THUMB_H + 4 }}>
       {timeline.frames.map(({ frame }, i) => {
@@ -76,7 +79,7 @@ const Thumbnails = memo(function Thumbnails({ trace, timeline, lefts, selectedFr
             onClick={() => onSelectFrame(frame)}
             className={cn(
               "group absolute top-0.5 overflow-hidden rounded-md outline-none",
-              "focus-visible:ring-2 focus-visible:ring-accent-primary/70",
+              "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface-panel",
               active ? "shadow-[0_0_0_2px_var(--color-accent-primary)]" : "opacity-80 hover:opacity-100",
             )}
             style={{ left: lefts[i], width: THUMB_W, height: THUMB_H }}

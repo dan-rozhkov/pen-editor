@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect } from "react";
 import { track } from "./lib/analytics";
 import { markEditorOpened } from "./lib/analytics/sessionTiming";
 import { chatHiddenSections } from "./lib/chatMode";
@@ -10,7 +10,7 @@ import { installComponentSync } from "./store/componentSync";
 import { LeftRail } from "./components/LeftRail";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { RightPanel } from "./components/RightPanel";
-import { PrimitivesPanel } from "./components/PrimitivesPanel";
+import { CanvasHeader, CANVAS_HEADER_HEIGHT } from "./components/CanvasHeader";
 import { PresentOverlay } from "./components/PresentOverlay";
 import { CommandPalette } from "./components/CommandPalette";
 import { PluginPanels } from "./components/plugins/PluginPanels";
@@ -165,6 +165,19 @@ function App() {
   // mutating calls, frames and place-node while `canMutateScene()` is false.
   useEffect(() => maybeStartCanvasHost() ?? undefined, [isSharedView]);
 
+  // Publish the canvas header's height for overlays that sit below it. On
+  // <html> (not the overlay root) because SharedCanvasBar renders next to
+  // <EditorApp />, outside this subtree. A layout effect, so the first painted
+  // frame already has it (an expanded pane would otherwise flash over the header).
+  const hasCanvasHeader = !isMobile && !isUIHidden && !isPresent;
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--canvas-header-h", `${hasCanvasHeader ? CANVAS_HEADER_HEIGHT : 0}px`);
+    return () => {
+      root.style.removeProperty("--canvas-header-h");
+    };
+  }, [hasCanvasHeader]);
+
   // Embed HTML components: re-render consumers when a master changes (edit,
   // undo, redo) and catch stale regions up on page activation. See
   // store/componentSync.ts.
@@ -242,41 +255,43 @@ function App() {
           canvas as their own — see sharedViewStore.ts). */}
       {mode !== "present" && !isSharedView && <ShareDialog />}
 
-      {/* UI panels — overlay on top of canvas */}
+      {/* UI panels — overlay on top of canvas. The header row spans the full
+          width above the rail/sidebar/center/right panel (desktop only: on
+          mobile the File menu stays in the sidebar header). */}
       {!isUIHidden && !isPresent && (
-        <div className="absolute inset-0 flex flex-row pointer-events-none">
-          {/* Left rail + sidebar — layers panel is read-only in view mode. */}
-          <div className="pointer-events-auto flex flex-row">
-            <LeftRail hiddenSections={chatHiddenSections()} />
-            <ReadOnlyProvider value={isView}>
-              <LeftSidebar />
-            </ReadOnlyProvider>
-          </div>
-          {/* Center area — tools/right panel are hidden on mobile, which keeps
-              only the left rail (and its full-width overlay panel). */}
-          {!isMobile && (
-            <>
-              <div className="flex-1 h-full relative">
-                {/* Drawing tools are pointless in read-only view mode, and
-                    the 3D layer view's own control bar occupies the same
-                    bottom-center slot — hide the draw palette in both. */}
-                {!isView && !isDev && !is3DActive && (
-                  <div className="pointer-events-auto">
-                    <PrimitivesPanel />
-                  </div>
-                )}
-                {!isView && !is3DActive && <Rulers />}
-                <FpsDisplay />
-              </div>
-              {/* Right sidebar — read-only in view mode (inspect, no edits);
-                  swapped for the read-only InspectPanel in dev mode. */}
-              <div className="pointer-events-auto">
-                <ReadOnlyProvider value={isView || isDev}>
-                  <RightPanel />
-                </ReadOnlyProvider>
-              </div>
-            </>
+        <div className="absolute inset-0 flex flex-col pointer-events-none">
+          {hasCanvasHeader && (
+            <div className="pointer-events-auto relative z-10 shrink-0">
+              <CanvasHeader />
+            </div>
           )}
+          <div className="flex min-h-0 flex-1 flex-row">
+            {/* Left rail + sidebar — layers panel is read-only in view mode. */}
+            <div className="pointer-events-auto flex flex-row">
+              <LeftRail hiddenSections={chatHiddenSections()} />
+              <ReadOnlyProvider value={isView}>
+                <LeftSidebar />
+              </ReadOnlyProvider>
+            </div>
+            {/* Center area — right panel is hidden on mobile, which keeps
+                only the left rail (and its full-width overlay panel). The
+                drawing tools live in the header (CanvasHeader). */}
+            {!isMobile && (
+              <>
+                <div className="flex-1 h-full relative">
+                  {!isView && !is3DActive && <Rulers />}
+                  <FpsDisplay />
+                </div>
+                {/* Right sidebar — read-only in view mode (inspect, no edits);
+                    swapped for the read-only InspectPanel in dev mode. */}
+                <div className="pointer-events-auto">
+                  <ReadOnlyProvider value={isView || isDev}>
+                    <RightPanel />
+                  </ReadOnlyProvider>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -14,7 +14,7 @@ import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 
 vi.mock("@/pixi/PixiCanvas", () => ({ PixiCanvas: () => <div data-testid="pixi-shim" /> }));
 vi.mock("@/components/RightPanel", () => ({ RightPanel: () => <div data-testid="right-panel-shim" /> }));
-vi.mock("@/components/PrimitivesPanel", () => ({ PrimitivesPanel: () => null }));
+vi.mock("@/components/CanvasHeader", () => ({ CANVAS_HEADER_HEIGHT: 41, CanvasHeader: () => <div data-testid="canvas-header-shim" /> }));
 vi.mock("@/components/PresentOverlay", () => ({ PresentOverlay: () => null }));
 vi.mock("@/components/CommandPalette", () => ({ CommandPalette: () => null }));
 vi.mock("@/components/plugins/PluginPanels", () => ({ PluginPanels: () => null }));
@@ -72,6 +72,8 @@ describe("<App /> chatless mode", () => {
     expect(screen.queryByTestId("rail-agents")).toBeNull();
     expect(screen.queryByTestId("chat-shim")).toBeNull();
     expect(screen.getByTestId("rail-pages")).toBeTruthy();
+    // The header row (File menu + tools) is part of the chatless canvas tab.
+    expect(screen.getByTestId("canvas-header-shim")).toBeTruthy();
     // loadModels still runs: it also carries image-ops capabilities + vision metadata.
     expect(loadModels).toHaveBeenCalled();
     // The showcase prompt is neither consumed nor turned into a chat.

@@ -32,13 +32,14 @@ export default function TracePage() {
   }, [id, source, key]);
 
   const goal = result?.ok ? result.trace.goal : undefined;
+  const notFound = result !== null && !result.ok && result.reason === "not-found";
   useEffect(() => {
     const previous = document.title;
-    document.title = goal === undefined ? "Trace" : traceTitle(goal);
+    document.title = goal !== undefined ? traceTitle(goal) : notFound ? "Trace not found" : "Trace";
     return () => {
       document.title = previous;
     };
-  }, [goal]);
+  }, [goal, notFound]);
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 

@@ -78,4 +78,42 @@ describe("<PrimitivesPanel /> tool dock", () => {
     expect(frameEntries[0]).toMatchObject({ label: "Frame", shortcut: "F" });
     expect(embedEntries[0]).toMatchObject({ label: "Embed", shortcut: "E" });
   });
+
+  describe("header variant", () => {
+    it("is the floating card by default and compact without a card in the header", () => {
+      const floating = render(<PrimitivesPanel />);
+      expect(floating.container.querySelector(".absolute.bottom-4")).not.toBeNull();
+      expect(floating.container.querySelector(".rounded-2xl")).not.toBeNull();
+      floating.unmount();
+
+      const header = render(<PrimitivesPanel variant="header" />);
+      expect(header.container.querySelector(".absolute")).toBeNull();
+      expect(header.container.querySelector(".rounded-2xl")).toBeNull();
+      expect(header.container.querySelector(".border-border-default")).toBeNull();
+    });
+
+    it("keeps every tool, chevron and label in the header variant", () => {
+      render(<PrimitivesPanel variant="header" />);
+      expect(screen.getAllByRole("button", { name: "Embed" })).toHaveLength(1);
+      const chevrons = screen
+        .getAllByRole("button")
+        .filter((b) => /^More /.test(b.getAttribute("aria-label") ?? ""))
+        .map((b) => b.getAttribute("aria-label"));
+      expect(chevrons).toEqual(["More move tools", "More shapes", "More pen tools"]);
+    });
+
+    it("marks the active tool as pressed and toggles it on click", () => {
+      render(<PrimitivesPanel variant="header" />);
+      const embed = screen.getByRole("button", { name: "Embed" });
+      expect(embed.getAttribute("aria-pressed")).toBe("false");
+      fireEvent.click(embed);
+      expect(useDrawModeStore.getState().activeTool).toBe("embed");
+      expect(screen.getByRole("button", { name: "Embed" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("uses 28px buttons", () => {
+      render(<PrimitivesPanel variant="header" />);
+      expect(screen.getByRole("button", { name: "Embed" }).className).toContain("size-7");
+    });
+  });
 });

@@ -103,9 +103,10 @@ describe("<LeftSidebar />", () => {
     vi.mocked(useIsMobile).mockReturnValue(false);
   });
 
-  it("renders the Toolbar and the Pages section (pages + layers) by default", () => {
+  it("renders the Pages section (pages + layers) by default, without the File menu row on desktop", () => {
     render(<LeftSidebar />);
-    expect(screen.getByTestId("toolbar-shim")).toBeTruthy();
+    // The File menu lives in the canvas header on desktop (CanvasHeader).
+    expect(screen.queryByTestId("toolbar-shim")).toBeNull();
     // Pages section shows the pages list and the layer tree together.
     expect(screen.getByTestId("pages-shim")).toBeTruthy();
     expect(screen.getByTestId("layers-shim")).toBeTruthy();
@@ -139,7 +140,7 @@ describe("<LeftSidebar />", () => {
   it("renders the Slides section when it is active", () => {
     useLeftSidebarStore.setState({ activeSection: "slides" });
     render(<LeftSidebar />);
-    expect(screen.getByTestId("toolbar-shim")).toBeTruthy();
+    expect(screen.queryByTestId("toolbar-shim")).toBeNull();
     expect(screen.getByText("Untitled")).toBeTruthy();
     expect(screen.getByTestId("slides-shim")).toBeTruthy();
     // Pages/layers content is not mounted while slides is active.

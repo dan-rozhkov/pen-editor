@@ -64,7 +64,7 @@ export function ContextMeter() {
             aria-label={label}
             data-testid="context-meter"
             tabIndex={0}
-            className="flex shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px]"
+            className="flex shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-ring focus-visible:ring-[2px]"
             style={{ width: BOX_SIZE, height: BOX_SIZE }}
           >
             <svg

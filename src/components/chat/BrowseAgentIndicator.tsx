@@ -172,7 +172,7 @@ export function BrowseAgentIndicator({ part }: { part: AnyPart }) {
         <button
           type="button"
           onClick={openTrace}
-          className="flex items-center gap-1.5 w-full rounded-sm py-0.5 text-[13px] leading-relaxed text-text-muted outline-none hover:text-text-secondary focus-visible:ring-[2px] focus-visible:ring-ring/30"
+          className="flex items-center gap-1.5 w-full rounded-sm py-0.5 text-[13px] leading-relaxed text-text-muted outline-none hover:text-text-secondary focus-visible:ring-[2px] focus-visible:ring-ring"
         >
           <FilmStripIcon size={14} className="shrink-0" aria-hidden />
           <span className="truncate">View trace</span>

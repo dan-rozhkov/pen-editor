@@ -21,7 +21,7 @@ describe("DocPage", () => {
 
   it("shows the empty state without documents", () => {
     renderDoc("/doc");
-    expect(screen.getByText("No documents yet.")).toBeTruthy();
+    expect(screen.getByText("No documents yet")).toBeTruthy();
     expect(screen.getByRole("button", { name: /New document/ })).toBeTruthy();
   });
 

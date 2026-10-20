@@ -1,6 +1,7 @@
 import { FileXIcon, MagnifyingGlassIcon, PlugsIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { TraceLoadResult } from "@/lib/browseTraceLoad";
 
 function Bar({ className }: { className: string }) {
@@ -10,7 +11,7 @@ function Bar({ className }: { className: string }) {
 /** Shape of the loaded page, so nothing jumps when the trace arrives. */
 export function TraceSkeleton() {
   return (
-    <div role="status" aria-label="Loading trace" className="flex h-dvh flex-col bg-surface-base">
+    <div role="status" aria-label="Loading trace" className="flex h-dvh flex-col bg-surface-panel">
       <div className="space-y-3 border-b border-border-default bg-surface-panel px-4 py-3">
         <Bar className="h-5 w-2/3" />
         <Bar className="h-3.5 w-1/2" />
@@ -40,13 +41,8 @@ export function TraceSkeleton() {
 
 function Message({ icon, title, children, action }: { icon: ReactNode; title: string; children: ReactNode; action?: ReactNode }) {
   return (
-    <main className="flex h-dvh items-center justify-center bg-surface-base px-4">
-      <div className="flex max-w-sm flex-col items-center gap-2 text-center">
-        <span className="text-text-disabled [&>svg]:size-10">{icon}</span>
-        <h1 className="text-base font-semibold text-text-primary">{title}</h1>
-        <div className="text-pretty text-sm text-text-muted">{children}</div>
-        {action && <div className="mt-2">{action}</div>}
-      </div>
+    <main className="flex h-dvh items-center justify-center bg-surface-panel px-4">
+      <EmptyState titleAs="h1" icon={icon} title={title} description={children} action={action} />
     </main>
   );
 }

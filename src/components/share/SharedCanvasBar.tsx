@@ -33,7 +33,7 @@ export function SharedCanvasBar({ title, shareId }: SharedCanvasBarProps) {
   return (
     <div
       data-testid="shared-canvas-bar"
-      className="absolute top-2 inset-x-0 z-50 flex justify-center pointer-events-none px-2"
+      className="absolute top-[calc(var(--canvas-header-h,0px)+0.5rem)] inset-x-0 z-50 flex justify-center pointer-events-none px-2"
     >
       <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-border-default bg-surface-panel px-3 py-1.5 text-xs text-text-default shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
         <span className="max-w-[40vw] truncate font-medium">{title}</span>

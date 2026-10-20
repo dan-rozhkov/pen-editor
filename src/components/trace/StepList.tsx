@@ -1,7 +1,8 @@
 import { memo, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { keepInView } from "./keepInView";
-import { EmptyNote, RowButton, SectionHeading, StatusDot, ToneIcon } from "./parts";
+import { EmptyState } from "@/components/ui/empty-state";
+import { RowButton, SectionHeading, StatusDot, ToneIcon } from "./parts";
 import { formatDuration, type StepRow } from "./traceModel";
 
 interface Props {
@@ -25,7 +26,7 @@ export const StepList = memo(function StepList({ rows, selected, flagged, onSele
         Steps
       </SectionHeading>
       {rows.length === 0 ? (
-        <EmptyNote title="No steps were recorded." className="px-4 py-6" />
+        <EmptyState size="panel" title="No steps were recorded" description="The run ended before the agent took a step." className="mx-auto px-4 py-6" />
       ) : (
         <ol ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
           {rows.map(({ step, label, summary, durationMs, ratio }) => {

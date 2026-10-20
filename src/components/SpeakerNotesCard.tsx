@@ -8,6 +8,7 @@ import type { FlatFrameNode } from "@/types/scene";
 import { NoteIcon } from "@phosphor-icons/react";
 import { Button } from "./ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { TOOL_STYLES, type ToolStyle } from "./toolStyles";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 /**
@@ -21,7 +22,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
  * when the textarea gains focus, so the whole typing session (many
  * without-history writes) collapses into a single undo step.
  */
-export function SpeakerNotesCard() {
+export function SpeakerNotesCard({ toolStyle = TOOL_STYLES.floating }: { toolStyle?: ToolStyle } = {}) {
   const activeSection = useLeftSidebarStore((s) => s.activeSection);
   const activeSlideId = useActiveSlideId();
   const speakerNotes = useSceneStore((s) =>
@@ -72,16 +73,16 @@ export function SpeakerNotesCard() {
               variant="ghost"
               size="lg"
               aria-label="Speaker notes"
-              className="group relative size-9 p-0 rounded-lg! transition-none outline-none text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
+              className={`${toolStyle.buttonBase} ${toolStyle.inactive}`}
             >
-              <NoteIcon size={40} className="size-6" weight="light" />
+              <NoteIcon size={toolStyle.iconSize} className={toolStyle.icon} weight="light" />
             </Button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent side="top">Speaker notes</TooltipContent>
+        <TooltipContent side={toolStyle.tooltipSide}>Speaker notes</TooltipContent>
       </Tooltip>
       <PopoverContent
-        side="top"
+        side={toolStyle.tooltipSide}
         align="center"
         className="w-[320px]"
         draggable

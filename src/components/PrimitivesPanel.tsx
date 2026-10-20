@@ -25,6 +25,10 @@ import {
 import { Layers3DToggle } from "./canvas/Layers3DToggle";
 import { ImageOpsTools } from "./canvas/ImageOpsTools";
 import { SpeakerNotesCard } from "./SpeakerNotesCard";
+import { TOOL_STYLES } from "./toolStyles";
+import type { PrimitivesVariant, ToolStyle } from "./toolStyles";
+
+export type { PrimitivesVariant, ToolStyle };
 
 interface ToolDropdownGroupProps {
   mainTool: ToolDefinition;
@@ -35,7 +39,7 @@ interface ToolDropdownGroupProps {
   activeTool: DrawToolType | null;
   isSubGroupActive: boolean;
   onToggleTool: (tool: DrawToolType) => void;
-  toolButtonBaseClass: string;
+  style: ToolStyle;
 }
 
 function ToolDropdownGroup({
@@ -47,7 +51,7 @@ function ToolDropdownGroup({
   activeTool,
   isSubGroupActive,
   onToggleTool,
-  toolButtonBaseClass,
+  style,
 }: ToolDropdownGroupProps) {
   return (
     <DropdownMenu>
@@ -57,15 +61,12 @@ function ToolDropdownGroup({
           size="lg"
           tooltip={mainTool.label}
           shortcut={mainTool.shortcut}
-          side="top"
+          side={style.tooltipSide}
           onClick={onMainClick}
-          className={`${toolButtonBaseClass} ${
-            isMainActive
-              ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
-              : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
-          }`}
+          aria-pressed={isMainActive}
+          className={`${style.buttonBase} ${isMainActive ? style.active : style.inactive}`}
         >
-          <mainTool.icon size={40} className="size-6" weight="light" />
+          <mainTool.icon size={style.iconSize} className={style.icon} weight="light" />
         </IconButton>
 
         <DropdownMenuTrigger
@@ -74,20 +75,18 @@ function ToolDropdownGroup({
               variant="ghost"
               size="lg"
               tooltip={subMenuTooltip}
-              side="top"
-              className={`${toolButtonBaseClass} -ml-1 w-6 justify-center ${
-                isSubGroupActive
-                  ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
-                  : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
+              side={style.tooltipSide}
+              className={`${style.buttonBase} ${style.caretButton} ${
+                isSubGroupActive ? style.active : style.inactive
               }`}
             >
-              <CaretDownIcon size={12} className="size-3" weight="bold" />
+              <CaretDownIcon size={12} className={style.caret} weight="bold" />
             </IconButton>
           }
         />
       </div>
 
-      <DropdownMenuContent align="center" sideOffset={8}>
+      <DropdownMenuContent align="center" sideOffset={style.menuSideOffset}>
         {subTools.map(({ icon: Icon, label, tool, shortcut }) => {
           const isActive = activeTool === tool;
           return (
@@ -111,7 +110,16 @@ function ToolDropdownGroup({
   );
 }
 
-export function PrimitivesPanel() {
+interface PrimitivesPanelProps {
+  /**
+   * "floating" (default): the bottom-center card used by the embed widget.
+   * "header": compact, card-less row for the canvas header (the parent
+   * positions it; this variant renders no absolute wrapper).
+   */
+  variant?: PrimitivesVariant;
+}
+
+export function PrimitivesPanel({ variant = "floating" }: PrimitivesPanelProps = {}) {
   const activeTool = useDrawModeStore((s) => s.activeTool);
   const toggleTool = useDrawModeStore((s) => s.toggleTool);
   const setActiveTool = useDrawModeStore((s) => s.setActiveTool);
@@ -127,111 +135,118 @@ export function PrimitivesPanel() {
   const isRectangleActive = activeTool === "rect";
   const isPenSubToolActive = penSubTools.some((t) => t.tool === activeTool);
   const isPenActive = activeTool === "pen";
-  const toolButtonBaseClass =
-    "group relative size-9 p-0 rounded-lg! transition-none outline-none";
+  const compact = variant === "header";
+  const style = TOOL_STYLES[variant];
+  const buttonClass = (isActive: boolean) =>
+    `${style.buttonBase} ${isActive ? style.active : style.inactive}`;
+
+  const tools = (
+    <>
+      <ToolDropdownGroup
+        mainTool={MOVE_TOOL}
+        onMainClick={() => setActiveTool(null)}
+        isMainActive={isMoveActive}
+        subMenuTooltip="More move tools"
+        subTools={MOVE_SUB_TOOLS}
+        activeTool={activeTool}
+        isSubGroupActive={isMoveSubToolActive}
+        onToggleTool={toggleTool}
+        style={style}
+      />
+
+      <IconButton
+        onClick={() => toggleTool(EMBED_TOOL.tool)}
+        tooltip={EMBED_TOOL.label}
+        shortcut={EMBED_TOOL.shortcut}
+        side={style.tooltipSide}
+        variant="ghost"
+        size="lg"
+        aria-pressed={isEmbedActive}
+        className={buttonClass(isEmbedActive)}
+      >
+        <EMBED_TOOL.icon size={style.iconSize} className={style.icon} weight="light" />
+      </IconButton>
+
+      <ToolDropdownGroup
+        mainTool={RECT_TOOL}
+        onMainClick={() => toggleTool("rect")}
+        isMainActive={isRectangleActive}
+        subMenuTooltip="More shapes"
+        subTools={rectSubTools}
+        activeTool={activeTool}
+        isSubGroupActive={isRectSubToolActive}
+        onToggleTool={toggleTool}
+        style={style}
+      />
+
+      <ToolDropdownGroup
+        mainTool={PEN_TOOL}
+        onMainClick={() => toggleTool("pen")}
+        isMainActive={isPenActive}
+        subMenuTooltip="More pen tools"
+        subTools={penSubTools}
+        activeTool={activeTool}
+        isSubGroupActive={isPenSubToolActive}
+        onToggleTool={toggleTool}
+        style={style}
+      />
+
+      <IconButton
+        onClick={() => toggleTool(COMMENT_TOOL.tool)}
+        tooltip={COMMENT_TOOL.label}
+        shortcut={COMMENT_TOOL.shortcut}
+        side={style.tooltipSide}
+        variant="ghost"
+        size="lg"
+        aria-pressed={activeTool === COMMENT_TOOL.tool}
+        className={buttonClass(activeTool === COMMENT_TOOL.tool)}
+      >
+        <COMMENT_TOOL.icon size={style.iconSize} className={style.icon} weight="light" />
+      </IconButton>
+
+      {trailingTools.map(({ icon: Icon, label, tool, shortcut }) => {
+        const isActive = activeTool === tool;
+        return (
+          <Fragment key={label}>
+            <IconButton
+              onClick={() => toggleTool(tool)}
+              tooltip={label}
+              shortcut={shortcut}
+              side={style.tooltipSide}
+              variant="ghost"
+              size="lg"
+              aria-pressed={isActive}
+              className={buttonClass(isActive)}
+            >
+              <Icon size={style.iconSize} className={style.icon} weight="light" />
+            </IconButton>
+          </Fragment>
+        );
+      })}
+
+      <Separator
+        orientation="vertical"
+        className={compact ? "mx-1 h-4" : "mx-2 h-6"}
+        style={{ alignSelf: "center" }}
+      />
+      <Layers3DToggle toolStyle={style} />
+      <ImageOpsTools toolStyle={style} />
+      <SpeakerNotesCard toolStyle={style} />
+    </>
+  );
+
+  if (compact) {
+    return (
+      <div data-testid="primitives-panel" className="flex items-center gap-0.5">
+        {tools}
+      </div>
+    );
+  }
 
   return (
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2">
       <div className="flex items-center gap-1 p-1.5 bg-surface-panel border border-border-default rounded-2xl shadow-[0_0px_3px_rgba(0,0,0,0.04)]">
-        <ToolDropdownGroup
-          mainTool={MOVE_TOOL}
-          onMainClick={() => setActiveTool(null)}
-          isMainActive={isMoveActive}
-          subMenuTooltip="More move tools"
-          subTools={MOVE_SUB_TOOLS}
-          activeTool={activeTool}
-          isSubGroupActive={isMoveSubToolActive}
-          onToggleTool={toggleTool}
-          toolButtonBaseClass={toolButtonBaseClass}
-        />
-
-        <IconButton
-          onClick={() => toggleTool(EMBED_TOOL.tool)}
-          tooltip={EMBED_TOOL.label}
-          shortcut={EMBED_TOOL.shortcut}
-          side="top"
-          variant="ghost"
-          size="lg"
-          className={`${toolButtonBaseClass} ${
-            isEmbedActive
-              ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
-              : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
-          }`}
-        >
-          <EMBED_TOOL.icon size={40} className="size-6" weight="light" />
-        </IconButton>
-
-        <ToolDropdownGroup
-          mainTool={RECT_TOOL}
-          onMainClick={() => toggleTool("rect")}
-          isMainActive={isRectangleActive}
-          subMenuTooltip="More shapes"
-          subTools={rectSubTools}
-          activeTool={activeTool}
-          isSubGroupActive={isRectSubToolActive}
-          onToggleTool={toggleTool}
-          toolButtonBaseClass={toolButtonBaseClass}
-        />
-
-        <ToolDropdownGroup
-          mainTool={PEN_TOOL}
-          onMainClick={() => toggleTool("pen")}
-          isMainActive={isPenActive}
-          subMenuTooltip="More pen tools"
-          subTools={penSubTools}
-          activeTool={activeTool}
-          isSubGroupActive={isPenSubToolActive}
-          onToggleTool={toggleTool}
-          toolButtonBaseClass={toolButtonBaseClass}
-        />
-
-        <IconButton
-          onClick={() => toggleTool(COMMENT_TOOL.tool)}
-          tooltip={COMMENT_TOOL.label}
-          shortcut={COMMENT_TOOL.shortcut}
-          side="top"
-          variant="ghost"
-          size="lg"
-          className={`${toolButtonBaseClass} ${
-            activeTool === COMMENT_TOOL.tool
-              ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
-              : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
-          }`}
-        >
-          <COMMENT_TOOL.icon size={40} className="size-6" weight="light" />
-        </IconButton>
-
-        {trailingTools.map(({ icon: Icon, label, tool, shortcut }) => {
-          const isActive = activeTool === tool;
-          return (
-            <Fragment key={label}>
-              <IconButton
-                onClick={() => toggleTool(tool)}
-                tooltip={label}
-                shortcut={shortcut}
-                side="top"
-                variant="ghost"
-                size="lg"
-                className={`${toolButtonBaseClass} ${
-                  isActive
-                    ? "bg-accent-light text-white hover:bg-accent-light hover:text-white"
-                    : "text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary"
-                }`}
-              >
-                <Icon size={40} className="size-6" weight="light" />
-              </IconButton>
-            </Fragment>
-          );
-        })}
-
-        <Separator
-          orientation="vertical"
-          className="mx-2 h-6"
-          style={{ alignSelf: "center" }}
-        />
-        <Layers3DToggle />
-        <ImageOpsTools />
-        <SpeakerNotesCard />
+        {tools}
       </div>
     </div>
   );

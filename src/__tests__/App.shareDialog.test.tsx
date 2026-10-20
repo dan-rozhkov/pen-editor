@@ -3,6 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { resetStores } from "@/test/fixtures";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { useSharedViewStore } from "@/store/sharedViewStore";
+import { useUIVisibilityStore } from "@/store/uiVisibilityStore";
 
 /**
  * Finding C: <ShareDialog/> moved from Toolbar (which only renders while
@@ -18,7 +19,7 @@ vi.mock("@/pixi/PixiCanvas", () => ({ PixiCanvas: () => <div data-testid="pixi-s
 vi.mock("@/components/LeftRail", () => ({ LeftRail: () => <div data-testid="left-rail-shim" /> }));
 vi.mock("@/components/LeftSidebar", () => ({ LeftSidebar: () => <div data-testid="left-sidebar-shim" /> }));
 vi.mock("@/components/RightPanel", () => ({ RightPanel: () => <div data-testid="right-panel-shim" /> }));
-vi.mock("@/components/PrimitivesPanel", () => ({ PrimitivesPanel: () => <div data-testid="primitives-shim" /> }));
+vi.mock("@/components/CanvasHeader", () => ({ CANVAS_HEADER_HEIGHT: 41, CanvasHeader: () => <div data-testid="canvas-header-shim" /> }));
 vi.mock("@/components/PresentOverlay", () => ({ PresentOverlay: () => <div data-testid="present-overlay-shim" /> }));
 vi.mock("@/components/CommandPalette", () => ({ CommandPalette: () => <div data-testid="command-palette-shim" /> }));
 vi.mock("@/components/plugins/PluginPanels", () => ({ PluginPanels: () => <div data-testid="plugin-panels-shim" /> }));
@@ -56,6 +57,26 @@ describe("<App /> — ShareDialog mount", () => {
   it("mounts ShareDialog in edit mode regardless of the left sidebar's active section", () => {
     render(<App />);
     expect(screen.getByTestId("share-dialog-shim")).toBeTruthy();
+  });
+
+  it("mounts the canvas header in edit mode and hides it in present mode or with the UI hidden", () => {
+    const { unmount } = render(<App />);
+    expect(screen.getByTestId("canvas-header-shim")).toBeTruthy();
+    expect(document.documentElement.style.getPropertyValue("--canvas-header-h")).toBe("41px");
+    unmount();
+    expect(document.documentElement.style.getPropertyValue("--canvas-header-h")).toBe("");
+
+    useEditorModeStore.setState({ mode: "present", presentFrameIds: ["f1"], presentIndex: 0 });
+    const present = render(<App />);
+    expect(screen.queryByTestId("canvas-header-shim")).toBeNull();
+    expect(document.documentElement.style.getPropertyValue("--canvas-header-h")).toBe("0px");
+    present.unmount();
+
+    useEditorModeStore.setState({ mode: "edit", presentFrameIds: [], presentIndex: 0 });
+    useUIVisibilityStore.setState({ isUIHidden: true });
+    render(<App />);
+    expect(screen.queryByTestId("canvas-header-shim")).toBeNull();
+    useUIVisibilityStore.setState({ isUIHidden: false });
   });
 
   it("does not mount ShareDialog in present mode", () => {

@@ -1,7 +1,8 @@
 import type { BrowseTraceFrame } from "@sideform/browser-agent/agent/session";
 import { memo, useState } from "react";
 import { cn } from "@/lib/utils";
-import { BAR_ROW, EmptyNote, FRAME_SURFACE } from "./parts";
+import { EmptyState } from "@/components/ui/empty-state";
+import { BAR_ROW, FRAME_SURFACE } from "./parts";
 import { formatOffset } from "./traceModel";
 
 interface Props {
@@ -14,7 +15,6 @@ interface Props {
 const KIND_LABEL: Record<BrowseTraceFrame["kind"], string> = { step: "After step", screenshot: "Screenshot", final: "Final state" };
 
 /** Centered, narrow layout for the frame area's notes. */
-const EMPTY_CLASS = "max-w-80 text-pretty text-center";
 
 /** Natural sizes of loaded frames, cached per src so revisiting a frame does not jump. */
 const measuredSizes = new Map<string, { width: number; height: number }>();
@@ -31,7 +31,7 @@ export const FrameView = memo(function FrameView({ frame, startedAt, position }:
   const naturalWidth = known?.width ?? frame?.width;
 
   return (
-    <section aria-label="Frame" className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-base">
+    <section aria-label="Frame" className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-panel">
       <div className={cn(BAR_ROW, "shrink-0 justify-end")}>
         {frame && (
           <p className="flex items-center gap-2 text-xs tabular-nums text-text-muted">
@@ -70,9 +70,9 @@ export const FrameView = memo(function FrameView({ frame, startedAt, position }:
               className={cn("rounded-lg object-contain shadow-[0_1px_2px_rgb(0_0_0/0.06),0_8px_24px_-8px_rgb(0_0_0/0.18)]", FRAME_SURFACE)}
             />
           ) : broken ? (
-            <EmptyNote title="This frame could not be loaded" hint="The image file may have been removed." className={EMPTY_CLASS} />
+            <EmptyState size="panel" title="This frame could not be loaded" description="The image file may have been removed." />
           ) : (
-            <EmptyNote title="No frame for this step" hint="Steps such as snapshot or read do not capture the page." className={EMPTY_CLASS} />
+            <EmptyState size="panel" title="No frame for this step" description="Steps such as snapshot or read do not capture the page." />
           )}
         </div>
       </div>

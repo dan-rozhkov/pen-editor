@@ -11,8 +11,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { TOOL_STYLES, type ToolStyle } from "@/components/toolStyles";
 
-export function Layers3DToggle() {
+export function Layers3DToggle({ toolStyle = TOOL_STYLES.floating }: { toolStyle?: ToolStyle } = {}) {
   const active = useLayers3DStore((s) => s.active);
   const enter = useLayers3DStore((s) => s.enter);
   const exit = useLayers3DStore((s) => s.exit);
@@ -40,12 +41,12 @@ export function Layers3DToggle() {
           aria-label="Frame in 3D"
           disabled={disabled}
           onClick={onClick}
-          className="flex size-9 items-center justify-center rounded-lg text-text-primary transition-none outline-none hover:bg-secondary hover:text-text-primary dark:hover:bg-secondary"
+          className={`flex items-center justify-center ${toolStyle.buttonBase} ${toolStyle.inactive}`}
         >
-          <PerspectiveIcon size={24} weight="light" />
+          <PerspectiveIcon size={toolStyle.iconSize} className={toolStyle.icon} weight="light" />
         </button>
       </TooltipTrigger>
-      <TooltipContent side="top">Frame in 3D</TooltipContent>
+      <TooltipContent side={toolStyle.tooltipSide}>Frame in 3D</TooltipContent>
     </Tooltip>
   );
 }

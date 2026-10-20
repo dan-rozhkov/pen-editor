@@ -50,7 +50,11 @@ const MCP_STATUS_LABEL: Record<"off" | "connecting" | "connected", string> = {
   connected: "MCP connected",
 };
 
-export function Toolbar() {
+/**
+ * The File dropdown (plus the Pixso-import dialog it opens). Rendered by the
+ * canvas header on desktop and by `Toolbar` in the mobile sidebar header.
+ */
+export function FileMenu() {
   const addNode = useSceneStore((state) => state.addNode);
   const uiTheme = useUIThemeStore((s) => s.uiTheme);
   const mcpStatus = useMcpBridgeStore((s) => s.status);
@@ -162,10 +166,10 @@ export function Toolbar() {
   };
 
   return (
-    <div className="flex flex-row items-center gap-2 px-1 py-2 bg-surface-panel">
+    <>
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={<Button variant="ghost" size="sm" />}
+          render={<Button variant="ghost" size="default" className="h-7 text-sm" />}
         >
           File
           <CaretDownIcon className="size-3 text-muted-foreground" />
@@ -350,12 +354,6 @@ export function Toolbar() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Right side: "Sign in" / avatar menu; renders nothing when accounts
-          are off on this deployment. */}
-      <div className="ml-auto">
-        <AuthMenu variant="toolbar" />
-      </div>
-
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
         <DialogContent
           className="sm:max-w-xl max-h-[80vh] flex flex-col gap-0 p-0"
@@ -400,6 +398,23 @@ export function Toolbar() {
           </div>
         </DialogContent>
       </Dialog>
+    </>
+  );
+}
+
+/**
+ * Mobile sidebar header: File menu on the left, account menu on the right.
+ * On desktop the same two live in `CanvasHeader`.
+ */
+export function Toolbar() {
+  return (
+    <div className="flex flex-row items-center gap-2 px-1 py-2 bg-surface-panel">
+      <FileMenu />
+      {/* Right side: "Sign in" / avatar menu; renders nothing when accounts
+          are off on this deployment. */}
+      <div className="ml-auto">
+        <AuthMenu variant="toolbar" />
+      </div>
     </div>
   );
 }

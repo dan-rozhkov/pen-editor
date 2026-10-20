@@ -96,7 +96,7 @@ export function LeftSidebarResizer() {
       aria-valuemin={LEFT_SIDEBAR_MIN_WIDTH}
       aria-valuemax={LEFT_SIDEBAR_MAX_WIDTH}
       tabIndex={0}
-      className="absolute top-0 -right-[2px] bottom-0 w-[5px] z-10 cursor-ew-resize touch-none outline-none focus-visible:ring-[2px] focus-visible:ring-ring/50"
+      className="absolute top-0 -right-[2px] bottom-0 w-[5px] z-10 cursor-ew-resize touch-none outline-none focus-visible:ring-[2px] focus-visible:ring-ring"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={endDrag}

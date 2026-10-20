@@ -8,13 +8,8 @@ import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { OFFLINE_MESSAGE } from "@/lib/apiBase";
 import { useCanRemoveBackground, useCanVectorize } from "./useImageOpsCapabilities";
 import { resolveImageOpsTargetNodeId } from "@/lib/commands/imageOpsTarget";
+import { TOOL_STYLES, type ToolStyle } from "@/components/toolStyles";
 import { runRemoveBackground, runVectorize } from "@/lib/commands/imageOpsActions";
-
-// Kept in sync with the neighboring toolbar buttons in PrimitivesPanel.tsx
-// (same variant/size/side, same icon size/weight) so this group reads as
-// part of the same panel rather than a bolted-on extra.
-const toolButtonBaseClass =
-  "group relative size-9 p-0 rounded-lg! transition-none outline-none text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary";
 
 type OpKind = "remove-background" | "vectorize";
 
@@ -30,7 +25,12 @@ type OpKind = "remove-background" | "vectorize";
  * op configured (canRemoveBackground()/canVectorize(), from the cached
  * GET /api/models response) only gets that one button.
  */
-export function ImageOpsTools() {
+export function ImageOpsTools({ toolStyle = TOOL_STYLES.floating }: { toolStyle?: ToolStyle } = {}) {
+  // Same look as the neighbouring tool buttons (one definition: toolStyles.ts).
+  const buttonClass = `${toolStyle.buttonBase} ${toolStyle.inactive}`;
+  const iconClass = toolStyle.icon;
+  const iconSize = toolStyle.iconSize;
+  const side = toolStyle.tooltipSide;
   const selectedIds = useSelectionStore((s) => s.selectedIds);
   const nodesById = useSceneStore((s) => s.nodesById);
   const targetNodeId = resolveImageOpsTargetNodeId(nodesById, selectedIds);
@@ -92,15 +92,15 @@ export function ImageOpsTools() {
           size="lg"
           tooltip={tooltipFor("Remove background")}
           aria-label="Remove background"
-          side="top"
+          side={side}
           disabled={disabled}
           onClick={() => run("remove-background", targetNodeId)}
-          className={toolButtonBaseClass}
+          className={buttonClass}
         >
           {runningOp === "remove-background" ? (
-            <CircleNotch size={40} className="size-6 animate-spin" weight="thin" />
+            <CircleNotch size={iconSize} className={`${iconClass} animate-spin`} weight="thin" />
           ) : (
-            <MagicWandIcon size={40} className="size-6" weight="light" />
+            <MagicWandIcon size={iconSize} className={iconClass} weight="light" />
           )}
         </IconButton>
       )}
@@ -110,15 +110,15 @@ export function ImageOpsTools() {
           size="lg"
           tooltip={tooltipFor("Vectorize")}
           aria-label="Vectorize"
-          side="top"
+          side={side}
           disabled={disabled}
           onClick={() => run("vectorize", targetNodeId)}
-          className={toolButtonBaseClass}
+          className={buttonClass}
         >
           {runningOp === "vectorize" ? (
-            <CircleNotch size={40} className="size-6 animate-spin" weight="thin" />
+            <CircleNotch size={iconSize} className={`${iconClass} animate-spin`} weight="thin" />
           ) : (
-            <BezierCurveIcon size={40} className="size-6" weight="light" />
+            <BezierCurveIcon size={iconSize} className={iconClass} weight="light" />
           )}
         </IconButton>
       )}

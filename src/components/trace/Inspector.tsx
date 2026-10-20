@@ -3,6 +3,7 @@ import { memo, useEffect, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { keepInView } from "./keepInView";
+import { EmptyState } from "@/components/ui/empty-state";
 import { BAR_ROW, Count, EmptyNote, OutcomeBadge, RowButton, SectionHeading, ToneIcon } from "./parts";
 import {
   describeCheck,
@@ -12,7 +13,7 @@ import {
 } from "./traceModel";
 
 function Empty({ title, hint }: { title: string; hint?: string }) {
-  return <EmptyNote title={title} hint={hint} className="px-1 py-2" />;
+  return <EmptyState size="panel" title={title} description={hint} className="mx-auto px-1 py-4" />;
 }
 
 interface LogProps {

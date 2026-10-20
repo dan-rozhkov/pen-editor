@@ -124,7 +124,7 @@ export function FontCombobox({ label, value, onChange }: FontComboboxProps) {
     <Combobox open={open} onOpenChange={handleOpenChange} value={value}>
       <div ref={inputGroupRef}>
         <ComboboxInput
-          className="[&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-input [&_[data-slot=input-group]]:rounded-md [&_[data-slot=input-group]]:focus-within:border-ring [&_[data-slot=input-group]]:focus-within:ring-ring/30 [&_[data-slot=input-group]]:focus-within:ring-[2px] [&_[data-slot=input-group]]:!bg-surface-panel"
+          className="[&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-input [&_[data-slot=input-group]]:rounded-md [&_[data-slot=input-group]]:focus-within:border-ring [&_[data-slot=input-group]]:focus-within:ring-ring [&_[data-slot=input-group]]:focus-within:ring-[2px] [&_[data-slot=input-group]]:!bg-surface-panel"
           value={open ? searchValue : value}
           onChange={(e) => setSearchValue(e.target.value)}
           placeholder={loading ? "Loading fonts..." : "Search fonts..."}
@@ -194,7 +194,7 @@ export function FontCombobox({ label, value, onChange }: FontComboboxProps) {
     return (
       <div className="flex-1">
         <InputGroup
-          className="border border-input rounded-md focus-within:border-ring focus-within:ring-ring/30 focus-within:ring-[2px]"
+          className="border border-input rounded-md focus-within:border-ring focus-within:ring-ring focus-within:ring-[2px]"
           style={{ backgroundColor: "var(--color-surface-panel)" }}
         >
           <InputGroupAddon align="inline-start">

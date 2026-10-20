@@ -19,13 +19,13 @@ describe("TracePage", () => {
     const badge = screen.getByTestId("trace-outcome");
     expect(badge.textContent).toContain("QA failed");
     expect(badge.className).toContain("h-7");
-    expect(badge.className).toContain("border-border-default");
+    expect(badge.className).toContain("border-border");
     expect(badge.className).toContain("text-text-primary");
     expect(badge.className).not.toContain("bg-destructive");
     const icon = badge.querySelector("svg");
     expect(icon?.getAttribute("class")).toContain("text-destructive");
     expect(within(screen.getByRole("region", { name: "Steps" })).getAllByRole("button")).toHaveLength(8);
-    expect(document.title).toMatch(/^Trace · Check that a visitor can start a free trial/);
+    expect(document.title).toMatch(/^Check that a visitor can start a free trial/);
     // The result is a document, not page text.
     expect(screen.queryByText(/Result:/)).toBeNull();
     expect(screen.queryByText("The trial button is missing on the pricing page.")).toBeNull();
@@ -243,8 +243,8 @@ describe("TracePage", () => {
   it("shows empty states for a run without steps or frames", async () => {
     answer({ ok: true, status: 200, json: async () => ({ ...(sampleTraceJson() as object), steps: [], frames: [], console: [], network: [], qa: undefined }) });
     renderTrace();
-    expect(await screen.findByText("No steps were recorded.")).toBeTruthy();
-    expect(screen.getByText("No frames were captured in this run.")).toBeTruthy();
+    expect(await screen.findByText("No steps were recorded")).toBeTruthy();
+    expect(screen.getByText("No frames were captured in this run")).toBeTruthy();
     expect(screen.getByText(/^No frame for this step/)).toBeTruthy();
   });
 });

@@ -34,7 +34,7 @@ describe("formatting", () => {
   });
 
   it("cuts long goals in the title", () => {
-    expect(traceTitle("Buy milk")).toBe("Trace · Buy milk");
+    expect(traceTitle("Buy milk")).toBe("Buy milk");
     expect(traceTitle("x".repeat(100)).length).toBeLessThan(75);
   });
 });
