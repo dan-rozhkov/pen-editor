@@ -1,4 +1,4 @@
-import { CalendarBlankIcon, ClockIcon, GlobeIcon, ListNumbersIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { AppWindowIcon, CalendarBlankIcon, ClockIcon, GlobeIcon, ListNumbersIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -41,7 +41,7 @@ export function TraceHeader({ trace }: { trace: BrowseTrace }) {
             {failedSteps} failed
           </Meta>
         )}
-        {browser && <Meta icon={<GlobeIcon weight="light" />}>{browser}</Meta>}
+        {browser && <Meta icon={trace.labels?.app ? <AppWindowIcon weight="light" /> : <GlobeIcon weight="light" />}>{browser}</Meta>}
         <Meta icon={<CalendarBlankIcon weight="light" />}>
           {new Date(trace.startedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
         </Meta>

@@ -1,5 +1,4 @@
 import { FilmStripIcon } from "@phosphor-icons/react";
-import { Button } from "@/components/ui/button";
 import type { SavedTrace } from "@/lib/browseTraces";
 import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
 import { ToolCallIndicator } from "./ToolCallIndicator";
@@ -168,10 +167,17 @@ export function BrowseAgentIndicator({ part }: { part: AnyPart }) {
   return (
     <>
       {indicator}
-      <Button variant="ghost" size="xs" className="mb-1.5 text-text-muted" onClick={openTrace}>
-        <FilmStripIcon aria-hidden />
-        View trace
-      </Button>
+      {/* Same row as a tool call chip (ToolCallIndicator): no indent, muted 13px text, 14px icon. */}
+      <div className="my-0.5">
+        <button
+          type="button"
+          onClick={openTrace}
+          className="flex items-center gap-1.5 w-full rounded-sm py-0.5 text-[13px] leading-relaxed text-text-muted outline-none hover:text-text-secondary focus-visible:ring-[2px] focus-visible:ring-ring/30"
+        >
+          <FilmStripIcon size={14} className="shrink-0" aria-hidden />
+          <span className="truncate">View trace</span>
+        </button>
+      </div>
     </>
   );
 }

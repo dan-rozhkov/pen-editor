@@ -527,6 +527,12 @@ function withCarriedDialogs<T>(output: T, dialogs: readonly unknown[] | undefine
   return { ...output, dialogs: [...(Array.isArray(own) ? own : []), ...dialogs] };
 }
 
+/** The trace label of a run's `app` (a name or a path): "/Applications/Orca.app" → "Orca". */
+export function appLabelOf(app: string): string {
+  const last = app.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? app;
+  return last.replace(/\.app$/i, "") || app;
+}
+
 /** A run whose `app` this run launched (set before the launch call: a launch that timed out may still have started). */
 type AppRun = { launched: boolean };
 
@@ -611,11 +617,12 @@ const runBrowseAgentBody = async (
   const recorder = qaOn ? createStepRecorder() : undefined;
   // The run trace (spec 2026-10-20-browse-run-trace-design.md): steps, a frame after each page-changing step, QA at the end.
   const desktopRun = isDesktopBrowserAvailable();
-  // A desktop shell without a save bridge (older) cannot keep a trace: no recorder, so no screenshots are taken either.
-  const traceRecorder = canSaveBrowseTrace(desktopRun)
+  // Only QA runs keep a trace. A desktop shell without a save bridge (older) cannot keep one either: no recorder, so
+  // no screenshots are taken.
+  const traceRecorder = qaOn && canSaveBrowseTrace(desktopRun)
     ? createBrowseTraceRecorder({
         goal,
-        labels: { browser: desktopRun ? "desktop" : "cloud", mode: qaOn ? "qa" : "task" },
+        labels: { browser: desktopRun ? "desktop" : "cloud", mode: "qa", ...(app ? { app: appLabelOf(app) } : {}) },
         ...(typeof bridge?.screenshot === "function" ? { capture: () => captureTraceFrame(bridge) } : {}),
       })
     : undefined;
@@ -909,17 +916,36 @@ const runBrowseAgentBody = async (
           ? {
               toolCallId,
               // The pre-open for an app: browse_open { app } through the same executor as the model's own call.
-              setup: async () => {
+              setup: async ({ signal: runSignal }) => {
                 appRun.launched = true;
-                const opened = await executeToolCall(
-                  "browse_open",
-                  { app },
-                  { sessionId: parentSessionId, ...browserContext, toolCallId: `${toolCallId ?? "browse_agent"}:open`, signal },
-                  "browse_agent",
-                );
+                const openInput = { app };
+                // The launch is the trace's first step (it skips executeTool, the model's own path), with a frame of the app window.
+                let traceEnd: ReturnType<NonNullable<typeof traceRecorder>["onToolCall"]> | undefined;
+                try {
+                  // The session signal: it also aborts at the run deadline, so no frame is taken for a launch that outlived the run.
+                  traceEnd = traceRecorder?.onToolCall({ toolName: "browse_open", input: openInput }, { signal: runSignal });
+                } catch {
+                  // An observer must not change the run.
+                }
+                let opened: string;
+                try {
+                  opened = await executeToolCall(
+                    "browse_open",
+                    openInput,
+                    { sessionId: parentSessionId, ...browserContext, toolCallId: `${toolCallId ?? "browse_agent"}:open`, signal },
+                    "browse_agent",
+                  );
+                } catch (err) {
+                  await traceEnd?.({ error: err }).catch(() => undefined);
+                  throw err;
+                }
                 const parsedOpen = parseJsonObject(opened);
-                if (typeof parsedOpen.error === "string") throw new SetupError("open", parsedOpen.error);
-                return opened;
+                if (typeof parsedOpen.error === "string") {
+                  await traceEnd?.({ error: parsedOpen.error }).catch(() => undefined);
+                  throw new SetupError("open", parsedOpen.error);
+                }
+                const carried = await traceEnd?.({ output: opened }).catch(() => undefined);
+                return withCarriedDialogs(opened, carried?.dialogs);
               },
             }
           : { url: url || undefined, toolCallId },

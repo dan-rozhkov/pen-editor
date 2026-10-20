@@ -1,65 +1,16 @@
-import { CheckCircleIcon, CheckIcon, CopyIcon, XCircleIcon } from "@phosphor-icons/react";
-import type { BrowseTrace, BrowseTraceLogEntry, BrowseTraceStep } from "@sideform/browser-agent/agent/session";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { CheckCircleIcon, XCircleIcon } from "@phosphor-icons/react";
+import type { BrowseTrace, BrowseTraceLogEntry } from "@sideform/browser-agent/agent/session";
+import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
-import { IconButton } from "@/components/ui/IconButton";
-import { IconSwap } from "@/components/ui/IconSwap";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { TONE_BADGE } from "./tone";
 import {
   describeCheck,
   describeOutcome,
-  formatDuration,
   formatOffset,
   parseNetworkEntry,
-  prettyJson,
-  prettyText,
-  stepDuration,
-  toolLabel,
 } from "./traceModel";
-
-function CopyButton({ text, label }: { text: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
-  const copy = () => {
-    void (async () => {
-      try {
-        await navigator.clipboard.writeText(text);
-        setCopied(true);
-        clearTimeout(timer.current);
-        timer.current = setTimeout(() => setCopied(false), 1500);
-      } catch {
-        // Clipboard may be blocked; the text stays selectable.
-      }
-    })();
-  };
-  return (
-    <IconButton type="button" variant="ghost" size="icon-xs" tooltip={copied ? "Copied" : label} aria-label={label} onClick={copy} static>
-      <IconSwap active={copied} activeIcon={<CheckIcon className="size-3.5" />} inactiveIcon={<CopyIcon weight="light" className="size-3.5" />} />
-    </IconButton>
-  );
-}
-
-function Block({ title, text, tone }: { title: string; text: string; tone?: "danger" }) {
-  return (
-    <section className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <h3 className={cn("text-xs font-medium", tone === "danger" ? "text-destructive" : "text-text-muted")}>{title}</h3>
-        <CopyButton text={text} label={`Copy ${title.toLowerCase()}`} />
-      </div>
-      <pre
-        className={cn(
-          "max-h-64 overflow-auto rounded-lg p-3 font-mono text-[11px]/relaxed break-words whitespace-pre-wrap",
-          tone === "danger" ? "bg-destructive/8 text-destructive" : "bg-surface-elevated text-text-secondary",
-        )}
-      >
-        {text}
-      </pre>
-    </section>
-  );
-}
 
 function Empty({ icon, title, hint }: { icon: ReactNode; title: string; hint?: string }) {
   return (
@@ -67,28 +18,6 @@ function Empty({ icon, title, hint }: { icon: ReactNode; title: string; hint?: s
       <span className="text-text-disabled [&>svg]:size-7">{icon}</span>
       <p className="text-sm font-medium text-text-secondary">{title}</p>
       {hint && <p className="max-w-60 text-pretty text-xs text-text-muted">{hint}</p>}
-    </div>
-  );
-}
-
-function StepPanel({ trace, step }: { trace: BrowseTrace; step: BrowseTraceStep | undefined }) {
-  if (!step) return <Empty icon={<CheckCircleIcon weight="light" />} title="No step selected" hint="Pick a step in the list to see its input and output." />;
-  const args = prettyJson(step.args);
-  const output = prettyText(step.output);
-  return (
-    <div className="space-y-4">
-      <div>
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-text-primary">{toolLabel(step.tool)}</h2>
-          <Badge className={cn("h-5", step.ok ? TONE_BADGE.success : TONE_BADGE.danger)}>{step.ok ? "Succeeded" : "Failed"}</Badge>
-        </div>
-        <p className="mt-1 text-xs tabular-nums text-text-muted">
-          {formatOffset(step.startedAt - trace.startedAt)} to {formatOffset(step.endedAt - trace.startedAt)} · {formatDuration(stepDuration(step))}
-        </p>
-      </div>
-      {step.error && <Block title="Error" text={step.error} tone="danger" />}
-      {args && args !== "{}" ? <Block title="Arguments" text={args} /> : <p className="text-xs text-text-muted">This step took no arguments.</p>}
-      {output ? <Block title="Output" text={output} /> : <p className="text-xs text-text-muted">This step returned no output.</p>}
     </div>
   );
 }
@@ -124,8 +53,8 @@ function LogPanel({ trace, entries, droppedCount, selectedStep, kind, onSelectSt
                 disabled={!linked}
                 onClick={() => entry.stepIndex !== undefined && onSelectStep(entry.stepIndex)}
                 className={cn(
-                  "grid w-full grid-cols-[3.5rem_minmax(0,1fr)] gap-2 rounded-md px-1 py-1.5 text-start outline-none transition-colors duration-150 motion-reduce:transition-none",
-                  "focus-visible:ring-2 focus-visible:ring-accent-primary/60 enabled:hover:bg-surface-hover/60",
+                  "grid w-full grid-cols-[3.5rem_minmax(0,1fr)] gap-2 rounded-md px-1 py-1.5 text-start outline-none",
+                  "focus-visible:ring-2 focus-visible:ring-accent-primary/60 enabled:hover:bg-secondary dark:enabled:hover:bg-secondary/50",
                   current && "bg-accent-selection",
                 )}
               >
@@ -214,18 +143,16 @@ function Count({ n }: { n: number }) {
 
 interface Props {
   trace: BrowseTrace;
-  step: BrowseTraceStep | undefined;
   selectedStep: number | null;
   onSelectStep(index: number): void;
 }
 
-export function Inspector({ trace, step, selectedStep, onSelectStep }: Props) {
+export function Inspector({ trace, selectedStep, onSelectStep }: Props) {
   const failedChecks = trace.qa?.checks?.filter((c) => !c.passed).length ?? 0;
   return (
-    <Tabs defaultValue="step" className="min-h-0 flex-1 gap-0 bg-surface-panel">
+    <Tabs defaultValue="console" className="min-h-0 flex-1 gap-0 bg-surface-panel">
       <div className="shrink-0 px-3 pt-3 pb-2">
-        <TabsList className="w-full" aria-label="Details">
-          <TabsTrigger value="step">Step</TabsTrigger>
+        <TabsList aria-label="Details">
           <TabsTrigger value="console">
             Console <Count n={trace.console.length} />
           </TabsTrigger>
@@ -237,9 +164,6 @@ export function Inspector({ trace, step, selectedStep, onSelectStep }: Props) {
           </TabsTrigger>
         </TabsList>
       </div>
-      <TabsContent value="step" className="min-h-0 overflow-y-auto px-4 pt-2 pb-4">
-        <StepPanel trace={trace} step={step} />
-      </TabsContent>
       <TabsContent value="console" className="min-h-0 overflow-y-auto px-3 pt-1 pb-4">
         <LogPanel trace={trace} entries={trace.console} droppedCount={trace.dropped?.console} selectedStep={selectedStep} kind="console" onSelectStep={onSelectStep} />
       </TabsContent>

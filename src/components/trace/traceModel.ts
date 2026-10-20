@@ -144,8 +144,10 @@ export function describeOutcome(trace: BrowseTrace): Outcome {
   return { label: label || "Unknown", tone: "neutral" };
 }
 
-/** "cloud" -> "Cloud browser", "desktop" -> "Desktop browser". */
+/** "cloud" -> "Cloud browser", "desktop" -> "Desktop browser"; a run in a desktop app -> the app's name. */
 export function browserLabel(trace: BrowseTrace): string | undefined {
+  const app = trace.labels?.app;
+  if (app) return app;
   const browser = trace.labels?.browser;
   if (!browser) return undefined;
   if (browser === "cloud") return "Cloud browser";

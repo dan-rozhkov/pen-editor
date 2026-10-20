@@ -28,7 +28,6 @@ test("renders the steps and switches frames", async ({ page }) => {
   await page.keyboard.press("ArrowRight");
   await expect(steps.nth(4)).toHaveAttribute("aria-current", "step");
   await expect(frame(page)).toHaveAttribute("data-frame-id", "3");
-  await expect(page.getByText(/was not found after 3000 ms/)).toBeVisible();
 
   await page.getByRole("button", { name: /^Frame 5,/ }).click();
   await expect(frame(page)).toHaveAttribute("data-frame-id", "4");

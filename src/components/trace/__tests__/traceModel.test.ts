@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { sampleTrace } from "../__fixtures__/sampleTrace";
 import {
   beforeFrameOfStep,
+  browserLabel,
   buildStepRows,
   buildTimeline,
   describeCheck,
@@ -66,6 +67,15 @@ describe("describeOutcome", () => {
     ["weird", "Weird", "neutral"],
   ])("maps status %s", (status, label, tone) => {
     expect(describeOutcome({ ...sampleTrace, qa: undefined, status })).toEqual({ label, tone });
+  });
+});
+
+describe("browserLabel", () => {
+  it("names the browser, or the desktop app the run drove", () => {
+    expect(browserLabel({ ...sampleTrace, labels: { browser: "cloud" } })).toBe("Cloud browser");
+    expect(browserLabel({ ...sampleTrace, labels: { browser: "desktop" } })).toBe("Desktop browser");
+    expect(browserLabel({ ...sampleTrace, labels: { browser: "desktop", app: "Orca" } })).toBe("Orca");
+    expect(browserLabel({ ...sampleTrace, labels: undefined })).toBeUndefined();
   });
 });
 

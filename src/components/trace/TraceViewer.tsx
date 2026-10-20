@@ -77,11 +77,11 @@ export function TraceViewer({ trace }: { trace: BrowseTrace }) {
         onSelectFrame={selectFrame}
         onSelectStep={selectStep}
       />
-      {/* Three panels side by side; under 900px they stack and the page scrolls. */}
+      {/* Steps and the frame side by side; the details panel runs full width under them. Under 900px all stack. */}
       <main
         className={
           "grid min-h-0 flex-1 grid-cols-1 overflow-y-auto " +
-          "min-[900px]:grid-cols-[minmax(15rem,19rem)_minmax(0,1fr)_minmax(18rem,24rem)] min-[900px]:grid-rows-[minmax(0,1fr)] min-[900px]:overflow-hidden"
+          "min-[900px]:grid-cols-[minmax(15rem,19rem)_minmax(0,1fr)] min-[900px]:grid-rows-[minmax(0,1fr)] min-[900px]:overflow-hidden"
         }
       >
         <div className="order-2 max-h-96 min-h-0 border-t border-border-default min-[900px]:order-none min-[900px]:max-h-none min-[900px]:border-e min-[900px]:border-t-0 flex flex-col">
@@ -97,10 +97,10 @@ export function TraceViewer({ trace }: { trace: BrowseTrace }) {
             hasStep={!!step}
           />
         </div>
-        <div className="order-3 flex min-h-96 min-w-0 flex-col border-t border-border-default min-[900px]:order-none min-[900px]:min-h-0 min-[900px]:border-s min-[900px]:border-t-0">
-          <Inspector trace={trace} step={step} selectedStep={stepIndex} onSelectStep={selectStep} />
-        </div>
       </main>
+      <div className="flex h-72 min-h-0 min-w-0 shrink-0 flex-col border-t border-border-default">
+        <Inspector trace={trace} selectedStep={stepIndex} onSelectStep={selectStep} />
+      </div>
     </div>
   );
 }

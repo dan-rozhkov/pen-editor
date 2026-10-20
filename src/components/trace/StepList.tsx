@@ -38,8 +38,8 @@ export function StepList({ rows, selected, flagged, onSelect }: Props) {
                   onClick={() => onSelect(step.index)}
                   className={cn(
                     "group relative grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 rounded-lg px-2 py-2 text-start outline-none",
-                    "transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-accent-primary/60",
-                    active ? "bg-accent-selection" : "hover:bg-surface-hover/60",
+                    "focus-visible:ring-2 focus-visible:ring-accent-primary/60",
+                    active ? "bg-accent-selection" : "hover:bg-secondary dark:hover:bg-secondary/50",
                   )}
                 >
                   <span className="text-end text-[11px] tabular-nums text-text-muted">{step.index + 1}</span>
@@ -62,7 +62,7 @@ export function StepList({ rows, selected, flagged, onSelect }: Props) {
                   </span>
                   <span aria-hidden className="col-start-2 col-end-4 h-[3px] overflow-hidden rounded-full bg-surface-elevated">
                     <span
-                      className={cn("block h-full origin-left rounded-full", step.ok ? "bg-accent-primary/50" : "bg-destructive/70")}
+                      className={cn("block h-full origin-left rounded-full", step.ok ? "bg-accent-primary" : "bg-destructive")}
                       style={{ width: `${Math.max(2, ratio * 100)}%` }}
                     />
                   </span>

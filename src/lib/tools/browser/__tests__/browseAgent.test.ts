@@ -4,7 +4,7 @@ import { clearOpenCodeKey, setOpenCodeKey } from "@/lib/opencodeKey";
 import { useChatStore } from "@/store/chatStore";
 import { sse, textTurn } from "@/test/sseStream";
 import { setPenDesktop, stubBrowser, type PenDesktopBrowser } from "./helpers";
-import { BROWSE_AGENT_DEADLINE_MS, browseAgent, nestedChatId } from "../browseAgent";
+import { BROWSE_AGENT_DEADLINE_MS, appLabelOf, browseAgent, nestedChatId } from "../browseAgent";
 
 // The agent panel advertises canvasTabs; the sub-agent request must still not.
 vi.mock("@/lib/chatTransport", async (importActual) => {
@@ -703,11 +703,11 @@ describe("browse_agent run trace", () => {
   it("cloud run: records the steps, uploads the manifest and adds trace to the result", async () => {
     traceUploadStatus = 200;
     openThenDone();
-    const out = JSON.parse(await browseAgent({ goal: "Look at the cart", url: "https://shop.test" }, ctx));
+    const out = JSON.parse(await browseAgent({ goal: "Look at the cart", url: "https://shop.test", qa: true }, ctx));
     expect(out.trace).toEqual({ id: "cloud-trace-1", source: "cloud" });
     expect(tracePosts).toHaveLength(1);
     const { manifest, assets } = tracePosts[0] as { manifest: Record<string, unknown>; assets: unknown[] };
-    expect(manifest).toMatchObject({ goal: "Look at the cart", status: "done", labels: { browser: "cloud", mode: "task" } });
+    expect(manifest).toMatchObject({ goal: "Look at the cart", status: "done", labels: { browser: "cloud", mode: "qa" } });
     expect((manifest.steps as Array<{ tool: string }>).map((x) => x.tool)).toEqual(["browse_open", "browse_open"]); // the start page, then the model's call
     expect(assets).toEqual([]);
   });
@@ -715,7 +715,7 @@ describe("browse_agent run trace", () => {
   it("a failed upload only logs: the result has no trace field", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     openThenDone();
-    const out = JSON.parse(await browseAgent({ goal: "x", url: "https://shop.test" }, ctx));
+    const out = JSON.parse(await browseAgent({ goal: "x", url: "https://shop.test", qa: true }, ctx));
     expect(out).not.toHaveProperty("trace");
     expect(out.status).toBe("done");
     expect(warn).toHaveBeenCalled();
@@ -729,13 +729,14 @@ describe("browse_agent run trace", () => {
     window.penDesktop!.traces = { save, read: async () => ({ error: "n/a" }) };
     openThenDone();
     try {
-      const out = JSON.parse(await browseAgent({ goal: "x", url: "https://shop.test" }, ctx));
+      const out = JSON.parse(await browseAgent({ goal: "x", url: "https://shop.test", qa: true }, ctx));
       expect(out.trace).toEqual({ id: "local-1", source: "local" });
       expect(tracePosts).toHaveLength(0);
       const payload = save.mock.calls[0] as unknown as [{ manifest: { labels: unknown; frames: unknown[] }; assets: Array<{ path: string }> }];
-      expect(payload[0].manifest.labels).toEqual({ browser: "desktop", mode: "task" });
-      expect(payload[0].manifest.frames).toHaveLength(2);
-      expect(payload[0].assets.map((a) => a.path)).toEqual(["frames/0.jpg", "frames/1.jpg"]);
+      expect(payload[0].manifest.labels).toEqual({ browser: "desktop", mode: "qa" });
+      // A frame after each browse_open, then the QA final frame.
+      expect(payload[0].manifest.frames).toHaveLength(3);
+      expect(payload[0].assets.map((a) => a.path)).toEqual(["frames/0.jpg", "frames/1.jpg", "frames/2.jpg"]);
     } finally {
       delete window.penDesktop;
     }
@@ -748,7 +749,7 @@ describe("browse_agent run trace", () => {
     toolHandlers.browse_open = vi.fn(async () => JSON.stringify({ ok: true, dialogs: [{ type: "confirm", message: "own" }] }));
     const captured = stubFetch([() => toolTurn("browse_open", { url: "https://shop.test/cart" }, "c1"), () => textTurn("done")]);
     try {
-      await browseAgent({ goal: "x" }, ctx);
+      await browseAgent({ goal: "x", qa: true }, ctx);
       const seen = JSON.parse(outputOf(captured, 1, "c1"));
       expect(seen.dialogs).toEqual([{ type: "confirm", message: "own" }, ...dialogs]);
     } finally {
@@ -795,6 +796,54 @@ describe("browse_agent run trace", () => {
     const out = JSON.parse(await browseAgent({ goal: "Check", qa: true }, ctx));
     expect(out.trace.source).toBe("cloud");
     expect(tracePosts[0].manifest).toMatchObject({ labels: { mode: "qa" }, qa: { outcome: "passed", reason: "ok" } });
+  });
+
+  it("a run without qa keeps no trace and takes no screenshots", async () => {
+    const save = vi.fn(async () => ({ id: "local-x" }));
+    const screenshot = vi.fn(async () => ({ imageData: JPEG }));
+    setPenDesktop(stubBrowser({ screenshot }));
+    window.penDesktop!.traces = { save, read: async () => ({ error: "n/a" }) };
+    traceUploadStatus = 200;
+    openThenDone();
+    try {
+      const out = JSON.parse(await browseAgent({ goal: "x", url: "https://shop.test" }, ctx));
+      expect(out).not.toHaveProperty("trace");
+      expect(screenshot).not.toHaveBeenCalled();
+      expect(save).not.toHaveBeenCalled();
+      expect(tracePosts).toHaveLength(0);
+    } finally {
+      delete window.penDesktop;
+    }
+  });
+
+  it("app qa run: the launch is the first step with a frame of the app, and the trace names the app", async () => {
+    const save = vi.fn(async () => ({ id: "local-app" }));
+    setPenDesktop(stubBrowser({
+      launchApp: async () => ({}),
+      releaseApp: async () => ({ ok: true }),
+      screenshot: async () => ({ imageData: JPEG }),
+    }));
+    window.penDesktop!.traces = { save, read: async () => ({ error: "n/a" }) };
+    toolHandlers.browse_open = vi.fn(async () => JSON.stringify({ url: "app://notes", title: "Notes" }));
+    stubFetch([() => toolTurn("qa_verdict", { verdict: "pass", reason: "ok" }, "c2")]);
+    try {
+      await browseAgent({ goal: "Check the notes", app: "/Applications/Notes.app", qa: true }, ctx);
+      const payload = save.mock.calls[0] as unknown as [{ manifest: { labels: unknown; steps: Array<{ tool: string; args: unknown }>; frames: Array<{ kind: string; stepIndex?: number }> } }];
+      const { labels, steps, frames } = payload[0].manifest;
+      expect(labels).toEqual({ browser: "desktop", mode: "qa", app: "Notes" });
+      expect(steps[0]).toMatchObject({ tool: "browse_open", args: { app: "/Applications/Notes.app" } });
+      expect(frames[0]).toMatchObject({ kind: "step", stepIndex: 0 });
+    } finally {
+      delete window.penDesktop;
+    }
+  });
+});
+
+describe("appLabelOf", () => {
+  it("drops the folder and the .app suffix", () => {
+    expect(appLabelOf("/Applications/Orca.app")).toBe("Orca");
+    expect(appLabelOf("/Applications/Orca.app/")).toBe("Orca");
+    expect(appLabelOf("Notes")).toBe("Notes");
   });
 });
 

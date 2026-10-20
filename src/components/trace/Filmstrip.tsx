@@ -67,9 +67,9 @@ export function Filmstrip({ trace, selectedFrameId, selectedStep, flagged, onSel
                     title={formatOffset(frame.at - trace.startedAt)}
                     onClick={() => onSelectFrame(frame)}
                     className={cn(
-                      "group absolute top-0.5 overflow-hidden rounded-md outline-none transition-[box-shadow,translate,opacity] duration-150 ease-out motion-reduce:transition-none",
+                      "group absolute top-0.5 overflow-hidden rounded-md outline-none",
                       "focus-visible:ring-2 focus-visible:ring-accent-primary/70",
-                      active ? "shadow-[0_0_0_2px_var(--color-accent-primary)]" : "opacity-80 hover:-translate-y-px hover:opacity-100",
+                      active ? "shadow-[0_0_0_2px_var(--color-accent-primary)]" : "opacity-80 hover:opacity-100",
                     )}
                     style={{ left: lefts[i], width: THUMB_W, height: THUMB_H }}
                   >
@@ -103,7 +103,7 @@ export function Filmstrip({ trace, selectedFrameId, selectedStep, flagged, onSel
                 aria-label={`Step ${s.index + 1}`}
                 onClick={() => onSelectStep(s.index)}
                 className={cn(
-                  "absolute inset-y-0 rounded-full transition-colors duration-150 motion-reduce:transition-none",
+                  "absolute inset-y-0 rounded-full",
                   s.index === selectedStep ? (s.ok ? "bg-accent-primary" : "bg-destructive") : s.ok ? "bg-accent-primary/30 hover:bg-accent-primary/50" : "bg-destructive/40 hover:bg-destructive/60",
                 )}
                 style={{ left: `${s.startPct}%`, width: `${s.widthPct}%` }}

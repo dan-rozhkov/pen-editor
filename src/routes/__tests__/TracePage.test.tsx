@@ -80,11 +80,10 @@ describe("TracePage", () => {
     expect(frameId()).toBe("3");
   });
 
-  it("shows step details, log counts and links entries to steps", async () => {
+  it("shows log counts and links entries to steps", async () => {
     renderTrace();
     await screen.findByTestId("trace-frame");
-    fireEvent.click(stepButton(5));
-    expect(screen.getByText(/was not found after 3000 ms/)).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: /^Step$/ })).toBeNull();
     const consoleTab = screen.getByRole("tab", { name: /Console/ });
     expect(consoleTab.textContent).toContain("2");
     expect(screen.getByRole("tab", { name: /Network/ }).textContent).toContain("2");
