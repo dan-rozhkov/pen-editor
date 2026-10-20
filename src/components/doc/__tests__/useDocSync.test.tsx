@@ -4,7 +4,8 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import { useDocSync } from "@/components/doc/useDocSync";
-import { createDoc, getDoc, listDocs, updateDoc, type Doc } from "@/lib/docs/docStore";
+import { resetDesktopDocMirrorForTests, startDesktopDocMirror } from "@/lib/docs/desktopDocMirror";
+import { createDoc, getDoc, importDoc, listDocs, updateDoc, type Doc } from "@/lib/docs/docStore";
 
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }));
 
@@ -13,9 +14,9 @@ const DELETED = "This document was deleted.";
 const UNREADABLE = "This document cannot be read.";
 const STORAGE = "Could not save the document: browser storage is full or blocked.";
 
-function mount(id: string) {
+function mount(id: string | null) {
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <MemoryRouter initialEntries={[`/doc?id=${id}`]}>{children}</MemoryRouter>
+    <MemoryRouter initialEntries={[id ? `/doc?id=${id}` : "/doc"]}>{children}</MemoryRouter>
   );
   return renderHook(() => useDocSync(), { wrapper });
 }
@@ -219,5 +220,86 @@ describe("useDocSync autosave", () => {
     act(() => void vi.advanceTimersByTime(300));
     expect(getDoc(doc.id)?.markdown).toBe("b");
     expect(result.current.docs).toBe(before);
+  });
+});
+
+describe("useDocSync with a document that arrives later (desktop disk import)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("shows a ?id= document that was missing at mount once importDoc delivers it", () => {
+    const { result } = mount("doc_late");
+    expect(result.current.id).toBeNull();
+    act(() => void importDoc({ id: "doc_late", title: "Late", markdown: "from disk", updatedAt: 5, rev: 4 }));
+    expect(result.current.id).toBe("doc_late");
+    expect(result.current.title).toBe("Late");
+    expect(result.current.markdown).toBe("from disk");
+    expect(result.current.docs.map((m) => m.id)).toEqual(["doc_late"]);
+  });
+
+  it("picks up a newer imported rev of the open document", () => {
+    const doc = createDoc({ title: "T", markdown: "a" }, "editor");
+    const { result } = mount(doc.id);
+    act(() => void importDoc({ ...doc, markdown: "disk newer", rev: doc.rev + 3 }));
+    expect(result.current.markdown).toBe("disk newer");
+  });
+});
+
+describe("useDocSync while the desktop mirror is still reconciling", () => {
+  afterEach(() => {
+    cleanup();
+    resetDesktopDocMirrorForTests();
+    delete (window as unknown as { penDesktop?: unknown }).penDesktop;
+  });
+
+  function startMirror(list: () => Promise<{ docs: Doc[] }>) {
+    (window as unknown as { penDesktop?: unknown }).penDesktop = {
+      docs: { list, save: vi.fn(async (d: Doc) => ({ ok: true, rev: d.rev })), remove: vi.fn(async () => ({ ok: true })) },
+    };
+    return startDesktopDocMirror();
+  }
+
+  it("holds an id that exists locally and the no-id initial pick until the reconcile ends", async () => {
+    localStorage.clear();
+    const a = createDoc({ title: "A" }, "editor");
+    const b = createDoc({ title: "B" }, "editor");
+    let release: (v: { docs: Doc[] }) => void = () => {};
+    const started = startMirror(() => new Promise((r) => (release = r)));
+    const withId = mount(a.id);
+    const noId = mount(null);
+    expect(withId.result.current.id).toBeNull();
+    expect(noId.result.current.id).toBeNull();
+    await act(async () => {
+      release({ docs: [] });
+      await started;
+    });
+    expect(withId.result.current.id).toBe(a.id);
+    expect(noId.result.current.id).toBe(b.id);
+  });
+
+  it.each([
+    { name: "shows the id once the import lands", wanted: "doc_late", disk: [{ id: "doc_late", title: "Late", markdown: "disk", updatedAt: 5, rev: 4 }], lands: true },
+    { name: "falls back to the newest doc when the id is still missing after the reconcile", wanted: "doc_nowhere", disk: [], lands: false },
+  ])("holds a missing ?id= without falling back while reconciling, then $name", async ({ wanted, disk, lands }) => {
+    localStorage.clear();
+    const other = createDoc({ title: "Other" }, "editor");
+    let release: (v: { docs: Doc[] }) => void = () => {};
+    const started = startMirror(() => new Promise((r) => (release = r)));
+    const { result } = mount(wanted);
+    expect(result.current.id).toBeNull();
+    expect(result.current.docs.map((m) => m.id)).toEqual([other.id]);
+    await act(async () => {
+      release({ docs: disk });
+      await started;
+    });
+    expect(result.current.id).toBe(lands ? wanted : other.id);
+    expect(result.current.markdown).toBe(lands ? "disk" : "");
   });
 });

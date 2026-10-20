@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createDoc, dropStaleIndexEntry, getDoc, listDocs, readDoc, repairDocIndex, subscribeDocs, updateDoc, type DocChange } from "@/lib/docs/docStore";
+import { createDoc, deleteDoc, dropStaleIndexEntry, clearTombstone, importDoc, pruneTombstones, readTombstones, setDocPersistence, upgradeLegacyRev, getDoc, listDocs, readDoc, repairDocIndex, subscribeDocs, updateDoc, type DocChange } from "@/lib/docs/docStore";
 
 const BODY_KEY = (id: string) => `pen.docs.doc.${id}`;
 
@@ -140,5 +140,215 @@ describe("docStore change payloads", () => {
     expect(repairDocIndex(doc.id)).toBe(true);
     expect(repairDocIndex("nope")).toBe(false);
     expect(JSON.parse(localStorage.getItem("pen.docs.index") ?? "[]")).toHaveLength(1);
+  });
+});
+
+describe("persistence sink", () => {
+  const sink = { save: vi.fn(), remove: vi.fn() };
+  beforeEach(() => {
+    localStorage.clear();
+    sink.save.mockReset();
+    sink.remove.mockReset();
+    setDocPersistence(sink);
+  });
+  afterEach(() => {
+    setDocPersistence(null);
+    vi.restoreAllMocks();
+  });
+
+  it("gets every create and update with the written doc", () => {
+    const doc = createDoc({ title: "T", markdown: "a" }, "editor");
+    expect(sink.save).toHaveBeenLastCalledWith(doc);
+    const next = updateDoc(doc.id, { markdown: "b" }, "agent");
+    expect(sink.save).toHaveBeenLastCalledWith(next);
+    expect(sink.save).toHaveBeenCalledTimes(2);
+  });
+
+  it("gets deletes but never a dropped stale index entry", () => {
+    const doc = createDoc({ title: "T" }, "editor");
+    deleteDoc(doc.id, "editor");
+    expect(sink.remove).toHaveBeenCalledWith(doc.id);
+    sink.remove.mockClear();
+
+    localStorage.setItem("pen.docs.index", JSON.stringify([{ id: "ghost", title: "G", updatedAt: 1 }]));
+    expect(dropStaleIndexEntry("ghost")).toBe(true);
+    const live = createDoc({ title: "L" }, "editor");
+    expect(dropStaleIndexEntry(live.id)).toBe(false);
+    expect(sink.remove).not.toHaveBeenCalled();
+    expect(readTombstones()).toEqual({ [doc.id]: { rev: 1, at: expect.any(Number) } });
+  });
+
+  it("is not called for a failed write", () => {
+    const spy = failIndexWrites();
+    expect(() => createDoc({ title: "T" }, "editor")).toThrow();
+    spy.mockRestore();
+    expect(sink.save).not.toHaveBeenCalled();
+  });
+
+  it("does not fail the write when the sink throws", () => {
+    sink.save.mockImplementation(() => {
+      throw new Error("disk");
+    });
+    sink.remove.mockImplementation(() => {
+      throw new Error("disk");
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const doc = createDoc({ title: "T", markdown: "a" }, "editor");
+    expect(getDoc(doc.id)).not.toBeNull();
+    expect(updateDoc(doc.id, { markdown: "b" }, "editor")).toMatchObject({ rev: 2 });
+    expect(() => deleteDoc(doc.id, "editor")).not.toThrow();
+    expect(getDoc(doc.id)).toBeNull();
+  });
+
+  it("is not called for changes that arrive from other pages", () => {
+    const unsubscribe = subscribeDocs(() => {});
+    const doc = { id: "x", title: "X", markdown: "m", updatedAt: 1, rev: 3 };
+    window.dispatchEvent(new StorageEvent("storage", { key: "pen.docs.doc.x", newValue: JSON.stringify(doc) }));
+    window.dispatchEvent(new StorageEvent("storage", { key: "pen.docs.doc.x", newValue: null }));
+    unsubscribe();
+    expect(sink.save).not.toHaveBeenCalled();
+    expect(sink.remove).not.toHaveBeenCalled();
+  });
+});
+
+describe("importDoc", () => {
+  const sink = { save: vi.fn(), remove: vi.fn() };
+  const doc = (rev: number, markdown = `r${rev}`) => ({ id: "d1", title: "Disk", markdown, updatedAt: 500 + rev, rev });
+  beforeEach(() => {
+    localStorage.clear();
+    sink.save.mockReset();
+    setDocPersistence(sink);
+  });
+  afterEach(() => {
+    setDocPersistence(null);
+    vi.restoreAllMocks();
+  });
+
+  it("writes a missing doc as is, indexes it and notifies without a source", () => {
+    const changes: DocChange[] = [];
+    const unsubscribe = subscribeDocs((c) => changes.push(c));
+    expect(importDoc(doc(4))).toBe(true);
+    unsubscribe();
+    expect(getDoc("d1")).toEqual(doc(4));
+    expect(listDocs()).toEqual([{ id: "d1", title: "Disk", updatedAt: 504 }]);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toEqual({ id: "d1", doc: doc(4) });
+    expect("source" in changes[0]).toBe(false);
+    expect(sink.save).not.toHaveBeenCalled();
+  });
+
+  it("replaces a lower rev, ignores equal and higher local revs", () => {
+    importDoc(doc(2));
+    expect(importDoc(doc(3))).toBe(true);
+    expect(importDoc(doc(3, "other"))).toBe(false);
+    expect(importDoc(doc(2))).toBe(false);
+    expect(getDoc("d1")).toEqual(doc(3));
+  });
+
+  it("replaces an unreadable local body", () => {
+    localStorage.setItem(BODY_KEY("d1"), "{broken");
+    expect(importDoc(doc(1))).toBe(true);
+    expect(getDoc("d1")).toEqual(doc(1));
+  });
+
+  it("rolls back and returns false when the index write fails", () => {
+    importDoc(doc(1));
+    const spy = failIndexWrites();
+    expect(importDoc(doc(2))).toBe(false);
+    expect(getDoc("d1")).toEqual(doc(1));
+    spy.mockRestore();
+    localStorage.clear();
+    const spy2 = failIndexWrites();
+    expect(importDoc(doc(2))).toBe(false);
+    spy2.mockRestore();
+    expect(readDoc("d1")).toEqual({ kind: "missing" });
+  });
+});
+
+describe("delete tombstones", () => {
+  const disk = (rev: number) => ({ id: "gone", title: "Disk", markdown: `r${rev}`, updatedAt: 1, rev });
+  const tomb = (rev: number) => ({ rev, at: expect.any(Number) });
+  beforeEach(() => {
+    localStorage.clear();
+    setDocPersistence({ save: vi.fn(), remove: vi.fn() });
+  });
+  afterEach(() => setDocPersistence(null));
+
+  it("deleteDoc records the deleted rev and time, keeping the higher rev", () => {
+    const doc = createDoc({ title: "T" }, "editor");
+    updateDoc(doc.id, { markdown: "b" }, "editor");
+    deleteDoc(doc.id, "editor");
+    expect(readTombstones()).toEqual({ [doc.id]: tomb(2) });
+    expect(JSON.parse(localStorage.getItem("pen.docs.deleted") ?? "{}")).toEqual({ [doc.id]: tomb(2) });
+  });
+
+  it("records nothing without a persistence sink (web pages)", () => {
+    setDocPersistence(null);
+    const doc = createDoc({ title: "T" }, "editor");
+    deleteDoc(doc.id, "editor");
+    expect(localStorage.getItem("pen.docs.deleted")).toBeNull();
+  });
+
+  it("importDoc skips a copy at or below the tombstone rev", () => {
+    expect(importDoc(disk(3))).toBe(true);
+    deleteDoc("gone", "editor");
+    expect(importDoc(disk(3))).toBe(false);
+    expect(importDoc(disk(2))).toBe(false);
+    expect(getDoc("gone")).toBeNull();
+    expect(readTombstones()).toEqual({ gone: tomb(3) });
+  });
+
+  it("a higher rev wins and clears the tombstone", () => {
+    importDoc(disk(3));
+    deleteDoc("gone", "editor");
+    expect(importDoc(disk(4))).toBe(true);
+    expect(getDoc("gone")?.rev).toBe(4);
+    expect(readTombstones()).toEqual({});
+    expect(localStorage.getItem("pen.docs.deleted")).toBeNull();
+  });
+
+  it("clearTombstone removes one id; broken and old numeric records are ignored", () => {
+    localStorage.setItem("pen.docs.deleted", "not json");
+    expect(readTombstones()).toEqual({});
+    localStorage.setItem("pen.docs.deleted", JSON.stringify({ a: 1, b: "x", c: { rev: 2, at: 5 }, d: { rev: 1, at: 7 } }));
+    expect(readTombstones()).toEqual({ c: { rev: 2, at: 5 }, d: { rev: 1, at: 7 } });
+    clearTombstone("c");
+    expect(readTombstones()).toEqual({ d: { rev: 1, at: 7 } });
+  });
+
+  it("pruneTombstones drops only entries older than the limit", () => {
+    const now = Date.now();
+    localStorage.setItem("pen.docs.deleted", JSON.stringify({ old: { rev: 1, at: now - 40 * 86400000 }, fresh: { rev: 1, at: now - 86400000 } }));
+    expect(pruneTombstones()).toBe(1);
+    expect(Object.keys(readTombstones())).toEqual(["fresh"]);
+    expect(pruneTombstones()).toBe(0);
+  });
+});
+
+describe("upgradeLegacyRev", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("raises a rev-0 body to 1, keeps its content, notifies without a source and skips the sink", () => {
+    localStorage.setItem("pen.docs.doc.legacy", JSON.stringify({ id: "legacy", title: "L", markdown: "m", updatedAt: 7 }));
+    localStorage.setItem("pen.docs.index", JSON.stringify([{ id: "legacy", title: "L", updatedAt: 7 }]));
+    const sink = { save: vi.fn(), remove: vi.fn() };
+    setDocPersistence(sink);
+    const changes: DocChange[] = [];
+    const off = subscribeDocs((c) => changes.push(c));
+    expect(upgradeLegacyRev("legacy")).toBe(true);
+    off();
+    setDocPersistence(null);
+    expect(getDoc("legacy")).toEqual({ id: "legacy", title: "L", markdown: "m", updatedAt: 7, rev: 1 });
+    expect(sink.save).not.toHaveBeenCalled();
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({ id: "legacy", doc: { rev: 1 } });
+    expect(changes[0]?.source).toBeUndefined();
+  });
+
+  it("does nothing for a rev >= 1 body or a missing one", () => {
+    const doc = createDoc({ title: "T" }, "editor");
+    expect(upgradeLegacyRev(doc.id)).toBe(false);
+    expect(upgradeLegacyRev("nope")).toBe(false);
+    expect(getDoc(doc.id)?.rev).toBe(1);
   });
 });

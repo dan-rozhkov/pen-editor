@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { docCreate, docEdit, docList, docOpen, docRead } from "../docTools";
 import { getDoc, listDocs } from "@/lib/docs/docStore";
 import { getAgentPanelDocsBridge } from "@/lib/agentPanel";
+import { resetDesktopDocMirrorForTests, startDesktopDocMirror } from "@/lib/docs/desktopDocMirror";
 
 const run = async (h: (a: Record<string, unknown>, c?: never) => Promise<string>, args: Record<string, unknown> = {}) =>
   JSON.parse(await h(args));
@@ -109,5 +110,58 @@ describe("doc tools", () => {
     expect(getAgentPanelDocsBridge()).toBeUndefined();
     window.penAgentPanel = { version: 3, docs: {} } as unknown as Window["penAgentPanel"];
     expect(getAgentPanelDocsBridge()).toBeUndefined();
+  });
+});
+
+describe("doc tools wait for the desktop disk mirror", () => {
+  afterEach(() => {
+    resetDesktopDocMirrorForTests();
+    delete (window as unknown as { penDesktop?: unknown }).penDesktop;
+  });
+
+  function startSlowMirror() {
+    let release: (v: { docs: unknown[] }) => void = () => {};
+    (window as unknown as { penDesktop?: unknown }).penDesktop = {
+      docs: {
+        list: () => new Promise((r) => (release = r)),
+        save: vi.fn(async (d: { rev: number }) => ({ ok: true, rev: d.rev })),
+        remove: vi.fn(async () => ({ ok: true })),
+      },
+    };
+    const started = startDesktopDocMirror();
+    return { started, release: (docs: unknown[]) => release({ docs }) };
+  }
+
+  it("doc_list and doc_read see a disk-only doc after the reconcile", async () => {
+    const m = startSlowMirror();
+    let settled = false;
+    const listed = run(docList).then((r) => ((settled = true), r));
+    const read = run(docRead, { docId: "doc_disk" });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(settled).toBe(false);
+    m.release([{ id: "doc_disk", title: "Disk", markdown: "body", updatedAt: 5, rev: 2 }]);
+    await m.started;
+    expect((await listed).documents.map((d: { docId: string }) => d.docId)).toEqual(["doc_disk"]);
+    expect(await read).toMatchObject({ docId: "doc_disk", markdown: "body" });
+  });
+
+  it("doc_edit waits, then edits the disk-only doc", async () => {
+    const m = startSlowMirror();
+    const edit = run(docEdit, { docId: "doc_disk", markdown: "new" });
+    m.release([{ id: "doc_disk", title: "Disk", markdown: "body", updatedAt: 5, rev: 2 }]);
+    await m.started;
+    expect(await edit).toMatchObject({ docId: "doc_disk" });
+    expect(getDoc("doc_disk")).toMatchObject({ markdown: "new", rev: 3 });
+  });
+
+  it("doc_create does not write before the reconcile ends", async () => {
+    const m = startSlowMirror();
+    const created = run(docCreate, { title: "N", markdown: "x" });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(listDocs()).toHaveLength(0);
+    m.release([]);
+    await m.started;
+    expect((await created).docId).toBeTruthy();
+    expect(listDocs()).toHaveLength(1);
   });
 });

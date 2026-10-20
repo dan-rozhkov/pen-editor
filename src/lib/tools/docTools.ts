@@ -2,6 +2,7 @@ import type { ToolHandler } from "../toolRegistry";
 import { createDoc, getDoc, listDocs, updateDoc } from "../docs/docStore";
 import { applyDocEdits, type DocEdit } from "../docs/applyDocEdits";
 import { getAgentPanelDocsBridge } from "../agentPanel";
+import { whenDesktopDocsReady } from "../docs/desktopDocMirror";
 
 // Panel-local (canvasLink/canvasTools.ts, prefix "doc_"): markdown documents live in this
 // browser's localStorage (docs/docStore.ts) and the desktop shell shows them in a /doc tab.
@@ -26,10 +27,13 @@ async function openTab(docId: string): Promise<string | undefined> {
   }
 }
 
-export const docList: ToolHandler = async () =>
-  JSON.stringify({ documents: listDocs().map(({ id, title, updatedAt }) => ({ docId: id, title, updatedAt })) });
+export const docList: ToolHandler = async () => {
+  await whenDesktopDocsReady();
+  return JSON.stringify({ documents: listDocs().map(({ id, title, updatedAt }) => ({ docId: id, title, updatedAt })) });
+};
 
 export const docCreate: ToolHandler = async (args) => {
+  await whenDesktopDocsReady();
   const title = str(args?.title);
   const markdown = str(args?.markdown);
   if (title === undefined || markdown === undefined) return err("title and markdown are required strings.");
@@ -44,6 +48,7 @@ export const docCreate: ToolHandler = async (args) => {
 };
 
 export const docRead: ToolHandler = async (args) => {
+  await whenDesktopDocsReady();
   const docId = str(args?.docId);
   if (!docId) return err("docId is required.");
   const doc = getDoc(docId);
@@ -52,6 +57,7 @@ export const docRead: ToolHandler = async (args) => {
 };
 
 export const docEdit: ToolHandler = async (args) => {
+  await whenDesktopDocsReady();
   const docId = str(args?.docId);
   if (!docId) return err("docId is required.");
   const edits = args?.edits as DocEdit[] | undefined;
@@ -84,6 +90,7 @@ export const docEdit: ToolHandler = async (args) => {
 };
 
 export const docOpen: ToolHandler = async (args) => {
+  await whenDesktopDocsReady();
   const docId = str(args?.docId);
   if (!docId) return err("docId is required.");
   if (!getDoc(docId)) return err(`Unknown docId "${docId}". Call doc_list to see the documents.`);

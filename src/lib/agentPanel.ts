@@ -1,4 +1,4 @@
-import type { BrowseTraceSavePayload, BrowseTraceSaveResult, DesktopAuthApi, PenDesktopApi } from "@/lib/desktopBridge";
+import type { BrowseTraceSavePayload, BrowseTraceSaveResult, DesktopAuthApi, DesktopDocsDiskApi, PenDesktopApi } from "@/lib/desktopBridge";
 import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
 import type { AgentPanelCanvasBridge } from "@/lib/canvasLink/protocol";
 
@@ -35,7 +35,7 @@ export interface PenAgentPanelApi {
 }
 
 /** Opens or activates the doc tab that shows `docId`. Resolves after the tab exists. */
-export interface AgentPanelDocsBridge {
+export interface AgentPanelDocsBridge extends DesktopDocsDiskApi {
   open(docId: string): Promise<{ ok: boolean; error?: string }>;
 }
 

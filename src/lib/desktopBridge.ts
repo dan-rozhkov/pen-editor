@@ -2,6 +2,7 @@ import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
 import type { BrowserBridge } from "@sideform/browser-agent/loop";
 import { getCommands, runCommand } from "@/lib/commands/registry";
 import { useDocumentStore } from "@/store/documentStore";
+import type { Doc } from "@/lib/docs/docStore";
 import type { CanvasHostBridge } from "@/lib/canvasLink/protocol";
 
 /** What `traces.save` takes: `splitTraceAssets` output (frames moved out of the manifest). */
@@ -51,6 +52,17 @@ export interface DesktopAuthApi {
   onToken(cb: (payload: { token: string; verifier: string }) => void): () => void;
 }
 
+/** A markdown document as the shell stores it on disk (`<userData>/documents/<id>.json`): docStore's `Doc`. */
+export type StoredDoc = Doc;
+
+/** The shell's on-disk document store. Every method is optional: older shells lack them. */
+export interface DesktopDocsDiskApi {
+  list?(): Promise<{ docs: StoredDoc[] } | { error: string }>;
+  /** Disk keeps the higher rev; `stale` = disk already has rev >= this one and nothing was written. */
+  save?(doc: StoredDoc): Promise<{ ok: true; rev: number } | { ok: true; stale: true; rev: number } | { error: string }>;
+  remove?(id: string): Promise<{ ok: true } | { error: string }>;
+}
+
 export interface PenDesktopApi {
   auth?: DesktopAuthApi;
   /**
@@ -65,7 +77,7 @@ export interface PenDesktopApi {
    * Opens a Markdown document (by its docStore id) in a Document tab. Exposed on the
    * /trace page only; older shells lack it.
    */
-  docs?: { open(docId: string): Promise<{ ok: boolean; error?: string }> };
+  docs?: DesktopDocsDiskApi & { open?(docId: string): Promise<{ ok: boolean; error?: string }> };
   setDocumentTitle?(title: string): void;
   /** true when the desktop agent layout flag is on: the editor tab is chatless. */
   agentLayout?: boolean;

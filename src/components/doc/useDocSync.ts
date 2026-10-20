@@ -14,6 +14,7 @@ import {
   type DocChange,
   type DocMeta,
 } from "@/lib/docs/docStore";
+import { isDesktopDocsReady, whenDesktopDocsReady } from "@/lib/docs/desktopDocMirror";
 
 const SAVE_DELAY_MS = 300;
 /** Longest an edit may stay unsaved while the user keeps typing. */
@@ -82,7 +83,23 @@ export function useDocSync(): DocSync {
   const inIndex = !!paramId && docs.some((d) => d.id === paramId);
   const orphanBody = useMemo(() => (paramId && !inIndex ? readDoc(paramId).kind : null), [paramId, inIndex]);
   const resolvedParam = paramId && (inIndex || orphanBody === "ok") ? paramId : null;
-  const id = (resolvedParam ?? docs[0]?.id) ?? null;
+  // Desktop: disk documents may still be on their way in. Until the startup reconcile
+  // ends nothing is picked (not `?id=`, not the newest) and the URL is not rewritten;
+  // without a mirror this is ready at once.
+  const [mirrorReady, setMirrorReady] = useState(isDesktopDocsReady);
+  useEffect(() => {
+    if (mirrorReady) return;
+    let live = true;
+    void whenDesktopDocsReady().then(() => {
+      if (!live) return;
+      setMirrorReady(true);
+      setDocs(listDocs());
+    });
+    return () => {
+      live = false;
+    };
+  }, [mirrorReady]);
+  const id = mirrorReady ? ((resolvedParam ?? docs[0]?.id) ?? null) : null;
 
   const [loaded, setLoaded] = useState(() => {
     const read = id ? readDoc(id) : null;

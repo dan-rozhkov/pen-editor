@@ -49,7 +49,7 @@ export const ResultButton = memo(function ResultButton({ trace }: { trace: Brows
       setError(e instanceof Error ? e.message : "The result could not be saved.");
       return;
     }
-    if (desktop?.docs) {
+    if (desktop?.docs?.open) {
       void desktop.docs.open(id).then((r) => !r.ok && setError(r.error ?? "The document could not be opened."), () => setError("The document could not be opened."));
       return;
     }

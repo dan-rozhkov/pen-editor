@@ -1,8 +1,11 @@
 // Markdown documents: the store behind the /doc surface and the agent's doc_*
-// tools. Documents live in this browser's localStorage only — the agent panel
-// (/agent) and a desktop doc tab (/doc) share one origin and one storage
-// partition, so the panel's tools write here and the tab picks the change up
-// through BroadcastChannel. No IPC.
+// tools. localStorage is the synchronous working copy — the agent panel (/agent)
+// and a desktop doc tab (/doc) share one origin and one storage partition, so the
+// panel's tools write here and the tab picks the change up through
+// BroadcastChannel. In the desktop shell, desktopDocMirror.ts installs a
+// persistence sink (`setDocPersistence`) that mirrors every local write to disk,
+// and feeds disk documents back in through `importDoc` at startup. Without a sink
+// (the web) nothing leaves this browser.
 //
 // Every localStorage access is wrapped: a private window or blocked site data
 // makes getItem/setItem throw (see opencodeKey.ts for the same rule).
@@ -73,6 +76,29 @@ function readIndex(): DocMeta[] {
 /** Thrown by writes when localStorage is full or blocked. */
 export const DOC_STORAGE_ERROR = "Document storage is unavailable in this browser (localStorage blocked or full).";
 
+/** Receives every successful write made by THIS page (never changes that arrive from other pages or from `importDoc`). */
+export interface DocPersistence {
+  save(doc: Doc): void;
+  remove(id: string): void;
+}
+
+let persistence: DocPersistence | null = null;
+
+/** Installs (or with null removes) the sink that mirrors local writes elsewhere, e.g. to disk. */
+export function setDocPersistence(sink: DocPersistence | null): void {
+  persistence = sink;
+}
+
+// A sink failure must never turn a finished local write into a failed one.
+function persist(call: (sink: DocPersistence) => void): void {
+  if (!persistence) return;
+  try {
+    call(persistence);
+  } catch (e) {
+    console.error("docStore persistence failed", e);
+  }
+}
+
 function newDocId(): string {
   const uuid = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
   return `doc_${uuid.replace(/-/g, "").slice(0, 12)}`;
@@ -85,7 +111,7 @@ function getChannel(): BroadcastChannel | null {
   return channel;
 }
 
-function parseDoc(value: unknown): Doc | null {
+export function parseDoc(value: unknown): Doc | null {
   const doc = value as Partial<Doc> | null;
   if (!doc || typeof doc.id !== "string" || typeof doc.title !== "string" || typeof doc.markdown !== "string" || typeof doc.updatedAt !== "number") {
     return null;
@@ -208,7 +234,72 @@ export function updateDoc(
   return next;
 }
 
+const TOMBSTONE_KEY = "pen.docs.deleted";
+/** A tombstone older than this is dropped by the startup reconcile. */
+export const TOMBSTONE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+export interface Tombstone {
+  /** The rev the document had when it was deleted. */
+  rev: number;
+  /** Date.now() at deletion. */
+  at: number;
+}
+
+/** Deleted ids as `{ [id]: { rev, at } }`. Keeps a stale disk copy from bringing a deleted document back. The old numeric format is ignored. */
+export function readTombstones(): Record<string, Tombstone> {
+  const raw = readJson<Record<string, unknown>>(TOMBSTONE_KEY);
+  const out: Record<string, Tombstone> = {};
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    for (const [id, value] of Object.entries(raw)) {
+      const t = value as Partial<Tombstone> | null;
+      if (t && typeof t === "object" && typeof t.rev === "number" && typeof t.at === "number") out[id] = { rev: t.rev, at: t.at };
+    }
+  }
+  return out;
+}
+
+function writeTombstones(map: Record<string, Tombstone>): void {
+  if (Object.keys(map).length === 0) {
+    try {
+      localStorage.removeItem(TOMBSTONE_KEY);
+    } catch {
+      // Storage blocked: nothing was stored either.
+    }
+    return;
+  }
+  writeJson(TOMBSTONE_KEY, map);
+}
+
+export function clearTombstone(id: string): void {
+  const map = readTombstones();
+  if (!(id in map)) return;
+  delete map[id];
+  writeTombstones(map);
+}
+
+/** Drops tombstones older than `maxAgeMs`; returns how many went. */
+export function pruneTombstones(maxAgeMs: number = TOMBSTONE_MAX_AGE_MS): number {
+  const map = readTombstones();
+  const now = Date.now();
+  let dropped = 0;
+  for (const [id, t] of Object.entries(map)) {
+    if (now - t.at > maxAgeMs) {
+      delete map[id];
+      dropped++;
+    }
+  }
+  if (dropped > 0) writeTombstones(map);
+  return dropped;
+}
+
 export function deleteDoc(id: string, source: DocChangeSource): void {
+  // Only where a persistence sink exists: a web page has no second copy to guard against.
+  const before = persistence ? readDoc(id) : null;
+  if (before?.kind === "ok") {
+    const map = readTombstones();
+    map[id] = { rev: Math.max(map[id]?.rev ?? 0, before.doc.rev), at: Date.now() };
+    writeTombstones(map);
+  }
   try {
     localStorage.removeItem(DOC_KEY_PREFIX + id);
   } catch {
@@ -216,6 +307,7 @@ export function deleteDoc(id: string, source: DocChangeSource): void {
   }
   writeJson(INDEX_KEY, readIndex().filter((meta) => meta.id !== id));
   notify({ id, deleted: true, source });
+  persist((sink) => sink.remove(id));
 }
 
 /**
@@ -226,6 +318,7 @@ export function dropStaleIndexEntry(id: string): boolean {
   if (readDoc(id).kind !== "missing") return false;
   writeJson(INDEX_KEY, readIndex().filter((meta) => meta.id !== id));
   notify({ id, deleted: true, source: "editor" });
+  // No persistence call: the entry alone is stale, and a disk copy may be the only one left.
   return true;
 }
 
@@ -254,6 +347,44 @@ function commitDoc(doc: Doc, source: DocChangeSource): void {
     throw new Error(DOC_STORAGE_ERROR);
   }
   notify({ id: doc.id, source, doc });
+  persist((sink) => sink.save(doc));
+}
+
+/**
+ * Writes a document that came from outside (the desktop disk store), keeping its
+ * `rev` and `updatedAt`. Only when the local body is missing, unreadable or has a
+ * lower rev, and the id carries no delete tombstone of the same or a higher rev; returns whether it wrote. Never calls the persistence sink (the
+ * document already lives there). Listeners hear it with no `source`.
+ */
+export function importDoc(doc: Doc): boolean {
+  const tombstone = readTombstones()[doc.id];
+  if (tombstone !== undefined) {
+    // A copy at or below the deleted rev is the deleted document coming back; a newer one was written later elsewhere and wins.
+    if (doc.rev <= tombstone.rev) return false;
+    clearTombstone(doc.id);
+  }
+  const key = DOC_KEY_PREFIX + doc.id;
+  const local = readDoc(doc.id);
+  if (local.kind === "ok" && local.doc.rev >= doc.rev) return false;
+  let previous: string | null;
+  try {
+    previous = localStorage.getItem(key);
+  } catch {
+    return false;
+  }
+  if (!writeJson(key, doc)) return false;
+  const meta: DocMeta = { id: doc.id, title: doc.title, updatedAt: doc.updatedAt };
+  if (!writeJson(INDEX_KEY, [meta, ...readIndex().filter((m) => m.id !== doc.id)])) {
+    try {
+      if (previous === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, previous);
+    } catch {
+      // Storage is blocked: the body write above could not have stuck either.
+    }
+    return false;
+  }
+  notify({ id: doc.id, doc });
+  return true;
 }
 
 /**
@@ -279,4 +410,18 @@ export function subscribeDocs(listener: Listener): () => void {
   return () => {
     listeners.delete(listener);
   };
+}
+
+/**
+ * Raises a local body stored without a `rev` (reads as 0) to rev 1, keeping title,
+ * markdown and updatedAt. Never calls the persistence sink. Listeners hear it with
+ * no `source`, so an open editor adopts the rev. Returns whether it wrote.
+ */
+export function upgradeLegacyRev(id: string): boolean {
+  const read = readDoc(id);
+  if (read.kind !== "ok" || read.doc.rev >= 1) return false;
+  const next: Doc = { ...read.doc, rev: 1 };
+  if (!writeJson(DOC_KEY_PREFIX + id, next)) return false;
+  notify({ id, doc: next });
+  return true;
 }

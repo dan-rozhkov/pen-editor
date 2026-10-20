@@ -10,6 +10,8 @@ import { initAnalytics } from '@/lib/analytics'
 import { startBridges } from '@/lib/bridgeBootstrap'
 import { installModelContextForEditorRoute } from '@/lib/webmcp/earlyInstall'
 import { loadModels } from '@/lib/chatModels'
+import { isAgentRoutePath, isDocRoutePath, isTraceRoutePath } from '@/lib/agentPanel'
+import { startDesktopDocMirror } from '@/lib/docs/desktopDocMirror'
 import { applyStoredUITheme, installUIThemeStorageSync } from '@/lib/uiTheme'
 import { MOBBIN_OAUTH_CALLBACK_PATH } from '@/lib/mobbinAuth'
 
@@ -57,6 +59,13 @@ if (import.meta.env.PROD && !isMobbinOAuthCallbackRoute()) {
 // See bridgeBootstrap.ts for the desktop/websocket MCP bridge startup
 // ordering and its failure-falls-back-not-silently-disables contract.
 startBridges()
+
+// Desktop shell: mirror markdown documents to disk and reconcile with it. No-op on the web.
+// Only the pages that read or write documents: /agent, /doc, /trace/<id>.
+{
+  const path = window.location.pathname
+  if (isAgentRoutePath(path) || isDocRoutePath(path) || isTraceRoutePath(path)) void startDesktopDocMirror()
+}
 
 // Start fetching the chat model list here, before the first render, rather
 // than only from App's effect. A chat session's queued-payload effect holds
