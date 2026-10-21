@@ -233,6 +233,17 @@ describe("trace playback", () => {
     expect(currentStep()).toBe(1);
   });
 
+  it("scrubs to the middle of a repeat tile's time slot, and keeps repeats out of the accessibility tree", async () => {
+    await openTrace();
+    const repeats = screen.getAllByTestId("filmstrip-repeat");
+    expect(repeats.every((el) => el.getAttribute("aria-hidden") === "true" && el.tagName === "DIV")).toBe(true);
+    const tiles = repeats.length + 6; // 6 frames, one home tile each
+    fireEvent.click(playButton());
+    fireEvent.click(repeats[0]!); // slot 0 repeats the first frame
+    expect(isPlaying()).toBe(false);
+    expect(Number(slider().getAttribute("aria-valuenow"))).toBeCloseTo((0.5 * 9000) / tiles, -1);
+  });
+
   it("seeks and pauses by dragging on the axis", async () => {
     await openTrace();
     const axis = screen.getByTestId("trace-axis");

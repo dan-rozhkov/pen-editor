@@ -6,13 +6,14 @@ import {
   buildTimeline,
   describeCheck,
   describeOutcome,
+  filmstripLayout,
+  filmstripTiles,
   formatDuration,
   formatOffset,
   lastFrameOfStep,
   parseNetworkEntry,
   prettyText,
   shortUrl,
-  spreadPositions,
   stepOfFrame,
   stepsWithProblems,
   summarizeArgs,
@@ -123,19 +124,68 @@ describe("buildTimeline", () => {
   });
 });
 
-describe("spreadPositions", () => {
-  it("keeps separated items at their centers", () => {
-    expect(spreadPositions([100, 400], 80, 8, 600)).toEqual([60, 360]);
+describe("filmstripTiles", () => {
+  const timeline = buildTimeline(sampleTrace); // frames at 1950, 3150, 3950, 7650, 8350, 8900 of 9000 ms
+  const withPcts = (pcts: number[]) => ({ ...timeline, frames: pcts.map((pct) => ({ frame: timeline.frames[0]!.frame, pct })) });
+  const homes = (tiles: ReturnType<typeof filmstripTiles>) => tiles.flatMap((t, slot) => (t.home ? [[slot, t.frameIndex]] : []));
+
+  it("gives every frame exactly one home tile, in order, for any n from the frame count up", () => {
+    for (let n = timeline.frames.length; n <= 40; n++) {
+      const tiles = filmstripTiles(timeline, n);
+      expect(tiles).toHaveLength(n);
+      expect(homes(tiles).map(([, frame]) => frame)).toEqual([0, 1, 2, 3, 4, 5]);
+    }
   });
 
-  it("pushes overlapping items apart without leaving the track", () => {
-    const lefts = spreadPositions([10, 12, 590], 80, 8, 600);
-    expect(lefts[0]).toBe(0);
-    expect(lefts[1]).toBe(88);
-    expect(lefts[2]).toBe(520);
+  it("puts a frame in the slot that holds its time", () => {
+    // 20 slots of 450 ms: 1950 -> 4, 3150 -> 7, 3950 -> 8, 7650 -> 17, 8350 -> 18, 8900 -> 19
+    expect(homes(filmstripTiles(timeline, 20))).toEqual([[4, 0], [7, 1], [8, 2], [17, 3], [18, 4], [19, 5]]);
   });
 
-  it("returns nothing for no items", () => expect(spreadPositions([], 80, 8, 600)).toEqual([]));
+  it("grows to one tile per frame when there are fewer slots than frames", () => {
+    expect(filmstripTiles(timeline, 2)).toHaveLength(6);
+    expect(filmstripTiles(timeline, 0)).toHaveLength(6);
+  });
+
+  it("spreads frames that share a slot to the nearest free slots, forward first", () => {
+    const crowded = withPcts([41, 42, 43, 90]);
+    expect(homes(filmstripTiles(crowded, 10))).toEqual([[4, 0], [5, 1], [6, 2], [9, 3]]);
+  });
+
+  it("moves frames back from the end when the end is full", () => {
+    const crowded = withPcts([95, 96, 97, 99, 100]);
+    expect(homes(filmstripTiles(crowded, 5))).toEqual([[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]]);
+    expect(homes(filmstripTiles(withPcts([10, 98, 99, 100]), 6)).map(([, f]) => f)).toEqual([0, 1, 2, 3]);
+    expect(homes(filmstripTiles(withPcts([10, 98, 99, 100]), 6)).at(-1)).toEqual([5, 3]);
+  });
+
+  it("repeats the first frame before it and carries each frame forward after it", () => {
+    const tiles = filmstripTiles(timeline, 20);
+    expect(tiles.slice(0, 5).map((t) => t.frameIndex)).toEqual([0, 0, 0, 0, 0]);
+    expect(tiles.slice(4, 9).map((t) => t.frameIndex)).toEqual([0, 0, 0, 1, 2]);
+    expect(tiles.slice(8, 18).map((t) => t.frameIndex)).toEqual([2, 2, 2, 2, 2, 2, 2, 2, 2, 3]);
+  });
+
+  it("has no tiles for a run without frames", () => {
+    expect(filmstripTiles(buildTimeline({ ...sampleTrace, frames: [] }), 5)).toEqual([]);
+  });
+});
+
+describe("filmstripLayout", () => {
+  it("fills the visible width edge to edge with as many tiles as fit", () => {
+    const { n, tileW, stripW } = filmstripLayout(968, 3, 76, 8);
+    expect(n).toBe(11);
+    expect(stripW).toBe(968);
+    expect(n * tileW + (n - 1) * 8).toBeCloseTo(968);
+  });
+
+  it("widens the strip when there are more frames than tiles that fit", () => {
+    expect(filmstripLayout(300, 10, 76, 8)).toEqual({ n: 10, tileW: 76, stripW: 10 * 84 - 8 });
+  });
+
+  it("keeps one tile for a tiny width", () => {
+    expect(filmstripLayout(20, 0, 76, 8)).toEqual({ n: 1, tileW: 20, stripW: 20 });
+  });
 });
 
 describe("log and QA text", () => {

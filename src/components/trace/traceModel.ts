@@ -310,23 +310,54 @@ export function parseNetworkEntry(text: string): NetworkRow | null {
 
 // ---- layout ----------------------------------------------------------------
 
+export interface FilmstripTile {
+  /** Index into `timeline.frames`. */
+  frameIndex: number;
+  /** True on the frame's own tile (exactly one per frame); the others repeat a frame. */
+  home: boolean;
+}
+
 /**
- * Left edges for items of equal `size` wanted at `centers` (px) inside
- * `total` px: each item stays as close to its center as it can without
- * overlapping its neighbour, and never leaves [0, total]. Needs
- * `n * (size + gap) - gap <= total`; a narrower `total` is treated as that minimum.
+ * `n` tiles (at least one per frame) for a run with frames; [] for none.
+ * Each frame owns the slot of `n` equal ones that holds its time; frames that
+ * share a slot move to the nearest free slot in time order, forward first,
+ * back from the end when it is full. Every other tile repeats the nearest
+ * home tile before it (the page state carried forward); the tiles before the
+ * first home tile repeat the first frame.
  */
-export function spreadPositions(centers: number[], size: number, gap: number, total: number): number[] {
-  const n = centers.length;
-  if (n === 0) return [];
-  const step = size + gap;
-  const room = Math.max(total, n * step - gap);
-  const left = centers.map((c) => c - size / 2);
-  for (let i = 0; i < n; i++) left[i] = Math.max(i === 0 ? 0 : left[i - 1]! + step, left[i]!);
-  for (let i = n - 1; i >= 0; i--) {
-    const limit = i === n - 1 ? room - size : left[i + 1]! - step;
-    left[i] = Math.min(left[i]!, limit);
+export function filmstripTiles(timeline: Timeline, n: number): FilmstripTile[] {
+  const frames = timeline.frames;
+  const count = Math.max(Math.floor(n), frames.length);
+  if (frames.length === 0) return [];
+  const slots = frames.map((f) => Math.min(count - 1, Math.max(0, Math.floor((f.pct / 100) * count))));
+  for (let i = 1; i < slots.length; i++) slots[i] = Math.max(slots[i]!, slots[i - 1]! + 1);
+  for (let i = slots.length - 1; i >= 0; i--) slots[i] = Math.min(slots[i]!, i === slots.length - 1 ? count - 1 : slots[i + 1]! - 1);
+  const homeOf = new Map(slots.map((slot, i) => [slot, i]));
+  const tiles: FilmstripTile[] = [];
+  let current = 0;
+  for (let slot = 0; slot < count; slot++) {
+    const own = homeOf.get(slot);
+    if (own !== undefined) current = own;
+    tiles.push({ frameIndex: current, home: own !== undefined });
   }
-  for (let i = 0; i < n; i++) left[i] = Math.max(i === 0 ? 0 : left[i - 1]! + step, left[i]!);
-  return left;
+  return tiles;
+}
+
+export interface FilmstripLayout {
+  /** Tile count: as many as fit, but at least one per frame. */
+  n: number;
+  /** Width of one tile and of the whole strip, in px. */
+  tileW: number;
+  stripW: number;
+}
+
+/**
+ * Tiles of `thumbW` px with `gap` between them fill `visible` px edge to edge;
+ * a run with more frames than fit widens the strip (it then scrolls) so every
+ * frame keeps a tile of its own.
+ */
+export function filmstripLayout(visible: number, frameCount: number, thumbW: number, gap: number): FilmstripLayout {
+  const fit = Math.max(1, Math.floor((visible + gap) / (thumbW + gap)));
+  if (frameCount > fit) return { n: frameCount, tileW: thumbW, stripW: frameCount * (thumbW + gap) - gap };
+  return { n: fit, tileW: (visible - (fit - 1) * gap) / fit, stripW: visible };
 }
