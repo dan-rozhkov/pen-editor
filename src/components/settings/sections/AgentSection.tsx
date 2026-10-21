@@ -8,27 +8,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { useChatBootstrap } from "@/hooks/useChatBootstrap";
 import { useModelOptions } from "@/hooks/useModelOptions";
+import { traceFlag } from "@/lib/browseTracePref";
 import { hasOpenCodeKey, subscribeOpenCodeKey } from "@/lib/opencodeKey";
-import { PROMPT_SUGGESTIONS_KEY, promptSuggestionsDisabled, setPromptSuggestionsEnabled } from "@/lib/promptSuggestion";
-import { onStorageKey } from "@/lib/storageSync";
+import { promptSuggestionsFlag } from "@/lib/promptSuggestion";
 import { useChatStore } from "@/store/chatStore";
 import { useOpenCodeKeyDialogStore } from "@/store/openCodeKeyDialogStore";
 
-import { SettingsGroup, SettingsSection } from "../SettingsSection";
+import { SettingsGroup, SettingsSection, SettingsSubheading } from "../SettingsSection";
 
 const PARALLEL_OPTIONS = [
   { value: "1", label: "x1" },
   { value: "2", label: "x2" },
   { value: "3", label: "x3" },
 ] as const;
-
-// The kill switch lives in localStorage only, so React reads it through a tiny external store.
-const suggestionListeners = new Set<() => void>();
-onStorageKey(PROMPT_SUGGESTIONS_KEY, () => suggestionListeners.forEach((l) => l()));
-function subscribeSuggestions(cb: () => void) {
-  suggestionListeners.add(cb);
-  return () => void suggestionListeners.delete(cb);
-}
 
 export function AgentSection() {
   useChatBootstrap();
@@ -38,7 +30,8 @@ export function AgentSection() {
   const setParallelCount = useChatStore((s) => s.setParallelCount);
   const options = useModelOptions();
   const hasKey = useSyncExternalStore(subscribeOpenCodeKey, hasOpenCodeKey, hasOpenCodeKey);
-  const suggestionsOff = useSyncExternalStore(subscribeSuggestions, promptSuggestionsDisabled, () => false);
+  const suggestionsOn = useSyncExternalStore(promptSuggestionsFlag.subscribe, promptSuggestionsFlag.get, () => true);
+  const allTraces = useSyncExternalStore(traceFlag.subscribe, traceFlag.get, () => false);
   const dialogOpen = useOpenCodeKeyDialogStore((s) => s.open);
   const setDialogOpen = useOpenCodeKeyDialogStore((s) => s.setOpen);
 
@@ -90,12 +83,17 @@ export function AgentSection() {
       <SettingsGroup inline title="Prompt suggestions" description="Suggest a next message after the agent replies.">
         <Switch
           aria-label="Prompt suggestions"
-          checked={!suggestionsOff}
-          onCheckedChange={(next) => {
-            setPromptSuggestionsEnabled(next);
-            suggestionListeners.forEach((l) => l());
-          }}
+          checked={suggestionsOn}
+          onCheckedChange={promptSuggestionsFlag.set}
         />
+      </SettingsGroup>
+      <SettingsSubheading>Browser</SettingsSubheading>
+      <SettingsGroup
+        inline
+        title="Record traces for all runs"
+        description="Save a step-by-step trace of every browser run, not only QA tests. Screenshots of the visited pages are stored with it. On the web, traces are uploaded, and anyone with the link can open them."
+      >
+        <Switch aria-label="Record traces for all runs" checked={allTraces} onCheckedChange={traceFlag.set} />
       </SettingsGroup>
       {/* Mounted once, as in ChatPanel: this page has no composer to host it. */}
       <OpenCodeKeyDialog open={dialogOpen} onOpenChange={setDialogOpen} />

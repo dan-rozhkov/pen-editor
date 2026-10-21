@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { subscribeOpenCodeKey } from "@/lib/opencodeKey";
+import { createStorageFlag } from "@/lib/storageSync";
 import { subscribeToMobbinAuthChanges } from "@/lib/mobbinAuth";
 import { useMobbinAuthStore } from "@/store/mobbinAuthStore";
 
@@ -88,5 +89,53 @@ describe("cross-tab settings sync", () => {
     fire("unrelated", "false");
     window.dispatchEvent(new StorageEvent("storage", { key: "show-pixel-grid", newValue: "false", storageArea: sessionStorage }));
     expect(usePixelGridStore.getState().showPixelGrid).toBe(true);
+  });
+});
+
+describe("createStorageFlag", () => {
+  it("onValue marker: absent = off, marker = on, set(false) removes the key", () => {
+    const flag = createStorageFlag("t.on", { onValue: "all" });
+    expect(flag.get()).toBe(false);
+    flag.set(true);
+    expect(localStorage.getItem("t.on")).toBe("all");
+    expect(flag.get()).toBe(true);
+    flag.set(false);
+    expect(localStorage.getItem("t.on")).toBeNull();
+    expect(flag.get()).toBe(false);
+  });
+
+  it("offValue marker: absent = on, marker = off, set(true) removes the key", () => {
+    const flag = createStorageFlag("t.off", { offValue: "off" });
+    expect(flag.get()).toBe(true);
+    flag.set(false);
+    expect(localStorage.getItem("t.off")).toBe("off");
+    expect(flag.get()).toBe(false);
+    flag.set(true);
+    expect(localStorage.getItem("t.off")).toBeNull();
+    expect(flag.get()).toBe(true);
+  });
+
+  it("notifies on a local set and on another document's write to its key only; unsubscribe stops it", () => {
+    const flag = createStorageFlag("t.sub", { onValue: "all" });
+    const cb = vi.fn();
+    const off = flag.subscribe(cb);
+    flag.set(true);
+    expect(cb).toHaveBeenCalledTimes(1);
+    fire("t.sub", null);
+    expect(cb).toHaveBeenCalledTimes(2);
+    fire("other", "x");
+    expect(cb).toHaveBeenCalledTimes(2);
+    off();
+    flag.set(false);
+    expect(cb).toHaveBeenCalledTimes(2);
+  });
+
+  it("falls back to the absent state when storage throws", () => {
+    const spy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("denied");
+    });
+    expect(createStorageFlag("t.x", { onValue: "all" }).get()).toBe(false);
+    expect(createStorageFlag("t.y", { offValue: "off" }).get()).toBe(true);
+    spy.mockRestore();
   });
 });

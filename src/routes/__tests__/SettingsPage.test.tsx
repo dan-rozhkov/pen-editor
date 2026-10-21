@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 
 import SettingsPage from "../SettingsPage";
+import { BROWSE_TRACES_KEY } from "@/lib/browseTracePref";
 import { SETTINGS_SECTION_EVENT } from "@/lib/openSettings";
 import { usePixelGridStore } from "@/store/pixelGridStore";
 import { useUIThemeStore } from "@/store/uiThemeStore";
@@ -119,5 +120,17 @@ describe("<SettingsPage />", () => {
     expect(await screen.findByText("Toggle rulers")).toBeTruthy();
     fireEvent.change(screen.getByRole("searchbox", { name: "Search shortcuts" }), { target: { value: "zzzz-none" } });
     expect(screen.getByText("No shortcuts match.")).toBeTruthy();
+  });
+
+  it("AI agent section: the browser-trace switch toggles the browse-traces key", () => {
+    renderSettings("/settings?section=agent");
+    expect(screen.getByText("Browser")).toBeTruthy();
+    const sw = screen.getByRole("switch", { name: "Record traces for all runs" });
+    expect(sw.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(sw);
+    expect(localStorage.getItem(BROWSE_TRACES_KEY)).toBe("all");
+    expect(screen.getByRole("switch", { name: "Record traces for all runs" }).getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(screen.getByRole("switch", { name: "Record traces for all runs" }));
+    expect(localStorage.getItem(BROWSE_TRACES_KEY)).toBeNull();
   });
 });

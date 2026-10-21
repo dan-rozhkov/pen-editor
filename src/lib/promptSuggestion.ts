@@ -1,5 +1,6 @@
 import type { UIMessage } from "ai";
 import { apiFetch } from "@/lib/apiBase";
+import { createStorageFlag } from "@/lib/storageSync";
 
 // Mirrors the backend's POST /api/prompt-suggestion limits.
 const MAX_TEXT_CHARS = 2000;
@@ -14,23 +15,15 @@ export interface SuggestionMessage {
   text: string;
 }
 
+/** Absent = on, "off" = off. `get()` is true while suggestions are enabled. */
+export const promptSuggestionsFlag = createStorageFlag(PROMPT_SUGGESTIONS_KEY, { offValue: "off" });
+
 export function promptSuggestionsDisabled(): boolean {
-  try {
-    return localStorage.getItem(PROMPT_SUGGESTIONS_KEY) === "off";
-  } catch {
-    return false;
-  }
+  return !promptSuggestionsFlag.get();
 }
 
 /** Settings toggle: writes the same kill switch the composer already reads. */
-export function setPromptSuggestionsEnabled(enabled: boolean): void {
-  try {
-    if (enabled) localStorage.removeItem(PROMPT_SUGGESTIONS_KEY);
-    else localStorage.setItem(PROMPT_SUGGESTIONS_KEY, "off");
-  } catch {
-    // localStorage unavailable (private mode/quota): the toggle just doesn't stick.
-  }
-}
+export const setPromptSuggestionsEnabled = promptSuggestionsFlag.set;
 
 /**
  * Reduce the chat to the plain-text transcript the suggestion endpoint wants:

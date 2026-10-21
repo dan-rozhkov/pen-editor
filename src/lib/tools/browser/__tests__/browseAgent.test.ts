@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toolHandlers, type ToolHandler } from "@/lib/toolRegistry";
 import { clearOpenCodeKey, setOpenCodeKey } from "@/lib/opencodeKey";
 import { useChatStore } from "@/store/chatStore";
+import { BROWSE_TRACES_KEY } from "@/lib/browseTracePref";
 import { sse, textTurn } from "@/test/sseStream";
 import { setPenDesktop, stubBrowser, type PenDesktopBrowser } from "./helpers";
 import { BROWSE_AGENT_DEADLINE_MS, appLabelOf, browseAgent, nestedChatId } from "../browseAgent";
@@ -710,6 +711,27 @@ describe("browse_agent run trace", () => {
     expect(manifest).toMatchObject({ goal: "Look at the cart", status: "done", labels: { browser: "cloud", mode: "qa" } });
     expect((manifest.steps as Array<{ tool: string }>).map((x) => x.tool)).toEqual(["browse_open", "browse_open"]); // the start page, then the model's call
     expect(assets).toEqual([]);
+  });
+
+  it("a non-QA run keeps a trace only when the all-runs setting is on", async () => {
+    traceUploadStatus = 200;
+    openThenDone();
+    const off = JSON.parse(await browseAgent({ goal: "Look", url: "https://shop.test" }, ctx));
+    expect(off).not.toHaveProperty("trace");
+    expect(tracePosts).toHaveLength(0);
+
+    localStorage.setItem(BROWSE_TRACES_KEY, "all");
+    try {
+      openThenDone();
+      const on = JSON.parse(await browseAgent({ goal: "Look", url: "https://shop.test" }, ctx));
+      expect(on.trace).toEqual({ id: "cloud-trace-1", source: "cloud" });
+      expect(on).not.toHaveProperty("qa");
+      const { manifest } = tracePosts[0] as { manifest: Record<string, unknown> };
+      expect(manifest).toMatchObject({ goal: "Look", status: "done", labels: { browser: "cloud", mode: "browse" } });
+      expect(manifest).not.toHaveProperty("qa");
+    } finally {
+      localStorage.removeItem(BROWSE_TRACES_KEY);
+    }
   });
 
   it("a failed upload only logs: the result has no trace field", async () => {

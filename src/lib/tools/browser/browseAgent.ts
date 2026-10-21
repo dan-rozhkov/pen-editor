@@ -52,6 +52,7 @@ import { APP_NEEDS_DESKTOP_ERROR } from "./browseOpen";
 import { peBase } from "./shared";
 import { APP_LAUNCH_ALLOWANCE_MS, appArgOf, desktopAppsAvailable, isIsolatedQaCall, rememberRunSession, runSessionId } from "./isolation";
 import { acquireBrowseSlot } from "@/lib/browseRunLimiter";
+import { tracesForAllRuns } from "@/lib/browseTracePref";
 import { canSaveBrowseTrace, saveBrowseTrace } from "@/lib/browseTraces";
 import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
 import { checkpointForModel, useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
@@ -155,7 +156,7 @@ async function boundedQaAssert(
 
 /** Each page read for the QA judge may take this long. */
 const QA_JUDGE_READ_MS = 5_000;
-/** The trace recorder's last drain of the request log (`flush()` boxes itself at 2 s); reserved in the QA tail when the run keeps one. */
+/** The trace recorder's last drain of the request log (`flush()` boxes itself at 2 s); reserved in the isolated QA tail when the run keeps one. Any run that keeps a trace (QA always; other runs when the all-runs setting is on) drains once, but only the isolated QA path reserves the time: plain runs rely on the package margin. */
 const TRACE_FLUSH_RESERVE_MS = 2_000;
 /** The server has its own QA_JUDGE_TIMEOUT_MS budget; the client waits a little longer than it. */
 const QA_JUDGE_CLIENT_TIMEOUT_MS = QA_JUDGE_TIMEOUT_MS + 10_000;
@@ -484,7 +485,7 @@ type RunOutcome = string | (() => Promise<string>);
 /** Below this much deadline left after waiting for a slot, an isolated run is not worth starting. */
 const MIN_ISOLATED_RUN_MS = 60_000;
 
-/** Bound of a QA run's final trace screenshot. */
+/** Bound of the final trace screenshot of any run that keeps a trace (QA always; other runs when the all-runs setting is on). */
 const FINAL_FRAME_TIMEOUT_MS = 4_000;
 
 /** Bound of the run-end viewport reset, as the package's runBrowseAgent. */
@@ -624,12 +625,12 @@ const runBrowseAgentBody = async (
   const recorder = qaOn ? createStepRecorder() : undefined;
   // The run trace (spec 2026-10-20-browse-run-trace-design.md): steps, a frame after each page-changing step, QA at the end.
   const desktopRun = isDesktopBrowserAvailable();
-  // Only QA runs keep a trace. A desktop shell without a save bridge (older) cannot keep one either: no recorder, so
-  // no screenshots are taken.
-  const traceRecorder = qaOn && canSaveBrowseTrace(desktopRun)
+  // QA runs keep a trace; so does every run when the "record traces for all runs" setting is on. A desktop shell
+  // without a save bridge (older) cannot keep one either: no recorder, so no screenshots are taken.
+  const traceRecorder = (qaOn || tracesForAllRuns()) && canSaveBrowseTrace(desktopRun)
     ? createBrowseTraceRecorder({
         goal,
-        labels: { browser: desktopRun ? "desktop" : "cloud", mode: "qa", ...(app ? { app: appLabelOf(app) } : {}) },
+        labels: { browser: desktopRun ? "desktop" : "cloud", mode: qaOn ? "qa" : "browse", ...(app ? { app: appLabelOf(app) } : {}) },
         ...(typeof bridge?.screenshot === "function" ? { capture: () => captureTraceFrame(bridge) } : {}),
         // Network log of the page; a shell without `requests` records none.
         ...(typeof bridge?.requests === "function" ? { requests: () => bridge.requests!() } : {}),
@@ -819,6 +820,15 @@ const runBrowseAgentBody = async (
    * The `qa` field: steps, run-level diagnostics and checks. The host's final checks run here, BEFORE
    * the checkpoint finish releases the fixture mocks (the package does the same order).
    */
+  /**
+   * A non-QA run that keeps a trace (the all-runs setting): the final frame and the last log drain, no verdict.
+   * A QA run does both inside `buildQa`, around its final checks, so this leaves it alone.
+   */
+  const finishTraceCapture = async (result: BrowseAgentResult) => {
+    if (recorder || !traceRecorder) return;
+    await takeFinalFrame(result);
+    await traceRecorder.flush();
+  };
   const buildQa = async (result: BrowseAgentResult) => {
     if (!recorder) return undefined;
     await takeFinalFrame(result);
@@ -834,7 +844,7 @@ const runBrowseAgentBody = async (
     return qa;
   };
   /**
-   * The QA run's "final" trace frame: one screenshot of the page as the run left it, before the final checks, the
+   * The "final" trace frame: one screenshot of the page as the run left it, before the final checks, the
    * judge's read and the cleanup. Not for a run that was stopped, ran out of time or never started. Bounded; a
    * failure is ignored. The dialogs the screenshot drains are dropped: the run is over, no tool result is left to carry them.
    */
@@ -964,6 +974,7 @@ const runBrowseAgentBody = async (
             }
           : { url: url || undefined, toolCallId },
       );
+      await finishTraceCapture(result);
       const qa = await buildQa(result);
       const settleJudge = await startJudge(qa);
       const checkpoint = await finishCheckpoint(cp, result);
@@ -1048,6 +1059,7 @@ const runBrowseAgentBody = async (
           throw new SetupError("validate", parsed.ok ? "" : parsed.error);
         }),
     });
+    await finishTraceCapture(result);
     const qa = await buildQa(result);
     const settleJudge = await startJudge(qa);
     const checkpoint = await finishCheckpoint(cp, result, releaseFixture);
