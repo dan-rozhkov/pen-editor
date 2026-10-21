@@ -91,3 +91,38 @@ export function RowButton({ active, className, ...rest }: { active: boolean } & 
     />
   );
 }
+
+/** A small pill switch between a few options (one pressed at a time). */
+export function Segmented<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  value: T;
+  options: readonly { value: T; label: string }[];
+  onChange(value: T): void;
+  disabled?: boolean;
+}) {
+  return (
+    <div role="group" aria-label={label} className="flex shrink-0 rounded-md bg-secondary p-0.5">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          disabled={disabled}
+          aria-pressed={value === option.value}
+          onClick={() => onChange(option.value)}
+          className={cn(
+            "h-5 rounded-sm px-2 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+            value === option.value ? "bg-surface-panel text-text-primary" : "text-text-muted enabled:hover:text-text-primary",
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}

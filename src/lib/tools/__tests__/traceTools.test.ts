@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { summarizeTrace, traceList, traceRead } from "../traceTools";
 import { getAgentPanelTraceTabsBridge } from "@/lib/agentPanel";
-import { sampleTrace, sampleTraceJson } from "@/components/trace/__fixtures__/sampleTrace";
+import { sampleTrace, sampleTraceJson, sampleTraceWithExtrasJson } from "@/components/trace/__fixtures__/sampleTrace";
 
 type Traces = NonNullable<NonNullable<Window["penAgentPanel"]>["traces"]>;
 
@@ -71,6 +71,32 @@ describe("trace_read", () => {
     expect(out.consoleErrors.total).toBe(2);
     expect(out.failedRequests.shown[1].text).toContain("POST 500");
     expect(text).not.toMatch(/data:image|base64|frames|iVBOR/);
+  });
+
+  it("lists the request log with failed requests first and summarizes batched actions", async () => {
+    withTrace(sampleTraceWithExtrasJson());
+    const out = JSON.parse(await raw(traceRead, { traceId: "sample-trace-1" }));
+    expect(out.requests).toMatchObject({ total: 3, failed: 2 });
+    expect(out.requests.shown.map((r: { status: number }) => r.status)).toEqual([404, 500, 200]);
+    expect(out.requests.shown[0]).toMatchObject({ step: 0, method: "GET", url: "https://acme.test/favicon.ico", ms: 50 });
+    expect(out.steps.shown[2].actions).toMatch(/^1\/3 ok, 1 not run, failed: type Email - .*disabled/);
+    expect(out.steps.shown[0]).not.toHaveProperty("actions");
+    // The failures are listed once: the console-derived list keeps only its count.
+    expect(out.failedRequests).toEqual({ total: 2 });
+    expect(JSON.stringify(out)).not.toMatch(/boom|requestHeaders|responseBody/);
+  });
+
+  it("has no requests key for a trace without a request log, and caps a long one", async () => {
+    withTrace(sampleTraceJson());
+    expect(JSON.parse(await raw(traceRead, { traceId: "x" }))).not.toHaveProperty("requests");
+    const json = sampleTraceWithExtrasJson() as { requests: unknown[] };
+    json.requests = Array.from({ length: 300 }, (_, i) => ({ at: i, method: "GET", url: `https://acme.test/${i}/${"u".repeat(900)}`, status: i % 2 ? 500 : 200 }));
+    withTrace(json);
+    const out = JSON.parse(await raw(traceRead, { traceId: "x" }));
+    expect(out.requests).toMatchObject({ total: 300, failed: 150 });
+    expect(out.requests.shown.length).toBeLessThanOrEqual(20);
+    expect(out.requests.omitted).toBeGreaterThan(0);
+    expect(out.requests.shown[0].url.length).toBeLessThan(300);
   });
 
   it("caps long lists and strings and says how many are omitted", async () => {

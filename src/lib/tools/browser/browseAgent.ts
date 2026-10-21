@@ -155,6 +155,8 @@ async function boundedQaAssert(
 
 /** Each page read for the QA judge may take this long. */
 const QA_JUDGE_READ_MS = 5_000;
+/** The trace recorder's last drain of the request log (`flush()` boxes itself at 2 s); reserved in the QA tail when the run keeps one. */
+const TRACE_FLUSH_RESERVE_MS = 2_000;
 /** The server has its own QA_JUDGE_TIMEOUT_MS budget; the client waits a little longer than it. */
 const QA_JUDGE_CLIENT_TIMEOUT_MS = QA_JUDGE_TIMEOUT_MS + 10_000;
 /** The judge request must end this long before the tool's outer timeout (the rest of the run's cleanup runs beside it). */
@@ -438,8 +440,13 @@ const runWithCleanup = async (
     // session close (bounded by CLOSE_SESSION_TIMEOUT_MS).
     // Final checks (`checks`) run after the loop too: reserve their bound as well.
     const checksReserve = args.checks !== undefined && args.checks !== null ? QA_FINAL_CHECKS_TIMEOUT_MS : 0;
+    // A QA run on a bridge that serves the request log drains it once more after the loop.
+    const flushReserve =
+      args.qa === true && canSaveBrowseTrace(isDesktopBrowserAvailable()) && typeof getBrowserBridge(context?.sessionId)?.requests === "function"
+        ? TRACE_FLUSH_RESERVE_MS
+        : 0;
     const deadlineMs =
-      BROWSE_AGENT_DEADLINE_MS + appAllowance - (Date.now() - waitStart) - CHECKPOINT_CALL_TIMEOUT_MS - CLOSE_SESSION_TIMEOUT_MS - checksReserve;
+      BROWSE_AGENT_DEADLINE_MS + appAllowance - (Date.now() - waitStart) - CHECKPOINT_CALL_TIMEOUT_MS - CLOSE_SESSION_TIMEOUT_MS - checksReserve - flushReserve;
     if (deadlineMs < MIN_ISOLATED_RUN_MS) {
       return JSON.stringify({
         status: "error",
@@ -624,8 +631,12 @@ const runBrowseAgentBody = async (
         goal,
         labels: { browser: desktopRun ? "desktop" : "cloud", mode: "qa", ...(app ? { app: appLabelOf(app) } : {}) },
         ...(typeof bridge?.screenshot === "function" ? { capture: () => captureTraceFrame(bridge) } : {}),
+        // Network log of the page; a shell without `requests` records none.
+        ...(typeof bridge?.requests === "function" ? { requests: () => bridge.requests!() } : {}),
       })
     : undefined;
+
+  const flushReserve = traceRecorder && typeof bridge?.requests === "function" ? TRACE_FLUSH_RESERVE_MS : 0;
 
   const parentSessionId = context?.sessionId;
   // Isolated QA run (spec 2026-10-17-isolated-parallel-browse-design.md): its own
@@ -817,6 +828,9 @@ const runBrowseAgentBody = async (
       // The final assert drained more errors into the recorder: refresh the run-level lists.
       qa = applyFinalChecks({ ...qa, ...recorder.extras() }, finalResults);
     }
+    // Last drain of the request log, while the run's browser still lives (the cleanup closes an isolated session).
+    // Self-time-boxed (2 s) and never rejects.
+    await traceRecorder?.flush();
     return qa;
   };
   /**
@@ -845,7 +859,7 @@ const runBrowseAgentBody = async (
     if (signal?.aborted) return judgeFailed("aborted");
     const timeLeft = () => outerEnd - Date.now() - QA_JUDGE_TAIL_MARGIN_MS;
     // Both reads, then the cleanup tail the run reserves, must fit before the margin.
-    if (timeLeft() < 2 * QA_JUDGE_READ_MS + CHECKPOINT_CALL_TIMEOUT_MS + (runSession ? CLOSE_SESSION_TIMEOUT_MS : 0)) return judgeFailed(NO_TIME_FOR_JUDGE);
+    if (timeLeft() < 2 * QA_JUDGE_READ_MS + CHECKPOINT_CALL_TIMEOUT_MS + (runSession ? CLOSE_SESSION_TIMEOUT_MS : 0) + flushReserve) return judgeFailed(NO_TIME_FOR_JUDGE);
     const nested = (name: string, input: Record<string, unknown>) =>
       withTimeout<string | undefined>(() => executeBrowseTool(bridge, name, input, peBase), QA_JUDGE_READ_MS, undefined, signal);
     const read = await nested("browse_read", { maxChars: QA_JUDGE_PAGE_MAX_CHARS });

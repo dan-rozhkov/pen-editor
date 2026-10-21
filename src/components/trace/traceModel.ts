@@ -1,4 +1,6 @@
-import type { BrowseTrace, BrowseTraceFrame, BrowseTraceLogEntry, BrowseTraceStep } from "@sideform/browser-agent/agent/session";
+import type { BrowseTrace, BrowseTraceFrame, BrowseTraceLogEntry, BrowseTraceRequest, BrowseTraceStep } from "@sideform/browser-agent/agent/session";
+
+export { batchProgress, droppedRequests, requestFailed, stepActions, traceRequests, type BatchProgress } from "@/lib/trace/traceData";
 
 // Pure helpers of the trace viewer: no React, no DOM. Everything the UI
 // shows that needs a decision (a summary text, a position on the time axis,
@@ -360,4 +362,113 @@ export function filmstripLayout(visible: number, frameCount: number, thumbW: num
   const fit = Math.max(1, Math.floor((visible + gap) / (thumbW + gap)));
   if (frameCount > fit) return { n: frameCount, tileW: thumbW, stripW: frameCount * (thumbW + gap) - gap };
   return { n: fit, tileW: (visible - (fit - 1) * gap) / fit, stripW: visible };
+}
+
+// ---- before / after --------------------------------------------------------
+
+export interface StepFrames {
+  /** The last frame taken at or before the step began. */
+  before?: BrowseTraceFrame;
+  /** The step's own last frame. */
+  after?: BrowseTraceFrame;
+  /** What stands in for `after` when the step took no screenshot. */
+  fallback?: BrowseTraceFrame;
+}
+
+export function framesOfStep(trace: BrowseTrace, stepIndex: number): StepFrames {
+  const step = trace.steps.find((s) => s.index === stepIndex);
+  if (!step) return {};
+  const frames = sortedFrames(trace);
+  const own = frames.filter((f) => f.stepIndex === stepIndex);
+  const after = own[own.length - 1];
+  const earlier = frames.filter((f) => f.at <= step.startedAt && f.id !== after?.id);
+  return { before: earlier[earlier.length - 1], after, fallback: after ? undefined : lastFrameOfStep(trace, stepIndex) };
+}
+
+export type FrameSide = "before" | "after";
+/** `own`: the step's own screenshot. `earlier`: a frame from before the step stands in for it. `before`: the page as the step began. */
+export type FrameKind = "own" | "earlier" | "before";
+
+export interface ShownStepFrame {
+  frame: BrowseTraceFrame | undefined;
+  kind: FrameKind;
+  /** True when a Before / After switch has two different frames to show. */
+  canCompare: boolean;
+}
+
+export function pickStepFrame(frames: StepFrames, view: FrameSide): ShownStepFrame {
+  const after = frames.after ?? frames.fallback;
+  const canCompare = !!frames.before && !!after && frames.before.id !== after.id;
+  if (view === "before" && canCompare) return { frame: frames.before, kind: "before", canCompare };
+  return { frame: after, kind: frames.after ? "own" : "earlier", canCompare };
+}
+
+// ---- log filters -----------------------------------------------------------
+
+export interface LogFilter {
+  scope: "all" | "step";
+  query: string;
+}
+
+export const NO_LOG_FILTER: LogFilter = { scope: "all", query: "" };
+
+/** Entries of the selected step (its index, or a time inside it) that contain the query (any case). */
+export function filterLogEntries<T extends { at: number; stepIndex?: number }>(
+  entries: readonly T[],
+  filter: LogFilter,
+  step: BrowseTraceStep | undefined,
+  textOf: (entry: T) => string,
+): T[] {
+  const query = filter.query.trim().toLowerCase();
+  return entries.filter((entry) => {
+    if (filter.scope === "step" && step) {
+      const inside = entry.stepIndex === undefined ? entry.at >= step.startedAt && entry.at <= step.endedAt : entry.stepIndex === step.index;
+      if (!inside) return false;
+    }
+    return query === "" || textOf(entry).toLowerCase().includes(query);
+  });
+}
+
+/** "3 of 12" when a filter narrows the list, else "12". */
+export function filteredCount(shown: number, total: number): string {
+  return shown === total ? String(total) : `${shown} of ${total}`;
+}
+
+// ---- requests --------------------------------------------------------------
+
+/** The searchable line of a request: "GET 404 https://…". */
+export function requestText(request: BrowseTraceRequest): string {
+  return `${request.method} ${request.error ? "error" : (request.status ?? "")} ${request.url} ${request.type ?? ""}`.trim();
+}
+
+/** "512 B", "3.4 kB", "1.2 MB". */
+export function formatBytes(bytes: number): string {
+  const value = Math.max(0, bytes);
+  if (value < 1000) return `${Math.round(value)} B`;
+  if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)} kB`;
+  return `${(value / 1_000_000).toFixed(1)} MB`;
+}
+
+/** Where a request's bar sits on the run's time axis, in percent of the run. */
+export function requestWaterfall(trace: BrowseTrace, request: BrowseTraceRequest): { startPct: number; widthPct: number } {
+  const span = Math.max(1, traceEnd(trace) - trace.startedAt);
+  const startPct = clampPct(((request.at - trace.startedAt) / span) * 100);
+  const widthPct = Math.min(100 - startPct, Math.max(0.5, ((request.durationMs ?? 0) / span) * 100));
+  return { startPct, widthPct };
+}
+
+// ---- deep link -------------------------------------------------------------
+
+/** `?step=N` (1-based) -> the step index it names, when the trace has that step. */
+export function stepFromParam(value: string | null, trace: BrowseTrace): number | undefined {
+  if (!value || !/^\d+$/.test(value)) return undefined;
+  const index = Number(value) - 1;
+  return trace.steps.some((s) => s.index === index) ? index : undefined;
+}
+
+/** The current address with `step` set to the 1-based number; other parameters stay. */
+export function stepLinkUrl(location: { href: string }, stepIndex: number): string {
+  const url = new URL(location.href);
+  url.searchParams.set("step", String(stepIndex + 1));
+  return url.toString();
 }

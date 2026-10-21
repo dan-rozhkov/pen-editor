@@ -52,14 +52,13 @@ describe("TracePage", () => {
     expect(within(popup).getByText(/Error:/).closest("p")?.textContent).toContain("launch timed out");
   });
 
-  it("selects a step's last frame, without before/after buttons", async () => {
+  it("selects a step's last frame, with a Before / After switch", async () => {
     renderTrace();
     await screen.findByTestId("trace-frame");
     expect(frameId()).toBe("0");
     fireEvent.click(stepButton(4)); // step index 3
     expect(frameId()).toBe("2");
-    expect(screen.queryByRole("button", { name: /^(before|after)$/i })).toBeNull();
-    expect(screen.queryByRole("group", { name: "Compare" })).toBeNull();
+    expect(screen.getByRole("group", { name: "Frame view" })).toBeTruthy(); // step 4 has a frame of its own and one before it
   });
 
   it("steps with the arrow keys; B does nothing", async () => {
@@ -190,7 +189,7 @@ describe("TracePage", () => {
   it("shows log counts and links entries to steps", async () => {
     renderTrace();
     await screen.findByTestId("trace-frame");
-    expect(screen.queryByRole("tab", { name: /^Step$/ })).toBeNull();
+    expect(screen.getByRole("tab", { name: /^Step$/ }).getAttribute("aria-selected")).toBe("true");
     const consoleTab = screen.getByRole("tab", { name: /Console/ });
     expect(consoleTab.textContent).toContain("2");
     expect(screen.getByRole("tab", { name: /Network/ }).textContent).toContain("2");

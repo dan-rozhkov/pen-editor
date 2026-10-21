@@ -73,6 +73,7 @@ describe("trace playback", () => {
 
   it("highlights the entries of the running step in the console and follows it", async () => {
     await openTrace();
+    fireEvent.click(screen.getByRole("tab", { name: /Console/ }));
     const entry = () => screen.getByRole("button", { name: /favicon/ });
     expect(entry().getAttribute("aria-current")).toBe("step");
     fireEvent.click(playButton());
@@ -158,6 +159,7 @@ describe("trace playback", () => {
     expect(isPlaying()).toBe(false);
     expect(slider().getAttribute("aria-valuenow")).toBe("3950");
 
+    fireEvent.click(screen.getByRole("tab", { name: /Console/ }));
     fireEvent.click(playButton());
     fireEvent.click(screen.getByRole("button", { name: /favicon/ }));
     expect(isPlaying()).toBe(false);

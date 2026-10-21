@@ -42,6 +42,9 @@ const COMMAND_TIMEOUT_MS: Record<string, number> = {
   // Run-end viewport reset (browser-agent v0.2.23): no navigation, quick; the host bounds it at 5 s anyway.
   clearActEmulation: 10_000,
 };
+// Network log drain (browser-agent v0.3.4): reads a buffer, no navigation. Outside the per-chat FIFO; the fetch ends
+// below the recorder's own 5 s limit per drain, so the recorder never gives up on a call that is still running.
+const REQUESTS_TIMEOUT_MS = 4_500;
 const DEFAULT_COMMAND_TIMEOUT_MS = 85_000;
 const TIMEOUT_ERROR = "Cloud browser timed out — try again.";
 
@@ -281,6 +284,13 @@ function makeBridge(resolveChat: () => string): CloudBrowserBridge {
     assert: (args) => call("assert", args),
     clearActEmulation: () => call("clearActEmulation"),
     captureCheckpoint: (token) => call("captureCheckpoint", token ? { token } : {}),
+    // Not queued behind the chat's other commands (a background drain must not delay the agent's next step), and
+    // never starts a session: with no handle there is nothing to read. The package contract is a JSON string.
+    requests: async () => {
+      const chatId = resolveChat();
+      if (!getHandle(chatId)) return "[]";
+      return JSON.stringify(await callCommand(chatId, "requests", {}, Date.now() + REQUESTS_TIMEOUT_MS));
+    },
   };
 }
 

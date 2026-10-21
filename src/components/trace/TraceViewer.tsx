@@ -1,5 +1,5 @@
 import type { BrowseTrace, BrowseTraceFrame } from "@sideform/browser-agent/agent/session";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Filmstrip } from "./Filmstrip";
 import { FrameView } from "./FrameView";
@@ -8,7 +8,17 @@ import { frameAtTraceTime, playheadOfStep, sortedSteps, stepAtPlayTime, stepAtTr
 import { usePlayback } from "./usePlayback";
 import { StepList } from "./StepList";
 import { TraceHeader } from "./TraceHeader";
-import { buildStepRows, lastFrameOfStep, sortedFrames, stepOfFrame, stepsWithProblems } from "./traceModel";
+import {
+  buildStepRows,
+  framesOfStep,
+  pickStepFrame,
+  sortedFrames,
+  stepFromParam,
+  stepLinkUrl,
+  stepOfFrame,
+  stepsWithProblems,
+  type FrameSide,
+} from "./traceModel";
 
 /** Keys the playhead slider handles itself; the rest (Space) go to the page. */
 const SLIDER_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
@@ -49,18 +59,39 @@ function useDetailsOpen(): [boolean, () => void] {
   return [open, toggle];
 }
 
-export function TraceViewer({ trace }: { trace: BrowseTrace }) {
+interface ViewerProps {
+  trace: BrowseTrace;
+  /** The raw `?step=` value (1-based): the step to open on. */
+  initialStep?: string | null;
+  /** Keep `?step=` in the address bar in step with the selection. Off for a file opened in memory. */
+  deepLink?: boolean;
+}
+
+/** Writes `?step=N` into the address without a navigation: the router and the trace loader never see it. */
+function writeStepToUrl(stepIndex: number): void {
+  window.history.replaceState(window.history.state, "", stepLinkUrl(window.location, stepIndex));
+}
+
+export function TraceViewer({ trace, initialStep, deepLink = true }: ViewerProps) {
   const rows = useMemo(() => buildStepRows(trace), [trace]);
   const flagged = useMemo(() => stepsWithProblems(trace), [trace]);
   const frames = useMemo(() => sortedFrames(trace), [trace]);
-  const [stepIndex, setStepIndex] = useState<number | null>(trace.steps[0]?.index ?? null);
+  const linked = useMemo(() => (deepLink ? stepFromParam(initialStep ?? null, trace) : undefined), [deepLink, initialStep, trace]);
+  const [stepIndex, setStepIndex] = useState<number | null>(linked ?? trace.steps[0]?.index ?? null);
   const [frameId, setFrameId] = useState<number | null>(null);
+  // Before / After is per step: another step starts on After again.
+  const [side, setSide] = useState<{ step: number | null; view: FrameSide }>({ step: null, view: "after" });
   const [detailsOpen, toggleDetails] = useDetailsOpen();
 
+  // A frame picked on the filmstrip or by playback shows as it is; a step's own frames get the Before / After switch.
+  const stepPick = useMemo(() => {
+    if (frameId !== null || stepIndex === null) return null;
+    return pickStepFrame(framesOfStep(trace, stepIndex), side.step === stepIndex ? side.view : "after");
+  }, [trace, frameId, stepIndex, side]);
   const shown = useMemo(() => {
     if (frameId !== null) return frames.find((f) => f.id === frameId);
-    return stepIndex === null ? frames[0] : lastFrameOfStep(trace, stepIndex);
-  }, [frames, frameId, stepIndex, trace]);
+    return stepPick ? stepPick.frame : frames[0];
+  }, [frames, frameId, stepPick]);
 
   const position = useMemo(() => {
     const at = shown ? frames.findIndex((f) => f.id === shown.id) : -1;
@@ -122,6 +153,23 @@ export function TraceViewer({ trace }: { trace: BrowseTrace }) {
     },
     [pause, seek, followTime, perStep, schedule],
   );
+
+  // Open on the linked step with the playhead there too.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (opened.current || linked === undefined) return;
+    opened.current = true;
+    const at = playheadOfStep(trace, ordered, linked);
+    if (at !== undefined) seek(at);
+  }, [linked, trace, ordered, seek]);
+
+  const firstStep = useRef(trace.steps[0]?.index ?? null);
+  useEffect(() => {
+    if (!deepLink || stepIndex === null) return;
+    // Leave a plain address alone until the viewer moves off the first step.
+    if (stepIndex === firstStep.current && !new URL(window.location.href).searchParams.has("step")) return;
+    writeStepToUrl(stepIndex);
+  }, [deepLink, stepIndex]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -191,12 +239,18 @@ export function TraceViewer({ trace }: { trace: BrowseTrace }) {
             frame={shown}
             startedAt={trace.startedAt}
             position={position}
+            kind={stepPick?.kind}
+            compare={
+              stepPick?.canCompare && stepIndex !== null
+                ? { view: stepPick.kind === "before" ? "before" : "after", onChange: (view) => setSide({ step: stepIndex, view }) }
+                : undefined
+            }
           />
         </div>
       </main>
       {/* Hidden, not unmounted: the selected tab and the scroll position survive. */}
       <div hidden={!detailsOpen} className={cn("h-72 min-h-0 min-w-0 shrink-0 flex-col border-t border-border-default", detailsOpen && "flex")}>
-        <Inspector trace={trace} selectedStep={stepIndex} onSelectStep={selectStep} />
+        <Inspector trace={trace} selectedStep={stepIndex} onSelectStep={selectStep} canLink={deepLink} />
       </div>
     </div>
   );

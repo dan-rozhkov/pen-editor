@@ -1,6 +1,7 @@
 import { FileXIcon, MagnifyingGlassIcon, PlugsIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
+import { Link } from "react-router";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { TraceLoadResult } from "@/lib/browseTraceLoad";
 
@@ -49,11 +50,18 @@ function Message({ icon, title, children, action }: { icon: ReactNode; title: st
 
 type Failure = Extract<TraceLoadResult, { ok: false }>;
 
+/** Secondary way out of a dead end: pick a trace file instead. */
+const openFile = (
+  <Link to="/trace" className={buttonVariants({ variant: "outline" })}>
+    Open a trace file
+  </Link>
+);
+
 export function TraceFailure({ failure, onRetry }: { failure: Failure; onRetry(): void }) {
   switch (failure.reason) {
     case "not-found":
       return (
-        <Message icon={<MagnifyingGlassIcon weight="light" />} title="Trace not found">
+        <Message icon={<MagnifyingGlassIcon weight="light" />} title="Trace not found" action={openFile}>
           It may have been deleted, or the link is wrong.
         </Message>
       );
@@ -65,7 +73,7 @@ export function TraceFailure({ failure, onRetry }: { failure: Failure; onRetry()
       );
     case "invalid":
       return (
-        <Message icon={<FileXIcon weight="light" />} title="This is not a Sideform trace">
+        <Message icon={<FileXIcon weight="light" />} title="This is not a Sideform trace" action={openFile}>
           The file is not in a format this viewer knows.
           <code className="mt-2 block break-words rounded-md bg-surface-elevated px-2 py-1 font-mono text-[11px] text-text-secondary">{failure.message}</code>
         </Message>

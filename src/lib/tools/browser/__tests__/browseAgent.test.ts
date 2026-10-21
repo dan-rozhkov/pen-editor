@@ -742,6 +742,37 @@ describe("browse_agent run trace", () => {
     }
   });
 
+  /** One desktop QA run over a stub bridge; resolves to the manifest the shell was asked to save. */
+  const desktopQaManifest = async (bridge: Partial<PenDesktopBrowser>, id: string) => {
+    const save = vi.fn(async () => ({ id }));
+    setPenDesktop(stubBrowser(bridge));
+    window.penDesktop!.traces = { save, read: async () => ({ error: "n/a" }) };
+    openThenDone();
+    try {
+      await browseAgent({ goal: "x", url: "https://shop.test", qa: true }, ctx);
+      return (save.mock.calls[0] as unknown as [{ manifest: Record<string, unknown> }])[0].manifest;
+    } finally {
+      delete window.penDesktop;
+    }
+  };
+
+  it("desktop run with a bridge that has requests: the log is drained before the trace is saved", async () => {
+    // The bridge drains its buffer: the entry comes back once, later reads are empty.
+    let drained = false;
+    const requests = vi.fn(async () => {
+      const entries = drained ? [] : [{ at: Date.now(), method: "GET", url: "https://shop.test/api/cart", status: 500 }];
+      drained = true;
+      return JSON.stringify(entries);
+    });
+    const manifest = await desktopQaManifest({ requests }, "local-req");
+    expect(requests).toHaveBeenCalled();
+    expect(manifest.requests).toEqual([expect.objectContaining({ url: "https://shop.test/api/cart", status: 500 })]);
+  });
+
+  it("a bridge without requests records no request log", async () => {
+    expect(await desktopQaManifest({}, "local-noreq")).not.toHaveProperty("requests");
+  });
+
   it("an alert drained by the trace screenshot still reaches the tool result", async () => {
     const dialogs = [{ type: "alert", message: "Saved!" }];
     setPenDesktop(stubBrowser({ screenshot: async () => ({ imageData: JPEG, width: 10, height: 20, dialogs }) }));

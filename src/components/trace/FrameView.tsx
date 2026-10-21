@@ -2,24 +2,32 @@ import type { BrowseTraceFrame } from "@sideform/browser-agent/agent/session";
 import { memo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
-import { BAR_ROW, FRAME_SURFACE } from "./parts";
-import { formatOffset } from "./traceModel";
+import { BAR_ROW, FRAME_SURFACE, Segmented } from "./parts";
+import { formatOffset, type FrameKind, type FrameSide } from "./traceModel";
 
 interface Props {
   frame: BrowseTraceFrame | undefined;
   startedAt: number;
   /** "Frame 3 of 6" counter source. */
   position: { index: number; total: number } | null;
+  /** What `frame` is for the selected step; a filmstrip pick is its own. */
+  kind?: FrameKind;
+  /** Before / After switch, when the selected step has two frames to compare. */
+  compare?: { view: FrameSide; onChange(view: FrameSide): void };
 }
 
 const KIND_LABEL: Record<BrowseTraceFrame["kind"], string> = { step: "After step", screenshot: "Screenshot", final: "Final state" };
 
-/** Centered, narrow layout for the frame area's notes. */
+function altLabel(frame: BrowseTraceFrame, kind: FrameKind): string {
+  if (kind === "before") return "Before step";
+  if (kind === "earlier") return "Earlier frame";
+  return KIND_LABEL[frame.kind];
+}
 
 /** Natural sizes of loaded frames, cached per src so revisiting a frame does not jump. */
 const measuredSizes = new Map<string, { width: number; height: number }>();
 
-export const FrameView = memo(function FrameView({ frame, startedAt, position }: Props) {
+export const FrameView = memo(function FrameView({ frame, startedAt, position, kind = "own", compare }: Props) {
   // Remember which source failed, so a new frame gets a fresh attempt.
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const broken = frame !== undefined && failedSrc === frame.src;
@@ -32,7 +40,24 @@ export const FrameView = memo(function FrameView({ frame, startedAt, position }:
 
   return (
     <section aria-label="Frame" className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-panel">
-      <div className={cn(BAR_ROW, "shrink-0 justify-end")}>
+      <div className={cn(BAR_ROW, "shrink-0")}>
+        {compare && (
+          <Segmented
+            label="Frame view"
+            value={compare.view}
+            options={[
+              { value: "before", label: "Before" },
+              { value: "after", label: "After" },
+            ]}
+            onChange={compare.onChange}
+          />
+        )}
+        {kind === "earlier" && (
+          <p data-testid="frame-note" className="min-w-0 truncate ps-1 text-xs text-amber-600 dark:text-amber-400">
+            Earlier frame — this step took no screenshot
+          </p>
+        )}
+        <span className="flex-1" />
         {frame && (
           <p className="flex items-center gap-2 text-xs tabular-nums text-text-muted">
             <span data-testid="frame-offset">{formatOffset(frame.at - startedAt)}</span>
@@ -55,7 +80,7 @@ export const FrameView = memo(function FrameView({ frame, startedAt, position }:
             <img
               key={frame.id}
               src={frame.src}
-              alt={`${KIND_LABEL[frame.kind]} at ${formatOffset(frame.at - startedAt)}`}
+              alt={`${altLabel(frame, kind)} at ${formatOffset(frame.at - startedAt)}`}
               onError={() => setFailedSrc(frame.src)}
               onLoad={(e) => {
                 const { naturalWidth: w, naturalHeight: h } = e.currentTarget;

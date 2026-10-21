@@ -43,10 +43,12 @@ describe("isDocRoutePath", () => {
 });
 
 describe("isTraceRoutePath", () => {
-  it("matches /trace/<id> only, basename-aware", () => {
+  it("matches /trace and /trace/<id>, basename-aware", () => {
     expect(isTraceRoutePath("/trace/abc", "/")).toBe(true);
-    expect(isTraceRoutePath("/trace/", "/")).toBe(false);
-    expect(isTraceRoutePath("/trace", "/")).toBe(false);
+    expect(isTraceRoutePath("/trace/", "/")).toBe(true);
+    expect(isTraceRoutePath("/trace", "/")).toBe(true);
+    expect(isTraceRoutePath("/x/trace", "/x/")).toBe(true);
+    expect(isTraceRoutePath("/tracer", "/")).toBe(false);
     expect(isTraceRoutePath("/x/trace/abc", "/x/")).toBe(true);
     expect(isTraceRoutePath("/trace/abc", "/x/")).toBe(false);
   });

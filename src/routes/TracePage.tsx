@@ -1,21 +1,32 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { EditorProviders } from "@/components/EditorProviders";
+import { TraceFilePicker } from "@/components/trace/TraceFilePicker";
 import { TraceFailure, TraceSkeleton } from "@/components/trace/TraceStates";
 import { TraceViewer } from "@/components/trace/TraceViewer";
 import { traceTitle } from "@/components/trace/traceModel";
 import { useHtmlRouteClass } from "@/hooks/useHtmlRouteClass";
+import type { TraceSource } from "@/lib/browseTraces";
 import { loadBrowseTrace, traceSourceFromParam, type TraceLoadResult } from "@/lib/browseTraceLoad";
 
 /**
  * "/trace/:id": the viewer of a recorded browse run (`?src=local|cloud`,
- * default cloud). Must not import App, Pixi or the chat.
+ * default cloud; `?step=N` opens on that step). "/trace": open a trace file.
+ * Must not import App, Pixi or the chat.
  */
 export default function TracePage() {
   useHtmlRouteClass("route-trace");
   const { id = "" } = useParams();
   const [params] = useSearchParams();
   const source = traceSourceFromParam(params.get("src"));
+  // Keyed: another trace starts from its own ?step=, not the previous one's.
+  return <EditorProviders>{id ? <RemoteTrace key={`${source}:${id}`} id={id} source={source} /> : <TraceFilePicker />}</EditorProviders>;
+}
+
+function RemoteTrace({ id, source }: { id: string; source: TraceSource }) {
+  const [params] = useSearchParams();
+  // Read once: the viewer then keeps the address in step with its selection itself.
+  const [stepParam] = useState(() => params.get("step"));
   const [attempt, setAttempt] = useState(0);
   const [loaded, setLoaded] = useState<{ key: string; result: TraceLoadResult } | null>(null);
   const key = `${source}:${id}:${attempt}`;
@@ -43,9 +54,11 @@ export default function TracePage() {
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
-  return (
-    <EditorProviders>
-      {result === null ? <TraceSkeleton /> : result.ok ? <TraceViewer key={result.trace.id} trace={result.trace} /> : <TraceFailure failure={result} onRetry={retry} />}
-    </EditorProviders>
+  return result === null ? (
+    <TraceSkeleton />
+  ) : result.ok ? (
+    <TraceViewer key={result.trace.id} trace={result.trace} initialStep={stepParam} />
+  ) : (
+    <TraceFailure failure={result} onRetry={retry} />
   );
 }

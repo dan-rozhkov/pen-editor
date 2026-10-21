@@ -105,6 +105,23 @@ describe("browse_agent isolated QA run", () => {
     expect(iso.clearActEmulation.mock.invocationCallOrder[0]).toBeLessThan(closeSession.mock.invocationCallOrder[0]);
   });
 
+  it("drains the request log of the isolated session before the close and keeps the entries in the saved trace", async () => {
+    const save = vi.fn(async () => ({ id: "t-1" }));
+    let drained = false;
+    const requests = vi.fn(async () => {
+      const entries = drained ? [] : [{ at: Date.now(), method: "POST", url: "https://a.test/api/save", status: 500 }];
+      drained = true;
+      return JSON.stringify(entries);
+    });
+    Object.assign(iso, { requests });
+    window.penDesktop = { ...window.penDesktop, traces: { save, read: async () => ({ error: "n/a" }) } } as never;
+    await browseAgent({ goal: "g", url: "https://a.test", qa: true }, ctx);
+    expect(requests).toHaveBeenCalled();
+    expect(requests.mock.invocationCallOrder.at(-1)!).toBeLessThan(closeSession.mock.invocationCallOrder[0]);
+    const manifest = (save.mock.calls[0] as unknown as [{ manifest: { requests?: unknown[] } }])[0].manifest;
+    expect(manifest.requests).toEqual([expect.objectContaining({ url: "https://a.test/api/save", status: 500 })]);
+  });
+
   it("closes the session when the run fails", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("boom", { status: 500 })));
     await browseAgent({ goal: "g", url: "https://a.test", qa: true }, ctx);

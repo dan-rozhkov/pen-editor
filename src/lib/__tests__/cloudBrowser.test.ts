@@ -253,6 +253,31 @@ describe("per-chat serialization", () => {
     ]);
     expect(maxInFlight).toBe(2);
   });
+
+  it("a pending requests drain does not hold back the next queued command", async () => {
+    const order: string[] = [];
+    let releaseRequests: () => void = () => {};
+    const fetchMock = vi.fn(async (url: string) => {
+      const name = String(url).split("/").pop()!;
+      order.push(name);
+      if (name === "requests") await new Promise<void>((r) => (releaseRequests = r));
+      return jsonResponse(name === "open" ? OK : { result: name === "requests" ? [] : {} });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const bridge = getCloudBrowserBridge("chat-requests");
+    await bridge.open({ url: "https://a.io" });
+    const drain = bridge.requests!();
+    await bridge.act({ action: "click" } as never);
+    expect(order).toEqual(["open", "requests", "act"]);
+    releaseRequests();
+    expect(await drain).toBe("[]");
+  });
+
+  it("requests without a session answers an empty log and sends nothing", async () => {
+    const fetchMock = stubFetch(jsonResponse({ result: {} }));
+    expect(await getCloudBrowserBridge("chat-no-session").requests!()).toBe("[]");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("fetch timeout", () => {

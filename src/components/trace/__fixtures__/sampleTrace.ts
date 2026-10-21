@@ -71,3 +71,22 @@ export const sampleTrace: BrowseTrace = {
 };
 
 export const sampleTraceJson = (): unknown => JSON.parse(JSON.stringify(sampleTrace));
+
+/** The sample as a newer recorder writes it: a batched act with a failing action, and every request of the run. */
+export function sampleTraceWithExtrasJson(): unknown {
+  const trace = sampleTraceJson() as Record<string, unknown> & { steps: Record<string, unknown>[] };
+  trace.steps[2] = {
+    ...trace.steps[2],
+    args: { actions: [{ action: "click", target: "Pricing" }, { action: "type", target: "Email", text: "a" }, { action: "press", key: "Enter" }] },
+    actions: [
+      { action: "click Pricing", ok: true },
+      { action: "type Email", ok: false, error: "Element “Email” is disabled" },
+    ],
+  };
+  trace.requests = [
+    { at: T0 + 3000, stepIndex: 2, method: "POST", url: "https://acme.test/api/pricing/track", type: "xhr", status: 500, durationMs: 120, size: 2048, responseBody: '{"error":"boom"}', bodyTruncated: true, requestHeaders: { accept: "*/*" }, responseHeaders: { "content-type": "application/json" } },
+    { at: T0 + 300, stepIndex: 0, method: "GET", url: "https://acme.test/", type: "document", status: 200, durationMs: 400, size: 5120 },
+    { at: T0 + 1800, stepIndex: 0, method: "GET", url: "https://acme.test/favicon.ico", type: "image", status: 404, durationMs: 50 },
+  ];
+  return trace;
+}

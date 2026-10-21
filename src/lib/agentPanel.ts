@@ -92,10 +92,10 @@ export function isDocRoutePath(pathname: string, base: string = import.meta.env.
   return isRoutePath(pathname, "doc", base);
 }
 
-/** True when `pathname` is the canvas-less /trace/<id> route (basename-aware). */
+/** True when `pathname` is the canvas-less /trace/<id> or /trace (open a file) route (basename-aware). */
 export function isTraceRoutePath(pathname: string, base: string = import.meta.env.BASE_URL || "/"): boolean {
   const prefix = base.endsWith("/") ? base.slice(0, -1) : base;
-  return pathname.startsWith(`${prefix}/trace/`) && pathname.length > prefix.length + "/trace/".length;
+  return pathname === `${prefix}/trace` || pathname.startsWith(`${prefix}/trace/`);
 }
 
 /** True when `pathname` is the canvas-less /auth/desktop hand-off page (basename-aware). */

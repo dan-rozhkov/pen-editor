@@ -23,7 +23,7 @@ test("renders the steps and switches frames", async ({ page }) => {
 
   await steps.nth(3).click();
   await expect(frame(page)).toHaveAttribute("data-frame-id", "2");
-  await expect(page.getByRole("button", { name: /^(before|after)$/i })).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Frame view" })).toBeVisible();
 
   await page.keyboard.press("ArrowRight");
   await expect(steps.nth(4)).toHaveAttribute("aria-current", "step");

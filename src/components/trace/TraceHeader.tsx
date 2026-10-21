@@ -2,6 +2,7 @@ import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
 import { SquareHalfBottomIcon } from "@phosphor-icons/react";
 import { memo } from "react";
 import { IconButton } from "@/components/ui/IconButton";
+import { DownloadButton } from "./DownloadButton";
 import { ResultButton } from "./ResultButton";
 import { RunDetails } from "./RunDetails";
 import { BAR_ROW, OutcomeBadge } from "./parts";
@@ -26,6 +27,7 @@ export const TraceHeader = memo(function TraceHeader({ trace, detailsOpen, onTog
         <OutcomeBadge tone={outcome.tone} label={outcome.label} data-testid="trace-outcome" />
         <RunDetails trace={trace} />
         <ResultButton trace={trace} />
+        <DownloadButton trace={trace} />
         <IconButton
           tooltip={detailsOpen ? "Hide details" : "Show details"}
           aria-label="Details panel"

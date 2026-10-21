@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { sampleTrace } from "../__fixtures__/sampleTrace";
 import {
+  NO_LOG_FILTER,
+  batchProgress,
+  droppedRequests,
+  filterLogEntries,
+  filteredCount,
+  formatBytes,
+  framesOfStep,
+  pickStepFrame,
+  requestFailed,
+  requestText,
+  requestWaterfall,
+  stepActions,
+  stepFromParam,
+  stepLinkUrl,
+  traceRequests,
   browserLabel,
   buildStepRows,
   buildTimeline,
@@ -208,5 +223,117 @@ describe("log and QA text", () => {
     expect(prettyText('{"a":1}')).toBe('{\n  "a": 1\n}');
     expect(prettyText("plain")).toBe("plain");
     expect(prettyText(undefined)).toBe("");
+  });
+});
+
+describe("fields of newer recorders", () => {
+  const T = sampleTrace.startedAt;
+  const step = sampleTrace.steps[2]!;
+  const withActions = (actions: unknown[] | undefined, asked: number) => ({ ...step, args: { actions: Array.from({ length: asked }, () => ({ action: "click" })) }, actions }) as typeof step;
+
+  it("reads actions and requests when present and tolerates their absence", () => {
+    expect(stepActions(step)).toBeUndefined();
+    expect(traceRequests(sampleTrace)).toEqual([]);
+    expect(droppedRequests(sampleTrace)).toBeUndefined();
+    const trace = { ...sampleTrace, dropped: { requests: 4 }, requests: [{ at: 5, method: "GET", url: "b" }, { at: 1, method: "GET", url: "a" }] } as typeof sampleTrace;
+    expect(traceRequests(trace).map((r) => r.url)).toEqual(["a", "b"]);
+    expect(droppedRequests(trace)).toBe(4);
+  });
+
+  it("drops malformed requests and actions instead of failing", () => {
+    const junk = {
+      ...sampleTrace,
+      dropped: { requests: "many" },
+      requests: [
+        { at: 2, method: "GET", url: "ok", requestHeaders: { a: "1", b: {} }, responseHeaders: [], responseBody: {}, status: "200" },
+        { at: 1, method: "GET", url: 5 },
+        { at: "x", method: "GET", url: "u" },
+        null,
+        "str",
+      ],
+    } as unknown as typeof sampleTrace;
+    const [only, ...rest] = traceRequests(junk);
+    expect(rest).toEqual([]);
+    expect(only).toMatchObject({ url: "ok", requestHeaders: { a: "1" }, responseHeaders: undefined, responseBody: undefined, status: undefined });
+    expect(droppedRequests(junk)).toBeUndefined();
+    for (const bad of [{}, "x", 5, null]) expect(traceRequests({ ...sampleTrace, requests: bad } as unknown as typeof sampleTrace)).toEqual([]);
+    expect(stepActions({ ...step, actions: "x" } as unknown as typeof step)).toBeUndefined();
+    expect(stepActions({ ...step, actions: [{ action: "a", ok: true }, { action: 1, ok: true }, { action: "b" }, null] } as unknown as typeof step)).toEqual([{ action: "a", ok: true }]);
+  });
+
+  it("counts the actions a stopped batch did not run", () => {
+    expect(batchProgress(step)).toBeNull();
+    expect(batchProgress(withActions([{ action: "a", ok: true }, { action: "b", ok: false }], 5))).toEqual({ total: 5, ran: 2, notRun: 3 });
+    expect(batchProgress(withActions([{ action: "a", ok: true }], 1))?.notRun).toBe(0);
+  });
+
+  it("finds the frames before and after a step", () => {
+    const two = framesOfStep(sampleTrace, 2);
+    expect([two.before?.id, two.after?.id, two.fallback]).toEqual([0, 1, undefined]);
+    const snapshot = framesOfStep(sampleTrace, 1); // no screenshot of its own
+    expect([snapshot.before?.id, snapshot.after, snapshot.fallback?.id]).toEqual([0, undefined, 0]);
+    expect(framesOfStep(sampleTrace, 99)).toEqual({});
+    expect(framesOfStep(sampleTrace, 0).before).toBeUndefined();
+  });
+
+  it("picks the frame to show and whether Before / After can differ", () => {
+    const own = framesOfStep(sampleTrace, 2);
+    expect(pickStepFrame(own, "after")).toMatchObject({ kind: "own", canCompare: true, frame: { id: 1 } });
+    expect(pickStepFrame(own, "before")).toMatchObject({ kind: "before", frame: { id: 0 } });
+    const same = framesOfStep(sampleTrace, 1); // the earlier frame is both
+    expect(pickStepFrame(same, "before")).toMatchObject({ kind: "earlier", canCompare: false, frame: { id: 0 } });
+    const mid = { before: sampleTrace.frames[0], fallback: sampleTrace.frames[1] };
+    expect(pickStepFrame(mid, "after")).toMatchObject({ kind: "earlier", canCompare: true, frame: { id: 1 } });
+    expect(pickStepFrame(mid, "before").frame?.id).toBe(0);
+    expect(pickStepFrame({}, "after")).toMatchObject({ frame: undefined, canCompare: false });
+  });
+
+  it("filters log entries by step, time and text", () => {
+    const entries = [
+      { at: T + 100, stepIndex: 0, text: "Favicon missing" },
+      { at: T + 2500, text: "late error" },
+      { at: T + 9000, stepIndex: 5, text: "other" },
+    ];
+    const textOf = (e: { text: string }) => e.text;
+    const two = sampleTrace.steps[2]!; // 2300..3100
+    expect(filterLogEntries(entries, NO_LOG_FILTER, two, textOf)).toHaveLength(3);
+    expect(filterLogEntries(entries, { scope: "step", query: "" }, two, textOf).map(textOf)).toEqual(["late error"]);
+    expect(filterLogEntries(entries, { scope: "step", query: "" }, sampleTrace.steps[0], textOf).map(textOf)).toEqual(["Favicon missing"]);
+    expect(filterLogEntries(entries, { scope: "all", query: " FAVICON " }, undefined, textOf).map(textOf)).toEqual(["Favicon missing"]);
+    expect(filterLogEntries(entries, { scope: "step", query: "" }, undefined, textOf)).toHaveLength(3);
+    // An entry tagged with another step stays out even when its time falls inside this one.
+    const tagged = [{ at: T + 2500, stepIndex: 5, text: "other step" }];
+    expect(filterLogEntries(tagged, { scope: "step", query: "" }, two, textOf)).toEqual([]);
+    expect(filteredCount(3, 12)).toBe("3 of 12");
+    expect(filteredCount(12, 12)).toBe("12");
+  });
+
+  it("judges, describes and places requests", () => {
+    const ok = { at: T + 900, method: "GET", url: "https://a.test/x", status: 200, durationMs: 1800 };
+    expect(requestFailed(ok)).toBe(false);
+    expect(requestFailed({ ...ok, status: 404 })).toBe(true);
+    expect(requestFailed({ ...ok, status: undefined, error: "net::ERR_FAILED" })).toBe(true);
+    expect(requestText({ ...ok, status: undefined, error: "x" })).toBe("GET error https://a.test/x");
+    expect(requestWaterfall(sampleTrace, ok)).toEqual({ startPct: 10, widthPct: 20 });
+    const late = requestWaterfall(sampleTrace, { ...ok, at: T + 8990, durationMs: 5000 });
+    expect(late.startPct + late.widthPct).toBeLessThanOrEqual(100);
+    expect(requestWaterfall(sampleTrace, { ...ok, durationMs: undefined }).widthPct).toBe(0.5);
+  });
+
+  it.each([
+    [0, "0 B"],
+    [999, "999 B"],
+    [3400, "3.4 kB"],
+    [25_000, "25 kB"],
+    [1_250_000, "1.3 MB"],
+  ])("formats %d bytes as %s", (bytes, text) => expect(formatBytes(bytes)).toBe(text));
+
+  it("reads and writes the deep link, one-based", () => {
+    expect(stepFromParam("3", sampleTrace)).toBe(2);
+    expect(stepFromParam("0", sampleTrace)).toBeUndefined();
+    expect(stepFromParam("99", sampleTrace)).toBeUndefined();
+    expect(stepFromParam("x", sampleTrace)).toBeUndefined();
+    expect(stepFromParam(null, sampleTrace)).toBeUndefined();
+    expect(stepLinkUrl({ href: "https://app.test/trace/abc?src=local&step=1#x" }, 4)).toBe("https://app.test/trace/abc?src=local&step=5#x");
   });
 });

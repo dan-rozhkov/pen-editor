@@ -11,7 +11,8 @@ export function traceSourceFromParam(value: string | null): TraceSource {
   return value === "local" ? "local" : "cloud";
 }
 
-function validate(value: unknown): TraceLoadResult {
+/** Checks a parsed JSON value against the trace format. */
+export function validate(value: unknown): TraceLoadResult {
   const parsed = parseBrowseTrace(value);
   if ("error" in parsed) return { ok: false, reason: "invalid", message: parsed.error };
   return { ok: true, trace: parsed.trace };

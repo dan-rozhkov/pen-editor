@@ -1,6 +1,7 @@
-import { parseBrowseTrace, type BrowseTrace } from "@sideform/browser-agent/agent/session";
+import { parseBrowseTrace, type BrowseTrace, type BrowseTraceRequest, type BrowseTraceStep } from "@sideform/browser-agent/agent/session";
 import type { ToolHandler } from "../toolRegistry";
 import { getAgentPanelTraceTabsBridge } from "../agentPanel";
+import { batchProgress, droppedRequests, requestFailed, stepActions, traceRequests } from "@/lib/trace/traceData";
 
 // Panel-local (canvasLink/canvasTools.ts, prefix "trace_"): the agent reads the browse-run traces the
 // desktop shell has open in trace tabs. Advertised by the backend only when
@@ -102,7 +103,48 @@ interface PreparedSummary {
   steps: Prepared;
   console: Prepared;
   network: Prepared;
+  /** The recorder's request log, failed requests first. Absent when the trace has none. */
+  requests?: { failed: number; list: Prepared };
   qa?: { head: Record<string, unknown>; checks: Prepared };
+}
+
+/** "1/5 ok, 3 not run, failed: <action - error>" for a batched act; undefined when the step has no action list. */
+function actionsSummary(step: BrowseTraceStep): string | undefined {
+  const progress = batchProgress(step);
+  const actions = stepActions(step);
+  if (!progress || !actions?.length) return undefined;
+  const ok = actions.filter((a) => a.ok).length;
+  const failed = actions.find((a) => !a.ok);
+  return [
+    `${ok}/${progress.total} ok`,
+    ...(progress.notRun > 0 ? [`${progress.notRun} not run`] : []),
+    ...(failed ? [`failed: ${clip(`${failed.action}${failed.error ? ` - ${failed.error}` : ""}`, 160)}`] : []),
+  ].join(", ");
+}
+
+function prepareRequests(trace: BrowseTrace): PreparedSummary["requests"] {
+  if (!Array.isArray((trace as { requests?: unknown }).requests)) return undefined;
+  const failed: BrowseTraceRequest[] = [];
+  const rest: BrowseTraceRequest[] = [];
+  for (const r of traceRequests(trace)) (requestFailed(r) ? failed : rest).push(r);
+  const failedFirst = [...failed, ...rest];
+  const dropped = droppedRequests(trace);
+  return {
+    failed: failed.length,
+    list: prepare<BrowseTraceRequest>(
+      failedFirst,
+      FULL_CAPS.logEntries,
+      (r) =>
+        pick({
+          step: () => r.stepIndex,
+          method: () => clip(r.method, 16),
+          ...(r.error ? { error: () => clip(r.error, 120) } : { status: () => r.status }),
+          url: () => clip(r.url, 200),
+          ms: () => (r.durationMs === undefined ? undefined : Math.round(r.durationMs)),
+        }),
+      dropped,
+    ),
+  };
 }
 
 function prepareSummary(trace: BrowseTrace): PreparedSummary {
@@ -134,6 +176,7 @@ function prepareSummary(trace: BrowseTrace): PreparedSummary {
           args: () => argsSummary(s.args),
           output: () => (s.output ? clip(s.output, MAX_OUTPUT) : undefined),
           error: () => (s.error ? clip(s.error) : undefined),
+          actions: () => actionsSummary(s as unknown as BrowseTraceStep),
           url: () => url,
           ms: () => (finite(s.startedAt) && finite(s.endedAt) ? Math.max(0, s.endedAt - s.startedAt) : undefined),
         });
@@ -142,6 +185,7 @@ function prepareSummary(trace: BrowseTrace): PreparedSummary {
     ),
     console: prepare<Record<string, unknown>>(t.console, FULL_CAPS.logEntries, logEntry, dropped.console),
     network: prepare<Record<string, unknown>>(t.network, FULL_CAPS.logEntries, logEntry, dropped.network),
+    requests: safe(() => prepareRequests(trace)),
     ...(qa
       ? {
           qa: {
@@ -174,6 +218,10 @@ function prepareSummary(trace: BrowseTrace): PreparedSummary {
   };
 }
 
+function omitTotal({ total: _total, ...rest }: ReturnType<typeof render>) {
+  return rest;
+}
+
 function renderSummary(p: PreparedSummary, caps: Caps): Record<string, unknown> {
   const labels = p.labels.slice(0, caps.labels);
   const labelsOmitted = p.labels.length - labels.length;
@@ -183,7 +231,9 @@ function renderSummary(p: PreparedSummary, caps: Caps): Record<string, unknown> 
     ...(labelsOmitted > 0 ? { labelsOmitted } : {}),
     steps: render(p.steps, caps.steps),
     consoleErrors: render(p.console, caps.logEntries),
-    failedRequests: render(p.network, caps.logEntries),
+    // With a request log the failures are listed there; the console-derived list shrinks to its count.
+    failedRequests: p.requests ? { total: p.network.total } : render(p.network, caps.logEntries),
+    ...(p.requests ? { requests: { total: p.requests.list.total, failed: p.requests.failed, ...omitTotal(render(p.requests.list, caps.logEntries)) } } : {}),
     ...(p.qa ? { qa: { ...p.qa.head, checks: render(p.qa.checks, caps.qaChecks) } } : {}),
   };
 }
