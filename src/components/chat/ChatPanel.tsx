@@ -13,6 +13,7 @@ import {
   SphereIcon,
   LockIcon,
 } from "@phosphor-icons/react";
+import { toast } from "sonner";
 import { useChatStore, NO_ACTIVITY_NOTES } from "@/store/chatStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -27,17 +28,6 @@ import { getActorId, useAuthStore } from "@/lib/auth/authState";
 import { openSettings } from "@/lib/openSettings";
 import { hasOpenCodeKey, subscribeOpenCodeKey } from "@/lib/opencodeKey";
 import { useOpenCodeKeyDialogStore } from "@/store/openCodeKeyDialogStore";
-import { MessageList } from "./MessageList";
-import { ChatSessionIdContext } from "./ChatSessionContext";
-import { ChatInput } from "./ChatInput";
-import { ChatList } from "./ChatList";
-import { CloudBrowserPanel } from "./CloudBrowserPanel";
-import { releaseCloudBrowser } from "@/lib/cloudBrowser";
-import { useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
-import { SkillsPage } from "./SkillsPage";
-import { ContextMeter } from "./ContextMeter";
-import { OpenCodeKeyDialog } from "./OpenCodeKeyDialog";
-import { hasPendingAskUser } from "./pendingAskUser";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { IconButton } from "@/components/ui/IconButton";
 import { Button } from "@/components/ui/button";
@@ -58,6 +48,19 @@ import {
 import type { ChatLaunchPayload } from "@/types/chat";
 import { chatToMarkdown, chatFilename, downloadMarkdown } from "@/lib/chatExport";
 import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
+import { releaseCloudBrowser } from "@/lib/cloudBrowser";
+import { useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
+import { parseWorkflowAttachment } from "@/lib/workflows/workflowAttachment";
+import { getWorkflow } from "@/lib/workflows/workflowStore";
+import { MessageList } from "./MessageList";
+import { ChatSessionIdContext } from "./ChatSessionContext";
+import { ChatInput } from "./ChatInput";
+import { ChatList } from "./ChatList";
+import { CloudBrowserPanel } from "./CloudBrowserPanel";
+import { SkillsPage } from "./SkillsPage";
+import { ContextMeter } from "./ContextMeter";
+import { OpenCodeKeyDialog } from "./OpenCodeKeyDialog";
+import { hasPendingAskUser } from "./pendingAskUser";
 
 const PARALLEL_COUNT_OPTIONS = [
   { value: "1", label: "x1" },
@@ -80,6 +83,7 @@ interface ComposerControlsProps {
   openFilePicker: () => void;
   isLoading: boolean;
   stop: () => void;
+  workflowPicker: ReactNode;
 }
 
 type ComposerControlsRenderer = (props: ComposerControlsProps) => ReactNode;
@@ -389,7 +393,15 @@ function ChatSession({
       .join("");
 
     setMessages(messages.slice(0, index));
-    setInput(text);
+    // Never put the raw <workflow> block into the composer: restore the user's text and,
+    // when that workflow still exists, its chip (re-attached by id).
+    const attachment = parseWorkflowAttachment(text);
+    setInput(attachment ? attachment.before : text);
+    if (attachment) {
+      const stored = attachment.id ? getWorkflow(attachment.id) : null;
+      if (stored) useChatStore.getState().setAttachedWorkflowId(sessionId, stored.id);
+      else toast(`The workflow \u201c${attachment.title}\u201d no longer exists. It was not re-attached.`);
+    }
     // The transcript just shrank, so the last measured context size (taken
     // before the rollback) no longer describes this chat — leaving it would
     // show a near-full, red meter over a three-message session until the
@@ -544,6 +556,7 @@ export function ChatPanelContent({
     openFilePicker,
     isLoading,
     stop,
+    workflowPicker,
   }) => (
     <>
       <IconButton
@@ -557,6 +570,7 @@ export function ChatPanelContent({
       >
         <ImageIcon size={18} weight="light" />
       </IconButton>
+      {workflowPicker}
       <div className="ml-auto flex items-center gap-1">
         <ContextMeter />
         <DropdownMenu>

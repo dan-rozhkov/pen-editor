@@ -25,6 +25,10 @@ const AgentPage = lazy(() => import("@/routes/AgentPage"));
 // Tiptap must stay out of the showcase and editor chunks.
 const DocPage = lazy(() => import("@/routes/DocPage"));
 
+// The workflow editor at "/workflow" (desktop tab or plain browser). Lazy, and
+// it must never import App, Pixi, the scene stores or the chat.
+const WorkflowPage = lazy(() => import("@/routes/WorkflowPage"));
+
 // The settings page at "/settings" (desktop tab or plain browser). Lazy, and it
 // must never import App or Pixi.
 const SettingsPage = lazy(() => import("@/routes/SettingsPage"));
@@ -79,6 +83,14 @@ export function AppRouter() {
           element={
             <Suspense fallback={<RouteFallback />}>
               <DocPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/workflow"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <WorkflowPage />
             </Suspense>
           }
         />

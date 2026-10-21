@@ -1,8 +1,10 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor, act } from "@testing-library/react";
 import { useState } from "react";
 import { ChatInput } from "../ChatInput";
 import { useChatStore } from "@/store/chatStore";
+import { createWorkflow, deleteWorkflow, stepsFromTexts, updateWorkflow } from "@/lib/workflows/workflowStore";
+import { workflowToPrompt } from "@/lib/workflows/workflowMarkdown";
 import type { ChatLaunchPayload } from "@/types/chat";
 import type { SelectionContextItem } from "@/hooks/useSelectionContext";
 import type { EmbedElementContext } from "@/hooks/useEmbedElementContext";
@@ -678,5 +680,111 @@ describe("<ChatInput />", () => {
       expect(placeholder()).toBe("Answer the question above to continue…");
       expect(screen.queryByText(/Press Tab to accept/)).toBeNull();
     });
+  });
+});
+
+describe("<ChatInput /> attached workflow", () => {
+  beforeEach(() => localStorage.clear());
+
+  /** Attaches the workflow `title` through the picker. */
+  async function attach(title: string) {
+    fireEvent.click(screen.getByRole("button", { name: "Attach workflow" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: new RegExp(title) }));
+  }
+
+  const seedWorkflow = (title: string, texts: string[]) =>
+    createWorkflow({ title, steps: stepsFromTexts(texts) }, "editor");
+
+  it("says so when there are no workflows", async () => {
+    render(<Harness onSubmit={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Attach workflow" }));
+    expect(await screen.findByText("No workflows yet")).toBeTruthy();
+  });
+
+  it("lists workflows newest first with their step counts", async () => {
+    seedWorkflow("Older", ["a"]);
+    seedWorkflow("Newer", ["a", "b"]);
+    render(<Harness onSubmit={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Attach workflow" }));
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((i) => i.textContent)).toEqual(["Newer2 steps", "Older1 step"]);
+  });
+
+  it("sends the text followed by the workflow block and clears the chip", async () => {
+    const workflow = seedWorkflow("Launch", ["Open the app", "Export"]);
+    const onSubmit = vi.fn(() => true);
+    render(<Harness onSubmit={onSubmit} />);
+    await attach("Launch");
+    expect(screen.getByTestId("workflow-chip").textContent).toContain("Launch2 steps");
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "  do it  " } });
+    fireEvent.click(screen.getByLabelText("Send"));
+    expect(onSubmit).toHaveBeenCalledWith({
+      text: `do it\n\n${workflowToPrompt(workflow)}`,
+      images: undefined,
+    });
+    expect(screen.queryByTestId("workflow-chip")).toBeNull();
+  });
+
+  it("sends a workflow without any text and keeps the chip when the send fails", async () => {
+    const workflow = seedWorkflow("Launch", ["A"]);
+    const onSubmit = vi.fn(() => false);
+    render(<Harness onSubmit={onSubmit} />);
+    await attach("Launch");
+    fireEvent.click(screen.getByLabelText("Send"));
+    expect(onSubmit).toHaveBeenCalledWith({ text: workflowToPrompt(workflow), images: undefined });
+    expect(screen.getByTestId("workflow-chip")).toBeTruthy();
+  });
+
+  it("reads the workflow fresh at send time", async () => {
+    const workflow = seedWorkflow("Launch", ["A"]);
+    const onSubmit = vi.fn(() => true);
+    render(<Harness onSubmit={onSubmit} />);
+    await attach("Launch");
+    act(() => {
+      updateWorkflow(workflow.id, { steps: stepsFromTexts(["A", "B"]) }, "agent");
+    });
+    fireEvent.click(screen.getByLabelText("Send"));
+    expect(onSubmit).toHaveBeenCalledWith({
+      text: workflowToPrompt({ id: workflow.id, title: "Launch", steps: stepsFromTexts(["A", "B"]) }),
+      images: undefined,
+    });
+  });
+
+  it("removes the chip with its button and keeps one workflow at a time", async () => {
+    seedWorkflow("First", ["a"]);
+    seedWorkflow("Second", ["a"]);
+    render(<Harness onSubmit={vi.fn()} />);
+    await attach("First");
+    await attach("Second");
+    expect(screen.getAllByTestId("workflow-chip")).toHaveLength(1);
+    expect(screen.getByTestId("workflow-chip").textContent).toContain("Second");
+    fireEvent.click(screen.getByRole("button", { name: "Remove workflow" }));
+    expect(screen.queryByTestId("workflow-chip")).toBeNull();
+  });
+
+  it("shows one picker when a custom footer places it", () => {
+    render(
+      <ChatInput
+        sessionId="test-session"
+        input=""
+        setInput={() => {}}
+        onSubmit={vi.fn()}
+        isLoading={false}
+        stop={() => {}}
+        renderFooter={({ workflowPicker }) => <div>{workflowPicker}</div>}
+      />,
+    );
+    expect(screen.getAllByRole("button", { name: "Attach workflow" })).toHaveLength(1);
+  });
+
+  it("sends without a workflow deleted after it was attached", async () => {
+    const workflow = seedWorkflow("Doomed", ["a"]);
+    const onSubmit = vi.fn(() => true);
+    render(<Harness onSubmit={onSubmit} />);
+    await attach("Doomed");
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "hello" } });
+    act(() => deleteWorkflow(workflow.id, "agent"));
+    fireEvent.click(screen.getByLabelText("Send"));
+    expect(onSubmit).toHaveBeenCalledWith({ text: "hello", images: undefined });
   });
 });

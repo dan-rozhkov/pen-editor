@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { deriveChatTitle } from "../chatTitle";
+import { workflowToPrompt } from "../workflows/workflowMarkdown";
 
 describe("deriveChatTitle", () => {
   it("returns null for an empty string", () => {
@@ -56,5 +57,17 @@ describe("deriveChatTitle", () => {
     const text = `${"a".repeat(40)} b`;
     // No space within the first 40 chars, so it falls back to a hard cut.
     expect(deriveChatTitle(text)).toBe(`${"a".repeat(40)}…`);
+  });
+
+  describe("with an attached workflow", () => {
+    const block = workflowToPrompt({ id: "wf_1", title: "Launch", steps: [{ id: "a", text: "Open" }] });
+
+    it("titles from the user's text, not the raw tag", () => {
+      expect(deriveChatTitle(`do it now\n\n${block}`)).toBe("do it now");
+    });
+
+    it("titles from the workflow when the message is the workflow alone", () => {
+      expect(deriveChatTitle(block)).toBe("Workflow: Launch");
+    });
   });
 });

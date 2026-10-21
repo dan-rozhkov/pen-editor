@@ -10,15 +10,8 @@ import {
 } from "@phosphor-icons/react";
 import { PanelEmptyState } from "@/components/PanelEmptyState";
 import { messageToClipboardText } from "@/lib/chatExport";
-import { SimpleMarkdown } from "./SimpleMarkdown";
-import { ToolCallIndicator } from "./ToolCallIndicator";
-import { BrowseAgentIndicator } from "./BrowseAgentIndicator";
-import type { LikeMeta } from "./LikeReferenceButton";
-import { ThinkingIndicator } from "./ThinkingIndicator";
-import { ImageLightbox } from "./ImageLightbox";
 import { IconSwap } from "@/components/ui/IconSwap";
-import { AskUserForm } from "./AskUserForm";
-import { MemoryActivityRow } from "./MemoryActivityRow";
+import { parseWorkflowAttachment } from "@/lib/workflows/workflowAttachment";
 import { memoryChangesFromInput, noteChangeList, skillChangeFromInput, SKILL_ACTIONS, type ChangeDetail } from "@/lib/memoryActivity";
 import type { ChatActivityNote } from "@/store/chatStore";
 import type { AskUserInput } from "@/types/askUser";
@@ -27,6 +20,15 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
+import { SimpleMarkdown } from "./SimpleMarkdown";
+import { WorkflowAttachmentCard } from "./WorkflowAttachmentCard";
+import { ToolCallIndicator } from "./ToolCallIndicator";
+import { BrowseAgentIndicator } from "./BrowseAgentIndicator";
+import type { LikeMeta } from "./LikeReferenceButton";
+import { ThinkingIndicator } from "./ThinkingIndicator";
+import { ImageLightbox } from "./ImageLightbox";
+import { AskUserForm } from "./AskUserForm";
+import { MemoryActivityRow } from "./MemoryActivityRow";
 
 // The memory tool's output is a plain object, never a thrown error — a
 // storage failure, an ambiguous `old_text`, `over_capacity`, or the circuit
@@ -324,6 +326,8 @@ export function MessageList({
             )
             .map((p) => p.text)
             .join("");
+          const workflowAttachment = parseWorkflowAttachment(textContent);
+          const shownText = workflowAttachment ? workflowAttachment.before : textContent;
 
           const imageParts = msg.parts.filter(
             (p): p is { type: "file"; mediaType: string; url: string } => {
@@ -365,7 +369,8 @@ export function MessageList({
                     ))}
                   </div>
                 )}
-                {textContent && <SimpleMarkdown content={textContent} />}
+                {shownText && <SimpleMarkdown content={shownText} />}
+                {workflowAttachment && <WorkflowAttachmentCard attachment={workflowAttachment} />}
               </div>
             </div>
           );

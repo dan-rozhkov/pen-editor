@@ -6,16 +6,7 @@ import { DocEditor } from "@/components/doc/DocEditor";
 import { DocTitle } from "@/components/doc/ui/DocTitle";
 import { titleAfterTemplate } from "@/lib/docs/docTemplates";
 import { useDocSync } from "@/components/doc/useDocSync";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -119,26 +110,7 @@ export default function DocPage() {
             </main>
           </>
         )}
-        <AlertDialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
-          <AlertDialogContent size="sm">
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete “{sync.title.trim() || "Untitled"}”?</AlertDialogTitle>
-              <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                variant="destructive"
-                onClick={() => {
-                  sync.remove();
-                  setConfirmingDelete(false);
-                }}
-              >
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <ConfirmDeleteDialog open={confirmingDelete} onOpenChange={setConfirmingDelete} name={sync.title.trim() || "Untitled"} onConfirm={sync.remove} />
       </div>
     </EditorProviders>
   );

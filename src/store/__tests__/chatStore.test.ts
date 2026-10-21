@@ -435,3 +435,14 @@ describe("chatStore — liked references", () => {
     expect(useChatStore.getState().likedReferences[id]).toBeUndefined();
   });
 });
+
+describe("chatStore — attached workflow", () => {
+  it("keeps one attached workflow id per chat and clears it", () => {
+    const { setAttachedWorkflowId } = useChatStore.getState();
+    setAttachedWorkflowId("c1", "wf_1");
+    setAttachedWorkflowId("c2", "wf_2");
+    expect(useChatStore.getState().attachedWorkflowIds).toEqual({ c1: "wf_1", c2: "wf_2" });
+    setAttachedWorkflowId("c1", null);
+    expect(useChatStore.getState().attachedWorkflowIds).toEqual({ c2: "wf_2" });
+  });
+});

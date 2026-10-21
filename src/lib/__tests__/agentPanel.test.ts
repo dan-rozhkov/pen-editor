@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isAgentPanelHost, isAgentRoutePath, isDocRoutePath, isTraceRoutePath } from "../agentPanel";
+import { isAgentPanelHost, isAgentRoutePath, isDocRoutePath, isTraceRoutePath, isWorkflowRoutePath } from "../agentPanel";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -39,6 +39,16 @@ describe("isDocRoutePath", () => {
     expect(isDocRoutePath("/docs", "/")).toBe(false);
     expect(isDocRoutePath("/x/doc", "/x/")).toBe(true);
     expect(isDocRoutePath("/doc", "/x/")).toBe(false);
+  });
+});
+
+describe("isWorkflowRoutePath", () => {
+  it("matches /workflow under the base only", () => {
+    expect(isWorkflowRoutePath("/workflow", "/")).toBe(true);
+    expect(isWorkflowRoutePath("/workflow/", "/")).toBe(true);
+    expect(isWorkflowRoutePath("/workflows", "/")).toBe(false);
+    expect(isWorkflowRoutePath("/x/workflow", "/x/")).toBe(true);
+    expect(isWorkflowRoutePath("/workflow", "/x/")).toBe(false);
   });
 });
 

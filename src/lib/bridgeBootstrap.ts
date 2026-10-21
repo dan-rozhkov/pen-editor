@@ -2,6 +2,7 @@ import {
   isAgentRoutePath,
   isAuthDesktopRoutePath,
   isDocRoutePath,
+  isWorkflowRoutePath,
   isSettingsRoutePath,
   isTraceRoutePath,
 } from '@/lib/agentPanel'
@@ -39,12 +40,13 @@ import {
 // rejection. Catching here means the desktop path failing still lets the WS
 // bridge start when it's configured.
 export function startBridges(): void {
-  // The canvas-less /agent, /doc, /trace, /settings and /auth/desktop pages must never register as an editor/MCP
+  // The canvas-less /agent, /doc, /workflow, /trace, /settings and /auth/desktop pages must never register as an editor/MCP
   // target (and /doc and /settings must not own the tab title or the File menu).
   const path = window.location.pathname
   if (
     isAgentRoutePath(path) ||
     isDocRoutePath(path) ||
+    isWorkflowRoutePath(path) ||
     isTraceRoutePath(path) ||
     isSettingsRoutePath(path) ||
     isAuthDesktopRoutePath(path)

@@ -6,9 +6,7 @@ import {
   XIcon,
   CodeIcon,
 } from "@phosphor-icons/react";
-import { SlashCommandMenu } from "./SlashCommandMenu";
-import type { SlashCommand } from "./slashCommands";
-import { LikedReferencesStrip } from "./LikedReferencesStrip";
+import { toast } from "sonner";
 import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
 import { useChatStore, NO_ATTACHED_IMAGES } from "@/store/chatStore";
 import {
@@ -24,11 +22,18 @@ import {
   MAX_ATTACHMENT_SIDE,
 } from "@/lib/tools/screenshotDownscale";
 import { NodeIcon } from "@/components/layers/LayerIcons";
+import { WorkflowChip, WorkflowPicker } from "@/components/workflow/WorkflowPicker";
+import { useWorkflowById } from "@/components/workflow/useWorkflowList";
+import { countFilledSteps, getWorkflow } from "@/lib/workflows/workflowStore";
+import { workflowToPrompt } from "@/lib/workflows/workflowMarkdown";
 import {
   Tooltip,
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
+import { SlashCommandMenu } from "./SlashCommandMenu";
+import type { SlashCommand } from "./slashCommands";
+import { LikedReferencesStrip } from "./LikedReferencesStrip";
 
 // Maximum images per message (mirrored by MAX_IMAGE_PARTS on the backend).
 const MAX_IMAGES = 4;
@@ -79,6 +84,8 @@ interface ChatInputFooterProps {
   openFilePicker: () => void;
   isLoading: boolean;
   stop: () => void;
+  /** The "Attach workflow" button, to place next to the image button. */
+  workflowPicker: ReactNode;
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -167,6 +174,15 @@ export function ChatInput({
     [setSessionAttachedImages, sessionId],
   );
   const [isDragOver, setIsDragOver] = useState(false);
+  // At most one attached workflow, per chat in chatStore.attachedWorkflowIds (not
+  // persisted). The chip shows what is stored right now; the send reads it fresh again.
+  const attachedWorkflowId = useChatStore((s) => s.attachedWorkflowIds[sessionId] ?? null);
+  const setSessionAttachedWorkflowId = useChatStore((s) => s.setAttachedWorkflowId);
+  const setAttachedWorkflowId = useCallback(
+    (id: string | null) => setSessionAttachedWorkflowId(sessionId, id),
+    [setSessionAttachedWorkflowId, sessionId],
+  );
+  const attachedWorkflow = useWorkflowById(attachedWorkflowId);
   // The slash query the user explicitly dismissed the menu for. Openness is
   // derived from the input (see `showSlashMenu` below), so only the dismissal
   // — a real user event — needs to be remembered.
@@ -209,7 +225,7 @@ export function ChatInput({
     // Block sending while an ask_user question is unanswered so the answer
     // isn't stranded (covers both the built-in send button and renderFooter).
     !awaitingAnswer &&
-    (input.trim().length > 0 || attachedImages.length > 0);
+    (input.trim().length > 0 || attachedImages.length > 0 || attachedWorkflow !== null);
   const canAttach = canAttachImages && attachedImages.length < MAX_IMAGES;
   const attachLabel = !canAttachImages
     ? "Selected model can't read images"
@@ -219,6 +235,7 @@ export function ChatInput({
         ? "Attach image"
         : "Attach image (described as text for this model)";
   const openFilePicker = () => fileInputRef.current?.click();
+  const workflowPicker = <WorkflowPicker selectedId={attachedWorkflowId} onSelect={setAttachedWorkflowId} />;
 
   // Extract slash query from input (e.g. "/aud" -> "aud", "/" -> "")
   const slashQuery = useMemo(() => {
@@ -316,9 +333,26 @@ export function ChatInput({
       // disabled while offline, but Enter bypasses it. Calling onSubmit
       // unconditionally lets its offline guard (in useDesignChat) surface a
       // visible per-message error instead of Enter being a silent no-op.
-      if ((input.trim() || images.length > 0) && !awaitingAnswer) {
+      if ((input.trim() || images.length > 0 || attachedWorkflowId) && !awaitingAnswer) {
+        let text = input.trim();
+        let workflowGone = false;
+        if (attachedWorkflowId) {
+          const workflow = getWorkflow(attachedWorkflowId);
+          if (workflow) {
+            const block = workflowToPrompt(workflow);
+            text = text ? `${text}\n\n${block}` : block;
+          } else {
+            workflowGone = true;
+            toast("The attached workflow was deleted. It was not sent.");
+          }
+        }
+        if (!text && images.length === 0) {
+          // Only a deleted workflow was attached: nothing to send.
+          if (workflowGone) setAttachedWorkflowId(null);
+          return;
+        }
         const didSend = onSubmit({
-          text: input.trim(),
+          text,
           images: images.length > 0 ? images : undefined,
         });
         // Only clear attachments once the message actually sent — a failed
@@ -326,10 +360,11 @@ export function ChatInput({
         // user can retry without re-attaching everything.
         if (didSend) {
           setAttachedImages([]);
+          setAttachedWorkflowId(null);
         }
       }
     },
-    [input, attachedImages, canAttachImages, awaitingAnswer, onSubmit, setAttachedImages]
+    [input, attachedImages, attachedWorkflowId, canAttachImages, awaitingAnswer, onSubmit, setAttachedImages, setAttachedWorkflowId]
   );
 
   const handleKeyDown = useCallback(
@@ -496,6 +531,14 @@ export function ChatInput({
 
       <LikedReferencesStrip sessionId={sessionId} />
 
+      {attachedWorkflow && (
+        <WorkflowChip
+          title={attachedWorkflow.title}
+          stepCount={countFilledSteps(attachedWorkflow.steps)}
+          onRemove={() => setAttachedWorkflowId(null)}
+        />
+      )}
+
       {/* Image previews */}
       {attachedImages.length > 0 && !canAttachImages && (
         <div className="mb-2 text-xs text-amber-500">
@@ -545,6 +588,7 @@ export function ChatInput({
             <TooltipContent>{attachLabel}</TooltipContent>
           </Tooltip>
         )}
+        {!renderFooter && workflowPicker}
         <input
           ref={fileInputRef}
           type="file"
@@ -639,6 +683,7 @@ export function ChatInput({
         openFilePicker,
         isLoading,
         stop,
+        workflowPicker,
       })}
     </>
   );

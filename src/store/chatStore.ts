@@ -139,6 +139,8 @@ interface ChatState {
    * goes inactive (inactive ChatSessions render null for performance).
    */
   attachedImages: Record<string, AttachedImage[]>;
+  /** Composer-attached workflow id per chat id (at most one); same lifetime as `attachedImages`. */
+  attachedWorkflowIds: Record<string, string>;
   /**
    * Reference images the user "liked" (hearted) in the agent's tool results,
    * keyed by chat id. Sent to the backend inside canvasContext so the agent
@@ -200,6 +202,8 @@ interface ChatState {
     chatId: string,
     update: AttachedImage[] | ((prev: AttachedImage[]) => AttachedImage[]),
   ) => void;
+
+  setAttachedWorkflowId: (chatId: string, workflowId: string | null) => void;
 
   setContextTokens: (chatId: string, tokens: number) => void;
   /** Drops a chat's context-usage reading — called wherever a fresh context
@@ -325,6 +329,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   launchQueue: {},
   sessionActions: {},
   attachedImages: {},
+  attachedWorkflowIds: {},
   likedReferences: {},
   contextTokens: {},
 
@@ -381,6 +386,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       abortControllers,
       launchQueue,
       attachedImages,
+      attachedWorkflowIds,
       likedReferences,
       contextTokens,
       activityNotes,
@@ -407,6 +413,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       delete newLaunchQueue[chatId];
       const newAttachedImages = { ...attachedImages };
       delete newAttachedImages[chatId];
+      const newAttachedWorkflowIds = { ...attachedWorkflowIds };
+      delete newAttachedWorkflowIds[chatId];
       const newLikedReferences = { ...likedReferences };
       delete newLikedReferences[chatId];
       const newContextTokens = { ...contextTokens };
@@ -424,6 +432,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         abortControllers: newControllers,
         launchQueue: newLaunchQueue,
         attachedImages: newAttachedImages,
+        attachedWorkflowIds: newAttachedWorkflowIds,
         likedReferences: newLikedReferences,
         contextTokens: newContextTokens,
         activityNotes: newActivityNotes,
@@ -441,6 +450,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     delete newControllers[chatId];
     delete newLaunchQueue[chatId];
     delete newAttachedImages[chatId];
+    const newAttachedWorkflowIds = { ...attachedWorkflowIds };
+    delete newAttachedWorkflowIds[chatId];
     delete newContextTokens[chatId];
     const newActivityNotes = { ...activityNotes };
     delete newActivityNotes[chatId];
@@ -455,6 +466,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       abortControllers: newControllers,
       launchQueue: newLaunchQueue,
       attachedImages: newAttachedImages,
+      attachedWorkflowIds: newAttachedWorkflowIds,
       likedReferences: newLikedReferences,
       contextTokens: newContextTokens,
       activityNotes: newActivityNotes,
@@ -634,6 +646,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         nextMap[chatId] = next;
       }
       return { attachedImages: nextMap };
+    });
+  },
+
+  setAttachedWorkflowId: (chatId, workflowId) => {
+    set((s) => {
+      if ((s.attachedWorkflowIds[chatId] ?? null) === workflowId) return s;
+      const next = { ...s.attachedWorkflowIds };
+      if (workflowId === null) delete next[chatId];
+      else next[chatId] = workflowId;
+      return { attachedWorkflowIds: next };
     });
   },
 

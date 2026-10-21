@@ -19,6 +19,8 @@ export interface PenAgentPanelApi {
   };
   /** The shell's markdown document tabs (/doc). Absent on a shell without doc tabs. */
   docs?: AgentPanelDocsBridge;
+  /** The shell's workflow tabs (/workflow). Absent on a shell without workflow tabs. */
+  workflows?: AgentPanelWorkflowsBridge;
   /** Opens or focuses the Settings tab. Absent on an older shell. */
   settings?: DesktopSettingsApi;
   /** Local browse-run traces. Absent on a shell without trace tabs. */
@@ -41,6 +43,11 @@ export interface AgentPanelDocsBridge extends DesktopDocsDiskApi {
   open(docId: string): Promise<{ ok: boolean; error?: string }>;
 }
 
+/** Opens or activates the workflow tab that shows `workflowId`. Resolves after the tab exists. */
+export interface AgentPanelWorkflowsBridge {
+  open(workflowId: string): Promise<{ ok: boolean; error?: string }>;
+}
+
 declare global {
   interface Window {
     /** Exposed by the desktop shell's preload ONLY inside the agent panel view. */
@@ -52,6 +59,12 @@ declare global {
 export function getAgentPanelDocsBridge(): AgentPanelDocsBridge | undefined {
   const docs = window.penAgentPanel?.docs;
   return typeof docs?.open === "function" ? docs : undefined;
+}
+
+/** The panel's workflow-tab bridge, or undefined (web, dev build, shell without workflow tabs). */
+export function getAgentPanelWorkflowsBridge(): AgentPanelWorkflowsBridge | undefined {
+  const workflows = window.penAgentPanel?.workflows;
+  return typeof workflows?.open === "function" ? workflows : undefined;
 }
 
 type PanelTraces = NonNullable<PenAgentPanelApi["traces"]>;
@@ -92,6 +105,11 @@ export function isAgentRoutePath(pathname: string, base: string = import.meta.en
 /** True when `pathname` is the canvas-less /doc route (basename-aware). */
 export function isDocRoutePath(pathname: string, base: string = import.meta.env.BASE_URL || "/"): boolean {
   return isRoutePath(pathname, "doc", base);
+}
+
+/** True when `pathname` is the canvas-less /workflow route (basename-aware). */
+export function isWorkflowRoutePath(pathname: string, base: string = import.meta.env.BASE_URL || "/"): boolean {
+  return isRoutePath(pathname, "workflow", base);
 }
 
 /** True when `pathname` is the canvas-less /trace/<id> or /trace (open a file) route (basename-aware). */

@@ -8,7 +8,7 @@
  * `placeNodeOnCanvas`) goes to the canvas tab as a `place-node` message.
  */
 
-const PANEL_LOCAL_PREFIXES = ["browse_", "qa_", "doc_", "trace_"] as const;
+const PANEL_LOCAL_PREFIXES = ["browse_", "qa_", "doc_", "workflow_", "trace_"] as const;
 
 /** Fixed (non-prefixed) tools that run in the agent panel itself. */
 export const PANEL_LOCAL_FIXED_TOOL_NAMES: ReadonlySet<string> = new Set([

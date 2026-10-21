@@ -2,6 +2,8 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import type { UIMessage } from "ai";
 import { MessageList } from "../MessageList";
+import { workflowToPrompt } from "@/lib/workflows/workflowMarkdown";
+import { stepsFromTexts } from "@/lib/workflows/workflowStore";
 
 afterEach(() => cleanup());
 
@@ -163,5 +165,19 @@ describe("<MessageList />", () => {
     );
 
     expect(scrollTopSetter).toHaveBeenCalled();
+  });
+
+  it("shows an attached workflow as a card that expands into its steps", () => {
+    const block = workflowToPrompt({ id: "wf_1", title: "Launch", steps: stepsFromTexts(["Open the app", "Export"]) });
+    const { container } = render(
+      <MessageList messages={[userMessage("u1", `make it so\n\n${block}`)]} isLoading={false} />
+    );
+    expect(screen.getByText("make it so")).toBeTruthy();
+    expect(container.textContent).not.toContain("<workflow");
+    const card = screen.getByRole("button", { name: /Workflow · Launch · 2 steps/ });
+    expect(screen.queryByText("Open the app")).toBeNull();
+    fireEvent.click(card);
+    expect(screen.getByText("Open the app")).toBeTruthy();
+    expect(screen.getByText("Export")).toBeTruthy();
   });
 });

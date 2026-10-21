@@ -65,6 +65,12 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   "doc_edit",
   "doc_insert_image",
   "doc_open",
+  // Panel-local workflows (workflows/workflowStore.ts): localStorage only, no scene.
+  "workflow_list",
+  "workflow_create",
+  "workflow_read",
+  "workflow_edit",
+  "workflow_open",
   // Panel-local trace tabs: read-only bridge calls, no scene.
   "trace_list",
   "trace_read",

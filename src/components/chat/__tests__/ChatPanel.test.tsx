@@ -23,6 +23,9 @@ let mockState: {
 // chat's slice here instead of the shared `mockState`.
 let perSessionOverrides: Record<string, Partial<typeof mockState>>;
 
+const { toastMock } = vi.hoisted(() => ({ toastMock: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toastMock }));
+
 vi.mock("@/hooks/useDesignChat", () => ({
   useDesignChat: ({ sessionId }: { sessionId: string }) => {
     const state = { ...mockState, ...perSessionOverrides[sessionId] };
@@ -46,6 +49,8 @@ import { useChatStore } from "@/store/chatStore";
 import { useOpenCodeKeyDialogStore } from "@/store/openCodeKeyDialogStore";
 import type { ChatSummary } from "@/store/chatStore";
 import { clearOpenCodeKey, setOpenCodeKey } from "@/lib/opencodeKey";
+import { createWorkflow, deleteWorkflow, stepsFromTexts } from "@/lib/workflows/workflowStore";
+import { workflowToPrompt } from "@/lib/workflows/workflowMarkdown";
 import { resetBrowseCheckpoints, useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
 
 afterEach(() => cleanup());
@@ -640,5 +645,53 @@ describe("ChatPanelContent skills page", () => {
 
     act(() => useChatStore.setState({ activeChatId: "tab-1" }));
     expect(screen.queryByTestId("skills-page")).toBeNull();
+  });
+});
+
+describe("<ChatPanelContent /> rollback with an attached workflow", () => {
+  const rollbackTo = (text: string) => {
+    mockState.messages = [{ id: "u1", role: "user", parts: [{ type: "text", text }] }];
+    render(<ChatPanelContent />);
+    fireEvent.click(screen.getByLabelText("Roll back to this message"));
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    toastMock.mockClear();
+    useChatStore.setState({ attachedWorkflowIds: {} });
+  });
+
+  it("restores only the user's text and re-attaches a stored workflow", () => {
+    const wf = createWorkflow({ title: "Launch", steps: stepsFromTexts(["Open"]) }, "editor");
+    rollbackTo(`do it\n\n${workflowToPrompt(wf)}`);
+    expect(setInput).toHaveBeenCalledWith("do it");
+    expect(useChatStore.getState().attachedWorkflowIds["tab-1"]).toBe(wf.id);
+  });
+
+  it("re-attaches by id even when another workflow shares the title", () => {
+    createWorkflow({ title: "Launch", steps: stepsFromTexts(["Other"]) }, "editor");
+    const wf = createWorkflow({ title: "Launch", steps: stepsFromTexts(["Open"]) }, "editor");
+    createWorkflow({ title: "Launch", steps: stepsFromTexts(["Newest"]) }, "editor");
+    rollbackTo(`do it\n\n${workflowToPrompt(wf)}`);
+    expect(useChatStore.getState().attachedWorkflowIds["tab-1"]).toBe(wf.id);
+    expect(toastMock).not.toHaveBeenCalled();
+  });
+
+  it("restores the text and toasts when the workflow was deleted", () => {
+    const wf = createWorkflow({ title: "Gone", steps: stepsFromTexts(["x"]) }, "editor");
+    const block = workflowToPrompt(wf);
+    deleteWorkflow(wf.id, "editor");
+    rollbackTo(`do it\n\n${block}`);
+    expect(setInput).toHaveBeenCalledWith("do it");
+    expect(useChatStore.getState().attachedWorkflowIds["tab-1"]).toBeUndefined();
+    expect(toastMock).toHaveBeenCalledWith("The workflow \u201cGone\u201d no longer exists. It was not re-attached.");
+  });
+
+  it("restores the text and toasts for an old block without an id", () => {
+    createWorkflow({ title: "Old", steps: stepsFromTexts(["x"]) }, "editor");
+    rollbackTo('do it\n\n<workflow title="Old">\nInstruction\n\n1. x\n</workflow>');
+    expect(setInput).toHaveBeenCalledWith("do it");
+    expect(useChatStore.getState().attachedWorkflowIds["tab-1"]).toBeUndefined();
+    expect(toastMock).toHaveBeenCalledTimes(1);
   });
 });

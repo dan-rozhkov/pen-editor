@@ -27,6 +27,7 @@ import { analyzeImage } from "./tools/analyzeImage";
 import { openCanvasTab } from "./tools/openCanvasTab";
 import { traceList, traceRead } from "./tools/traceTools";
 import { docList, docCreate, docRead, docEdit, docOpen, docInsertImage } from "./tools/docTools";
+import { workflowList, workflowCreate, workflowRead, workflowEdit, workflowOpen } from "./tools/workflowTools";
 import { generateImage, generateFrameImage } from "./tools/generateImage";
 import { setExportSettings } from "./tools/setExportSettings";
 import { exportLayersSvg } from "./tools/exportLayersSvg";
@@ -163,6 +164,13 @@ export const toolHandlers: Record<string, ToolHandler> = {
   doc_edit: docEdit,
   doc_insert_image: docInsertImage,
   doc_open: docOpen,
+  // Panel-local workflows (canvasTools.ts "workflow_" prefix); advertised only with
+  // clientCapabilities.workflowTabs. NOT in mcpToolNames.ts / WebMCP / plugins.
+  workflow_list: workflowList,
+  workflow_create: workflowCreate,
+  workflow_read: workflowRead,
+  workflow_edit: workflowEdit,
+  workflow_open: workflowOpen,
   // Panel-local, read-only: open browse-run trace tabs (canvasTools.ts "trace_" prefix); advertised
   // only with clientCapabilities.traceTabs. NOT in mcpToolNames.ts / WebMCP / plugins.
   trace_list: traceList,
