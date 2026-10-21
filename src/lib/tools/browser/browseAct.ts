@@ -8,7 +8,7 @@ import {
 import { BACKEND_MAX_DESCRIPTION, fetchBrowseBackend, sanitizedPageBody, truncateToChars } from "@sideform/browser-agent/loop";
 import { getBrowserBridge } from "./bridge";
 import { browseBackend } from "./backend";
-import { peBase, type PenDesktopBrowser } from "./shared";
+import { peBase, withSecrets, type PenDesktopBrowser } from "./shared";
 
 /**
  * browse_act — the routing, the batch and the snapshot rules live in the
@@ -118,4 +118,4 @@ export function runActionsBatch(
 }
 
 export const browseAct: ToolHandler = (args, context) =>
-  executeBrowseTool(getBrowserBridge(context?.sessionId, context?.browserSession), "browse_act", args, actOptions);
+  executeBrowseTool(getBrowserBridge(context?.sessionId, context?.browserSession), "browse_act", args, withSecrets(actOptions, context?.sessionId));

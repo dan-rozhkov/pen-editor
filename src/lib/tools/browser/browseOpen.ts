@@ -2,7 +2,7 @@ import type { ToolHandler } from "../../toolRegistry";
 import { executeBrowseTool } from "@sideform/browser-agent/agent/execute";
 import { getBrowserBridge, isDesktopBrowserAvailable } from "./bridge";
 import { appArgOf } from "./isolation";
-import { peBase } from "./shared";
+import { peBase, withSecrets } from "./shared";
 
 export const APP_NEEDS_DESKTOP_ERROR =
   "Launching an app works only in Sideform Desktop. Use `url` to open a web page instead.";
@@ -17,5 +17,5 @@ export const browseOpen: ToolHandler = async (args, context) => {
   if (appArgOf(args) !== undefined && !isDesktopBrowserAvailable()) {
     return JSON.stringify({ error: APP_NEEDS_DESKTOP_ERROR });
   }
-  return executeBrowseTool(getBrowserBridge(context?.sessionId, context?.browserSession), "browse_open", args, peBase);
+  return executeBrowseTool(getBrowserBridge(context?.sessionId, context?.browserSession), "browse_open", args, withSecrets(peBase, context?.sessionId));
 };

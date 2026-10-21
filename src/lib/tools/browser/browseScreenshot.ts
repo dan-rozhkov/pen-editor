@@ -8,7 +8,7 @@ import {
 } from "@sideform/browser-agent/agent/execute";
 import { getBrowserBridge } from "./bridge";
 import { FALLBACK_SIZE, isPositive, pageNodeName, placeNodeOnCanvas } from "./placeOnCanvas";
-import { peBase, safeParseObject } from "./shared";
+import { peBase, safeParseObject, withSecrets } from "./shared";
 
 /**
  * browse_screenshot — a viewport capture of the built-in browser tab
@@ -105,6 +105,6 @@ const placeOnCanvasStep = async (
 
 export const browseScreenshot: ToolHandler = (args, context) =>
   executeBrowseTool(getBrowserBridge(context?.sessionId, context?.browserSession), "browse_screenshot", args, {
-    ...peBase,
+    ...withSecrets(peBase, context?.sessionId),
     afterScreenshot: (ctx) => placeOnCanvasStep(ctx, context),
   });

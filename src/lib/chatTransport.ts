@@ -48,6 +48,9 @@ export const CLIENT_CAPABILITIES = {
   canvasTabs: isPanelCanvasLinkActive(),
   // The desktop panel can open markdown document tabs: the backend then offers doc_*.
   docTabs: getAgentPanelDocsBridge() !== undefined,
+  // The client keeps per-chat secrets and the executor substitutes `{{secret:<name>}}` in `type` text:
+  // the backend then lists the names the request carries. Static (the browser itself may be cloud).
+  browseSecrets: true,
   // The desktop panel can list and read open browse-run trace tabs: the backend then offers trace_list / trace_read.
   traceTabs: getAgentPanelTraceTabsBridge() !== undefined,
 } as const;

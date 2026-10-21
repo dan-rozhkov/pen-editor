@@ -7,6 +7,7 @@ import type { RetryState } from "@sideform/agent-harness/retry-fetch";
 import { browseTaskInnerBoundMs } from "@sideform/browser-agent/loop";
 import { track, bucketLength } from "@/lib/analytics";
 import { getLikedReferences } from "@/lib/canvasLink/likedReferences";
+import { secretNamesBody } from "@/store/browseSecretStore";
 import { consumeFirstPromptTiming } from "@/lib/analytics/sessionTiming";
 import { isOffline, OFFLINE_MESSAGE } from "@/lib/apiBase";
 import { getRequestUserId } from "@/lib/auth/authState";
@@ -68,6 +69,8 @@ export function buildCanvasContext(sessionId?: string): object {
     model,
     userId: getRequestUserId(),
     clientCapabilities: CLIENT_CAPABILITIES,
+    // Names only, never values; a top-level field, not part of canvasContext (cache invariant).
+    ...secretNamesBody(sessionId),
   };
 }
 
