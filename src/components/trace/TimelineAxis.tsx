@@ -20,7 +20,7 @@ interface Props {
   onSeek(time: number): void;
 }
 
-/** The time axis: step spans, the draggable playhead and the start and end labels. */
+/** The time axis: step spans, and the draggable playhead. */
 export function TimelineAxis({ timeline, startedAt, offset, selectedStep, onSelectStep, onSeek }: Props) {
   const trackRef = useRef<HTMLDivElement>(null);
   const press = useRef<{ x: number; id: number; dragging: boolean } | null>(null);
@@ -86,61 +86,55 @@ export function TimelineAxis({ timeline, startedAt, offset, selectedStep, onSele
   };
 
   return (
-    <>
+    <div
+      ref={trackRef}
+      className="relative mt-2 h-1.5 touch-none rounded-full bg-surface-elevated"
+      data-testid="trace-axis"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerEnd}
+      onPointerCancel={onPointerEnd}
+    >
+      {timeline.steps.map((s) => (
+        <button
+          key={s.index}
+          type="button"
+          tabIndex={-1}
+          data-span
+          data-space-plays
+          aria-label={`Step ${s.index + 1}`}
+          onClick={() => {
+            if (swallowClick.current) swallowClick.current = false;
+            else onSelectStep(s.index);
+          }}
+          className={cn(
+            "absolute inset-y-0 rounded-full",
+            s.index === selectedStep ? (s.ok ? "bg-accent-primary" : "bg-destructive") : s.ok ? "bg-accent-primary/30 hover:bg-accent-primary/50" : "bg-destructive/40 hover:bg-destructive/60",
+          )}
+          style={{ left: `${s.startPct}%`, width: `${s.widthPct}%` }}
+        />
+      ))}
+      {/* Playhead: above the spans and the markers. A 12px wide hit area around a 2px line. */}
       <div
-        ref={trackRef}
-        className="relative mt-2 h-1.5 touch-none rounded-full bg-surface-elevated"
-        data-testid="trace-axis"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerEnd}
-        onPointerCancel={onPointerEnd}
+        role="slider"
+        tabIndex={0}
+        aria-label="Playhead"
+        aria-orientation="horizontal"
+        aria-valuemin={0}
+        aria-valuemax={Math.round(span)}
+        aria-valuenow={Math.round(offset)}
+        aria-valuetext={`${formatClock(offset)} of ${formatClock(span)}`}
+        data-testid="trace-playhead"
+        onKeyDown={onKeyDown}
+        className="group/playhead absolute -inset-y-1.5 z-10 w-3 -translate-x-1/2 cursor-ew-resize outline-none"
+        style={{ left: `${(offset / span) * 100}%` }}
       >
-        {timeline.steps.map((s) => (
-          <button
-            key={s.index}
-            type="button"
-            tabIndex={-1}
-            data-span
-            data-space-plays
-            aria-label={`Step ${s.index + 1}`}
-            onClick={() => {
-              if (swallowClick.current) swallowClick.current = false;
-              else onSelectStep(s.index);
-            }}
-            className={cn(
-              "absolute inset-y-0 rounded-full",
-              s.index === selectedStep ? (s.ok ? "bg-accent-primary" : "bg-destructive") : s.ok ? "bg-accent-primary/30 hover:bg-accent-primary/50" : "bg-destructive/40 hover:bg-destructive/60",
-            )}
-            style={{ left: `${s.startPct}%`, width: `${s.widthPct}%` }}
-          />
-        ))}
-        {/* Playhead: above the spans and the markers. A 12px wide hit area around a 2px line. */}
-        <div
-          role="slider"
-          tabIndex={0}
-          aria-label="Playhead"
-          aria-orientation="horizontal"
-          aria-valuemin={0}
-          aria-valuemax={Math.round(span)}
-          aria-valuenow={Math.round(offset)}
-          aria-valuetext={`${formatClock(offset)} of ${formatClock(span)}`}
-          data-testid="trace-playhead"
-          onKeyDown={onKeyDown}
-          className="group/playhead absolute -inset-y-1.5 z-10 w-3 -translate-x-1/2 cursor-ew-resize outline-none"
-          style={{ left: `${(offset / span) * 100}%` }}
-        >
-          <span aria-hidden className="absolute inset-y-0 start-1/2 w-0.5 -translate-x-1/2 rounded-full bg-text-primary group-focus-visible/playhead:bg-accent-primary" />
-          <span
-            aria-hidden
-            className="absolute -top-0.5 start-1/2 size-2.5 -translate-x-1/2 rounded-full bg-text-primary ring-2 ring-surface-panel group-focus-visible/playhead:ring-ring"
-          />
-        </div>
+        <span aria-hidden className="absolute inset-y-0 start-1/2 w-0.5 -translate-x-1/2 rounded-full bg-text-primary group-focus-visible/playhead:bg-accent-primary" />
+        <span
+          aria-hidden
+          className="absolute -top-0.5 start-1/2 size-2.5 -translate-x-1/2 rounded-full bg-text-primary ring-2 ring-surface-panel group-focus-visible/playhead:ring-ring"
+        />
       </div>
-      <div aria-hidden className="mt-1 flex justify-between text-[10px] tabular-nums text-text-muted">
-        <span>{formatClock(0)}</span>
-        <span>{formatClock(span)}</span>
-      </div>
-    </>
+    </div>
   );
 }

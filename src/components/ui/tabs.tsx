@@ -21,7 +21,7 @@ function Tabs({
   );
 }
 
-const tabsListVariants = cva(
+export const tabsListVariants = cva(
   "rounded-lg p-[3px] group-data-horizontal/tabs:h-8 data-[variant=line]:rounded-none group/tabs-list text-muted-foreground inline-flex w-fit items-center justify-center group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col",
   {
     variants: {
@@ -51,6 +51,9 @@ function TabsList({
     />
   );
 }
+
+/** The pressed look of a default-variant tab, for controls that borrow the tabs' pill look. */
+export const TABS_TRIGGER_ACTIVE_CLASS = "bg-background text-foreground dark:text-foreground dark:border-input dark:bg-secondary/30";
 
 function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
   return (

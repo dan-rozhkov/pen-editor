@@ -72,7 +72,7 @@ export function TransportBar({ playing, offset, span, speed, pace, onTogglePlay,
       >
         <Icon className="size-4" weight="light" />
       </IconButton>
-      <p className="px-1 text-xs tabular-nums text-text-muted" data-testid="playback-time" aria-label="Playhead time">
+      <p className="text-xs tabular-nums text-text-muted" data-testid="playback-time" aria-label="Playhead time">
         <span className="text-text-secondary">{formatClock(offset)}</span> / {formatClock(span)}
       </p>
       <div className="ms-auto flex items-center gap-0.5">

@@ -40,7 +40,7 @@ export const FrameView = memo(function FrameView({ frame, startedAt, position, k
 
   return (
     <section aria-label="Frame" className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-panel">
-      <div className={cn(BAR_ROW, "shrink-0")}>
+      <div className={cn(BAR_ROW, "h-10 shrink-0 py-0")}>
         {compare && (
           <Segmented
             label="Frame view"
@@ -53,7 +53,7 @@ export const FrameView = memo(function FrameView({ frame, startedAt, position, k
           />
         )}
         {kind === "earlier" && (
-          <p data-testid="frame-note" className="min-w-0 truncate ps-1 text-xs text-amber-600 dark:text-amber-400">
+          <p data-testid="frame-note" className="min-w-0 truncate text-xs text-amber-600 dark:text-amber-400">
             Earlier frame — this step took no screenshot
           </p>
         )}

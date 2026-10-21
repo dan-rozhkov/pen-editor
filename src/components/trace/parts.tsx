@@ -1,10 +1,11 @@
 import type { ComponentProps, ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { TABS_TRIGGER_ACTIVE_CLASS, tabsListVariants } from "@/components/ui/tabs";
 import { TONE_ICON } from "./tone";
 import type { Tone } from "./traceModel";
 
-/** Toolbar row shared by the trace header, transport bar, frame bar and inspector tabs; same row as the /doc header and the chat header. */
-export const BAR_ROW = "flex items-center gap-1 px-2 py-1.5";
+/** Toolbar row shared by the trace header, transport bar, frame bar and inspector tabs. Its 16px gutter lines up with the filmstrip, the steps and the details panel. */
+export const BAR_ROW = "flex items-center gap-1 px-4 py-1.5";
 
 /** A frame screenshot's surface: white page, hairline outline that reads in light and dark. */
 export const FRAME_SURFACE = "bg-white outline outline-1 -outline-offset-1 outline-[oklch(0_0_0/0.1)] dark:outline-[oklch(1_0_0/0.1)]";
@@ -107,7 +108,7 @@ export function Segmented<T extends string>({
   disabled?: boolean;
 }) {
   return (
-    <div role="group" aria-label={label} className="flex shrink-0 rounded-md bg-secondary p-0.5">
+    <div role="group" aria-label={label} className={cn(tabsListVariants(), "h-8 shrink-0")}>
       {options.map((option) => (
         <button
           key={option.value}
@@ -116,8 +117,9 @@ export function Segmented<T extends string>({
           aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
           className={cn(
-            "h-5 rounded-sm px-2 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
-            value === option.value ? "bg-surface-panel text-text-primary" : "text-text-muted enabled:hover:text-text-primary",
+            // Same look as the TabsList pills in ui/tabs.tsx.
+            "inline-flex h-6 items-center justify-center rounded-md border border-transparent px-2 text-xs/relaxed font-medium whitespace-nowrap text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring enabled:hover:text-foreground disabled:opacity-50",
+            value === option.value && TABS_TRIGGER_ACTIVE_CLASS,
           )}
         >
           {option.label}

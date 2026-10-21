@@ -22,7 +22,7 @@ export const StepList = memo(function StepList({ rows, selected, flagged, onSele
 
   return (
     <section aria-label="Steps" className="flex min-h-0 flex-1 flex-col bg-surface-panel">
-      <SectionHeading as="h2" count={rows.length} className="flex shrink-0 items-baseline justify-between px-4 pt-3 pb-2">
+      <SectionHeading as="h2" count={rows.length} className="flex h-10 shrink-0 items-center justify-between px-4">
         Steps
       </SectionHeading>
       {rows.length === 0 ? (
@@ -36,12 +36,13 @@ export const StepList = memo(function StepList({ rows, selected, flagged, onSele
                 <RowButton
                   active={active}
                   onClick={() => onSelect(step.index)}
-                  className="group relative grid grid-cols-[minmax(1.5rem,auto)_minmax(0,1fr)_auto] items-baseline gap-x-2 gap-y-1 px-2 py-1.5"
+                  className="group relative grid grid-cols-[minmax(1.5rem,auto)_minmax(0,1fr)_minmax(3.5rem,max-content)] items-baseline gap-x-2 gap-y-1 px-2 py-1.5"
                 >
                   <span className="text-end text-[13px] leading-[18px] tabular-nums text-text-muted">{step.index + 1}</span>
                   <span className="min-w-0">
                     <span data-testid="step-title" className="flex h-[18px] items-center gap-1.5">
                       <span className="truncate text-[13px] leading-[18px] font-medium text-text-primary">{label}</span>
+                      {!step.ok && <ToneIcon tone="danger" label="Failed" className="size-3.5 shrink-0" />}
                       {flagged.has(step.index) && step.ok && (
                         <StatusDot tone="warning" title="Console or network problems" className="size-1.5 shrink-0" />
                       )}
@@ -54,10 +55,7 @@ export const StepList = memo(function StepList({ rows, selected, flagged, onSele
                       />
                     </span>
                   </span>
-                  <span className="flex h-[18px] items-center gap-1.5 text-[13px] leading-[18px] tabular-nums text-text-secondary">
-                    {formatDuration(durationMs)}
-                    {!step.ok && <ToneIcon tone="danger" label="Failed" className="size-3.5" />}
-                  </span>
+                  <span className="text-end text-[13px] leading-[18px] tabular-nums text-text-secondary">{formatDuration(durationMs)}</span>
                 </RowButton>
               </li>
             );

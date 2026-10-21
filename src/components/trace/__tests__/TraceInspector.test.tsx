@@ -40,8 +40,7 @@ describe("trace inspector", () => {
       const panel = within(openPanel());
       expect(panel.getByRole("heading", { name: /open/ })).toBeTruthy();
       expect(panel.getByText("OK")).toBeTruthy();
-      expect(panel.getByText("1.7 s")).toBeTruthy();
-      expect(panel.getByText("Starts +0:00.2")).toBeTruthy();
+      expect(panel.getByText("1.7 s · starts +0:00.2")).toBeTruthy();
       expect(text()).toContain('"url": "https://acme.test/"'); // args, pretty-printed
       expect(text()).toContain('"title": "Acme"'); // output, pretty-printed JSON
       expect(panel.getByRole("button", { name: "Copy arguments" })).toBeTruthy();

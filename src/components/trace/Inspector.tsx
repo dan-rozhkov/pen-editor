@@ -2,6 +2,7 @@ import type { BrowseTrace, BrowseTraceLogEntry, BrowseTraceRequest } from "@side
 import { LinkSimpleIcon } from "@phosphor-icons/react";
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,10 @@ import {
   traceRequests,
   type LogFilter,
 } from "./traceModel";
+
+/** One table style for console and network rows: 11px mono data, a fixed time column, 16px text edge (rows bleed 8px). */
+const ROW_GRID = "grid items-baseline gap-x-2 px-2 py-1.5 font-mono text-[11px]/relaxed";
+const TIME_CELL = "tabular-nums text-text-muted";
 
 function Empty({ title, hint }: { title: string; hint?: string }) {
   return <EmptyState size="panel" title={title} description={hint} className="mx-auto px-1 py-4" />;
@@ -118,7 +123,7 @@ function LogPanel({ trace, entries: all, droppedCount, selectedStep, kind, filte
     <>
       <LogToolbar kind={kind === "network" ? "requests" : kind} filter={filter} onChange={onFilter} canScope={selectedStep !== null} shown={entries.length} total={all.length} />
       {entries.length === 0 && <Empty title="Nothing matches" hint="Change the filter to see more." />}
-      <ul ref={listRef} className="-mx-1 space-y-0.5">
+      <ul ref={listRef} className="-mx-2 space-y-0.5">
         {entries.map((entry, i) => {
           const net = kind === "network" ? parseNetworkEntry(entry.text) : null;
           const linked = entry.stepIndex !== undefined;
@@ -129,21 +134,19 @@ function LogPanel({ trace, entries: all, droppedCount, selectedStep, kind, filte
                 active={current}
                 disabled={!linked}
                 onClick={() => entry.stepIndex !== undefined && onSelectStep(entry.stepIndex)}
-                className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-2 px-1 py-1.5"
+                className={cn(ROW_GRID, "grid-cols-[3.5rem_minmax(0,1fr)_auto]")}
               >
-                <span className="pt-px text-[11px] tabular-nums text-text-muted">{formatOffset(entry.at - trace.startedAt)}</span>
-                <span className="min-w-0 space-y-0.5">
-                  {net ? (
-                    <span className="flex items-baseline gap-1.5 font-mono text-[11px]/relaxed">
-                      <span className="font-semibold text-text-secondary">{net.method}</span>
-                      <span className={cn("font-semibold tabular-nums", net.failed ? "text-destructive" : "text-text-secondary")}>{net.status}</span>
-                      <span className="min-w-0 break-all text-text-muted">{net.url}</span>
-                    </span>
-                  ) : (
-                    <span className="block font-mono text-[11px]/relaxed break-words whitespace-pre-wrap text-text-secondary">{entry.text}</span>
-                  )}
-                  {linked && <span className="block text-[11px] text-text-muted">Step {entry.stepIndex! + 1}</span>}
-                </span>
+                <span className={TIME_CELL}>{formatOffset(entry.at - trace.startedAt)}</span>
+                {net ? (
+                  <span className="flex min-w-0 items-baseline gap-2">
+                    <span className="min-w-12 shrink-0 font-semibold text-text-secondary">{net.method}</span>
+                    <span title={String(net.status)} className={cn("max-w-[12rem] min-w-10 shrink-0 truncate font-semibold tabular-nums", net.failed ? "text-destructive" : "text-text-secondary")}>{net.status}</span>
+                    <span className="min-w-0 break-all text-text-muted">{net.url}</span>
+                  </span>
+                ) : (
+                  <span className="min-w-0 break-words whitespace-pre-wrap text-text-secondary">{entry.text}</span>
+                )}
+                <span className="text-end text-text-muted">{linked ? `Step ${entry.stepIndex! + 1}` : ""}</span>
               </RowButton>
             </li>
           );
@@ -160,7 +163,7 @@ function QaPanel({ trace }: { trace: BrowseTrace }) {
   const outcome = describeOutcome(trace);
   const judge = qa.judge;
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <section className="space-y-1.5">
         <OutcomeBadge tone={outcome.tone} label={outcome.label} />
         {qa.reason ? <p className="text-pretty text-sm text-text-primary">{qa.reason}</p> : <EmptyNote title="The agent gave no reason." />}
@@ -169,11 +172,11 @@ function QaPanel({ trace }: { trace: BrowseTrace }) {
       <section className="space-y-2">
         <SectionHeading count={qa.checks?.length ?? 0}>Checks</SectionHeading>
         {qa.checks && qa.checks.length > 0 ? (
-          <ul className="space-y-1.5">
+          <ul className="space-y-1">
             {qa.checks.map((check, i) => (
-              <li key={i} className="flex items-start gap-2 rounded-lg bg-surface-elevated px-3 py-2">
+              <li key={i} className="flex items-start gap-2 rounded-lg bg-surface-elevated px-3 py-2 text-xs/relaxed">
                 <ToneIcon tone={check.passed ? "success" : "danger"} label={check.passed ? "Passed" : "Failed"} className="mt-0.5 size-4 shrink-0" />
-                <div className="min-w-0 text-xs/relaxed">
+                <div className="min-w-0">
                   <p className="font-medium break-words text-text-primary">{describeCheck(check.check)}</p>
                   {(check.actual || check.error) && <p className="break-words text-text-muted">{check.error ?? check.actual}</p>}
                   <p className="text-[11px] text-text-disabled">{check.source === "final" ? "Final check" : "Agent check"}</p>
@@ -206,7 +209,7 @@ function QaPanel({ trace }: { trace: BrowseTrace }) {
 
 function Block({ title, text, copyLabel, empty }: { title: string; text: string; copyLabel: string; empty: string }) {
   return (
-    <section className="space-y-1.5">
+    <section className="min-w-0 space-y-1.5">
       <div className="flex items-center justify-between">
         <SectionHeading>{title}</SectionHeading>
         {text && <CopyButton text={text} label={copyLabel} />}
@@ -233,13 +236,25 @@ function StepPanel({ trace, selectedStep, canLink }: { trace: BrowseTrace; selec
           <span className="tabular-nums text-text-muted">{step.index + 1}</span> {toolLabel(step.tool)}
         </h3>
         <OutcomeBadge size="sm" tone={step.ok ? "success" : "danger"} label={step.ok ? "OK" : "Failed"} />
-        <span className="text-xs tabular-nums text-text-muted">{formatDuration(stepDuration(step))}</span>
-        <span className="text-xs tabular-nums text-text-muted">Starts {formatOffset(step.startedAt - trace.startedAt)}</span>
+        <span className="text-xs tabular-nums text-text-muted">
+          {formatDuration(stepDuration(step))} · starts {formatOffset(step.startedAt - trace.startedAt)}
+        </span>
         {canLink && (
-          <Button variant="ghost" size="sm" className="ms-auto" onClick={() => copy(stepLinkUrl(window.location, step.index))}>
+          <IconButton
+            variant="ghost"
+            size="icon-xs"
+            className="ms-auto"
+            tooltip={linkCopied ? "Link copied" : "Copy link to this step"}
+            aria-label="Copy link to this step"
+            onClick={() => copy(stepLinkUrl(window.location, step.index))}
+          >
             <LinkSimpleIcon weight="light" />
-            {linkCopied ? "Link copied" : "Copy link to this step"}
-          </Button>
+          </IconButton>
+        )}
+        {canLink && (
+          <span aria-live="polite" className="sr-only">
+            {linkCopied ? "Link copied" : ""}
+          </span>
         )}
       </div>
 
@@ -254,8 +269,8 @@ function StepPanel({ trace, selectedStep, canLink }: { trace: BrowseTrace; selec
           <SectionHeading count={actions.length}>Actions</SectionHeading>
           <ol className="space-y-1">
             {actions.map((action, i) => (
-              <li key={i} className="flex items-start gap-2 rounded-lg bg-surface-elevated px-3 py-1.5 text-xs/relaxed">
-                <ToneIcon tone={action.ok ? "success" : "danger"} label={action.ok ? "Passed" : "Failed"} className="mt-0.5 size-3.5 shrink-0" />
+              <li key={i} className="flex items-start gap-2 rounded-lg bg-surface-elevated px-3 py-2 text-xs/relaxed">
+                <ToneIcon tone={action.ok ? "success" : "danger"} label={action.ok ? "Passed" : "Failed"} className="mt-0.5 size-4 shrink-0" />
                 <span className="min-w-0">
                   <span className="font-medium break-words text-text-primary">{action.action}</span>
                   {action.error && <span className="block break-words text-destructive">{action.error}</span>}
@@ -267,8 +282,10 @@ function StepPanel({ trace, selectedStep, canLink }: { trace: BrowseTrace; selec
         </section>
       )}
 
-      <Block title="Arguments" text={prettyJson(step.args)} copyLabel="Copy arguments" empty="No arguments." />
-      <Block title="Output" text={prettyText(step.output)} copyLabel="Copy output" empty="No output." />
+      <div className="grid gap-4 min-[1100px]:grid-cols-2">
+        <Block title="Arguments" text={prettyJson(step.args)} copyLabel="Copy arguments" empty="No arguments." />
+        <Block title="Output" text={prettyText(step.output)} copyLabel="Copy output" empty="No output." />
+      </div>
     </div>
   );
 }
@@ -301,7 +318,7 @@ function RequestRow({ trace, request, open, onToggle, onSelectStep }: { trace: B
         type="button"
         aria-expanded={open}
         onClick={onToggle}
-        className="grid w-full grid-cols-[3rem_2.5rem_minmax(0,1fr)_4rem] items-center gap-x-2 rounded-md px-1 py-1.5 text-start font-mono text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-ring enabled:hover:bg-secondary min-[900px]:grid-cols-[3rem_2.5rem_minmax(0,1fr)_4rem_3.5rem_4rem_8rem]"
+        className="grid w-full grid-cols-[3.5rem_2.5rem_minmax(0,1fr)_4rem] items-baseline gap-x-2 rounded-md px-2 py-1.5 text-start font-mono text-[11px]/relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring enabled:hover:bg-secondary min-[900px]:grid-cols-[3.5rem_2.5rem_minmax(0,1fr)_4rem_3.5rem_4rem_8rem]"
       >
         <span className="font-semibold text-text-secondary">{request.method}</span>
         <span className={cn("font-semibold tabular-nums", failed ? "text-destructive" : "text-text-secondary")}>{request.error ? "ERR" : (request.status ?? "…")}</span>
@@ -320,7 +337,7 @@ function RequestRow({ trace, request, open, onToggle, onSelectStep }: { trace: B
         </span>
       </button>
       {open && (
-        <div className="mx-1 mb-1.5 space-y-3 rounded-lg bg-surface-elevated px-3 py-2">
+        <div className="mx-2 mb-1.5 space-y-3 rounded-lg bg-surface-elevated px-3 py-2">
           <p className="font-mono text-[11px]/relaxed break-all text-text-secondary">{request.url}</p>
           {request.error && <p className="text-xs break-words text-destructive">{request.error}</p>}
           <p className="text-[11px] text-text-muted">
@@ -371,20 +388,14 @@ function RequestsPanel({ trace, requests: all, selectedStep, filter, onFilter, f
   return (
     <>
       <LogToolbar kind="requests" filter={filter} onChange={onFilter} canScope={selectedStep !== null} shown={requests.length} total={all.length}>
-        <Segmented
-          label="Request status"
-          value={failedOnly ? "failed" : "all"}
-          options={[
-            { value: "all", label: "All" },
-            { value: "failed", label: "Failed only" },
-          ]}
-          onChange={(v) => onFailedOnly(v === "failed")}
-        />
+        <Button variant="secondary" size="sm" aria-pressed={failedOnly} onClick={() => onFailedOnly(!failedOnly)} className={cn(failedOnly && "bg-accent-selection")}>
+          Failed only
+        </Button>
       </LogToolbar>
       {requests.length === 0 ? (
         <Empty title="Nothing matches" hint="Change the filter to see more." />
       ) : (
-        <ul className="-mx-1 space-y-0.5">
+        <ul className="-mx-2 space-y-0.5">
           {requests.map((request) => {
             const key = keys.get(request)!;
             return <RequestRow key={key} trace={trace} request={request} open={openKey === key} onToggle={() => setOpenKey(openKey === key ? null : key)} onSelectStep={onSelectStep} />;
@@ -429,20 +440,20 @@ export const Inspector = memo(function Inspector({ trace, selectedStep, onSelect
           </TabsTrigger>
         </TabsList>
       </div>
-      <TabsContent value="step" className="min-h-0 overflow-y-auto px-3 pb-3">
+      <TabsContent value="step" className="min-h-0 overflow-y-auto px-4 pb-3">
         <StepPanel key={selectedStep} trace={trace} selectedStep={selectedStep} canLink={canLink} />
       </TabsContent>
-      <TabsContent value="console" className="min-h-0 overflow-y-auto px-2 pb-3">
+      <TabsContent value="console" className="min-h-0 overflow-y-auto px-4 pb-3">
         <LogPanel trace={trace} entries={trace.console} droppedCount={trace.dropped?.console} selectedStep={selectedStep} kind="console" filter={consoleFilter} onFilter={setConsoleFilter} onSelectStep={onSelectStep} />
       </TabsContent>
-      <TabsContent value="network" className="min-h-0 overflow-y-auto px-2 pb-3">
+      <TabsContent value="network" className="min-h-0 overflow-y-auto px-4 pb-3">
         {requests.length > 0 ? (
           <RequestsPanel trace={trace} requests={requests} selectedStep={selectedStep} filter={networkFilter} onFilter={setNetworkFilter} failedOnly={failedOnly} onFailedOnly={setFailedOnly} onSelectStep={onSelectStep} />
         ) : (
           <LogPanel trace={trace} entries={trace.network} droppedCount={trace.dropped?.network} selectedStep={selectedStep} kind="network" filter={networkFilter} onFilter={setNetworkFilter} onSelectStep={onSelectStep} />
         )}
       </TabsContent>
-      <TabsContent value="qa" className="min-h-0 overflow-y-auto px-3 pb-3">
+      <TabsContent value="qa" className="min-h-0 overflow-y-auto px-4 pb-3">
         <QaPanel trace={trace} />
       </TabsContent>
     </Tabs>

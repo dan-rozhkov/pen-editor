@@ -19,9 +19,9 @@ export const TraceHeader = memo(function TraceHeader({ trace, detailsOpen, onTog
   const title = goalFirstLine(trace.goal);
   return (
     <header className="shrink-0 border-b border-border-default bg-surface-panel">
-      {/* Same row as the /doc header and the chat header. */}
+      {/* Toolbar row of the trace viewer; the 16px gutter lines up with the filmstrip, steps and details panel. */}
       <div className={BAR_ROW}>
-        <h1 className="min-w-0 flex-1 truncate px-1 text-sm font-medium text-text-primary" title={trace.goal}>
+        <h1 className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary" title={trace.goal}>
           {title}
         </h1>
         <OutcomeBadge tone={outcome.tone} label={outcome.label} data-testid="trace-outcome" />

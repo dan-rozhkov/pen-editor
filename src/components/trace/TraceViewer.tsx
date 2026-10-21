@@ -249,7 +249,7 @@ export function TraceViewer({ trace, initialStep, deepLink = true }: ViewerProps
         </div>
       </main>
       {/* Hidden, not unmounted: the selected tab and the scroll position survive. */}
-      <div hidden={!detailsOpen} className={cn("h-72 min-h-0 min-w-0 shrink-0 flex-col border-t border-border-default", detailsOpen && "flex")}>
+      <div hidden={!detailsOpen} className={cn("h-60 min-[900px]:h-72 min-h-0 min-w-0 shrink-0 flex-col border-t border-border-default", detailsOpen && "flex")}>
         <Inspector trace={trace} selectedStep={stepIndex} onSelectStep={selectStep} canLink={deepLink} />
       </div>
     </div>

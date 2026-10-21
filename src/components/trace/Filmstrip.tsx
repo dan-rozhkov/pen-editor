@@ -170,7 +170,7 @@ export function Filmstrip({ trace, selectedFrameId, selectedStep, flagged, onSel
         onSpeedChange={player.onSpeedChange}
         onPaceChange={player.onPaceChange}
       />
-      <div ref={scrollRef} className="overflow-x-auto px-4 pt-1 pb-2">
+      <div ref={scrollRef} className="overflow-x-auto px-4 py-2">
         <div className="relative" style={{ width: stripW }}>
           <Thumbnails trace={trace} timeline={timeline} n={n} tileW={tileW} onSeekSlot={onSeekSlot} selectedFrameId={selectedFrameId} flagged={flagged} onSelectFrame={onSelectFrame} />
           <TimelineAxis
