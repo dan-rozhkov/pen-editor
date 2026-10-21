@@ -93,14 +93,14 @@ export function StepCard({ step, index, count, registerInput, onChange, onEnter,
         drag.onDrop(index);
       }}
       className={cn(
-        "group/step relative flex w-full items-start gap-3 rounded-2xl border border-border-default bg-surface-panel p-3 shadow-[0_1px_2px_rgba(0,0,0,0.05),0_6px_16px_-6px_rgba(0,0,0,0.1)] transition-[border-color,opacity] focus-within:border-accent-primary",
+        "group/step relative flex w-full items-start gap-3 rounded-2xl border border-border-default bg-surface-panel p-3 shadow-[0_1px_2px_rgba(0,0,0,0.05),0_6px_16px_-6px_rgba(0,0,0,0.1)] transition-[border-color,opacity] focus-within:border-text-muted",
         drag.dragging && "opacity-40",
-        drag.over && !drag.dragging && "border-accent-primary",
+        drag.over && !drag.dragging && "border-text-muted",
       )}
     >
       <span
         aria-hidden
-        className="flex size-8 shrink-0 select-none items-center justify-center rounded-lg bg-accent-selection text-xs font-semibold text-accent-primary tabular-nums"
+        className="flex size-8 shrink-0 select-none items-center justify-center rounded-lg bg-surface-hover text-xs font-medium text-text-secondary tabular-nums"
       >
         {number}
       </span>
@@ -133,16 +133,16 @@ export function StepCard({ step, index, count, registerInput, onChange, onEnter,
           onDragEnd={drag.onEnd}
           className={cn(ACTION_CLASS, "cursor-grab active:cursor-grabbing")}
         >
-          <DotsSixVerticalIcon weight="bold" />
+          <DotsSixVerticalIcon weight="light" />
         </IconButton>
         <IconButton variant="ghost" size="icon-xs" tooltip="Move up" aria-label={`Move step ${number} up`} disabled={index === 0} onClick={() => onMove(index, -1)} className={ACTION_CLASS}>
-          <ArrowUpIcon />
+          <ArrowUpIcon weight="light" />
         </IconButton>
         <IconButton variant="ghost" size="icon-xs" tooltip="Move down" aria-label={`Move step ${number} down`} disabled={index === count - 1} onClick={() => onMove(index, 1)} className={ACTION_CLASS}>
-          <ArrowDownIcon />
+          <ArrowDownIcon weight="light" />
         </IconButton>
         <IconButton variant="ghost" size="icon-xs" tooltip="Delete step" aria-label={`Delete step ${number}`} onClick={() => onRemove(index)} className={ACTION_CLASS}>
-          <TrashIcon />
+          <TrashIcon weight="light" />
         </IconButton>
       </div>
     </div>

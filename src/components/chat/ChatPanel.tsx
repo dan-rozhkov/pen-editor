@@ -6,7 +6,6 @@ import {
   ArrowLeftIcon,
   StopIcon,
   CaretDownIcon,
-  ImageIcon,
   ArrowLineLeftIcon,
   DotsThreeVerticalIcon,
   BookOpenIcon,
@@ -78,12 +77,9 @@ function cloneLaunchPayload(payload: ChatLaunchPayload): ChatLaunchPayload {
 interface ComposerControlsProps {
   formId: string;
   canSubmit: boolean;
-  canAttach: boolean;
-  attachLabel: string;
-  openFilePicker: () => void;
   isLoading: boolean;
   stop: () => void;
-  workflowPicker: ReactNode;
+  attachMenu: ReactNode;
 }
 
 type ComposerControlsRenderer = (props: ComposerControlsProps) => ReactNode;
@@ -551,26 +547,12 @@ export function ChatPanelContent({
   const composerControls: ComposerControlsRenderer = ({
     formId,
     canSubmit,
-    canAttach,
-    attachLabel,
-    openFilePicker,
     isLoading,
     stop,
-    workflowPicker,
+    attachMenu,
   }) => (
     <>
-      <IconButton
-        type="button"
-        variant="ghost"
-        size="icon"
-        tooltip={attachLabel}
-        onClick={openFilePicker}
-        disabled={!canAttach}
-        className="size-[30px] text-text-muted hover:bg-secondary"
-      >
-        <ImageIcon size={18} weight="light" />
-      </IconButton>
-      {workflowPicker}
+      {attachMenu}
       <div className="ml-auto flex items-center gap-1">
         <ContextMeter />
         <DropdownMenu>

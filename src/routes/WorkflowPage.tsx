@@ -78,7 +78,7 @@ export default function WorkflowPage() {
               description="Create a workflow to describe the steps the agent should follow."
               action={
                 <Button variant="outline" onClick={sync.create}>
-                  <PlusIcon /> New workflow
+                  <PlusIcon weight="light" /> New workflow
                 </Button>
               }
             />
@@ -98,12 +98,12 @@ export default function WorkflowPage() {
                   {sync.workflows.map((workflow) => (
                     <DropdownMenuItem key={workflow.id} onClick={() => sync.select(workflow.id)}>
                       <span className="truncate">{workflow.title}</span>
-                      {workflow.id === sync.id && <CheckIcon className="ml-auto" />}
+                      {workflow.id === sync.id && <CheckIcon className="ml-auto" weight="light" />}
                     </DropdownMenuItem>
                   ))}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={sync.create}>
-                    <PlusIcon /> New workflow
+                    <PlusIcon weight="light" /> New workflow
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -122,20 +122,20 @@ export default function WorkflowPage() {
                 <DropdownMenuTrigger
                   render={
                     <IconButton variant="ghost" size="icon" tooltip="Workflow options">
-                      <DotsThreeVerticalIcon className="size-4" weight="bold" />
+                      <DotsThreeVerticalIcon className="size-4" weight="light" />
                     </IconButton>
                   }
                 />
                 <DropdownMenuContent align="end" sideOffset={4} className="min-w-48">
                   <DropdownMenuItem onClick={copyMarkdown}>
-                    <CopyIcon /> Copy as Markdown
+                    <CopyIcon weight="light" /> Copy as Markdown
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setPasteText("")}>
-                    <ClipboardTextIcon /> Paste from Markdown
+                    <ClipboardTextIcon weight="light" /> Paste from Markdown
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => setConfirmingDelete(true)}>
-                    <TrashIcon /> Delete workflow
+                    <TrashIcon weight="light" /> Delete workflow
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

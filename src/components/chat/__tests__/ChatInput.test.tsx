@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor, act } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor, act, within } from "@testing-library/react";
 import { useState } from "react";
 import { ChatInput } from "../ChatInput";
 import { useChatStore } from "@/store/chatStore";
@@ -118,6 +118,14 @@ function Harness({
       awaitingAnswer={awaitingAnswer}
     />
   );
+}
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Opens the composer's "Attach" menu and returns the menu item whose name starts with `name` (the Image item may carry a hint after it). */
+async function openAttachMenu(name: string) {
+  fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+  return screen.findByRole("menuitem", { name: new RegExp(`^${escapeRegExp(name)}`) });
 }
 
 describe("<ChatInput />", () => {
@@ -384,10 +392,11 @@ describe("<ChatInput />", () => {
     expect(useChatStore.getState().attachedImages["tab-B"]).toBeUndefined();
   });
 
-  it("offers an enabled Attach image button when the model reads images", () => {
+  it("offers an enabled Image item in the Attach menu when the model reads images", async () => {
     render(<Harness onSubmit={vi.fn()} />);
-    const attach = screen.getByLabelText("Attach image") as HTMLButtonElement;
-    expect(attach.disabled).toBe(false);
+    const item = await openAttachMenu("Image");
+    expect(item.getAttribute("aria-disabled")).not.toBe("true");
+    expect(item.textContent).toBe("Image");
   });
 
   it("allows attaching without native vision when the backend has a vision fallback", async () => {
@@ -396,11 +405,10 @@ describe("<ChatInput />", () => {
     const onSubmit = vi.fn();
     render(<Harness onSubmit={onSubmit} />);
 
-    // Attach control is enabled with copy explaining the description-only path.
-    const attach = screen.getByLabelText(
-      "Attach image (described as text for this model)"
-    ) as HTMLButtonElement;
-    expect(attach.disabled).toBe(false);
+    // Attach item is enabled with copy explaining the description-only path.
+    const item = await openAttachMenu("Image");
+    expect(item.getAttribute("aria-disabled")).not.toBe("true");
+    expect(item.textContent).toContain("described as text");
 
     const fileInput = document.querySelector(
       'input[type="file"]'
@@ -478,8 +486,7 @@ describe("<ChatInput />", () => {
       render(<Harness onSubmit={vi.fn()} initialInput="go" />);
       // 5 selected nodes would exceed MAX_IMAGES (4) if they occupied a
       // slot; they don't, so the attach button is unaffected.
-      const attach = screen.getByLabelText("Attach image") as HTMLButtonElement;
-      expect(attach.disabled).toBe(false);
+      expect((await openAttachMenu("Image")).getAttribute("aria-disabled")).not.toBe("true");
 
       const fileInput = document.querySelector(
         'input[type="file"]'
@@ -524,8 +531,9 @@ describe("<ChatInput />", () => {
       await waitFor(() =>
         expect(screen.getAllByRole("img")).toHaveLength(4)
       );
-      const attach = screen.getByLabelText(`Max 4 images`) as HTMLButtonElement;
-      expect(attach.disabled).toBe(true);
+      const item = await openAttachMenu("Image");
+      expect(item.getAttribute("aria-disabled")).toBe("true");
+      expect(item.textContent).toContain("Max 4 images");
     });
   });
 
@@ -686,10 +694,9 @@ describe("<ChatInput />", () => {
 describe("<ChatInput /> attached workflow", () => {
   beforeEach(() => localStorage.clear());
 
-  /** Attaches the workflow `title` through the picker. */
+  /** Attaches the workflow `title` through the Attach menu. */
   async function attach(title: string) {
-    fireEvent.click(screen.getByRole("button", { name: "Attach workflow" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: new RegExp(title) }));
+    fireEvent.click(await openAttachMenu(title));
   }
 
   const seedWorkflow = (title: string, texts: string[]) =>
@@ -697,17 +704,18 @@ describe("<ChatInput /> attached workflow", () => {
 
   it("says so when there are no workflows", async () => {
     render(<Harness onSubmit={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Attach workflow" }));
+    await openAttachMenu("Image");
     expect(await screen.findByText("No workflows yet")).toBeTruthy();
   });
 
-  it("lists workflows newest first with their step counts", async () => {
+  it("lists workflows newest first", async () => {
     seedWorkflow("Older", ["a"]);
     seedWorkflow("Newer", ["a", "b"]);
     render(<Harness onSubmit={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Attach workflow" }));
-    const items = await screen.findAllByRole("menuitem");
-    expect(items.map((i) => i.textContent)).toEqual(["Newer2 steps", "Older1 step"]);
+    await openAttachMenu("Image");
+    const group = await screen.findByRole("group", { name: "Workflow" });
+    const items = within(group).getAllByRole("menuitem");
+    expect(items.map((i) => i.textContent)).toEqual(["Newer", "Older"]);
   });
 
   it("sends the text followed by the workflow block and clears the chip", async () => {
@@ -715,7 +723,7 @@ describe("<ChatInput /> attached workflow", () => {
     const onSubmit = vi.fn(() => true);
     render(<Harness onSubmit={onSubmit} />);
     await attach("Launch");
-    expect(screen.getByTestId("workflow-chip").textContent).toContain("Launch2 steps");
+    expect(screen.getByTestId("workflow-chip").textContent).toContain("Launch");
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "  do it  " } });
     fireEvent.click(screen.getByLabelText("Send"));
     expect(onSubmit).toHaveBeenCalledWith({
@@ -762,7 +770,15 @@ describe("<ChatInput /> attached workflow", () => {
     expect(screen.queryByTestId("workflow-chip")).toBeNull();
   });
 
-  it("shows one picker when a custom footer places it", () => {
+  it("detaches the attached workflow when it is picked again", async () => {
+    seedWorkflow("Launch", ["a"]);
+    render(<Harness onSubmit={vi.fn()} />);
+    await attach("Launch");
+    await attach("Launch");
+    expect(screen.queryByTestId("workflow-chip")).toBeNull();
+  });
+
+  it("shows one Attach button when a custom footer places it", () => {
     render(
       <ChatInput
         sessionId="test-session"
@@ -771,10 +787,10 @@ describe("<ChatInput /> attached workflow", () => {
         onSubmit={vi.fn()}
         isLoading={false}
         stop={() => {}}
-        renderFooter={({ workflowPicker }) => <div>{workflowPicker}</div>}
+        renderFooter={({ attachMenu }) => <div>{attachMenu}</div>}
       />,
     );
-    expect(screen.getAllByRole("button", { name: "Attach workflow" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Attach" })).toHaveLength(1);
   });
 
   it("sends without a workflow deleted after it was attached", async () => {

@@ -12,17 +12,15 @@ interface WorkflowCanvasProps {
   setSteps: (update: (steps: readonly WorkflowStep[]) => readonly WorkflowStep[]) => void;
 }
 
-/** A dashed connector with a dot at each end and an arrow head; `onInsert` adds a hover "+" in its middle. */
+/** A thin solid connector ending in an open arrow head; `onInsert` adds a hover "+" in its middle. */
 function Connector({ label, onInsert }: { label?: string; onInsert?: () => void }) {
   return (
     <div className="group/connector relative flex h-10 w-full justify-center" data-connector>
-      <div aria-hidden className="relative flex h-full flex-col items-center text-border-hover">
-        <span className="size-1.5 rounded-full border border-current bg-surface-base" />
-        <span className="w-0 flex-1 border-l-2 border-dashed border-current" />
-        <svg viewBox="0 0 8 5" className="h-[5px] w-2 fill-current">
-          <path d="M0 0h8L4 5z" />
+      <div aria-hidden className="relative flex h-full flex-col items-center py-1 text-border-hover">
+        <span className="w-px flex-1 bg-current" />
+        <svg viewBox="0 0 8 4.5" className="-mt-[3.5px] h-[4.5px] w-2 overflow-visible fill-none stroke-current" strokeWidth={1} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M0.5 0.5 4 4l3.5-3.5" />
         </svg>
-        <span className="size-1.5 rounded-full border border-current bg-surface-base" />
       </div>
       {onInsert && (
         <IconButton
@@ -33,7 +31,7 @@ function Connector({ label, onInsert }: { label?: string; onInsert?: () => void 
           onClick={onInsert}
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-surface-panel text-text-muted opacity-0 transition-opacity group-hover/connector:opacity-100 focus-visible:opacity-100"
         >
-          <PlusIcon weight="bold" />
+          <PlusIcon weight="light" />
         </IconButton>
       )}
     </div>
@@ -116,7 +114,7 @@ export function WorkflowCanvas({ steps, setSteps }: WorkflowCanvasProps) {
           description="A workflow is a list of steps the agent completes in order."
           action={
             <Button variant="outline" onClick={() => addAt(0)}>
-              <PlusIcon /> Add first step
+              <PlusIcon weight="light" /> Add first step
             </Button>
           }
         />
@@ -176,7 +174,7 @@ export function WorkflowCanvas({ steps, setSteps }: WorkflowCanvasProps) {
           onClick={() => addAt(steps.length)}
           className="size-10 rounded-full bg-surface-panel text-text-muted shadow-[0_1px_2px_rgba(0,0,0,0.05),0_6px_16px_-6px_rgba(0,0,0,0.1)] hover:text-text-primary"
         >
-          <PlusIcon weight="bold" />
+          <PlusIcon weight="light" />
         </IconButton>
       </li>
     </ol>

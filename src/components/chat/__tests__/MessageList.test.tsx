@@ -167,17 +167,17 @@ describe("<MessageList />", () => {
     expect(scrollTopSetter).toHaveBeenCalled();
   });
 
-  it("shows an attached workflow as a card that expands into its steps", () => {
+  it("shows an attached workflow as a small title chip instead of the raw block", () => {
     const block = workflowToPrompt({ id: "wf_1", title: "Launch", steps: stepsFromTexts(["Open the app", "Export"]) });
     const { container } = render(
       <MessageList messages={[userMessage("u1", `make it so\n\n${block}`)]} isLoading={false} />
     );
     expect(screen.getByText("make it so")).toBeTruthy();
     expect(container.textContent).not.toContain("<workflow");
-    const card = screen.getByRole("button", { name: /Workflow · Launch · 2 steps/ });
+    expect(screen.getByText("Launch")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Launch/ })).toBeNull();
     expect(screen.queryByText("Open the app")).toBeNull();
-    fireEvent.click(card);
-    expect(screen.getByText("Open the app")).toBeTruthy();
-    expect(screen.getByText("Export")).toBeTruthy();
+    expect(container.textContent).not.toContain("steps");
   });
+
 });

@@ -2,7 +2,6 @@ import { useState, useRef, useCallback, useEffect, useMemo, type ReactNode } fro
 import {
   PaperPlaneRightIcon,
   StopIcon,
-  ImageIcon,
   XIcon,
   CodeIcon,
 } from "@phosphor-icons/react";
@@ -22,9 +21,10 @@ import {
   MAX_ATTACHMENT_SIDE,
 } from "@/lib/tools/screenshotDownscale";
 import { NodeIcon } from "@/components/layers/LayerIcons";
-import { WorkflowChip, WorkflowPicker } from "@/components/workflow/WorkflowPicker";
+import { WorkflowChip } from "@/components/workflow/WorkflowPicker";
+import { AttachMenu } from "./AttachMenu";
 import { useWorkflowById } from "@/components/workflow/useWorkflowList";
-import { countFilledSteps, getWorkflow } from "@/lib/workflows/workflowStore";
+import { getWorkflow } from "@/lib/workflows/workflowStore";
 import { workflowToPrompt } from "@/lib/workflows/workflowMarkdown";
 import {
   Tooltip,
@@ -79,13 +79,10 @@ interface ChatInputProps {
 interface ChatInputFooterProps {
   formId: string;
   canSubmit: boolean;
-  canAttach: boolean;
-  attachLabel: string;
-  openFilePicker: () => void;
   isLoading: boolean;
   stop: () => void;
-  /** The "Attach workflow" button, to place next to the image button. */
-  workflowPicker: ReactNode;
+  /** The ready "Attach" paperclip menu (image + workflows). */
+  attachMenu: ReactNode;
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -226,16 +223,21 @@ export function ChatInput({
     // isn't stranded (covers both the built-in send button and renderFooter).
     !awaitingAnswer &&
     (input.trim().length > 0 || attachedImages.length > 0 || attachedWorkflow !== null);
-  const canAttach = canAttachImages && attachedImages.length < MAX_IMAGES;
-  const attachLabel = !canAttachImages
+  const imageDisabledReason = !canAttachImages
     ? "Selected model can't read images"
     : attachedImages.length >= MAX_IMAGES
       ? `Max ${MAX_IMAGES} images`
-      : nativeVision
-        ? "Attach image"
-        : "Attach image (described as text for this model)";
-  const openFilePicker = () => fileInputRef.current?.click();
-  const workflowPicker = <WorkflowPicker selectedId={attachedWorkflowId} onSelect={setAttachedWorkflowId} />;
+      : null;
+  const imageHint = nativeVision ? undefined : "described as text";
+  const attachMenu = (
+    <AttachMenu
+      imageDisabledReason={imageDisabledReason}
+      imageHint={imageHint}
+      onPickImage={() => fileInputRef.current?.click()}
+      selectedWorkflowId={attachedWorkflowId}
+      onSelectWorkflow={setAttachedWorkflowId}
+    />
+  );
 
   // Extract slash query from input (e.g. "/aud" -> "aud", "/" -> "")
   const slashQuery = useMemo(() => {
@@ -534,7 +536,6 @@ export function ChatInput({
       {attachedWorkflow && (
         <WorkflowChip
           title={attachedWorkflow.title}
-          stepCount={countFilledSteps(attachedWorkflow.steps)}
           onRemove={() => setAttachedWorkflowId(null)}
         />
       )}
@@ -570,25 +571,7 @@ export function ChatInput({
       )}
 
       <div className="flex items-end gap-2">
-        {!renderFooter && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  type="button"
-                  onClick={openFilePicker}
-                  disabled={!canAttach}
-                  className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled disabled:pointer-events-none transition-colors"
-                  aria-label={attachLabel}
-                >
-                  <ImageIcon size={18} weight="light" />
-                </button>
-              }
-            />
-            <TooltipContent>{attachLabel}</TooltipContent>
-          </Tooltip>
-        )}
-        {!renderFooter && workflowPicker}
+        {!renderFooter && attachMenu}
         <input
           ref={fileInputRef}
           type="file"
@@ -672,18 +655,12 @@ export function ChatInput({
         )}
       </div>
       </form>
-      {/* openFilePicker reads fileInputRef only when invoked (on click), never
-          during this render-time call — the ref rule is a false positive here. */}
-      {/* eslint-disable-next-line react-hooks/refs */}
       {renderFooter?.({
         formId,
         canSubmit,
-        canAttach,
-        attachLabel,
-        openFilePicker,
         isLoading,
         stop,
-        workflowPicker,
+        attachMenu,
       })}
     </>
   );
