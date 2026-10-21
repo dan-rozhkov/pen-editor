@@ -1,4 +1,3 @@
-import { useBrowseSecretStore } from "@/store/browseSecretStore";
 import {
   attachSnapshot as packageAttachSnapshot,
   callBridge,
@@ -100,14 +99,3 @@ export const peBase: ExecuteBrowseToolOptions = {
     commandFailed: "Built-in browser command failed.",
   },
 };
-
-/**
- * `opts` plus the chat's secrets (`{{secret:<name>}}` placeholders, see
- * browseSecretStore). `sessionId` is the chat's id (a browse sub-agent passes
- * its PARENT's). Read per call so a secret added mid-run applies at once.
- * Without a chat id no `secrets` option is set, so a placeholder errors cleanly.
- */
-export function withSecrets(opts: ExecuteBrowseToolOptions, sessionId: string | undefined): ExecuteBrowseToolOptions {
-  if (!sessionId) return opts;
-  return { ...opts, secrets: () => useBrowseSecretStore.getState().valuesFor(sessionId) };
-}

@@ -58,7 +58,6 @@ import {
   getLastUserMessageText,
   useDesignChat,
 } from "@/hooks/useDesignChat";
-import { resetBrowseSecrets, useBrowseSecretStore } from "@/store/browseSecretStore";
 import { setCredentialsEnabled } from "@/lib/apiBase";
 import { toolHandlers, type ToolHandler } from "@/lib/toolRegistry";
 import { clearOpenCodeKey, setOpenCodeKey } from "@/lib/opencodeKey";
@@ -317,19 +316,6 @@ describe("buildCanvasContext", () => {
     seedVariables();
   });
 
-  it("sends browseSecrets (names only, top level) only when the chat has secrets", () => {
-    resetBrowseSecrets();
-    expect(buildCanvasContext("chat-s")).not.toHaveProperty("browseSecrets");
-
-    useBrowseSecretStore.getState().set("chat-s", "pw", "hunter22");
-    const context = buildCanvasContext("chat-s") as Record<string, unknown>;
-    expect(context.browseSecrets).toEqual(["pw"]);
-    expect(context.canvasContext as string).not.toContain("pw");
-    expect(JSON.stringify(context)).not.toContain("hunter22");
-    expect(buildCanvasContext("other-chat")).not.toHaveProperty("browseSecrets");
-    resetBrowseSecrets();
-  });
-
   it("serializes scene roots, selection and variables, with no agentMode", () => {
     useSelectionStore.setState({ selectedIds: ["rect1"] });
 
@@ -582,7 +568,7 @@ describe("clientCapabilities", () => {
 
     const context = fresh.buildCanvasContext() as Record<string, unknown>;
 
-    expect(context.clientCapabilities).toEqual({ desktopBrowser: true, browser: "desktop", browseQa: true, browseIsolation: false, browseAssert: false, browseApps: false, browseNativeApps: false, browseSecrets: true, canvasTabs: false, docTabs: false, traceTabs: false });
+    expect(context.clientCapabilities).toEqual({ desktopBrowser: true, browser: "desktop", browseQa: true, browseIsolation: false, browseAssert: false, browseApps: false, browseNativeApps: false, canvasTabs: false, docTabs: false, traceTabs: false });
     // Not nested inside the stringified canvasContext.
     const canvas = JSON.parse((context as { canvasContext: string }).canvasContext);
     expect(canvas.clientCapabilities).toBeUndefined();
@@ -595,7 +581,7 @@ describe("clientCapabilities", () => {
 
     const context = fresh.buildCanvasContext() as Record<string, unknown>;
 
-    expect(context.clientCapabilities).toEqual({ desktopBrowser: false, browser: "cloud", browseQa: true, browseIsolation: false, browseAssert: true, browseApps: false, browseNativeApps: false, browseSecrets: true, canvasTabs: false, docTabs: false, traceTabs: false });
+    expect(context.clientCapabilities).toEqual({ desktopBrowser: false, browser: "cloud", browseQa: true, browseIsolation: false, browseAssert: true, browseApps: false, browseNativeApps: false, canvasTabs: false, docTabs: false, traceTabs: false });
   });
 
   it("docTabs is true when the agent panel exposes docs.open at import time", async () => {

@@ -38,12 +38,7 @@ import {
   type QaJudgeResult,
   type BrowseAgentResult,
 } from "@sideform/browser-agent/agent/session";
-import {
-  executeBrowseTool,
-  hasSecretPlaceholder,
-  inputHasSecretPlaceholder,
-  resolveSecretPlaceholders,
-} from "@sideform/browser-agent/agent/execute";
+import { executeBrowseTool } from "@sideform/browser-agent/agent/execute";
 import { parsePageFixture, type FixtureNetworkRule } from "@sideform/browser-agent/fixture";
 import { Chat } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai";
@@ -54,8 +49,7 @@ import { createChatTransport, CLIENT_CAPABILITIES } from "@/lib/chatTransport";
 import type { ToolHandler } from "../../toolRegistry";
 import { CLOSE_SESSION_TIMEOUT_MS, closeBrowserSession, getBrowserBridge, isDesktopBrowserAvailable, type BrowserBridge } from "./bridge";
 import { APP_NEEDS_DESKTOP_ERROR } from "./browseOpen";
-import { peBase, withSecrets } from "./shared";
-import { redactAllSecrets, secretNamesBody, useBrowseSecretStore } from "@/store/browseSecretStore";
+import { peBase } from "./shared";
 import { APP_LAUNCH_ALLOWANCE_MS, appArgOf, desktopAppsAvailable, isIsolatedQaCall, rememberRunSession, runSessionId } from "./isolation";
 import { acquireBrowseSlot } from "@/lib/browseRunLimiter";
 import { tracesForAllRuns } from "@/lib/browseTracePref";
@@ -541,42 +535,6 @@ function withCarriedDialogs<T>(output: T, dialogs: readonly unknown[] | undefine
   return { ...output, dialogs: [...(Array.isArray(own) ? own : []), ...dialogs] };
 }
 
-/**
- * Walks a fixture and resolves `{{secret:<name>}}` in the `text` of every `type` step against the
- * chat's secrets. An unknown name is an error (it never holds a value). Returns a copy.
- */
-export function resolveSetupSecrets<T>(value: T, chatId: string | undefined): { ok: true; value: T } | { ok: false; error: string } {
-  if (!inputHasSecretPlaceholder(value)) return { ok: true, value };
-  const secrets = chatId ? useBrowseSecretStore.getState().valuesFor(chatId) : {};
-  let error: string | undefined;
-  const walk = (v: unknown): unknown => {
-    if (Array.isArray(v)) return v.map(walk);
-    if (v === null || typeof v !== "object") return v;
-    const obj = v as Record<string, unknown>;
-    const out: Record<string, unknown> = {};
-    for (const [k, x] of Object.entries(obj)) out[k] = walk(x);
-    if (obj.action === "type" && typeof obj.text === "string" && hasSecretPlaceholder(obj.text)) {
-      const r = resolveSecretPlaceholders(obj.text, secrets);
-      if (r.ok) out.text = r.text;
-      else error ??= r.error;
-    }
-    return out;
-  };
-  const copy = walk(value) as T;
-  return error === undefined ? { ok: true, value: copy } : { ok: false, error };
-}
-
-/** `redactAllSecrets` for a tool output that is a JSON string or an already-parsed object. */
-function redactToolOutput<T>(output: T): T {
-  if (typeof output === "string") return redactAllSecrets(output) as T;
-  if (output === null || typeof output !== "object") return output;
-  try {
-    return JSON.parse(redactAllSecrets(JSON.stringify(output))) as T;
-  } catch {
-    return output;
-  }
-}
-
 /** The trace label of a run's `app` (a name or a path): "/Applications/Orca.app" → "Orca". */
 export function appLabelOf(app: string): string {
   const last = app.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? app;
@@ -728,7 +686,7 @@ const runBrowseAgentBody = async (
         // An observer must not change the run.
       }
       try {
-        const unredacted =
+        const output =
           qaOn && call.toolName === QA_VERDICT_TOOL
             ? executeQaVerdict(call.input)
             : qaOn && recorder && assertAllowed && call.toolName === QA_ASSERT_TOOL
@@ -739,14 +697,11 @@ const runBrowseAgentBody = async (
                 { sessionId: parentSessionId, ...browserContext, toolCallId: call.toolCallId, signal },
                 "browse_agent",
               );
-        // Every nested result (qa_assert, browse_capture, browse_fill_login included) is redacted
-        // before the trail and the trace see it, and again after the carried dialogs are merged.
-        const output = redactToolOutput(unredacted);
         end?.({ output });
         // Awaited: the step frame must show the page right after this step.
         const carried = await traceEnd?.({ output }).catch(() => undefined);
         // The trace screenshot drained dialogs the model has not seen yet: put them into its result.
-        return redactToolOutput(withCarriedDialogs(output, carried?.dialogs));
+        return withCarriedDialogs(output, carried?.dialogs);
       } catch (err) {
         end?.({ error: err });
         await traceEnd?.({ error: err }).catch(() => undefined);
@@ -769,8 +724,6 @@ const runBrowseAgentBody = async (
         // canvasTabs off: the sub-agent has no chat-to-canvas binding, so it is never offered open_canvas_tab.
         clientCapabilities: { ...CLIENT_CAPABILITIES, canvasTabs: false, browseAssert: assertAllowed },
         ...(loginAllowed ? { browseLogin: true } : {}),
-        // The PARENT chat's passwords, by name only (the values stay in the executor).
-        ...secretNamesBody(parentSessionId),
         userId: getRequestUserId(),
       }),
     }),
@@ -918,7 +871,7 @@ const runBrowseAgentBody = async (
     // Both reads, then the cleanup tail the run reserves, must fit before the margin.
     if (timeLeft() < 2 * QA_JUDGE_READ_MS + CHECKPOINT_CALL_TIMEOUT_MS + (runSession ? CLOSE_SESSION_TIMEOUT_MS : 0) + flushReserve) return judgeFailed(NO_TIME_FOR_JUDGE);
     const nested = (name: string, input: Record<string, unknown>) =>
-      withTimeout<string | undefined>(() => executeBrowseTool(bridge, name, input, withSecrets(peBase, parentSessionId)), QA_JUDGE_READ_MS, undefined, signal);
+      withTimeout<string | undefined>(() => executeBrowseTool(bridge, name, input, peBase), QA_JUDGE_READ_MS, undefined, signal);
     const read = await nested("browse_read", { maxChars: QA_JUDGE_PAGE_MAX_CHARS });
     if (signal?.aborted) return judgeFailed("aborted");
     const parsedRead = read === undefined ? {} : parseJsonObject(read);
@@ -1073,12 +1026,6 @@ const runBrowseAgentBody = async (
             ...(url ? { url } : {}),
           })
         : { ok: false, error: "setup must be an object" };
-  }
-  if (parsed.ok && resumeId === "") {
-    // Fixture `type` steps may carry `{{secret:<name>}}`: this chat's values go in here, so the model never holds them.
-    const resolved = resolveSetupSecrets(parsed.value, parentSessionId);
-    if (!resolved.ok) return JSON.stringify({ error: resolved.error });
-    parsed = { ...parsed, value: resolved.value };
   }
   if (parsed.ok) network = parsed.value.network;
   let setupApplied = false;

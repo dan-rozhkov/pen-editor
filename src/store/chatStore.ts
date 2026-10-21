@@ -4,7 +4,6 @@ import { deriveChatTitle } from "@/lib/chatTitle";
 import { canUseModel, getDefaultModel } from "@/lib/chatModels";
 import { releaseCloudBrowser } from "@/lib/cloudBrowser";
 import { useBrowseCheckpointStore } from "./browseCheckpointStore";
-import { useBrowseSecretStore } from "./browseSecretStore";
 import { subscribeOpenCodeKey } from "@/lib/opencodeKey";
 import { mergeChangesByEvent, type ChangeDetail } from "@/lib/memoryActivity";
 import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
@@ -396,7 +395,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // releaseCloudBrowser never rejects and is a no-op without a handle).
     void releaseCloudBrowser(chatId);
     useBrowseCheckpointStore.getState().deleteChat(chatId);
-    useBrowseSecretStore.getState().clearChat(chatId);
 
     // If only one chat remains, replace it with a new empty chat
     if (chats.length <= 1) {

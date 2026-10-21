@@ -59,7 +59,6 @@ import { browseScreenshot } from "./tools/browser/browseScreenshot";
 import { browseTabs } from "./tools/browser/browseTabs";
 import { browseTask } from "./tools/browser/browseTask";
 import { browseAgent } from "./tools/browser/browseAgent";
-import { redactAllSecrets } from "@/store/browseSecretStore";
 import { defineComponent, extractComponent, detachInstance, deleteComponent } from "./tools/components";
 
 /**
@@ -101,18 +100,8 @@ export type ToolHandler = HarnessToolHandler<ToolExecutionContext>;
 function withBrowseLoopGuard(toolName: string, handler: ToolHandler): ToolHandler {
   return async (args, context) => {
     const result = await handler(args, context);
-    return redactAllSecrets(applyLoopGuard(toolName, args, result, context?.browserSession ?? context?.sessionId));
+    return applyLoopGuard(toolName, args, result, context?.browserSession ?? context?.sessionId);
   };
-}
-
-/**
- * Last line of defence for browser passwords (browseSecretStore): whatever a browse tool returns,
- * every stored secret value (any chat, plus retired ones) is removed from the result. The executor
- * redacts its own results; this also covers the desktop browser being shared across chats, MCP/WebMCP
- * callers with no chat id, and handlers that bypass the executor.
- */
-function withSecretRedaction(handler: ToolHandler): ToolHandler {
-  return async (args, context) => redactAllSecrets(await handler(args, context));
 }
 
 export const toolHandlers: Record<string, ToolHandler> = {
@@ -217,7 +206,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
   // browser action, and the guard keys on (tool, args) repetition. Its nested
   // browse_* calls already pass through the guarded handlers above, under the
   // parent's sessionId, so loops inside the sub-agent are still caught.
-  browse_agent: withSecretRedaction(browseAgent),
+  browse_agent: browseAgent,
   // qa_verdict: browseAgent answers it locally inside a QA run. This entry
   // keeps the tool-name contract whole and refuses a call from the main chat.
   qa_verdict: async () => JSON.stringify({ error: "qa_verdict is only available inside a browse_agent QA run" }),

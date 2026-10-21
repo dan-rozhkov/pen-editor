@@ -34,8 +34,6 @@ import { ChatList } from "./ChatList";
 import { CloudBrowserPanel } from "./CloudBrowserPanel";
 import { releaseCloudBrowser } from "@/lib/cloudBrowser";
 import { useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
-import { useBrowseSecretStore } from "@/store/browseSecretStore";
-import { BrowseSecretsButton } from "./BrowseSecretsButton";
 import { SkillsPage } from "./SkillsPage";
 import { ContextMeter } from "./ContextMeter";
 import { OpenCodeKeyDialog } from "./OpenCodeKeyDialog";
@@ -82,8 +80,6 @@ interface ComposerControlsProps {
   openFilePicker: () => void;
   isLoading: boolean;
   stop: () => void;
-  /** The chat this composer belongs to: the renderer runs once per mounted session, not once for the active one. */
-  sessionId: string;
 }
 
 type ComposerControlsRenderer = (props: ComposerControlsProps) => ReactNode;
@@ -348,8 +344,6 @@ function ChatSession({
         void releaseCloudBrowser(sessionId);
         // Its browser checkpoints (cookies, storage) go with the transcript.
         useBrowseCheckpointStore.getState().clearChat(sessionId);
-        // Its passwords go too: a cleared chat starts over.
-        useBrowseSecretStore.getState().clearChat(sessionId);
       },
     });
     return () => unregisterSessionActions(sessionId);
@@ -466,7 +460,7 @@ function ChatSession({
           onManageSkills={onManageSkills}
           renderFooter={(footerProps) => (
             <div className="flex items-center gap-1 px-2 pb-2 pt-1.5">
-              {composerControls({ ...footerProps, sessionId })}
+              {composerControls(footerProps)}
             </div>
           )}
         />
@@ -550,7 +544,6 @@ export function ChatPanelContent({
     openFilePicker,
     isLoading,
     stop,
-    sessionId: composerSessionId,
   }) => (
     <>
       <IconButton
@@ -564,7 +557,6 @@ export function ChatPanelContent({
       >
         <ImageIcon size={18} weight="light" />
       </IconButton>
-      <BrowseSecretsButton chatId={composerSessionId} />
       <div className="ml-auto flex items-center gap-1">
         <ContextMeter />
         <DropdownMenu>

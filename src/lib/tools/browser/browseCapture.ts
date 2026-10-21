@@ -1,6 +1,5 @@
 import type { ToolHandler } from "../../toolRegistry";
 import { generateId, type EmbedNode } from "@/types/scene";
-import { redactAllSecrets } from "@/store/browseSecretStore";
 import { getBrowserBridge } from "./bridge";
 import { FALLBACK_SIZE, isPositive, pageNodeName, placeNodeOnCanvas } from "./placeOnCanvas";
 import {
@@ -31,19 +30,17 @@ export const browseCapture: ToolHandler = async (args, context) => {
 
   const { x, y, ...bridgeArgs } = args;
   const signal = context?.signal;
-  // The HTML goes onto the canvas (and into the saved file): a typed password in a field must not.
-  const rawCapture = await callBrowserBridge(call, bridgeArgs, unavailableMessage);
+  const raw = await callBrowserBridge(call, bridgeArgs, unavailableMessage);
   // A timed-out or stopped call must not place a late node: the model was
   // already told it failed (and may retry), which would duplicate the page.
   if (signal?.aborted) return ABORTED_ERROR;
-  const page = safeParseObject(rawCapture);
-  // The error branch is redacted too (an error may quote page text).
-  if ("error" in page) return redactAllSecrets(rawCapture);
+  const page = safeParseObject(raw);
+  if ("error" in page) return raw;
   if (typeof page.html !== "string" || !page.html) {
     return JSON.stringify({ error: "The capture returned no HTML." });
   }
 
-  const html = redactAllSecrets(page.html, "text");
+  const html = page.html;
   const size =
     isPositive(page.width) && isPositive(page.height)
       ? { width: page.width, height: page.height }
