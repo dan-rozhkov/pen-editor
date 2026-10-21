@@ -196,8 +196,11 @@ export function getDoc(id: string): Doc | null {
   return read.kind === "ok" ? read.doc : null;
 }
 
+/** The title of a document nobody named. */
+export const DEFAULT_DOC_TITLE = "Untitled";
+
 export function createDoc(input: { title: string; markdown?: string }, source: DocChangeSource): Doc {
-  const doc: Doc = { id: newDocId(), title: input.title.trim() || "Untitled", markdown: input.markdown ?? "", updatedAt: Date.now(), rev: 1 };
+  const doc: Doc = { id: newDocId(), title: input.title.trim() || DEFAULT_DOC_TITLE, markdown: input.markdown ?? "", updatedAt: Date.now(), rev: 1 };
   commitDoc(doc, source);
   return doc;
 }
@@ -229,7 +232,7 @@ export function updateDoc(
   if (!current) return null;
   if (options?.expectedRev !== undefined && current.rev !== options.expectedRev) return "conflict";
   const next: Doc = { ...current, ...patch, updatedAt: Date.now(), rev: current.rev + 1 };
-  if (patch.title !== undefined) next.title = patch.title.trim() || "Untitled";
+  if (patch.title !== undefined) next.title = patch.title.trim() || DEFAULT_DOC_TITLE;
   commitDoc(next, source);
   return next;
 }

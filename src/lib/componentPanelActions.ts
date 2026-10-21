@@ -12,20 +12,37 @@ import { resolveAbsoluteNodes } from "@/utils/absoluteNodes";
 import { runToolCall } from "@/lib/toolCallQueue";
 
 /**
+ * Switch to `pageId` (when given and not the active page), then select `nodeId` and fit the
+ * viewport to it. False when the node is not in the scene after the switch.
+ */
+function selectAndFit(nodeId: string, pageId?: string): boolean {
+  const pages = usePageStore.getState();
+  if (pageId && pageId !== pages.activePageId) pages.switchToPage(pageId);
+  if (!useSceneStore.getState().nodesById[nodeId]) return false;
+  useSelectionStore.getState().setSelectedIds([nodeId]);
+  const { width, height } = getCanvasViewportMetrics();
+  useViewportStore.getState().fitToContent(resolveAbsoluteNodes([nodeId]), width, height);
+  return true;
+}
+
+/**
  * Switch to the page that holds the master of `key`, select it and fit the
  * viewport to it. Returns false when the key has no master.
  */
 export function goToMaster(key: string): boolean {
   const found = findWinningMaster(key);
-  if (!found) return false;
-  const pages = usePageStore.getState();
-  if (found.page.pageId !== pages.activePageId) pages.switchToPage(found.page.pageId);
-  const id = found.node.id;
-  if (!useSceneStore.getState().nodesById[id]) return false;
-  useSelectionStore.getState().setSelectedIds([id]);
-  const { width, height } = getCanvasViewportMetrics();
-  useViewportStore.getState().fitToContent(resolveAbsoluteNodes([id]), width, height);
-  return true;
+  return found ? selectAndFit(found.node.id, found.page.pageId) : false;
+}
+
+/**
+ * Select `nodeId` wherever it lives: the active page (read from the live scene, whose page
+ * snapshot may be stale) or any other page, switching to that page. False when no page has it.
+ */
+export function goToNode(nodeId: string): boolean {
+  if (useSceneStore.getState().nodesById[nodeId]) return selectAndFit(nodeId);
+  const { pages, activePageId } = usePageStore.getState();
+  const page = pages.find((candidate) => candidate.id !== activePageId && candidate.nodesById[nodeId]);
+  return page ? selectAndFit(nodeId, page.id) : false;
 }
 
 /** The single selected embed screen (not a component master) that can take an instance, or null. */

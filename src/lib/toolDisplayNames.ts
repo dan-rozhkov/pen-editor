@@ -73,6 +73,7 @@ export const toolDisplayNames: Record<string, string> = {
   doc_create: "Create Document",
   doc_read: "Read Document",
   doc_edit: "Edit Document",
+  doc_insert_image: "Insert image into document",
   doc_open: "Open Document",
   trace_list: "List Trace Tabs",
   trace_read: "Read Trace",

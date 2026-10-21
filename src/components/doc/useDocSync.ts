@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
+  DEFAULT_DOC_TITLE,
   createDoc,
   deleteDoc,
   dropStaleIndexEntry,
@@ -239,7 +240,7 @@ export function useDocSync(): DocSync {
     flush();
     let doc: Doc;
     try {
-      doc = createDoc({ title: "Untitled" }, "editor");
+      doc = createDoc({ title: DEFAULT_DOC_TITLE }, "editor");
     } catch {
       toast.error(STORAGE_FAILURE_MESSAGE);
       return;

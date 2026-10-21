@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
 import type { Editor, Range } from "@tiptap/react";
 import type { ResolvedPos } from "@tiptap/pm/model";
-import { ImageIcon, ListDashesIcon, MinusIcon, TableIcon, TreeStructureIcon } from "@phosphor-icons/react";
+import { ImageIcon, InfoIcon, LinkSimpleIcon, ListDashesIcon, MinusIcon, TableIcon, TreeStructureIcon } from "@phosphor-icons/react";
 import { TURN_INTO_ITEMS } from "../ui/blockTransforms";
+
+/** The document picker (`DocLinkPicker`) listens for this on the editor DOM. */
+export const DOC_LINK_PICKER_EVENT = "doc-link-picker";
 
 /** The image URL popover (`ImagePrompt`) listens for this on the editor DOM. */
 export const IMAGE_PROMPT_EVENT = "doc-image-prompt";
@@ -15,6 +18,8 @@ export interface SlashItem {
   icon: ReactNode;
   /** Cannot live inside a table cell or header (a nested table, or a list that would split the table). */
   hideInTable?: boolean;
+  /** Heading shown above the first item of a run of items with the same group. */
+  group?: string;
   /** The caller removes the "/query" range first (`runSlashItem`). */
   run: (editor: Editor, chain: ReturnType<Editor["chain"]>) => void;
 }
@@ -42,6 +47,15 @@ export const SLASH_ITEMS: SlashItem[] = [
   byId("todo"),
   byId("toggle"),
   byId("quote"),
+  {
+    id: "callout",
+    title: "Callout",
+    hint: "Highlighted note box",
+    keywords: ["callout", "note", "warning", "alert", "tip", "info"],
+    icon: <InfoIcon />,
+    hideInTable: true,
+    run: (_editor, chain) => chain.insertCallout("note").run(),
+  },
   {
     id: "divider",
     title: "Divider",
@@ -88,6 +102,17 @@ export const SLASH_ITEMS: SlashItem[] = [
       editor.view.dom.dispatchEvent(new CustomEvent(IMAGE_PROMPT_EVENT));
     },
   },
+  {
+    id: "link-to-document",
+    title: "Link to document",
+    hint: "Link to another document",
+    keywords: ["link", "doc", "page", "mention"],
+    icon: <LinkSimpleIcon />,
+    run: (editor, chain) => {
+      chain.run();
+      editor.view.dom.dispatchEvent(new CustomEvent(DOC_LINK_PICKER_EVENT));
+    },
+  },
 ];
 
 /** The items that make sense at `$pos`: block items that cannot live in a table cell are dropped there. */
@@ -99,22 +124,28 @@ export function slashItemsAt($pos: ResolvedPos, items: SlashItem[] = SLASH_ITEMS
 
 const TABLE_CELLS = new Set(["tableCell", "tableHeader"]);
 
-/** Case-insensitive; title prefix first, then title substring, then keywords. */
+/**
+ * Case-insensitive; title prefix first, then title substring, then keywords. Grouped items (templates)
+ * come after the ungrouped ones, each group contiguous and score-sorted inside, so the menu can print
+ * a group heading once.
+ */
 export function filterSlashItems(query: string, items: SlashItem[] = SLASH_ITEMS): SlashItem[] {
   const q = query.trim().toLowerCase();
-  if (!q) return items;
   const rank = (item: SlashItem): number => {
+    if (!q) return 0;
     const title = item.title.toLowerCase();
     if (title.startsWith(q)) return 0;
     if (title.split(" ").some((word) => word.startsWith(q))) return 1;
     if (title.includes(q)) return 2;
     return item.keywords.some((keyword) => keyword.startsWith(q)) ? 3 : -1;
   };
-  return items
+  const ranked = items
     .map((item, index) => ({ item, index, score: rank(item) }))
     .filter((entry) => entry.score >= 0)
     .sort((a, b) => a.score - b.score || a.index - b.index)
     .map((entry) => entry.item);
+  const groups = [...new Set(ranked.flatMap((item) => item.group ?? []))];
+  return [...ranked.filter((item) => !item.group), ...groups.flatMap((group) => ranked.filter((item) => item.group === group))];
 }
 
 /** Removes the typed "/query" and runs the item as one undo step. */

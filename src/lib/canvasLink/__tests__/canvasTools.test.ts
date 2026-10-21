@@ -6,7 +6,7 @@ const PANEL = [
   "ask_user",
   "analyze_image",
   "open_canvas_tab",
-  "doc_list", "doc_create", "doc_read", "doc_edit", "doc_open",
+  "doc_list", "doc_create", "doc_read", "doc_edit", "doc_insert_image", "doc_open",
   "trace_list", "trace_read",
   "get_guidelines",
   "get_style_guide",

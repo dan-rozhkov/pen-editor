@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   computeDownscaledSize,
   downscaleImageDataUrl,
+  resolveScreenshotMaxSide,
 } from "@/lib/tools/screenshotDownscale";
 
 describe("computeDownscaledSize", () => {
@@ -250,5 +251,20 @@ describe("downscaleImageDataUrl", () => {
     stubImage(0, 0);
     const result = await downscaleImageDataUrl("data:image/png;base64,ORIGINAL", 1024);
     expect(result).toBe("data:image/png;base64,ORIGINAL");
+  });
+});
+
+describe("resolveScreenshotMaxSide", () => {
+  it.each([
+    [undefined, 1024],
+    ["2048", 1024],
+    [Number.NaN, 1024],
+    [0, 1024],
+    [-5, 1024],
+    [2048, 2048],
+    [1500.9, 1500],
+    [4096, 2048],
+  ])("%j -> %j", (requested, expected) => {
+    expect(resolveScreenshotMaxSide(requested)).toBe(expected);
   });
 });

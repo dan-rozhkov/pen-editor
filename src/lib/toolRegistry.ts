@@ -26,7 +26,7 @@ import { getGuidelines, getStyleGuide, getStyleGuideTags } from "./tools/staticT
 import { analyzeImage } from "./tools/analyzeImage";
 import { openCanvasTab } from "./tools/openCanvasTab";
 import { traceList, traceRead } from "./tools/traceTools";
-import { docList, docCreate, docRead, docEdit, docOpen } from "./tools/docTools";
+import { docList, docCreate, docRead, docEdit, docOpen, docInsertImage } from "./tools/docTools";
 import { generateImage, generateFrameImage } from "./tools/generateImage";
 import { setExportSettings } from "./tools/setExportSettings";
 import { exportLayersSvg } from "./tools/exportLayersSvg";
@@ -161,6 +161,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
   doc_create: docCreate,
   doc_read: docRead,
   doc_edit: docEdit,
+  doc_insert_image: docInsertImage,
   doc_open: docOpen,
   // Panel-local, read-only: open browse-run trace tabs (canvasTools.ts "trace_" prefix); advertised
   // only with clientCapabilities.traceTabs. NOT in mcpToolNames.ts / WebMCP / plugins.

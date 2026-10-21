@@ -4,12 +4,14 @@ import { useSelectionStore } from "@/store/selectionStore";
 import { captureEmbedScreenshot } from "@/lib/embedScreenshot";
 import { extractPixiNodeDataUrl, resolveEmbedForCapture } from "@/lib/captureNodeScreenshot";
 import { findHiddenSelfOrAncestor } from "@/utils/nodeUtils";
-import { downscaleImageDataUrl } from "./screenshotDownscale";
+import { downscaleImageDataUrl, resolveScreenshotMaxSide } from "./screenshotDownscale";
 import type { EmbedNode } from "@/types/scene";
 import type { ToolHandler } from "../toolRegistry";
 
 export const getScreenshot: ToolHandler = async (args) => {
   let nodeId = args.nodeId as string | undefined;
+  // Internal option (doc_insert_image asks for readable evidence); not in any advertised schema.
+  const maxSide = resolveScreenshotMaxSide(args.maxSide);
 
   if (!nodeId) {
     const { selectedIds } = useSelectionStore.getState();
@@ -65,7 +67,7 @@ export const getScreenshot: ToolHandler = async (args) => {
       nodeId,
     );
     if (imageData) {
-      return JSON.stringify({ imageData: await downscaleImageDataUrl(imageData) });
+      return JSON.stringify({ imageData: await downscaleImageDataUrl(imageData, maxSide) });
     }
     return JSON.stringify({
       error: `Embed "${nodeId}" could not be rendered to an image (its HTML may be empty, or contain a cross-origin image served without CORS headers).`,
@@ -87,7 +89,7 @@ export const getScreenshot: ToolHandler = async (args) => {
           : `Node "${nodeId}" not found in PixiJS scene`,
       });
     }
-    return JSON.stringify({ imageData: await downscaleImageDataUrl(result.dataUrl) });
+    return JSON.stringify({ imageData: await downscaleImageDataUrl(result.dataUrl, maxSide) });
   } catch (e) {
     return JSON.stringify({
       error: `PixiJS screenshot failed: ${e instanceof Error ? e.message : "unknown error"}`,

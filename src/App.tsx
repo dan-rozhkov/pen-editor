@@ -30,6 +30,7 @@ import { launchShowcaseAgentChat } from "./lib/launchShowcaseAgentChat";
 import { subscribeCanvasHost } from "./lib/canvasLink/agentLaunch";
 import { startWebMcp, stopWebMcp } from "./lib/webmcp";
 import { maybeStartCanvasHost } from "./lib/canvasLink/canvasHost";
+import { startCanvasFocusListener } from "./lib/canvasFocus/canvasFocusListener";
 import { importShowcaseScreensFromHandoff } from "./lib/importShowcaseScreens";
 import { OfflineBanner } from "./components/status/OfflineBanner";
 import { ShareDialog } from "./components/share/ShareDialog";
@@ -164,6 +165,10 @@ function App() {
   // view/present toggles (that would kill a running call): the host itself refuses
   // mutating calls, frames and place-node while `canMutateScene()` is false.
   useEffect(() => maybeStartCanvasHost() ?? undefined, [isSharedView]);
+
+  // A /doc link to a frame (`/app?node=<id>`) asks every canvas tab to show it; this tab
+  // answers only when its document has the node (src/lib/canvasFocus/).
+  useEffect(() => startCanvasFocusListener(), []);
 
   // Publish the canvas header's height for overlays that sit below it. On
   // <html> (not the overlay root) because SharedCanvasBar renders next to

@@ -2,8 +2,10 @@ import { Extension, ReactRenderer } from "@tiptap/react";
 import Suggestion from "@tiptap/suggestion";
 import { SlashCommandKey } from "./slashKey";
 import { SlashMenu, type SlashMenuHandle } from "./SlashMenu";
+import { getCachedDocTemplates } from "@/lib/docs/docTemplates";
+import { templateSlashItems } from "../templateInsert";
 import { isInPropertyCell } from "../extensions/docProperties";
-import { filterSlashItems, runSlashItem, slashItemsAt, type SlashItem } from "./slashItems";
+import { SLASH_ITEMS, filterSlashItems, runSlashItem, slashItemsAt, type SlashItem } from "./slashItems";
 
 export { SlashCommandKey };
 
@@ -24,7 +26,8 @@ export const SlashCommand = Extension.create({
           // A property key/value is one line of inline text: a block inserted there would split the list.
           return !isInPropertyCell($from);
         },
-        items: ({ query, editor }) => filterSlashItems(query, slashItemsAt(editor.state.selection.$from)),
+        items: ({ query, editor }) =>
+          filterSlashItems(query, slashItemsAt(editor.state.selection.$from, [...SLASH_ITEMS, ...templateSlashItems(getCachedDocTemplates())])),
         command: ({ editor, range, props }) => runSlashItem(editor, range, props),
         render: () => {
           let renderer: ReactRenderer<SlashMenuHandle> | null = null;

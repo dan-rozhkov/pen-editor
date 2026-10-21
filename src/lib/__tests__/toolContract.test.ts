@@ -59,6 +59,7 @@ const EXPECTED_CLIENT_TOOLS = [
   "doc_create",
   "doc_read",
   "doc_edit",
+  "doc_insert_image",
   "doc_open",
   "trace_list",
   "trace_read",

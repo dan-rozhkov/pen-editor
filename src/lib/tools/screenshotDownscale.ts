@@ -17,6 +17,19 @@ export const MAX_SCREENSHOT_SIDE = 1024;
 // разница в байтах между 1024 и 1400 здесь не решает.
 export const MAX_ATTACHMENT_SIDE = 1400;
 
+/** Hard ceiling for the internal `maxSide` option of get_screenshot (documents need readable evidence). */
+export const MAX_SCREENSHOT_SIDE_CEILING = 2048;
+
+/**
+ * The longest side get_screenshot downscales to. `requested` is the internal, non-schema `maxSide`
+ * argument (not advertised by the backend schema or WebMCP): absent or invalid keeps the 1024 default,
+ * a positive number is honored up to MAX_SCREENSHOT_SIDE_CEILING.
+ */
+export function resolveScreenshotMaxSide(requested: unknown): number {
+  if (typeof requested !== "number" || !Number.isFinite(requested) || requested < 1) return MAX_SCREENSHOT_SIDE;
+  return Math.min(Math.floor(requested), MAX_SCREENSHOT_SIDE_CEILING);
+}
+
 /**
  * Pure size computation, kept separate from the canvas/Image plumbing below
  * so it's trivially unit-testable without a real rendering pipeline (happy-dom

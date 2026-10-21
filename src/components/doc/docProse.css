@@ -204,6 +204,36 @@
 .doc-prose .doc-details [data-type="detailsContent"] { padding-left: 0.25em; }
 .doc-prose .doc-details [data-type="detailsContent"] > * + * { margin-top: 2px; }
 
+/* Callout (GitHub alert): soft tinted box, icon button + body. Tint comes from the doc palette, so both themes are covered. */
+.doc-prose .doc-callout {
+  --callout-bg: var(--doc-bg-blue); --callout-fg: var(--doc-text-blue);
+  display: flex; align-items: flex-start; gap: 0.5em;
+  margin: 0.5em 0; padding: 0.75em 0.9em;
+  border-radius: 8px; background: var(--callout-bg);
+}
+.doc-prose .doc-callout[data-kind="tip"] { --callout-bg: var(--doc-bg-green); --callout-fg: var(--doc-text-green); }
+.doc-prose .doc-callout[data-kind="important"] { --callout-bg: var(--doc-bg-purple); --callout-fg: var(--doc-text-purple); }
+.doc-prose .doc-callout[data-kind="warning"] { --callout-bg: var(--doc-bg-yellow); --callout-fg: var(--doc-text-yellow); }
+.doc-prose .doc-callout[data-kind="caution"] { --callout-bg: var(--doc-bg-red); --callout-fg: var(--doc-text-red); }
+.doc-prose .doc-callout-side { position: relative; flex: none; }
+.doc-prose .doc-callout-icon {
+  display: grid; place-items: center; width: 1.75rem; height: 1.75rem;
+  border-radius: 4px; color: var(--callout-fg); cursor: pointer;
+}
+.doc-prose .doc-callout-icon:hover:not(:disabled) { background: color-mix(in srgb, var(--callout-fg) 15%, transparent); }
+.doc-prose .doc-callout-icon:disabled { cursor: default; }
+.doc-prose .doc-callout-option {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 8px;
+  border-radius: 4px; font-size: 0.85rem; text-align: left; cursor: pointer;
+}
+.doc-prose .doc-callout-option[data-kind="note"] svg { color: var(--doc-text-blue); }
+.doc-prose .doc-callout-option[data-kind="tip"] svg { color: var(--doc-text-green); }
+.doc-prose .doc-callout-option[data-kind="important"] svg { color: var(--doc-text-purple); }
+.doc-prose .doc-callout-option[data-kind="warning"] svg { color: var(--doc-text-yellow); }
+.doc-prose .doc-callout-option[data-kind="caution"] svg { color: var(--doc-text-red); }
+.doc-prose .doc-callout-body { flex: 1; min-width: 0; padding-top: 2px; }
+.doc-prose .doc-callout-body > * + * { margin-top: 2px; }
+
 /* Mermaid: preview when idle, source above the preview while editing. */
 .doc-prose .doc-mermaid {
   border-radius: 8px;
@@ -295,4 +325,24 @@
 .doc-prose[contenteditable="false"] .doc-property-add { display: none; }
 @media (max-width: 480px) {
   .doc-prose [data-type="property-key"] { flex-basis: 120px; }
+}
+
+/* Links to another document or to a canvas frame: a small icon before the text. */
+.doc-prose a[href^="/doc?id="]::before,
+.doc-prose a[href^="/app?node="]::before {
+  content: "";
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.25em;
+  vertical-align: -0.125em;
+  background-color: currentColor;
+  -webkit-mask: var(--doc-link-icon) center / contain no-repeat;
+  mask: var(--doc-link-icon) center / contain no-repeat;
+}
+.doc-prose a[href^="/doc?id="] {
+  --doc-link-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M213.66 82.34l-56-56A8 8 0 0 0 152 24H56a16 16 0 0 0-16 16v176a16 16 0 0 0 16 16h144a16 16 0 0 0 16-16V88a8 8 0 0 0-2.34-5.66ZM160 51.31 188.69 80H160ZM200 216H56V40h88v48a8 8 0 0 0 8 8h48v120Zm-32-80a8 8 0 0 1-8 8H96a8 8 0 0 1 0-16h64a8 8 0 0 1 8 8Zm0 32a8 8 0 0 1-8 8H96a8 8 0 0 1 0-16h64a8 8 0 0 1 8 8Z'/%3E%3C/svg%3E");
+}
+.doc-prose a[href^="/app?node="] {
+  --doc-link-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M88 24a8 8 0 0 1 8 8v24h64V32a8 8 0 0 1 16 0v24h24a8 8 0 0 1 0 16h-24v64h24a8 8 0 0 1 0 16h-24v24a8 8 0 0 1-16 0v-24H96v24a8 8 0 0 1-16 0v-24H56a8 8 0 0 1 0-16h24V72H56a8 8 0 0 1 0-16h24V32a8 8 0 0 1 8-8Zm8 48v64h64V72Z' transform='translate(0 16)'/%3E%3C/svg%3E");
 }

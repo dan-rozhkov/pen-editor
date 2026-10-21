@@ -8,6 +8,7 @@ import { DocTableFilter } from "./table/tableFilter";
 import { DocCodeBlock } from "./extensions/docCodeBlock";
 import { DocColorMark, getActiveDocColor } from "./extensions/docColor";
 import { DocPropertyKeys, DocTable, PropertyKey, PropertyList, PropertyRow, PropertyValue } from "./extensions/docProperties";
+import { DocCallout } from "./extensions/docCallout";
 import { DocDetails, DocDetailsContent, DocDetailsSummary } from "./extensions/docDetails";
 
 // Cmd+Shift+S is the desktop menu's "Export as .json". Strike's default chord is
@@ -21,7 +22,8 @@ export const DocStrike = Strike.extend({
 
 /** Everything the agent can write as GFM markdown must survive a load/save round trip. */
 export const DOC_EXTENSIONS = [
-  StarterKit.configure({ strike: false, codeBlock: false }),
+  // Link clicks are handled by DocLinkClick (doc / frame / external links), not by openOnClick.
+  StarterKit.configure({ strike: false, codeBlock: false, link: { openOnClick: false } }),
   DocCodeBlock,
   DocStrike,
   Markdown,
@@ -38,6 +40,7 @@ export const DOC_EXTENSIONS = [
   DocDetails,
   DocDetailsSummary,
   DocDetailsContent,
+  DocCallout,
   DocColorMark,
   PropertyList,
   PropertyRow,

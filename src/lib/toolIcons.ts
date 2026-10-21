@@ -121,6 +121,7 @@ const toolIcons: Record<string, Icon> = {
   doc_create: FilePlusIcon,
   doc_read: FileTextIcon,
   doc_edit: NotePencilIcon,
+  doc_insert_image: ImageIcon,
   doc_open: FileTextIcon,
   trace_list: ListMagnifyingGlassIcon,
   trace_read: ReceiptIcon,

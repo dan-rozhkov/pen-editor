@@ -63,6 +63,7 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   "doc_create",
   "doc_read",
   "doc_edit",
+  "doc_insert_image",
   "doc_open",
   // Panel-local trace tabs: read-only bridge calls, no scene.
   "trace_list",

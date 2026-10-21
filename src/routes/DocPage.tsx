@@ -4,6 +4,7 @@ import type { Editor } from "@tiptap/react";
 import { EditorProviders } from "@/components/EditorProviders";
 import { DocEditor } from "@/components/doc/DocEditor";
 import { DocTitle } from "@/components/doc/ui/DocTitle";
+import { titleAfterTemplate } from "@/lib/docs/docTemplates";
 import { useDocSync } from "@/components/doc/useDocSync";
 import {
   AlertDialog,
@@ -107,6 +108,12 @@ export default function DocPage() {
                   onMarkdown={sync.onEditorMarkdown}
                   onSynced={sync.onEditorSynced}
                   onEditor={setEditor}
+                  docId={sync.id}
+                  onOpenDoc={sync.select}
+                  onTemplateTitle={(title) => {
+                    const next = titleAfterTemplate(sync.title, title);
+                    if (next !== null) sync.setTitle(next);
+                  }}
                 />
               </div>
             </main>

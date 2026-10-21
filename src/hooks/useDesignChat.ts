@@ -99,6 +99,8 @@ const TOOL_CALL_TIMEOUT_MS_OVERRIDES: Record<string, number> = {
   // doc_create / doc_open wait for the shell to open (and load) a document tab.
   doc_create: 60_000,
   doc_open: 60_000,
+  // doc_insert_image screenshots a node (canvas tab round trip) and uploads it.
+  doc_insert_image: 60_000,
   vectorize_image: 60_000,
   // browse_task (docs/superpowers/specs/2026-09-18-browse-task-jev-loop-
   // design.md §3) runs a whole snapshot/step/perform loop internally bounded
