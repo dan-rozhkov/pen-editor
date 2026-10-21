@@ -6,6 +6,7 @@ import { SettingsNav } from "@/components/settings/SettingsNav";
 import { AccountSection } from "@/components/settings/sections/AccountSection";
 import { AgentSection } from "@/components/settings/sections/AgentSection";
 import { AppearanceSection } from "@/components/settings/sections/AppearanceSection";
+import { BrowserSection } from "@/components/settings/sections/BrowserSection";
 import { CanvasSection } from "@/components/settings/sections/CanvasSection";
 import { IntegrationsSection } from "@/components/settings/sections/IntegrationsSection";
 import { ShortcutsSection } from "@/components/settings/sections/ShortcutsSection";
@@ -17,6 +18,7 @@ const SECTION_VIEWS: Record<SettingsSection, () => React.JSX.Element> = {
   appearance: AppearanceSection,
   canvas: CanvasSection,
   agent: AgentSection,
+  browser: BrowserSection,
   integrations: IntegrationsSection,
   shortcuts: ShortcutsSection,
 };

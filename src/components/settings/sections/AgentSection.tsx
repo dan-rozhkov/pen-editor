@@ -8,13 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { useChatBootstrap } from "@/hooks/useChatBootstrap";
 import { useModelOptions } from "@/hooks/useModelOptions";
-import { traceFlag } from "@/lib/browseTracePref";
 import { hasOpenCodeKey, subscribeOpenCodeKey } from "@/lib/opencodeKey";
 import { promptSuggestionsFlag } from "@/lib/promptSuggestion";
 import { useChatStore } from "@/store/chatStore";
 import { useOpenCodeKeyDialogStore } from "@/store/openCodeKeyDialogStore";
 
-import { SettingsGroup, SettingsSection, SettingsSubheading } from "../SettingsSection";
+import { SettingsGroup, SettingsSection } from "../SettingsSection";
 
 const PARALLEL_OPTIONS = [
   { value: "1", label: "x1" },
@@ -31,7 +30,6 @@ export function AgentSection() {
   const options = useModelOptions();
   const hasKey = useSyncExternalStore(subscribeOpenCodeKey, hasOpenCodeKey, hasOpenCodeKey);
   const suggestionsOn = useSyncExternalStore(promptSuggestionsFlag.subscribe, promptSuggestionsFlag.get, () => true);
-  const allTraces = useSyncExternalStore(traceFlag.subscribe, traceFlag.get, () => false);
   const dialogOpen = useOpenCodeKeyDialogStore((s) => s.open);
   const setDialogOpen = useOpenCodeKeyDialogStore((s) => s.setOpen);
 
@@ -86,14 +84,6 @@ export function AgentSection() {
           checked={suggestionsOn}
           onCheckedChange={promptSuggestionsFlag.set}
         />
-      </SettingsGroup>
-      <SettingsSubheading>Browser</SettingsSubheading>
-      <SettingsGroup
-        inline
-        title="Record traces for all runs"
-        description="Save a step-by-step trace of every browser run, not only QA tests. Screenshots of the visited pages are stored with it. On the web, traces are uploaded, and anyone with the link can open them."
-      >
-        <Switch aria-label="Record traces for all runs" checked={allTraces} onCheckedChange={traceFlag.set} />
       </SettingsGroup>
       {/* Mounted once, as in ChatPanel: this page has no composer to host it. */}
       <OpenCodeKeyDialog open={dialogOpen} onOpenChange={setDialogOpen} />

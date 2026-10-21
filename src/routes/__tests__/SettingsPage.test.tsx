@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 
 import SettingsPage from "../SettingsPage";
@@ -50,6 +50,15 @@ describe("<SettingsPage />", () => {
     expect(screen.getByRole("button", { name: "Appearance" }).getAttribute("aria-current")).toBe("page");
     expect(document.title).toBe("Settings");
     expect(document.documentElement.classList.contains("route-settings")).toBe(true);
+  });
+
+  it("lists Browser in the nav between AI agent and Integrations", () => {
+    renderSettings();
+    const names = within(screen.getByRole("navigation", { name: "Settings sections" }))
+      .getAllByRole("button")
+      .map((b) => b.textContent);
+    expect(names.indexOf("Browser")).toBe(names.indexOf("AI agent") + 1);
+    expect(names.indexOf("Integrations")).toBe(names.indexOf("Browser") + 1);
   });
 
   it("falls back to Appearance for an unknown section", () => {
@@ -122,9 +131,9 @@ describe("<SettingsPage />", () => {
     expect(screen.getByText("No shortcuts match.")).toBeTruthy();
   });
 
-  it("AI agent section: the browser-trace switch toggles the browse-traces key", () => {
-    renderSettings("/settings?section=agent");
-    expect(screen.getByText("Browser")).toBeTruthy();
+  it("Browser section: the browser-trace switch toggles the browse-traces key", () => {
+    renderSettings("/settings?section=browser");
+    expect(screen.getByRole("heading", { level: 2, name: "Browser" })).toBeTruthy();
     const sw = screen.getByRole("switch", { name: "Record traces for all runs" });
     expect(sw.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(sw);

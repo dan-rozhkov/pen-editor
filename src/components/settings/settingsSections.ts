@@ -1,4 +1,5 @@
 import {
+  GlobeIcon,
   KeyboardIcon,
   PaletteIcon,
   PuzzlePieceIcon,
@@ -14,6 +15,7 @@ export const SETTINGS_NAV: { id: SettingsSection; label: string; icon: typeof Us
   { id: "appearance", label: "Appearance", icon: PaletteIcon },
   { id: "canvas", label: "Canvas", icon: SelectionIcon },
   { id: "agent", label: "AI agent", icon: SparkleIcon },
+  { id: "browser", label: "Browser", icon: GlobeIcon },
   { id: "integrations", label: "Integrations", icon: PuzzlePieceIcon },
   { id: "shortcuts", label: "Keyboard shortcuts", icon: KeyboardIcon },
 ];
