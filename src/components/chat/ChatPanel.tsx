@@ -24,6 +24,7 @@ import { useModelOptions } from "@/hooks/useModelOptions";
 import { useAgentActivityNotes } from "@/hooks/useAgentActivityNotes";
 import { useReleaseCloudBrowserWhenDone } from "@/hooks/useReleaseCloudBrowserWhenDone";
 import { getActorId, useAuthStore } from "@/lib/auth/authState";
+import { openSettings } from "@/lib/openSettings";
 import { hasOpenCodeKey, subscribeOpenCodeKey } from "@/lib/opencodeKey";
 import { useOpenCodeKeyDialogStore } from "@/store/openCodeKeyDialogStore";
 import { MessageList } from "./MessageList";
@@ -600,6 +601,7 @@ export function ChatPanelContent({
             <DropdownMenuItem onClick={() => setOpenCodeDialogOpen(true)}>
               {hasKey ? "OpenCode key" : "Connect OpenCode…"}
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => openSettings("agent")}>Model settings…</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

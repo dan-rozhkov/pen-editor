@@ -12,7 +12,7 @@ import { installModelContextForEditorRoute } from '@/lib/webmcp/earlyInstall'
 import { loadModels } from '@/lib/chatModels'
 import { isAgentRoutePath, isDocRoutePath, isTraceRoutePath } from '@/lib/agentPanel'
 import { startDesktopDocMirror } from '@/lib/docs/desktopDocMirror'
-import { applyStoredUITheme, installUIThemeStorageSync } from '@/lib/uiTheme'
+import { applyStoredUITheme, installUIThemeBroadcastSync, installUIThemeStorageSync } from '@/lib/uiTheme'
 import { MOBBIN_OAUTH_CALLBACK_PATH } from '@/lib/mobbinAuth'
 
 import './index.css'
@@ -25,6 +25,7 @@ applyStoredUITheme()
 // Follow theme switches made in other same-origin documents (desktop shell:
 // canvas tab vs. the /agent panel).
 installUIThemeStorageSync()
+installUIThemeBroadcastSync()
 
 // Install the WebMCP model context before the editor's lazy chunk is even
 // requested. The tools still register later, from App.tsx, but an agent that

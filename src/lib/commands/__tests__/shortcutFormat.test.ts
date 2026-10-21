@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatShortcut } from "../shortcutFormat";
+import { formatShortcut, splitShortcut } from "../shortcutFormat";
 
 describe("formatShortcut", () => {
   it("renders Mac symbols with no separator", () => {
@@ -17,5 +17,15 @@ describe("formatShortcut", () => {
 
   it("renders alt", () => {
     expect(formatShortcut(["mod", "alt", "C"], true)).toBe("⌘⌥C");
+  });
+});
+
+describe("splitShortcut", () => {
+  it("splits mac symbols and plus-joined labels back into keys", () => {
+    expect(splitShortcut("⌘⇧Z")).toEqual(["⌘", "⇧", "Z"]);
+    expect(splitShortcut("⌘⏎")).toEqual(["⌘", "⏎"]);
+    expect(splitShortcut("⌫")).toEqual(["⌫"]);
+    expect(splitShortcut("Ctrl+Shift+Z")).toEqual(["Ctrl", "Shift", "Z"]);
+    expect(splitShortcut("Ctrl++")).toEqual(["Ctrl", "+"]);
   });
 });

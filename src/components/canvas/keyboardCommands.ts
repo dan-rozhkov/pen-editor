@@ -24,6 +24,7 @@ import { finishPenDraft, cancelPenDraft } from "@/pixi/interaction/penDraftCommi
 import { cancelActiveScale } from "@/pixi/interaction/scaleController";
 import { cancelActiveMeasure } from "@/pixi/interaction/measureToolController";
 import { enterPathEditMode } from "@/pixi/interaction/pathEditMode";
+import { openSettings } from "@/lib/openSettings";
 import { isTypingTarget, selectAllInScope } from "./keyboardShortcutUtils";
 import { applyEyedropperColor } from "@/lib/eyedropper";
 import {
@@ -147,6 +148,13 @@ export function createKeyDownHandler(deps: KeyDownHandlerDeps) {
     }
 
     const nodes = useSceneStore.getState().getNodes();
+
+    // Cmd/Ctrl+, — open Settings (macOS convention; works while typing).
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.code === "Comma") {
+      e.preventDefault();
+      if (!e.repeat) openSettings();
+      return;
+    }
 
     // Cmd/Ctrl+Enter — start present mode
     if ((e.metaKey || e.ctrlKey) && e.code === "Enter") {

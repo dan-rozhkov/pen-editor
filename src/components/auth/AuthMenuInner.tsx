@@ -1,6 +1,5 @@
 import { cn } from "@/lib/utils";
-import { appHref, signInHref, stripBase } from "@/lib/auth/paths";
-import { desktopAuth } from "@/lib/auth/desktopAuth";
+import { appHref } from "@/lib/auth/paths";
 import { signOut, useSession } from "@/lib/auth/session";
 import {
   DropdownMenu,
@@ -10,6 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import type { AuthMenuVariant } from "./AuthMenu";
+import { SignInControl } from "./SignInControl";
 
 const FOCUS =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary";
@@ -20,8 +20,6 @@ export default function AuthMenuInner({ variant }: { variant: AuthMenuVariant })
 
   const user = data?.user;
   if (!user) {
-    // Editor: new tab, so an unsaved document is never navigated away from;
-    // the session then reaches this tab through Better Auth's cross-tab sync.
     const inEditor = variant === "toolbar";
     const className = cn(
       "inline-flex shrink-0 items-center rounded-full font-medium transition-colors",
@@ -30,26 +28,7 @@ export default function AuthMenuInner({ variant }: { variant: AuthMenuVariant })
         ? "bg-surface-elevated px-4 py-2 text-sm text-text-muted hover:bg-surface-hover hover:text-text-primary"
         : "h-6 px-2.5 text-xs text-text-primary hover:bg-surface-hover",
     );
-    // Desktop shell: sign in through the system browser instead of an in-app page.
-    const desktop = desktopAuth();
-    if (desktop) {
-      return (
-        <button type="button" onClick={() => desktop.signIn()} className={className}>
-          Sign in
-        </button>
-      );
-    }
-    const href = inEditor ? signInHref("/account") : signInHref(stripBase(window.location.pathname));
-    return (
-      <a
-        href={href}
-        target={inEditor ? "_blank" : undefined}
-        rel={inEditor ? "noopener" : undefined}
-        className={className}
-      >
-        Sign in
-      </a>
-    );
+    return <SignInControl className={className} newTab={inEditor} />;
   }
 
   const label = user.name || user.email;

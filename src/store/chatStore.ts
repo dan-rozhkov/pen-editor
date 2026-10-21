@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { onStorageKey } from "@/lib/storageSync";
 import { deriveChatTitle } from "@/lib/chatTitle";
 import { canUseModel, getDefaultModel } from "@/lib/chatModels";
 import { releaseCloudBrowser } from "@/lib/cloudBrowser";
@@ -652,3 +653,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
 }));
+
+// The Settings tab writes the default model and parallel count from its own
+// document. `chat-model` is deliberately NOT followed here: new chats read it
+// from localStorage when they are created, so a remote write already updates
+// the default for them — and a remote write must never switch the model of a
+// chat that exists in this tab (the composer picker in another tab writes the
+// same key). The parallel count follows like the setter does, minus the write.
+onStorageKey("chat-parallel-count", (value) => {
+  const parallelCount = normalizeParallelCount(value);
+  useChatStore.setState((s) => ({
+    parallelCount,
+    chats: s.chats.map((c) => (c.id === s.activeChatId ? { ...c, parallelCount } : c)),
+  }));
+});

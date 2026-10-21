@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { onStorageKey } from '@/lib/storageSync'
 
 const STORAGE_KEY = 'show-pixel-grid'
 
@@ -21,3 +22,8 @@ export const usePixelGridStore = create<PixelGridState>((set, get) => ({
     localStorage.setItem(STORAGE_KEY, String(next))
   },
 }))
+
+// The Settings tab writes this key from its own document.
+onStorageKey(STORAGE_KEY, (value) => {
+  usePixelGridStore.setState({ showPixelGrid: value !== 'false' })
+})

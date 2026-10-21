@@ -7,7 +7,7 @@ const MAX_MESSAGES = 12;
 
 // localStorage kill switch, same style as `pen.rasterCache`: set to "off" to
 // stop the composer from ever calling the endpoint.
-const KILL_SWITCH_KEY = "pen.promptSuggestions";
+export const PROMPT_SUGGESTIONS_KEY = "pen.promptSuggestions";
 
 export interface SuggestionMessage {
   role: "user" | "assistant";
@@ -16,9 +16,19 @@ export interface SuggestionMessage {
 
 export function promptSuggestionsDisabled(): boolean {
   try {
-    return localStorage.getItem(KILL_SWITCH_KEY) === "off";
+    return localStorage.getItem(PROMPT_SUGGESTIONS_KEY) === "off";
   } catch {
     return false;
+  }
+}
+
+/** Settings toggle: writes the same kill switch the composer already reads. */
+export function setPromptSuggestionsEnabled(enabled: boolean): void {
+  try {
+    if (enabled) localStorage.removeItem(PROMPT_SUGGESTIONS_KEY);
+    else localStorage.setItem(PROMPT_SUGGESTIONS_KEY, "off");
+  } catch {
+    // localStorage unavailable (private mode/quota): the toggle just doesn't stick.
   }
 }
 

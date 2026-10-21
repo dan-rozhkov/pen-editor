@@ -3,6 +3,7 @@ import {
   applyUITheme,
   getStoredUITheme,
   applyThemeWithoutTransitions,
+  postUserTheme,
   setUIThemeStateSetter,
   UI_THEME_STORAGE_KEY,
   type UITheme,
@@ -58,6 +59,7 @@ interface UIThemeState {
 function persistTheme(theme: UITheme, source: ThemeSource, changed: boolean) {
   if (lockedTheme || source === 'remote') return
   if (source === 'user' || changed) localStorage.setItem(UI_THEME_STORAGE_KEY, theme)
+  if (source === 'user') postUserTheme(theme)
 }
 
 export const useUIThemeStore = create<UIThemeState>((set, get) => {

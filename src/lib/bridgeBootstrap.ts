@@ -1,4 +1,10 @@
-import { isAgentRoutePath, isAuthDesktopRoutePath, isDocRoutePath, isTraceRoutePath } from '@/lib/agentPanel'
+import {
+  isAgentRoutePath,
+  isAuthDesktopRoutePath,
+  isDocRoutePath,
+  isSettingsRoutePath,
+  isTraceRoutePath,
+} from '@/lib/agentPanel'
 
 // Starts the desktop/WebSocket MCP bridges and the menu-command bridge. Split
 // out of main.tsx so this ordering logic — dynamic imports plus the
@@ -33,10 +39,17 @@ import { isAgentRoutePath, isAuthDesktopRoutePath, isDocRoutePath, isTraceRouteP
 // rejection. Catching here means the desktop path failing still lets the WS
 // bridge start when it's configured.
 export function startBridges(): void {
-  // The canvas-less /agent, /doc, /trace and /auth/desktop pages must never register as an editor/MCP
-  // target (and /doc must not own the tab title or the File menu).
+  // The canvas-less /agent, /doc, /trace, /settings and /auth/desktop pages must never register as an editor/MCP
+  // target (and /doc and /settings must not own the tab title or the File menu).
   const path = window.location.pathname
-  if (isAgentRoutePath(path) || isDocRoutePath(path) || isTraceRoutePath(path) || isAuthDesktopRoutePath(path)) return
+  if (
+    isAgentRoutePath(path) ||
+    isDocRoutePath(path) ||
+    isTraceRoutePath(path) ||
+    isSettingsRoutePath(path) ||
+    isAuthDesktopRoutePath(path)
+  )
+    return
   const desktopMcpBridgeReady: Promise<void> = window.penDesktop
     ? import('@/lib/desktopMcpBridge')
         .then(({ initDesktopMcpBridge }) => {

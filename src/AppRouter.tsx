@@ -25,6 +25,10 @@ const AgentPage = lazy(() => import("@/routes/AgentPage"));
 // Tiptap must stay out of the showcase and editor chunks.
 const DocPage = lazy(() => import("@/routes/DocPage"));
 
+// The settings page at "/settings" (desktop tab or plain browser). Lazy, and it
+// must never import App or Pixi.
+const SettingsPage = lazy(() => import("@/routes/SettingsPage"));
+
 // The browse-run trace viewer at "/trace/:id" (desktop tab or plain browser),
 // and "/trace" to open a trace file.
 // Lazy, and it must never import App, Pixi or the chat.
@@ -75,6 +79,14 @@ export function AppRouter() {
           element={
             <Suspense fallback={<RouteFallback />}>
               <DocPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <SettingsPage />
             </Suspense>
           }
         />

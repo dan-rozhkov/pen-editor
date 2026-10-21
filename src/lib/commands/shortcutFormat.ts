@@ -31,3 +31,20 @@ export function formatShortcut(parts: ShortcutPart[], isMac = isMacPlatform()): 
   }
   return parts.map((p) => OTHER_LABELS[p] ?? p).join("+");
 }
+
+const MAC_MODIFIER_SYMBOLS = new Set(["⌘", "⇧", "⌥", "⌃"]);
+
+/** Splits a string produced by `formatShortcut` back into its key labels ("⌘⇧Z" -> ⌘, ⇧, Z; "Ctrl+Z" -> Ctrl, Z). */
+export function splitShortcut(shortcut: string): string[] {
+  if (shortcut.length > 1 && shortcut.includes("+")) {
+    // A trailing "+" is the plus key itself ("Ctrl++").
+    const keys = shortcut.endsWith("++") ? [...shortcut.slice(0, -2).split("+"), "+"] : shortcut.split("+");
+    return keys.filter(Boolean);
+  }
+  const chars = [...shortcut];
+  const keys: string[] = [];
+  let i = 0;
+  while (i < chars.length - 1 && MAC_MODIFIER_SYMBOLS.has(chars[i])) keys.push(chars[i++]);
+  keys.push(chars.slice(i).join(""));
+  return keys;
+}

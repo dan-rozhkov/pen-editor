@@ -37,6 +37,8 @@ import {
 } from "./ui/dropdown-menu";
 import { TooltipShortcut } from "./ui/tooltip";
 import { formatShortcut } from "../lib/commands/shortcutFormat";
+import { openSettings } from "../lib/openSettings";
+import { connectMobbinWithToast } from "../lib/connectMobbin";
 import {
   CaretDownIcon,
   FolderPlusIcon,
@@ -74,7 +76,6 @@ export function FileMenu() {
   const isSharedView = useSharedViewStore((s) => s.isSharedView);
   const mobbinStatus = useMobbinAuthStore((s) => s.status);
   const mobbinError = useMobbinAuthStore((s) => s.error);
-  const mobbinConnect = useMobbinAuthStore((s) => s.connect);
   const mobbinDisconnect = useMobbinAuthStore((s) => s.disconnect);
 
   const [importOpen, setImportOpen] = useState(false);
@@ -130,14 +131,6 @@ export function FileMenu() {
 
   const handlePasteStyle = () => {
     window.dispatchEvent(new Event("pen-editor:paste-style"));
-  };
-
-  const handleMobbinConnect = async () => {
-    await mobbinConnect();
-    const failure = useMobbinAuthStore.getState().error;
-    if (failure) {
-      toast(`Couldn't connect Mobbin — ${failure}`);
-    }
   };
 
   const handleImport = () => {
@@ -252,6 +245,11 @@ export function FileMenu() {
               Settings
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="min-w-56">
+              <DropdownMenuItem onClick={() => openSettings()}>
+                All settings…
+                <TooltipShortcut className="ml-auto">{formatShortcut(["mod", ","])}</TooltipShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuCheckboxItem checked={uiTheme === "light"} onCheckedChange={() => useUIThemeStore.getState().setUITheme("light", { source: "user" })}>
                 Light theme
               </DropdownMenuCheckboxItem>
@@ -283,7 +281,7 @@ export function FileMenu() {
                   if (mobbinStatus === "connected") {
                     mobbinDisconnect();
                   } else {
-                    void handleMobbinConnect();
+                    void connectMobbinWithToast();
                   }
                 }}
                 disabled={mobbinStatus === "connecting"}

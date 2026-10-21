@@ -24,6 +24,7 @@
 // later expires with no refresh token is a dead end, not a retry — see
 // `getValidAccessToken()`.
 import { apiFetch } from "@/lib/apiBase";
+import { onStorageKey } from "@/lib/storageSync";
 
 const CLIENT_ID_KEY = "pen.mobbin.clientId";
 const ACCESS_TOKEN_KEY = "pen.mobbin.accessToken";
@@ -94,6 +95,10 @@ export function subscribeToMobbinAuthChanges(
 function notifyChangeListeners(): void {
   for (const listener of changeListeners) listener();
 }
+
+// Credentials connected or removed in another document (the Settings tab)
+// re-derive this document's status too.
+for (const storageKey of ALL_STORAGE_KEYS) onStorageKey(storageKey, notifyChangeListeners);
 
 export interface MobbinTokens {
   clientId: string;

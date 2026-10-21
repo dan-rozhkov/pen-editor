@@ -1,4 +1,4 @@
-import type { BrowseTraceSavePayload, BrowseTraceSaveResult, DesktopAuthApi, DesktopDocsDiskApi, PenDesktopApi } from "@/lib/desktopBridge";
+import type { BrowseTraceSavePayload, BrowseTraceSaveResult, DesktopAuthApi, DesktopDocsDiskApi, DesktopSettingsApi, PenDesktopApi } from "@/lib/desktopBridge";
 import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
 import type { AgentPanelCanvasBridge } from "@/lib/canvasLink/protocol";
 
@@ -19,6 +19,8 @@ export interface PenAgentPanelApi {
   };
   /** The shell's markdown document tabs (/doc). Absent on a shell without doc tabs. */
   docs?: AgentPanelDocsBridge;
+  /** Opens or focuses the Settings tab. Absent on an older shell. */
+  settings?: DesktopSettingsApi;
   /** Local browse-run traces. Absent on a shell without trace tabs. */
   traces?: {
     save(payload: BrowseTraceSavePayload): Promise<BrowseTraceSaveResult>;
@@ -96,6 +98,11 @@ export function isDocRoutePath(pathname: string, base: string = import.meta.env.
 export function isTraceRoutePath(pathname: string, base: string = import.meta.env.BASE_URL || "/"): boolean {
   const prefix = base.endsWith("/") ? base.slice(0, -1) : base;
   return pathname === `${prefix}/trace` || pathname.startsWith(`${prefix}/trace/`);
+}
+
+/** True when `pathname` is the canvas-less /settings page (basename-aware). */
+export function isSettingsRoutePath(pathname: string, base: string = import.meta.env.BASE_URL || "/"): boolean {
+  return isRoutePath(pathname, "settings", base);
 }
 
 /** True when `pathname` is the canvas-less /auth/desktop hand-off page (basename-aware). */

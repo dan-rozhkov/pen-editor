@@ -1,37 +1,11 @@
-import { useEffect, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router";
 
 import { ApiKeysSection } from "@/components/auth/ApiKeysSection";
 import { AuthButton, AuthShell } from "@/components/auth/authUi";
 import { ConnectedAgentsSection } from "@/components/auth/ConnectedAgentsSection";
-import { authClient } from "@/lib/auth/authClient";
+import { formatProviders, useLinkedProviders } from "@/components/auth/useLinkedProviders";
 import { signInPath } from "@/lib/auth/paths";
 import { signOut, useSession } from "@/lib/auth/session";
-
-const PROVIDER_LABELS: Record<string, string> = {
-  google: "Google",
-  credential: "Email and password",
-};
-
-function useLinkedProviders(enabled: boolean): string[] | null {
-  const [providers, setProviders] = useState<string[] | null>(null);
-  useEffect(() => {
-    if (!enabled) return;
-    let live = true;
-    void authClient
-      .listAccounts()
-      .then((res) => {
-        if (live) setProviders((res.data ?? []).map((a) => a.providerId));
-      })
-      .catch(() => {
-        if (live) setProviders([]);
-      });
-    return () => {
-      live = false;
-    };
-  }, [enabled]);
-  return providers;
-}
 
 export default function AccountPage() {
   const session = useSession();
@@ -62,12 +36,7 @@ export default function AccountPage() {
           </h2>
           <p className="text-sm text-text-primary">{user.email}</p>
           <p className="text-sm text-text-muted">
-            Sign-in methods:{" "}
-            {providers === null
-              ? "loading…"
-              : providers.length === 0
-                ? "none"
-                : providers.map((p) => PROVIDER_LABELS[p] ?? p).join(", ")}
+            Sign-in methods: {formatProviders(providers)}
           </p>
         </section>
         <ApiKeysSection />

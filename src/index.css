@@ -344,11 +344,14 @@ html.route-agent #root {
   }
 }
 
-/* Routes that own the whole viewport ("/doc", "/trace/:id"): the same panel
+/* Routes that own the whole viewport ("/doc", "/settings", "/trace/:id"): the same panel
    surface as the island/chat, so every page matches edge to edge. */
 html.route-doc,
 html.route-doc body,
 html.route-doc #root,
+html.route-settings,
+html.route-settings body,
+html.route-settings #root,
 html.route-trace,
 html.route-trace body,
 html.route-trace #root {

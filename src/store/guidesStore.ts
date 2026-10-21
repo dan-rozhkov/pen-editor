@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { onStorageKey } from "@/lib/storageSync";
 
 export interface Guide {
   id: string;
@@ -71,3 +72,8 @@ export const useGuidesStore = create<GuidesState>((set, get) => ({
   setGuides: (guides) => set({ guides }),
   clearGuides: () => set({ guides: [] }),
 }));
+
+// The Settings tab writes this key from its own document.
+onStorageKey(SHOW_RULERS_STORAGE_KEY, (value) => {
+  useGuidesStore.setState({ showRulers: value === "true" });
+});

@@ -63,6 +63,13 @@ export interface DesktopDocsDiskApi {
   remove?(id: string): Promise<{ ok: true } | { error: string }>;
 }
 
+/** The shell's Settings tab. `section` is a SettingsSection id (src/lib/openSettings.ts). */
+export interface DesktopSettingsApi {
+  open?(section?: string): Promise<{ ok: boolean }> | void;
+  /** Main switches an already-open Settings tab to a section without reloading it. Absent on an older shell. */
+  onSection?(cb: (section: string) => void): () => void;
+}
+
 export interface PenDesktopApi {
   auth?: DesktopAuthApi;
   /**
@@ -79,6 +86,8 @@ export interface PenDesktopApi {
    */
   docs?: DesktopDocsDiskApi & { open?(docId: string): Promise<{ ok: boolean; error?: string }> };
   setDocumentTitle?(title: string): void;
+  /** Opens or focuses the Settings tab (/settings), optionally on a section. Absent on an older shell. */
+  settings?: DesktopSettingsApi;
   /** true when the desktop agent layout flag is on: the editor tab is chatless. */
   agentLayout?: boolean;
   /** Canvas link host bridge (desktop agent layout only); see docs/canvas-link.md. */

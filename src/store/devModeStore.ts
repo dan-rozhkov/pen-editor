@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { onStorageKey } from "@/lib/storageSync";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useMeasureStore } from "@/store/measureStore";
 import { useMeasurementsStore } from "@/store/measurementsStore";
@@ -140,3 +141,12 @@ export const useDevModeStore = create<DevModeState>((set, get) => ({
     }
   },
 }));
+
+// The Settings tab writes these keys from its own document. Same parsing as
+// the initial reads above; `active` is session-only and never synced.
+onStorageKey(UNITS_KEY, () => useDevModeStore.setState({ units: getInitialUnits() }));
+onStorageKey(REM_BASE_KEY, () => useDevModeStore.setState({ remBase: getInitialRemBase() }));
+onStorageKey(CODEGEN_FORMAT_KEY, () => useDevModeStore.setState({ codegenFormat: getInitialCodegenFormat() }));
+onStorageKey(CODEGEN_REACT_STYLE_KEY, () =>
+  useDevModeStore.setState({ codegenReactStyle: getInitialCodegenReactStyle() }),
+);

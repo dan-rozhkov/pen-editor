@@ -107,3 +107,40 @@ export function installUIThemeStorageSync() {
     else applyThemeWithoutTransitions(theme);
   });
 }
+
+const THEME_CHANNEL_NAME = "pen-ui-theme";
+let themeChannel: BroadcastChannel | null = null;
+
+function getThemeChannel(): BroadcastChannel | null {
+  if (themeChannel || typeof BroadcastChannel === "undefined") return themeChannel;
+  themeChannel = new BroadcastChannel(THEME_CHANNEL_NAME);
+  return themeChannel;
+}
+
+/** An explicit user choice (`source: "user"`), announced to every other same-origin document. */
+export function postUserTheme(theme: UITheme) {
+  getThemeChannel()?.postMessage({ theme });
+}
+
+let broadcastSyncInstalled = false;
+
+/**
+ * The user-intent channel next to the `storage` sync above. Editor routes
+ * ignore `ui-theme` storage events (a document opening also writes it), so a
+ * theme picked on the Settings page reaches them here instead: only
+ * `source: "user"` changes are posted, and every route, editors included,
+ * applies a received one as "remote" (never written back). BroadcastChannel
+ * does not deliver to the posting instance. Idempotent.
+ */
+export function installUIThemeBroadcastSync() {
+  if (broadcastSyncInstalled) return;
+  const channel = getThemeChannel();
+  if (!channel) return;
+  broadcastSyncInstalled = true;
+  channel.onmessage = (e: MessageEvent<{ theme?: unknown }>) => {
+    const theme = e.data?.theme;
+    if (theme !== "light" && theme !== "dark") return;
+    if (stateSetter) stateSetter(theme);
+    else applyThemeWithoutTransitions(theme);
+  };
+}

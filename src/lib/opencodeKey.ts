@@ -20,6 +20,8 @@
 // behave as if there is no key, on both read and write — a thrown write must
 // not surface as if the key were saved when it silently wasn't.
 
+import { onStorageKey } from "@/lib/storageSync";
+
 const OPENCODE_KEY_STORAGE_KEY = "pen.opencode.key.v1";
 
 let cachedKey: string | null | undefined; // undefined = not read yet this "session"
@@ -96,12 +98,15 @@ export function clearOpenCodeKey(): void {
   notify();
 }
 
+// A key saved or removed in another document (the Settings tab) reaches this
+// document's subscribers too.
+onStorageKey(OPENCODE_KEY_STORAGE_KEY, notify);
+
 /**
  * Subscribe to changes made through `setOpenCodeKey`/`clearOpenCodeKey` in
- * THIS tab (e.g. `useSyncExternalStore` in a component that needs to
+ * THIS tab or, via the `storage` event, another one (e.g. `useSyncExternalStore` in a component that needs to
  * re-render when the key appears/disappears — the picker's lock icons,
- * the key dialog itself). Does not observe another tab's `storage` event;
- * nothing in this feature needs cross-tab sync.
+ * the key dialog itself).
  */
 export function subscribeOpenCodeKey(cb: () => void): () => void {
   listeners.add(cb);

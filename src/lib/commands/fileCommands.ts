@@ -15,6 +15,8 @@ import { toDtcg, fromDtcg, type ImportResult } from "@/lib/designTokens";
 import type { DtcgDocument } from "@/lib/designTokens";
 import { useHistoryStore } from "@/store/historyStore";
 import { saveShareCredentials } from "@/lib/shareCanvas";
+import { openSettings } from "@/lib/openSettings";
+import { formatShortcut } from "./shortcutFormat";
 import type { PaletteCommand } from "./types";
 
 /**
@@ -185,6 +187,14 @@ export async function openDocument(): Promise<void> {
 
 export function getFileCommands(): PaletteCommand[] {
   return [
+    {
+      id: "app-open-settings",
+      label: "Open settings",
+      group: "File",
+      shortcut: formatShortcut(["mod", ","]),
+      keywords: ["preferences", "options", "theme", "account"],
+      run: () => openSettings(),
+    },
     { id: "file-open", label: "Open…", group: "File", keywords: ["open file", "load"], run: () => void openDocument() },
     { id: "file-export-json", label: "Export as .json", group: "File", keywords: ["save", "download"], run: exportAsJson },
     { id: "file-export-pen", label: "Export as .pen", group: "File", keywords: ["save", "download"], run: exportAsPen },
