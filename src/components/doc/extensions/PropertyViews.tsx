@@ -1,9 +1,10 @@
-import { useState, type ComponentType } from "react";
+import { useCallback, useState, type ComponentType } from "react";
 import { NodeViewContent, NodeViewWrapper, useEditorState, type NodeViewProps } from "@tiptap/react";
 import { ArrowUpRightIcon, CalendarBlankIcon, HashIcon, ListBulletsIcon, TextAlignLeftIcon, TextTIcon, type IconProps } from "@phosphor-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { POPOVER_SURFACE } from "../ui/menuSurface";
+import { useTransientPopover } from "./useTransientPopover";
 import { PropertyValueMenu } from "./PropertyValueMenu";
 import "./propertyPicker.css";
 import { addPropertyRow, inferIconKind, valueFacts, type PropertyIconKind } from "./docProperties";
@@ -23,6 +24,8 @@ export function PropertyRowView({ node, editor, getPos }: NodeViewProps) {
   const kind = inferIconKind(facts);
   const Icon = ICONS[kind];
   const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  useTransientPopover(open, close, editor);
   const editable = useEditorState({ editor, selector: (state) => state.editor.isEditable });
   return (
     <NodeViewWrapper className="doc-property-row" data-type="property-row" data-icon={kind}>
@@ -42,7 +45,7 @@ export function PropertyRowView({ node, editor, getPos }: NodeViewProps) {
             align="start"
             sideOffset={6}
             finalFocus={false}
-            className={cn(POPOVER_SURFACE, "w-60 p-1.5")}
+            className={cn(POPOVER_SURFACE, "max-h-[min(24rem,var(--available-height))] w-60 overflow-y-auto p-1.5")}
           >
             <PropertyValueMenu
               editor={editor}

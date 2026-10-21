@@ -121,13 +121,14 @@ export function DocEditor({ markdown, revision, onMarkdown, onSynced, onEditor, 
   const containerRef = useRef<HTMLDivElement>(null);
   return (
     <div ref={containerRef} className="relative">
-      <EditorContent editor={editor} />
+      {/* Before the editor: the empty body is 60dvh tall, so below it the row would sit far from the title. */}
       {editor && isEmpty && templates && (
         <TemplateStarter
           templates={templates}
           onPick={(template) => insertTemplate(editor, editor.chain().focus("start"), template)}
         />
       )}
+      <EditorContent editor={editor} />
       {editor && editor === createdEditor && (
         <>
           <BubbleToolbar editor={editor} />

@@ -1,9 +1,10 @@
-import { useState, type ComponentType } from "react";
+import { useCallback, useState, type ComponentType } from "react";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { InfoIcon, LightbulbIcon, MegaphoneIcon, WarningIcon, WarningOctagonIcon, type IconProps } from "@phosphor-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { MENU_HOVER, POPOVER_SURFACE } from "../ui/menuSurface";
+import { useTransientPopover } from "./useTransientPopover";
 import { CALLOUT_KINDS, isCalloutKind, type CalloutKind } from "./docCallout";
 
 const ICONS: Record<CalloutKind, ComponentType<IconProps>> = {
@@ -19,6 +20,8 @@ const LABELS: Record<CalloutKind, string> = { note: "Note", tip: "Tip", importan
 /** A tinted box: the icon button (left) opens a small menu to change the kind; the body is ordinary block content. */
 export function CalloutView({ node, updateAttributes, editor }: NodeViewProps) {
   const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  useTransientPopover(open, close, editor);
   const kind: CalloutKind = isCalloutKind(node.attrs.kind) ? node.attrs.kind : "note";
   const Icon = ICONS[kind];
   return (
@@ -34,8 +37,8 @@ export function CalloutView({ node, updateAttributes, editor }: NodeViewProps) {
           >
             <Icon size={18} weight="fill" />
           </PopoverTrigger>
-          <PopoverContent side="bottom" align="start" sideOffset={4} finalFocus={false} className={cn(POPOVER_SURFACE, "w-40 p-1")}>
-            <div role="menu" aria-label="Callout type" className="doc-prose flex flex-col gap-0.5" onMouseDown={(event) => event.preventDefault()}>
+          <PopoverContent side="bottom" align="start" sideOffset={4} finalFocus={false} className={cn(POPOVER_SURFACE, "max-h-[min(24rem,var(--available-height))] w-40 overflow-y-auto p-1")}>
+            <div role="menu" aria-label="Callout type" className="doc-palette flex flex-col gap-0.5" onMouseDown={(event) => event.preventDefault()}>
               {CALLOUT_KINDS.map((option) => {
                 const OptionIcon = ICONS[option];
                 return (
@@ -43,7 +46,7 @@ export function CalloutView({ node, updateAttributes, editor }: NodeViewProps) {
                     key={option}
                     type="button"
                     role="menuitem"
-                    className={cn(MENU_HOVER, "doc-callout-option")}
+                    className={cn(MENU_HOVER, "doc-callout-option text-popover-foreground flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm")}
                     data-kind={option}
                     onClick={() => {
                       updateAttributes({ kind: option });

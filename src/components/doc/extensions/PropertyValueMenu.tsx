@@ -44,7 +44,7 @@ export function PropertyValueMenu(props: Props) {
   const [view, setView] = useState<View>("menu");
   const { editor, getRowPos, onDone } = props;
   return (
-    <div className="doc-prose text-popover-foreground flex flex-col gap-0.5" onMouseDown={(event) => event.stopPropagation()}>
+    <div className="doc-palette text-popover-foreground flex flex-col gap-0.5" onMouseDown={(event) => event.stopPropagation()}>
       {view === "menu" && (
         <div role="menu" aria-label="Value type" className="flex flex-col gap-0.5">
           <MenuItem icon={<CalendarBlankIcon size={16} />} label="Date" onPick={() => setView("date")} />
@@ -146,7 +146,7 @@ function OptionPicker({ editor, getRowPos, keyText, currentTag, onDone }: Props)
           const selected = currentTag?.text.toLowerCase() === option.text.toLowerCase();
           return (
             <button key={option.text} type="button" role="option" aria-selected={selected} className={ITEM} onClick={() => pick(option.text, option.color)}>
-              <span data-bg={option.color} className="rounded px-1.5">
+              <span data-bg={option.color} className="doc-chip rounded px-1.5">
                 {option.text}
               </span>
               {selected && <CheckIcon size={14} className="ml-auto" />}
