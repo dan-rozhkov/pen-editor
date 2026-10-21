@@ -3,7 +3,7 @@ import Suggestion, { exitSuggestion } from "@tiptap/suggestion";
 import { PluginKey } from "@tiptap/pm/state";
 import { loginHost, savedLoginsAvailable, type SavedLogin } from "@/lib/docs/savedLogins";
 import { isInPropertyCell } from "../extensions/docProperties";
-import { reactSuggestionRender } from "../ui/suggestionRender";
+import { DOC_SUGGESTION_FLOATING_UI, reactSuggestionRender } from "../ui/suggestionRender";
 import { LoginMenu, type LoginMenuPick } from "./LoginMenu";
 
 export const LoginMentionKey = new PluginKey("loginMention");
@@ -38,6 +38,7 @@ export const LoginMention = Extension.create({
       Suggestion<LoginMenuPick, LoginMenuPick>({
         editor: this.editor,
         pluginKey: LoginMentionKey,
+        floatingUi: DOC_SUGGESTION_FLOATING_UI,
         char: "@",
         allowedPrefixes: [" "],
         allow: ({ state, range }) => {

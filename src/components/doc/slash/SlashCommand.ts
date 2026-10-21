@@ -2,7 +2,7 @@ import { Extension } from "@tiptap/react";
 import Suggestion from "@tiptap/suggestion";
 import { SlashCommandKey } from "./slashKey";
 import { SlashMenu } from "./SlashMenu";
-import { reactSuggestionRender } from "../ui/suggestionRender";
+import { DOC_SUGGESTION_FLOATING_UI, reactSuggestionRender } from "../ui/suggestionRender";
 import { getCachedDocTemplates } from "@/lib/docs/docTemplates";
 import { templateSlashItems } from "../templateInsert";
 import { isInPropertyCell } from "../extensions/docProperties";
@@ -19,6 +19,7 @@ export const SlashCommand = Extension.create({
       Suggestion<SlashItem, SlashItem>({
         editor: this.editor,
         pluginKey: SlashCommandKey,
+        floatingUi: DOC_SUGGESTION_FLOATING_UI,
         char: "/",
         allowedPrefixes: [" "],
         allow: ({ state, range }) => {

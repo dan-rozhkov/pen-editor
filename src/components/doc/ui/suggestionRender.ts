@@ -1,7 +1,11 @@
+import { shift } from "@floating-ui/dom";
 import { ReactRenderer } from "@tiptap/react";
 import type { SuggestionOptions, SuggestionProps } from "@tiptap/suggestion";
 import type { ComponentType, RefAttributes } from "react";
 import type { SuggestionMenuHandle } from "./useListNav";
+
+/** Keeps a doc suggestion menu inside the viewport: `flip` alone can move it to `bottom-end`, past the left edge of a narrow window. */
+export const DOC_SUGGESTION_FLOATING_UI = { middleware: [shift({ padding: 8 })] };
 
 /** The `render` option of a doc suggestion: a React menu mounted under the caret, keys routed to its handle. */
 export function reactSuggestionRender<I, S = I>(Menu: ComponentType<SuggestionProps<I, S> & RefAttributes<SuggestionMenuHandle>>): NonNullable<SuggestionOptions<I, S>["render"]> {
