@@ -8,6 +8,7 @@ import { DocTableFilter } from "./table/tableFilter";
 import { DocCodeBlock } from "./extensions/docCodeBlock";
 import { DocColorMark, getActiveDocColor } from "./extensions/docColor";
 import { DocPropertyKeys, DocTable, PropertyKey, PropertyList, PropertyRow, PropertyValue } from "./extensions/docProperties";
+import { DocLogin } from "./extensions/docLogin";
 import { DocCallout } from "./extensions/docCallout";
 import { DocDetails, DocDetailsContent, DocDetailsSummary } from "./extensions/docDetails";
 
@@ -41,6 +42,7 @@ export const DOC_EXTENSIONS = [
   DocDetailsSummary,
   DocDetailsContent,
   DocCallout,
+  DocLogin,
   DocColorMark,
   PropertyList,
   PropertyRow,

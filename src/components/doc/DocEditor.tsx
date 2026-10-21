@@ -3,6 +3,8 @@ import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/r
 import Placeholder from "@tiptap/extension-placeholder";
 import { DOC_EXTENSIONS } from "./docExtensions";
 import { SlashCommand } from "./slash/SlashCommand";
+import { LoginMention } from "./login/LoginMention";
+import { CreateLoginDialog } from "./login/CreateLoginDialog";
 import { BlockHandle } from "./blockHandle/BlockHandle";
 import { TableControls } from "./table/TableControls";
 import { BubbleToolbar } from "./ui/BubbleToolbar";
@@ -63,7 +65,7 @@ export function DocEditor({ markdown, revision, onMarkdown, onSynced, onEditor, 
           focusNode: focusNodeLink,
         }),
       }),
-      SlashCommand, Placeholder.configure({ placeholder: placeholderFor }),
+      SlashCommand, LoginMention, Placeholder.configure({ placeholder: placeholderFor }),
     ],
     content: markdown,
     contentType: "markdown",
@@ -136,6 +138,7 @@ export function DocEditor({ markdown, revision, onMarkdown, onSynced, onEditor, 
           <TableControls editor={editor} containerRef={containerRef} />
           <ImagePrompt editor={editor} />
           <DocLinkPicker editor={editor} currentDocId={docId} />
+          <CreateLoginDialog editor={editor} />
         </>
       )}
     </div>

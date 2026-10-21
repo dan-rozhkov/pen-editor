@@ -1,7 +1,8 @@
-import { Extension, ReactRenderer } from "@tiptap/react";
+import { Extension } from "@tiptap/react";
 import Suggestion from "@tiptap/suggestion";
 import { SlashCommandKey } from "./slashKey";
-import { SlashMenu, type SlashMenuHandle } from "./SlashMenu";
+import { SlashMenu } from "./SlashMenu";
+import { reactSuggestionRender } from "../ui/suggestionRender";
 import { getCachedDocTemplates } from "@/lib/docs/docTemplates";
 import { templateSlashItems } from "../templateInsert";
 import { isInPropertyCell } from "../extensions/docProperties";
@@ -29,27 +30,7 @@ export const SlashCommand = Extension.create({
         items: ({ query, editor }) =>
           filterSlashItems(query, slashItemsAt(editor.state.selection.$from, [...SLASH_ITEMS, ...templateSlashItems(getCachedDocTemplates())])),
         command: ({ editor, range, props }) => runSlashItem(editor, range, props),
-        render: () => {
-          let renderer: ReactRenderer<SlashMenuHandle> | null = null;
-          let unmount: (() => void) | undefined;
-          return {
-            onStart: (props) => {
-              renderer = new ReactRenderer(SlashMenu, { props, editor: props.editor });
-              renderer.element.style.zIndex = "10050";
-              unmount = props.mount(renderer.element);
-            },
-            onUpdate: (props) => renderer?.updateProps(props),
-            onKeyDown: (props) => {
-              if (props.event.key === "Escape") return false; // the plugin dismisses itself
-              return renderer?.ref?.onKeyDown(props) ?? false;
-            },
-            onExit: () => {
-              unmount?.();
-              renderer?.destroy();
-              renderer = null;
-            },
-          };
-        },
+        render: reactSuggestionRender(SlashMenu),
       }),
     ];
   },

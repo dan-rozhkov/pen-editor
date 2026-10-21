@@ -1,12 +1,10 @@
-import { Fragment, forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import type { SuggestionKeyDownProps } from "@tiptap/suggestion";
+import { Fragment, forwardRef } from "react";
 import { cn } from "@/lib/utils";
 import { MENU_SURFACE } from "../ui/menuSurface";
+import { useListNav, type SuggestionMenuHandle } from "../ui/useListNav";
 import type { SlashItem } from "./slashItems";
 
-export interface SlashMenuHandle {
-  onKeyDown: (props: SuggestionKeyDownProps) => boolean;
-}
+export type SlashMenuHandle = SuggestionMenuHandle;
 
 interface Props {
   items: SlashItem[];
@@ -14,32 +12,7 @@ interface Props {
 }
 
 export const SlashMenu = forwardRef<SlashMenuHandle, Props>(function SlashMenu({ items, command }, ref) {
-  const [selected, setSelected] = useState(0);
-  const listRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => setSelected(0), [items]);
-  useEffect(() => {
-    listRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView?.({ block: "nearest" });
-  }, [selected]);
-
-  useImperativeHandle(ref, () => ({
-    onKeyDown: ({ event }) => {
-      if (items.length === 0) return false;
-      if (event.key === "ArrowDown") {
-        setSelected((selected + 1) % items.length);
-        return true;
-      }
-      if (event.key === "ArrowUp") {
-        setSelected((selected + items.length - 1) % items.length);
-        return true;
-      }
-      if (event.key === "Enter" || event.key === "Tab") {
-        command(items[selected]);
-        return true;
-      }
-      return false;
-    },
-  }));
+  const { selected, setSelected, listRef } = useListNav(ref, { items, onPick: command, resetKey: items });
 
   return (
     <div

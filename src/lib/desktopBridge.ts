@@ -76,8 +76,31 @@ export interface DesktopSettingsApi {
   onSection?(cb: (section: string) => void): () => void;
 }
 
+/** A saved login from the desktop app's password store. No password ever crosses the bridge back. */
+export interface DesktopLoginEntry {
+  id: string;
+  origin: string;
+  username: string;
+  label: string;
+  /** A data: URL favicon. */
+  icon?: string;
+}
+
+export type DesktopLoginsListResult =
+  | { entries: DesktopLoginEntry[]; encryptionAvailable: boolean }
+  | { ok: false; error: string };
+
+export type DesktopLoginsAddResult = { ok: true; id: string } | { ok: false; error: string; exists?: true; id?: string };
+
+export interface DesktopLoginsApi {
+  list(): Promise<DesktopLoginsListResult>;
+  add(payload: { site: string; username: string; password: string; label?: string }): Promise<DesktopLoginsAddResult>;
+}
+
 export interface PenDesktopApi {
   auth?: DesktopAuthApi;
+  /** Saved logins for `@` mentions in documents. Absent on the web and on an older shell. */
+  logins?: DesktopLoginsApi;
   /**
    * Local browse-run traces (pen-editor-desktop traceStore). Optional: older shells lack it.
    * `read` returns `{ trace }` with data-URL frames, or `{ error }`.
