@@ -105,7 +105,7 @@ export function ColumnHeaderMenu({ editor, tablePos, col, placed, menu, actions,
             <ArrowRightIcon /> Move right
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" disabled={!actions?.delete} onClick={run((p) => deleteColumn(editor, p, col))}>
+          <DropdownMenuItem disabled={!actions?.delete} onClick={run((p) => deleteColumn(editor, p, col))}>
             <TrashIcon /> Delete
           </DropdownMenuItem>
         </DropdownMenuContent>

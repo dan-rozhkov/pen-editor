@@ -407,7 +407,7 @@ function HoverControls({ editor, containerRef }: Props) {
             <EraserIcon /> Clear contents
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" disabled={!rows?.delete} onClick={run((p) => deleteRow(editor, p, row))}>
+          <DropdownMenuItem disabled={!rows?.delete} onClick={run((p) => deleteRow(editor, p, row))}>
             <TrashIcon /> Delete
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -449,7 +449,7 @@ function HoverControls({ editor, containerRef }: Props) {
               <EraserIcon /> Clear contents
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" disabled={!cols?.delete} onClick={run((p) => deleteColumn(editor, p, col))}>
+            <DropdownMenuItem disabled={!cols?.delete} onClick={run((p) => deleteColumn(editor, p, col))}>
               <TrashIcon /> Delete
             </DropdownMenuItem>
           </DropdownMenuContent>

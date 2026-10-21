@@ -5,6 +5,7 @@ import {
   PuzzlePieceIcon,
   DotsThreeVertical,
   MagnifyingGlassIcon,
+  TrashIcon,
 } from "@phosphor-icons/react";
 import { usePluginStore } from "@/store/pluginStore";
 import { useDevModeStore } from "@/store/devModeStore";
@@ -191,7 +192,7 @@ export function PluginsPanel() {
                       Export
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setDeletingPluginId(plugin.id)}>
-                      Delete
+                      <TrashIcon /> Delete
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

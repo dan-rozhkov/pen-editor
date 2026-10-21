@@ -5,6 +5,7 @@ import {
   DotsThreeVertical,
   MagicWandIcon,
   PlusIcon,
+  TrashIcon,
   UploadSimpleIcon,
 } from "@phosphor-icons/react";
 import { useUserSkillStore } from "@/store/userSkillStore";
@@ -508,7 +509,7 @@ export function SkillsPage({ onClose }: SkillsPageProps) {
                             Export .md
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setDeletingName(skill.name)}>
-                            Delete
+                            <TrashIcon /> Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

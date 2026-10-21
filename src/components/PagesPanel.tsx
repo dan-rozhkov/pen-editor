@@ -1,6 +1,6 @@
 import { useState } from "react";
 import clsx from "clsx";
-import { DotsThreeVertical, PlusIcon } from "@phosphor-icons/react";
+import { DotsThreeVertical, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { usePageStore } from "@/store/pageStore";
 import {
   DropdownMenu,
@@ -134,7 +134,7 @@ export function PagesPanel() {
                         <DropdownMenuItem
                           onClick={() => deletePage(page.id)}
                         >
-                          Delete
+                          <TrashIcon /> Delete
                         </DropdownMenuItem>
                       </>
                     )}
