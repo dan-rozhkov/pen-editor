@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { appArgOf, desktopAppsAvailable } from "@/lib/tools/browser/isolation";
+import { appArgOf, desktopAppsAvailable, desktopNativeAppsAvailable } from "@/lib/tools/browser/isolation";
 import { getBrowserBridge } from "@/lib/tools/browser/bridge";
 import { browseOpen } from "@/lib/tools/browser/browseOpen";
 import { browseAct, runActionsBatch } from "@/lib/tools/browser/browseAct";
@@ -161,6 +161,21 @@ describe("desktopAppsAvailable / appArgOf", () => {
     expect(desktopAppsAvailable()).toBe(false);
     setPenDesktop(stubBrowser({ launchApp: async () => ({}), releaseApp: async () => ({}) }));
     expect(desktopAppsAvailable()).toBe(true);
+  });
+
+  it("desktopNativeAppsAvailable needs launchApp, releaseApp AND nativeApps === true", () => {
+    const apps = { launchApp: async () => ({}), releaseApp: async () => ({}) };
+    expect(desktopNativeAppsAvailable()).toBe(false);
+    setPenDesktop(stubBrowser({ ...apps }));
+    expect(desktopNativeAppsAvailable()).toBe(false);
+    setPenDesktop(stubBrowser({ ...apps, nativeApps: false }));
+    expect(desktopNativeAppsAvailable()).toBe(false);
+    setPenDesktop(stubBrowser({ launchApp: apps.launchApp, nativeApps: true }));
+    expect(desktopNativeAppsAvailable()).toBe(false);
+    setPenDesktop(stubBrowser({ releaseApp: apps.releaseApp, nativeApps: true }));
+    expect(desktopNativeAppsAvailable()).toBe(false);
+    setPenDesktop(stubBrowser({ ...apps, nativeApps: true }));
+    expect(desktopNativeAppsAvailable()).toBe(true);
   });
 
   it("appArgOf returns a trimmed non-empty string only", () => {

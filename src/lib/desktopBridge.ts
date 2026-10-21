@@ -42,6 +42,12 @@ export type DesktopBrowserBridge = BrowserBridge &
      * with `launchApp` it is the `browseApps` client capability.
      */
     releaseApp?(): Promise<unknown>;
+    /**
+     * The shell can drive native macOS apps (Accessibility helper) through
+     * `launchApp`. With `launchApp` and `releaseApp` it is the
+     * `browseNativeApps` client capability. Set on darwin only.
+     */
+    nativeApps?: boolean;
   };
 
 /** Desktop sign-in through the system browser (docs: pen-editor-backend desktop-sign-in spec). Optional: older shells lack it. */

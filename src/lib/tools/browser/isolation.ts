@@ -27,6 +27,15 @@ export function desktopAppsAvailable(): boolean {
   return typeof bridge?.launchApp === "function" && typeof bridge?.releaseApp === "function";
 }
 
+/**
+ * Whether the desktop shell can also drive native macOS apps (`nativeApps === true`
+ * on top of `launchApp` and `releaseApp`). Static for a page load (a capability).
+ */
+export function desktopNativeAppsAvailable(): boolean {
+  const bridge = desktopBrowserBridge() as DesktopBrowserBridge | undefined;
+  return desktopAppsAvailable() && bridge?.nativeApps === true;
+}
+
 /** The `app` argument of a browse_open / browse_agent call: a non-empty trimmed string, else undefined. */
 export function appArgOf(args: unknown): string | undefined {
   const app = typeof args === "object" && args !== null ? (args as { app?: unknown }).app : undefined;

@@ -568,7 +568,7 @@ describe("clientCapabilities", () => {
 
     const context = fresh.buildCanvasContext() as Record<string, unknown>;
 
-    expect(context.clientCapabilities).toEqual({ desktopBrowser: true, browser: "desktop", browseQa: true, browseIsolation: false, browseAssert: false, browseApps: false, canvasTabs: false, docTabs: false, traceTabs: false });
+    expect(context.clientCapabilities).toEqual({ desktopBrowser: true, browser: "desktop", browseQa: true, browseIsolation: false, browseAssert: false, browseApps: false, browseNativeApps: false, canvasTabs: false, docTabs: false, traceTabs: false });
     // Not nested inside the stringified canvasContext.
     const canvas = JSON.parse((context as { canvasContext: string }).canvasContext);
     expect(canvas.clientCapabilities).toBeUndefined();
@@ -581,7 +581,7 @@ describe("clientCapabilities", () => {
 
     const context = fresh.buildCanvasContext() as Record<string, unknown>;
 
-    expect(context.clientCapabilities).toEqual({ desktopBrowser: false, browser: "cloud", browseQa: true, browseIsolation: false, browseAssert: true, browseApps: false, canvasTabs: false, docTabs: false, traceTabs: false });
+    expect(context.clientCapabilities).toEqual({ desktopBrowser: false, browser: "cloud", browseQa: true, browseIsolation: false, browseAssert: true, browseApps: false, browseNativeApps: false, canvasTabs: false, docTabs: false, traceTabs: false });
   });
 
   it("docTabs is true when the agent panel exposes docs.open at import time", async () => {
