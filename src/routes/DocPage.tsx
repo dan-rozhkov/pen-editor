@@ -124,9 +124,9 @@ export default function DocPage() {
                     </IconButton>
                   }
                 />
-                <DropdownMenuContent align="end" sideOffset={4} className="min-w-44">
+                <DropdownMenuContent align="end" sideOffset={4} className="min-w-44 whitespace-nowrap">
                   <DropdownMenuItem onClick={downloadMarkdown}>
-                    <DownloadSimpleIcon /> Download as Markdown
+                    <DownloadSimpleIcon /> Download as .md
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setConfirmingDelete(true)}>
                     <TrashIcon /> Delete document
