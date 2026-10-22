@@ -15,6 +15,7 @@ import { EditorProviders } from "@/components/EditorProviders";
 import { DocEditor } from "@/components/doc/DocEditor";
 import { DocTitle } from "@/components/doc/ui/DocTitle";
 import { docFilename, docMarkdownFile } from "@/lib/docs/docExport";
+import { exportDocPdf } from "@/lib/docs/docPdf";
 import { saveBlob } from "@/lib/downloadFile";
 import { titleAfterTemplate } from "@/lib/docs/docTemplates";
 import { useDocSync } from "@/components/doc/useDocSync";
@@ -66,9 +67,14 @@ export default function DocPage() {
     saveBlob(blob, docFilename(sync.title));
   };
 
+  const downloadPdf = () => {
+    // Printing renders the live DOM, so nothing is pending: the editor text is already on screen.
+    void exportDocPdf(sync.title);
+  };
+
   return (
     <EditorProviders>
-      <div className="flex h-dvh flex-col overflow-hidden bg-surface-panel text-text-primary">
+      <div className="doc-page flex h-dvh flex-col overflow-hidden bg-surface-panel text-text-primary">
         {sync.id === null ? (
           <main className="flex flex-1 flex-col items-center justify-center px-4">
             <EmptyState
@@ -85,7 +91,7 @@ export default function DocPage() {
         ) : (
           <>
             {/* Same row as the chat header (OpenChatHeader) and the desktop browser bar. */}
-            <header className="flex shrink-0 items-center gap-1 border-b border-border-default bg-surface-panel px-2 py-1.5">
+            <header className="doc-page-header flex shrink-0 items-center gap-1 border-b border-border-default bg-surface-panel px-2 py-1.5">
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
@@ -128,14 +134,18 @@ export default function DocPage() {
                   <DropdownMenuItem onClick={downloadMarkdown}>
                     <DownloadSimpleIcon /> Download as .md
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={downloadPdf}>
+                    <DownloadSimpleIcon /> Download as .pdf
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setConfirmingDelete(true)}>
                     <TrashIcon /> Delete document
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </header>
-            <main className="layers-scrollbar min-h-0 flex-1 overflow-y-auto px-6 pb-24 pt-10 sm:px-24 sm:pt-16">
-              <div className="mx-auto w-full max-w-[708px]">
+            <main className="doc-page-scroll layers-scrollbar min-h-0 flex-1 overflow-y-auto px-6 pb-24 pt-10 sm:px-24 sm:pt-16">
+              <div className="doc-page-content mx-auto w-full max-w-[708px]">
+                <h1 className="doc-print-title">{sync.title.trim() || "Untitled"}</h1>
                 <DocTitle value={sync.title} onChange={sync.setTitle} onLeave={() => editor?.commands.focus("start")} />
                 <DocEditor
                   key={sync.editorId}

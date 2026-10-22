@@ -10,6 +10,11 @@ export function docFilename(title: string): string {
   return `${name || FALLBACK_NAME}.md`;
 }
 
+/** `<title>.pdf`, same sanitising as `docFilename`. */
+export function docPdfFilename(title: string): string {
+  return docFilename(title).replace(/\.md$/, ".pdf");
+}
+
 /** File text: the title as an H1, then the body. */
 export function docMarkdownFile(title: string, body: string): string {
   const heading = title.trim() || FALLBACK_NAME;

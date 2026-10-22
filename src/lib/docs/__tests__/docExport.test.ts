@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { docFilename, docMarkdownFile } from "@/lib/docs/docExport";
+import { docFilename, docMarkdownFile, docPdfFilename } from "@/lib/docs/docExport";
 
 describe("docFilename", () => {
   it("appends .md", () => expect(docFilename("Plan")).toBe("Plan.md"));
@@ -18,4 +18,12 @@ describe("docMarkdownFile", () => {
   it("puts the title as H1 before the body", () => expect(docMarkdownFile("T", "body")).toBe("# T\n\nbody\n"));
   it("uses Untitled for an empty title", () => expect(docMarkdownFile("  ", "x")).toBe("# Untitled\n\nx\n"));
   it("handles an empty body", () => expect(docMarkdownFile("T", "")).toBe("# T\n"));
+});
+
+describe("docPdfFilename", () => {
+  it("swaps the extension", () => expect(docPdfFilename("Plan")).toBe("Plan.pdf"));
+  it("sanitises and falls back", () => {
+    expect(docPdfFilename("a/b")).toBe("a b.pdf");
+    expect(docPdfFilename("")).toBe("Untitled.pdf");
+  });
 });

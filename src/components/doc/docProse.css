@@ -361,3 +361,100 @@
 .doc-prose .doc-login-icon { flex: none; border-radius: 3px; color: var(--color-text-muted); }
 .doc-prose .doc-login-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .doc-prose .doc-login.ProseMirror-selectednode { outline: 2px solid var(--color-accent-primary); outline-offset: 1px; }
+
+/* ===== Print / "Download as .pdf" =====
+   Both the desktop shell (printToPDF) and window.print() render the live page with print media.
+   The page is h-dvh with an inner scrolling <main>, so the viewport chain is unrolled here, the chrome is
+   hidden and the app theme is forced to its light values. DOM: div.doc-page > header.doc-page-header +
+   main.doc-page-scroll > div.doc-page-content > (DocTitle textarea + .doc-prose). */
+/* Named page: only html.route-doc uses it, so the lazily loaded stylesheet cannot leak page rules to other routes. */
+@page doc { size: A4; margin: 18mm 16mm; }
+/* Screen: the print-only title is hidden. */
+.doc-print-title { display: none; }
+@media print {
+  html.route-doc body { page: doc; }
+  /* Light theme tokens, whatever the app theme is. Specificity beats `.dark` (html.route-doc.dark). */
+  html.route-doc, html.route-doc.dark {
+    color-scheme: light;
+    --color-surface-base: #f5f5f5; --color-surface-panel: #ffffff; --color-surface-elevated: #f0f0f0;
+    --color-surface-hover: #e5e5e5; --color-surface-active: #d9d9d9;
+    --color-border-default: #e0e0e0; --color-border-light: #d0d0d0; --color-border-hover: #b0b0b0;
+    --color-text-primary: #111111; --color-text-secondary: #333333; --color-text-muted: #666666; --color-text-disabled: #999999;
+    --background: oklch(1 0 0); --foreground: oklch(0.145 0 0);
+    --color-code-keyword: #7c3aed; --color-code-string: #15803d; --color-code-comment: #6e7781;
+    --color-code-number: #c2410c; --color-code-property: #1d4ed8; --color-code-tag: #b91c1c;
+  }
+  html.route-doc.dark .doc-prose {
+    --doc-text-gray: #787774; --doc-text-brown: #9f6b53; --doc-text-orange: #d9730d;
+    --doc-text-yellow: #cb912f; --doc-text-green: #448361; --doc-text-blue: #337ea9;
+    --doc-text-purple: #9065b0; --doc-text-pink: #c14c8a; --doc-text-red: #d44c47;
+    --doc-bg-gray: #f1f1ef; --doc-bg-brown: #f4eeee; --doc-bg-orange: #fbecdd;
+    --doc-bg-yellow: #fbf3db; --doc-bg-green: #edf3ec; --doc-bg-blue: #e7f3f8;
+    --doc-bg-purple: #f6f3f9; --doc-bg-pink: #faf1f5; --doc-bg-red: #fdebec;
+  }
+  html.route-doc.dark .doc-prose :not(pre) > code { color: #eb5757; }
+
+  /* Unroll the viewport chain so the whole document paginates, not just the visible part. */
+  html.route-doc, html.route-doc body, html.route-doc #root, html.route-doc .doc-page {
+    height: auto !important; min-height: 0 !important; overflow: visible !important; background: #fff !important;
+  }
+  html.route-doc .doc-page { display: block !important; color: #111; }
+  html.route-doc .doc-page-scroll { display: block !important; overflow: visible !important; height: auto !important; flex: none !important; padding: 0 !important; }
+  html.route-doc .doc-page-content { max-width: none !important; width: 100% !important; margin: 0 !important; }
+  html.route-doc .doc-prose { min-height: 0; }
+
+  /* Chrome and editing affordances: header row, block handle, bubble toolbar, table controls,
+     template starter, placeholders, toasts, tooltips, popups. */
+  html.route-doc .doc-page-header,
+  html.route-doc [data-testid="block-handle"],
+  html.route-doc [role="toolbar"],
+  html.route-doc [role="group"][aria-label="Start from a template"],
+  html.route-doc [data-sonner-toaster],
+  html.route-doc [data-slot="tooltip-content"],
+  html.route-doc [role="tooltip"],
+  html.route-doc [data-slot="dropdown-menu-content"],
+  html.route-doc [data-slot="popover-content"],
+  html.route-doc [role="menu"],
+  html.route-doc [role="dialog"],
+  html.route-doc .doc-prose .tableWrapper button,
+  html.route-doc .doc-prose .doc-details > button,
+  html.route-doc .doc-prose .doc-mermaid-hint,
+  html.route-doc .doc-prose .is-empty::before { display: none !important; }
+  /* The table controls and block handle are siblings positioned absolutely around the content. */
+  html.route-doc .doc-prose .tableWrapper { padding: 0; overflow: visible; }
+
+  /* The title textarea keeps its screen-width pixel height, so print a real H1 instead. */
+  html.route-doc .doc-page-content > textarea { display: none !important; }
+  html.route-doc .doc-print-title {
+    display: block; margin: 0 0 8px; padding: 3px 2px; color: #111; font-size: 2.5rem; line-height: 1.2;
+    font-weight: 700; overflow-wrap: anywhere; break-after: avoid;
+  }
+
+  /* Collapsed toggles print expanded; the arrow button is hidden above. */
+  html.route-doc .doc-prose [data-type="detailsContent"],
+  html.route-doc .doc-prose [data-type="detailsContent"][hidden] { display: block !important; }
+  /* The callout icon stays as the kind marker but is not a control. */
+  html.route-doc .doc-prose .doc-callout-icon { pointer-events: none; background: none !important; }
+  /* Editor selection leftovers. */
+  html.route-doc .doc-prose .ProseMirror-selectednode { outline: none !important; box-shadow: none !important; }
+
+  html.route-doc .doc-prose { color: #111; font-size: 11pt; }
+  html.route-doc .doc-prose a { color: inherit; text-decoration: underline; text-decoration-color: currentColor; }
+  html.route-doc .doc-prose img { max-width: 100%; height: auto; }
+  html.route-doc .doc-prose pre { white-space: pre-wrap; overflow: visible; border: 1px solid var(--color-border-default); }
+  html.route-doc .doc-prose code { border: 0; }
+  html.route-doc .doc-prose table, html.route-doc .doc-prose th, html.route-doc .doc-prose td { border-color: var(--color-border-default); }
+
+  /* Keep heavy blocks whole; keep headings with what follows. */
+  html.route-doc .doc-prose img,
+  html.route-doc .doc-prose tr,
+  html.route-doc .doc-prose pre,
+  html.route-doc .doc-prose blockquote,
+  html.route-doc .doc-prose .doc-callout,
+  html.route-doc .doc-prose .doc-mermaid,
+  html.route-doc .doc-prose .doc-property-list { break-inside: avoid; }
+  html.route-doc .doc-prose h1, html.route-doc .doc-prose h2, html.route-doc .doc-prose h3 { break-after: avoid; }
+
+  /* Tinted backgrounds (callouts, table headers, highlights) survive printing. */
+  html.route-doc * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

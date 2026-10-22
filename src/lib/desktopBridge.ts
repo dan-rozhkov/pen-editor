@@ -113,7 +113,11 @@ export interface PenDesktopApi {
    * Opens a Markdown document (by its docStore id) in a Document tab. Exposed on the
    * /trace page only; older shells lack it.
    */
-  docs?: DesktopDocsDiskApi & { open?(docId: string): Promise<{ ok: boolean; error?: string }> };
+  docs?: DesktopDocsDiskApi & {
+    open?(docId: string): Promise<{ ok: boolean; error?: string }>;
+    /** Prints the current Document tab to a PDF (save dialog in the shell). Absent on an older shell. */
+    exportPdf?(fileName: string): Promise<{ ok: true; path: string } | { canceled: true } | { error: string }>;
+  };
   setDocumentTitle?(title: string): void;
   /** Opens or focuses the Settings tab (/settings), optionally on a section. Absent on an older shell. */
   settings?: DesktopSettingsApi;
