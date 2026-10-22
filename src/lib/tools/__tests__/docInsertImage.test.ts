@@ -188,7 +188,7 @@ describe("doc_insert_image", () => {
       upload(200);
       const r = await run({ docId, traceId: "t1", frameId: 2, alt: "Pricing page" });
       expect(r.url).toBe("https://cdn/up.png");
-      expect(read).toHaveBeenCalledWith("t1");
+      expect(read).toHaveBeenCalledWith("t1", { frames: true, frameIds: [2] });
       expect(JSON.parse(String(mocks.apiFetch.mock.calls[0][1].body))).toMatchObject({ image: expect.stringContaining("F2") });
       expect(getDoc(docId)?.markdown).toContain("![Pricing page](https://cdn/up.png)");
     });
@@ -197,8 +197,13 @@ describe("doc_insert_image", () => {
       const docId = await makeDoc();
       setTrace({ trace: dataFrames() });
       upload(200);
+      const read = setTrace({ trace: dataFrames() });
       await run({ docId, traceId: "t1", alt: "x" });
       expect(String(mocks.apiFetch.mock.calls[0][1].body)).toContain("F5");
+      expect(read.mock.calls).toEqual([
+        ["t1", { frames: false }],
+        ["t1", { frames: true, frameIds: [5] }],
+      ]);
     });
 
     it("errors on unknown frame, no bridge, shell error and a frame without image data", async () => {

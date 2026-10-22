@@ -1,13 +1,10 @@
 import type { ToolExecutionContext, ToolHandler } from "../../toolRegistry";
-import { createImagePaint, clearLegacyFillProps } from "@/utils/fillUtils";
-import { generateId, type RectNode } from "@/types/scene";
-import { loadImageSize } from "@/components/canvas/imageImport";
 import {
   executeBrowseTool,
   type ExecuteBrowseToolOptions,
 } from "@sideform/browser-agent/agent/execute";
 import { getBrowserBridge } from "./bridge";
-import { FALLBACK_SIZE, isPositive, pageNodeName, placeNodeOnCanvas } from "./placeOnCanvas";
+import { pageNodeName, placeImageRect } from "./placeOnCanvas";
 import { peBase, safeParseObject } from "./shared";
 
 /**
@@ -35,19 +32,6 @@ import { peBase, safeParseObject } from "./shared";
  * The capture itself is the package's (`executeBrowseTool`); the placement is
  * the `afterScreenshot` step below.
  */
-async function screenshotSize(shot: Record<string, unknown>, dataUrl: string) {
-  if (isPositive(shot.width) && isPositive(shot.height)) {
-    return { width: shot.width, height: shot.height };
-  }
-  try {
-    const natural = await loadImageSize(dataUrl);
-    if (isPositive(natural.width) && isPositive(natural.height)) return natural;
-  } catch {
-    // fall through
-  }
-  return FALLBACK_SIZE;
-}
-
 const placeOnCanvasStep = async (
   { raw, result, args, bridgeArgs, capture }: Parameters<NonNullable<ExecuteBrowseToolOptions["afterScreenshot"]>>[0],
   context: ToolExecutionContext | undefined
@@ -68,39 +52,20 @@ const placeOnCanvasStep = async (
     shot = plain;
   }
   const dataUrl = shot.imageData as string;
-  const { width, height } = await screenshotSize(shot, dataUrl);
   const name = pageNodeName(shot, "Screenshot");
 
   // The capture is already in hand: a failed placement (e.g. the canvas tab refused it
   // in the agent panel) is reported next to it instead of throwing the screenshot away.
-  let placedAt: { id: string; x: number; y: number } | undefined;
+  let placed: Awaited<ReturnType<typeof placeImageRect>>;
   try {
-    placedAt = await placeNodeOnCanvas(
-      args.x,
-      args.y,
-      { width, height },
-      (pos) => ({
-        id: generateId(),
-        type: "rect",
-        name,
-        x: pos.x,
-        y: pos.y,
-        width,
-        height,
-        cornerRadius: 0,
-        fills: [createImagePaint({ url: dataUrl, mode: "fill" })],
-        ...clearLegacyFillProps(),
-      } as RectNode),
-      context?.signal,
-      context?.sessionId
-    );
+    placed = await placeImageRect(dataUrl, shot, name, args, context?.signal, context?.sessionId);
   } catch (err) {
     return JSON.stringify({ ...result, placeError: err instanceof Error ? err.message : "Placing the screenshot failed." });
   }
-  if (!placedAt) return JSON.stringify({ ...result, placeError: "Placing the screenshot was aborted." });
-  const placedRect = { x: placedAt.x, y: placedAt.y, width, height };
+  if (!placed) return JSON.stringify({ ...result, placeError: "Placing the screenshot was aborted." });
+  const placedRect = { x: placed.x, y: placed.y, width: placed.width, height: placed.height };
 
-  return JSON.stringify({ ...result, placedNodeId: placedAt.id, placedAt: placedRect });
+  return JSON.stringify({ ...result, placedNodeId: placed.id, placedAt: placedRect });
 };
 
 export const browseScreenshot: ToolHandler = (args, context) =>

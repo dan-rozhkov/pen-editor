@@ -32,9 +32,10 @@ export interface PenAgentPanelApi {
     listTabs?(): Promise<{ tabs: { traceId: string; title: string; active: boolean }[] } | { error: string }>;
     /**
      * The stored trace (the shape `penDesktop.traces.read` returns). `{ frames: false }` skips the frame
-     * images: `frame.src` stays the stored asset path. Absent on an older shell.
+     * images: `frame.src` stays the stored asset path. With `frames: true`, `frameIds` inlines only those frames (an older
+     * shell ignores it and inlines all). Absent on an older shell.
      */
-    read?(id: string, opts?: { frames?: boolean }): Promise<{ trace: BrowseTrace } | { error: string }>;
+    read?(id: string, opts?: { frames?: boolean; frameIds?: number[] }): Promise<{ trace: BrowseTrace } | { error: string }>;
   };
 }
 

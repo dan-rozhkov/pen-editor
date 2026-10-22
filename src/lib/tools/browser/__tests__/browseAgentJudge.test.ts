@@ -230,6 +230,28 @@ describe("browse_agent QA judge", () => {
     expect((await pending).qa.outcome).toBe("failed");
   });
 
+  it("reports the mock rules that answered no request as qa.unmatchedMocks, read after the release", async () => {
+    stubFetch("pass");
+    bridge.releaseFixture.mockResolvedValue({
+      ok: true,
+      mockHits: [
+        { method: "GET", url: "**/api/contacts", hits: 2 },
+        { method: "POST", url: "**/api/contacts/export", hits: 0 },
+        { url: "**/api/legacy", hits: 0 },
+      ],
+    } as never);
+    const result = await run({ url: "https://shop.test/cart", setup: SETUP });
+    expect(result.qa.unmatchedMocks).toEqual([{ method: "POST", url: "**/api/contacts/export" }, { url: "**/api/legacy" }]);
+  });
+
+  it("leaves qa.unmatchedMocks out when every rule answered or the bridge reports no hits", async () => {
+    stubFetch("pass");
+    bridge.releaseFixture.mockResolvedValue({ ok: true, mockHits: [{ url: "**/api/x", hits: 1 }] } as never);
+    expect((await run({ url: "https://shop.test/cart", setup: SETUP })).qa).not.toHaveProperty("unmatchedMocks");
+    bridge.releaseFixture.mockResolvedValue({ ok: true } as never);
+    expect((await run({ url: "https://shop.test/cart", setup: SETUP })).qa).not.toHaveProperty("unmatchedMocks");
+  });
+
   it("an abort during the judge request keeps passed and records judge.error", async () => {
     const ac = new AbortController();
     judgeAnswer = (init) =>

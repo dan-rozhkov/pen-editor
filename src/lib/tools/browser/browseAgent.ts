@@ -8,6 +8,7 @@ import {
   goalRequiredResult,
   SetupError,
   createFixtureSetup,
+  unmatchedMocks,
   createRunCheckpoint,
   singleUseTool,
   QA_VERDICT_TOOL,
@@ -49,7 +50,7 @@ import { createChatTransport, CLIENT_CAPABILITIES } from "@/lib/chatTransport";
 import type { ToolHandler } from "../../toolRegistry";
 import { CLOSE_SESSION_TIMEOUT_MS, closeBrowserSession, getBrowserBridge, isDesktopBrowserAvailable, type BrowserBridge } from "./bridge";
 import { APP_NEEDS_DESKTOP_ERROR } from "./browseOpen";
-import { peBase } from "./shared";
+import { peBase, safeParseObject } from "./shared";
 import { APP_LAUNCH_ALLOWANCE_MS, appArgOf, desktopAppsAvailable, isIsolatedQaCall, rememberRunSession, runSessionId } from "./isolation";
 import { acquireBrowseSlot } from "@/lib/browseRunLimiter";
 import { tracesForAllRuns } from "@/lib/browseTracePref";
@@ -654,6 +655,16 @@ const runBrowseAgentBody = async (
   // Lazy: useDesignChat imports toolRegistry, which imports this module.
   const { executeToolCall } = await import("@/hooks/useDesignChat");
 
+  // Every screenshot the sub-agent put on the canvas, in order: the parent cannot otherwise tell which image is which.
+  const placed: { nodeId: string; url?: string }[] = [];
+  const notePlacedScreenshot = (toolName: string, output: unknown): void => {
+    if (toolName !== "browse_screenshot" || typeof output !== "string" || !output.includes('"placedNodeId"')) return;
+    const shot = safeParseObject(output);
+    if (typeof shot.placedNodeId === "string") {
+      placed.push({ nodeId: shot.placedNodeId, ...(typeof shot.url === "string" ? { url: shot.url } : {}) });
+    }
+  };
+
   const session = createBrowseAgentSession({
     signal: context?.signal,
     ...(deadlineMs !== undefined ? { deadlineMs } : {}),
@@ -698,6 +709,7 @@ const runBrowseAgentBody = async (
                 "browse_agent",
               );
         end?.({ output });
+        notePlacedScreenshot(call.toolName, output);
         // Awaited: the step frame must show the page right after this step.
         const carried = await traceEnd?.({ output }).catch(() => undefined);
         // The trace screenshot drained dialogs the model has not seen yet: put them into its result.
@@ -832,7 +844,7 @@ const runBrowseAgentBody = async (
   const buildQa = async (result: BrowseAgentResult) => {
     if (!recorder) return undefined;
     await takeFinalFrame(result);
-    let qa = qaResultOf(result, recorder.steps(), recorder.extras());
+    let qa = qaResultOf(result, recorder.steps(), recorder.extras(), recorder.lastAgentCall());
     if (finalChecks && finalChecksApply(qa)) {
       const finalResults = await runFinalChecks(bridge ?? INERT_BRIDGE, finalChecks, recorder);
       // The final assert drained more errors into the recorder: refresh the run-level lists.
@@ -888,7 +900,16 @@ const runBrowseAgentBody = async (
       return judged === "disabled" ? qa : applyQaJudge(qa, judged);
     };
   };
-  const toJson = (result: BrowseAgentResult, extra: Record<string, unknown>, checkpoint: unknown, qa: Awaited<ReturnType<typeof buildQa>>): string => {
+  // Hit counts of the fixture's network mocks. Set once the fixture setup exists; read after the release, so
+  // the rules that answered no request reach `qa.unmatchedMocks` (the package's `assemble` does the same).
+  let readMockHits: () => Parameters<typeof unmatchedMocks>[0] = () => undefined;
+  const withUnmatchedMocks = <Q extends JudgeQa | undefined>(q: Q): Q => {
+    if (!q) return q;
+    const unmatched = unmatchedMocks(readMockHits());
+    return unmatched.length > 0 ? { ...q, unmatchedMocks: unmatched } : q;
+  };
+  const toJson = (result: BrowseAgentResult, extraIn: Record<string, unknown>, checkpoint: unknown, qa: Awaited<ReturnType<typeof buildQa>>): string => {
+    const extra = placed.length ? { ...extraIn, placed } : extraIn;
     if (!recorder) return JSON.stringify({ ...result, ...extra, ...(checkpoint ? { checkpoint } : {}) });
     // Key order as the package's runBrowseAgent: `qa` before `error` and `setupStage`; the verdict field is folded into `qa`.
     const { error, setupStage, [QA_VERDICT_FIELD]: _verdict, ...rest } = result as BrowseAgentResult & Record<string, unknown>;
@@ -914,7 +935,7 @@ const runBrowseAgentBody = async (
     settleJudge: Awaited<ReturnType<typeof startJudge>>,
   ): RunOutcome =>
     async () => {
-      const finalQa = settleJudge ? await settleJudge() : qa;
+      const finalQa = withUnmatchedMocks(settleJudge ? await settleJudge() : qa);
       const saved = traceRecorder && await saveBrowseTrace(
         traceRecorder.finish({
           status: result.status,
@@ -1046,6 +1067,7 @@ const runBrowseAgentBody = async (
         },
       })
     : undefined;
+  readMockHits = () => fs?.mockHits();
   setPhase("setup");
   const cp = openCheckpoint(parsed.ok);
   const releaseFixture = async () => void (await fs?.release());

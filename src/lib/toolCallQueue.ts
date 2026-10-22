@@ -74,6 +74,8 @@ export const UNSERIALIZED_TOOL_NAMES: readonly string[] = [
   // Panel-local trace tabs: read-only bridge calls, no scene.
   "trace_list",
   "trace_read",
+  // trace_frame with placeOnCanvas adds one node, but only through runSerialized; the read itself is not queued.
+  "trace_frame",
   // The three browse_* tools (docs/superpowers/specs/2026-09-18-builtin-
   // browser-design.md) are thin forwarders onto the desktop shell's
   // BrowserController — they never touch the scene graph. `browse_open` in

@@ -133,6 +133,7 @@ const toolIcons: Record<string, Icon> = {
   workflow_open: FlowArrowIcon,
   trace_list: ListMagnifyingGlassIcon,
   trace_read: ReceiptIcon,
+  trace_frame: ImageIcon,
   publish_to_showcase: UploadSimpleIcon,
   read_design_repo: GithubLogoIcon,
   read_repo_files: FileCodeIcon,

@@ -2,6 +2,9 @@ import { useSceneStore } from "@/store/sceneStore";
 import type { SceneNode } from "@/types/scene";
 import { computeEmptySpace } from "../findEmptySpace";
 import { runSerialized } from "@/lib/toolCallQueue";
+import { createImagePaint, clearLegacyFillProps } from "@/utils/fillUtils";
+import { generateId, type RectNode } from "@/types/scene";
+import { loadImageSize } from "@/components/canvas/imageImport";
 
 /**
  * Shared by browse_screenshot (`placeOnCanvas`) and browse_capture: label
@@ -92,4 +95,55 @@ export function placeNodeOnCanvas<T extends SceneNode>(
     useSceneStore.getState().addNode(node);
     return { id: node.id, x: pos.x, y: pos.y };
   });
+}
+
+/** Size of an image: the `width`/`height` the source reports, else the decoded size, else FALLBACK_SIZE. */
+async function imageSize(source: Record<string, unknown>, dataUrl: string) {
+  if (isPositive(source.width) && isPositive(source.height)) {
+    return { width: source.width, height: source.height };
+  }
+  try {
+    const natural = await loadImageSize(dataUrl);
+    if (isPositive(natural.width) && isPositive(natural.height)) return natural;
+  } catch {
+    // fall through
+  }
+  return FALLBACK_SIZE;
+}
+
+/**
+ * Puts one image on the canvas as a `rect` with an image fill (shared by browse_screenshot and trace_frame).
+ * `source.width`/`height` give the size when present. Resolves the node's id and rect; `undefined` = aborted.
+ * Throws with the reason when the placement fails.
+ */
+export async function placeImageRect(
+  dataUrl: string,
+  source: Record<string, unknown>,
+  name: string,
+  at: { x?: unknown; y?: unknown },
+  signal?: AbortSignal,
+  sessionId?: string
+): Promise<{ id: string; x: number; y: number; width: number; height: number } | undefined> {
+  const { width, height } = await imageSize(source, dataUrl);
+  const placed = await placeNodeOnCanvas(
+    at.x,
+    at.y,
+    { width, height },
+    (pos) =>
+      ({
+        id: generateId(),
+        type: "rect",
+        name,
+        x: pos.x,
+        y: pos.y,
+        width,
+        height,
+        cornerRadius: 0,
+        fills: [createImagePaint({ url: dataUrl, mode: "fill" })],
+        ...clearLegacyFillProps(),
+      }) as RectNode,
+    signal,
+    sessionId
+  );
+  return placed && { ...placed, width, height };
 }

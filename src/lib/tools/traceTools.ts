@@ -1,12 +1,15 @@
 import { parseBrowseTrace, type BrowseTrace, type BrowseTraceRequest, type BrowseTraceStep } from "@sideform/browser-agent/agent/session";
 import type { ToolHandler } from "../toolRegistry";
 import { getAgentPanelTraceTabsBridge } from "../agentPanel";
+import { readTraceFrame } from "@/lib/trace/traceFrame";
+import { placeImageRect } from "./browser/placeOnCanvas";
 import { batchProgress, droppedRequests, requestFailed, stepActions, traceRequests } from "@/lib/trace/traceData";
 
 // Panel-local (canvasLink/canvasTools.ts, prefix "trace_"): the agent reads the browse-run traces the
 // desktop shell has open in trace tabs. Advertised by the backend only when
 // clientCapabilities.traceTabs is true. Output: JSON string, `{"error": "..."}` on failure.
-// trace_read returns a bounded TEXT summary: never frames, screenshots, data URLs or asset paths.
+// trace_read returns a bounded TEXT summary: never screenshots, data URLs or asset paths. Its `frames` index
+// ({total, shown: [{frameId, step, kind}]}) names the frames trace_frame can fetch as an image.
 
 const err = (message: string): string => JSON.stringify({ error: message });
 
@@ -300,5 +303,47 @@ export const traceRead: ToolHandler = async (args) => {
     return text.length > MAX_TOTAL_CHARS ? err(`The trace summary is too large (${text.length} chars).`) : text;
   } catch (e) {
     return err(clip(e instanceof Error ? e.message : "The trace could not be read.", 500));
+  }
+};
+
+/** A frame id as the model may send it: an integer, or an integer in a string. */
+function parseFrameId(raw: unknown): number | undefined {
+  const n = typeof raw === "string" && /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : raw;
+  return typeof n === "number" && Number.isInteger(n) && n >= 0 ? n : undefined;
+}
+
+/**
+ * trace_frame: one frame of a trace as an image, in browse_screenshot's result shape (`imageData` data URL, which the
+ * backend's toModelOutput turns into an image part). `placeOnCanvas` also puts it on the canvas (`placedNodeId`).
+ * Cost: the shell loads ALL frame images of the trace for this one read.
+ */
+export const traceFrame: ToolHandler = async (args, context) => {
+  const traceId = typeof args?.traceId === "string" ? args.traceId.trim() : "";
+  if (!traceId) return err("traceId is required. Call trace_list to see the open trace tabs.");
+  const frameId = parseFrameId(args?.frameId);
+  if (frameId === undefined) return err("frameId must be an integer from 0. Call trace_read and take it from frames.shown[].frameId.");
+  let frame;
+  try {
+    frame = await readTraceFrame(traceId, frameId);
+  } catch (e) {
+    return err(clip(e instanceof Error ? e.message : "The frame could not be read.", 500));
+  }
+  const isData = frame.src.startsWith("data:");
+  const out: Record<string, unknown> = {
+    traceId,
+    frameId: frame.id,
+    kind: frame.kind,
+    ...(frame.stepIndex !== undefined ? { stepIndex: frame.stepIndex } : {}),
+    ...(frame.width && frame.height ? { width: frame.width, height: frame.height } : {}),
+    ...(isData ? { imageData: frame.src } : { imageUrl: frame.src }),
+  };
+  if (args?.placeOnCanvas !== true) return JSON.stringify(out);
+  // The image is in hand: a failed placement is reported next to it.
+  try {
+    const placed = await placeImageRect(frame.src, frame as unknown as Record<string, unknown>, `Trace frame ${frame.id}`, args, context?.signal, context?.sessionId);
+    if (!placed) return JSON.stringify({ ...out, placeError: "Placing the frame was aborted." });
+    return JSON.stringify({ ...out, placedNodeId: placed.id, placedAt: { x: placed.x, y: placed.y, width: placed.width, height: placed.height } });
+  } catch (e) {
+    return JSON.stringify({ ...out, placeError: clip(e instanceof Error ? e.message : "Placing the frame failed.", 500) });
   }
 };

@@ -82,6 +82,7 @@ export const toolDisplayNames: Record<string, string> = {
   workflow_open: "Open Workflow",
   trace_list: "List Trace Tabs",
   trace_read: "Read Trace",
+  trace_frame: "View Trace Frame",
   publish_to_showcase: "Publish to Showcase",
   read_design_repo: "View Repo",
   read_repo_files: "Read Repo Files",

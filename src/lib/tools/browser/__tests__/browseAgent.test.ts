@@ -64,7 +64,7 @@ function setChatModel(model: string) {
 }
 
 let saved: Record<string, ToolHandler | undefined>;
-const stubbed = ["browse_open", "browse_capture", "browse_fill_login", "batch_design"];
+const stubbed = ["browse_open", "browse_capture", "browse_screenshot", "browse_fill_login", "batch_design"];
 
 beforeEach(() => {
   tracePosts = [];
@@ -133,6 +133,33 @@ describe("browse_agent", () => {
     expect(first.parts[0].text).toContain("https://example.com");
     // The pre-open result rides in the first message.
     expect(first.parts[0].text).toContain('{"ok":true}');
+  });
+
+  describe("placed screenshots", () => {
+    const run = () => browseAgent({ goal: "find defects" }, { sessionId: "chat-1", toolCallId: "tc-1" });
+
+    it("lists every screenshot put on the canvas, in order, with the page url", async () => {
+      const shots = [
+        JSON.stringify({ imageData: "data:image/jpeg;base64,AAAA", url: "https://e.com/a", placedNodeId: "n1" }),
+        JSON.stringify({ imageData: "data:image/jpeg;base64,BBBB", placedNodeId: "n2" }),
+        JSON.stringify({ imageData: "data:image/jpeg;base64,CCCC", url: "https://e.com/c" }),
+      ];
+      toolHandlers.browse_screenshot = vi.fn(async () => shots.shift() as string);
+      stubFetch([
+        () => toolTurn("browse_screenshot", { placeOnCanvas: true }, "s1"),
+        () => toolTurn("browse_screenshot", { placeOnCanvas: true }, "s2"),
+        () => toolTurn("browse_screenshot", {}, "s3"),
+        () => textTurn("done"),
+      ]);
+      const result = JSON.parse(await run());
+      expect(result.placed).toEqual([{ nodeId: "n1", url: "https://e.com/a" }, { nodeId: "n2" }]);
+    });
+
+    it("is absent when nothing was placed", async () => {
+      toolHandlers.browse_screenshot = vi.fn(async () => JSON.stringify({ imageData: "data:image/jpeg;base64,AAAA" }));
+      stubFetch([() => toolTurn("browse_screenshot", {}, "s1"), () => textTurn("done")]);
+      expect(JSON.parse(await run())).not.toHaveProperty("placed");
+    });
   });
 
   describe("browse_capture gate", () => {

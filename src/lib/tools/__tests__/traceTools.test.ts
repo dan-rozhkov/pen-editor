@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { summarizeTrace, traceList, traceRead } from "../traceTools";
+import { summarizeTrace, traceFrame, traceList, traceRead } from "../traceTools";
 import { getAgentPanelTraceTabsBridge } from "@/lib/agentPanel";
+import { useSceneStore } from "@/store/sceneStore";
+import { resetStores } from "@/test/fixtures";
 import { sampleTrace, sampleTraceJson, sampleTraceWithExtrasJson } from "@/components/trace/__fixtures__/sampleTrace";
 
 type Traces = NonNullable<NonNullable<Window["penAgentPanel"]>["traces"]>;
@@ -187,5 +189,76 @@ describe("summarizeTrace hardening", () => {
     const text = await raw(traceRead, { traceId: "sample-trace-1" });
     expect(text.length).toBeLessThan(30_000);
     expect(JSON.parse(text).error).toBeUndefined();
+  });
+});
+
+describe("trace_frame", () => {
+  const withTrace = (trace: unknown = sampleTraceJson()) => {
+    const read = vi.fn(async () => ({ trace }) as never);
+    setTraces({ listTabs: async () => ({ tabs: [] }), read });
+    return read;
+  };
+  const call = async (args: Record<string, unknown>) => JSON.parse(await (traceFrame as (a: Record<string, unknown>) => Promise<string>)(args));
+
+  beforeEach(() => resetStores());
+
+  it("reads with frames on and returns the frame in browse_screenshot's image shape", async () => {
+    const read = withTrace();
+    const out = await call({ traceId: "t1", frameId: 1 });
+    expect(read).toHaveBeenCalledWith("t1", { frames: true, frameIds: [1] });
+    expect(out).toMatchObject({ traceId: "t1", frameId: 1, kind: "step", stepIndex: 2, width: 640, height: 400 });
+    expect(out.imageData).toMatch(/^data:image\//);
+    expect(out).not.toHaveProperty("placedNodeId");
+    expect(Object.keys(useSceneStore.getState().nodesById)).toHaveLength(0);
+  });
+
+  it("accepts the frame id as a numeric string", async () => {
+    withTrace();
+    expect((await call({ traceId: "t1", frameId: "5" })).kind).toBe("final");
+  });
+
+  it("places the frame on the canvas as an image rect when asked", async () => {
+    withTrace();
+    const out = await call({ traceId: "t1", frameId: 0, placeOnCanvas: true, x: 40, y: 60 });
+    expect(out.placedNodeId).toEqual(expect.any(String));
+    expect(out.placedAt).toEqual({ x: 40, y: 60, width: 640, height: 400 });
+    const node = useSceneStore.getState().nodesById[out.placedNodeId] as { type: string; width: number };
+    expect(node).toMatchObject({ type: "rect", width: 640 });
+  });
+
+  it("errors on an unknown frame id and points at trace_read", async () => {
+    withTrace();
+    const out = await call({ traceId: "t1", frameId: 99 });
+    expect(out.error).toMatch(/Unknown frameId 99.*trace_read/);
+  });
+
+  it("errors on bad arguments, a missing bridge and a bridge error", async () => {
+    expect((await call({ frameId: 1 })).error).toMatch(/traceId is required/);
+    expect((await call({ traceId: "t1", frameId: "abc" })).error).toMatch(/frameId must be/);
+    expect((await call({ traceId: "t1", frameId: 1 })).error).toMatch(/not available/);
+    setTraces({ listTabs: async () => ({ tabs: [] }), read: async () => ({ error: "gone" }) });
+    expect(await call({ traceId: "t1", frameId: 1 })).toEqual({ error: "gone" });
+  });
+
+  it("reports a failed placement next to the image", async () => {
+    withTrace();
+    const { setPlaceNodeRedirect } = await import("@/lib/tools/browser/placeOnCanvas");
+    setPlaceNodeRedirect(async () => { throw new Error("canvas refused"); });
+    try {
+      const out = await call({ traceId: "t1", frameId: 0, placeOnCanvas: true });
+      expect(out.imageData).toBeDefined();
+      expect(out.placeError).toBe("canvas refused");
+    } finally {
+      setPlaceNodeRedirect(null);
+    }
+  });
+
+  it("returns an imageUrl for a frame stored as a URL", async () => {
+    const json = sampleTraceJson() as { frames: { src: string }[] };
+    json.frames[0].src = "https://cdn.test/f0.png";
+    withTrace(json);
+    const out = await call({ traceId: "t1", frameId: 0 });
+    expect(out).toMatchObject({ imageUrl: "https://cdn.test/f0.png" });
+    expect(out).not.toHaveProperty("imageData");
   });
 });

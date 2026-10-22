@@ -1,13 +1,13 @@
 import type { ToolHandler } from "../toolRegistry";
 import { createDoc, getDoc, listDocs, updateDoc } from "../docs/docStore";
 import { applyDocEdits, type DocEdit } from "../docs/applyDocEdits";
-import { getAgentPanelDocsBridge, getAgentPanelTraceTabsBridge } from "../agentPanel";
+import { getAgentPanelDocsBridge } from "../agentPanel";
 import { whenDesktopDocsReady } from "../docs/desktopDocMirror";
 import { buildImageMarkdown, insertImageIntoMarkdown } from "../docs/insertImage";
 import { stripLeadingTitle } from "../docs/stripLeadingTitle";
 import { ensurePublicUrl } from "../imageOps/resolveSourceUrl";
 import { isPanelCanvasLinkActive, panelCallTool } from "../canvasLink/panelRuntime";
-import { parseBrowseTrace } from "@sideform/browser-agent/agent/session";
+import { readTraceFrame } from "../trace/traceFrame";
 import { getScreenshot } from "./getScreenshot";
 
 // Panel-local (canvasLink/canvasTools.ts, prefix "doc_"): markdown documents live in this
@@ -158,34 +158,6 @@ async function screenshotNode(nodeId: string, context: Parameters<ToolHandler>[1
   return parsed.imageData;
 }
 
-/** The `src` of one frame of an open trace tab: a data: image URL or an http(s) URL. */
-async function traceFrameSrc(traceId: string, frameId: number | undefined): Promise<string> {
-  const bridge = getAgentPanelTraceTabsBridge();
-  if (!bridge) throw new Error("Trace tabs are not available here (desktop app only).");
-  const result: unknown = await bridge.read(traceId);
-  if (!result || typeof result !== "object") throw new Error("The desktop app returned an unexpected answer.");
-  if ("error" in result) throw new Error(String((result as { error: unknown }).error));
-  const parsed = parseBrowseTrace((result as { trace?: unknown }).trace);
-  if ("error" in parsed) throw new Error(`The trace is not valid: ${parsed.error}`);
-  const frames = parsed.trace.frames ?? [];
-  if (frames.length === 0) throw new Error(`The trace "${traceId}" has no screenshots.`);
-  let frame;
-  if (frameId === undefined) {
-    frame = [...frames].sort((a, b) => (a.kind === "final" ? 1 : 0) - (b.kind === "final" ? 1 : 0) || a.at - b.at || a.id - b.id).at(-1);
-  } else {
-    frame = frames.find((f) => f.id === frameId);
-    if (!frame) {
-      const ids = frames.slice(-10).map((f) => f.id).join(", ");
-      throw new Error(`Unknown frameId ${frameId} in trace "${traceId}". Latest frameIds: ${frames.length > 10 ? "..., " : ""}${ids}. Call trace_read to see the frames.`);
-    }
-  }
-  const src = frame?.src;
-  if (typeof src !== "string" || !(/^data:image\//i.test(src) || /^https?:\/\//i.test(src))) {
-    throw new Error("The frame image could not be loaded (the trace holds no image data for it).");
-  }
-  return src;
-}
-
 /** An https URL for the image source; never returns a data: URL. */
 async function resolveImageUrl(
   imageUrl: string | undefined,
@@ -196,7 +168,7 @@ async function resolveImageUrl(
 ): Promise<string> {
   const signal = context?.signal;
   if (traceId !== undefined) {
-    const src = await traceFrameSrc(traceId, frameId);
+    const { src } = await readTraceFrame(traceId, frameId);
     if (signal?.aborted) throw new Error("The call was cancelled.");
     if (/^https?:\/\//i.test(src)) return src;
     return raceAbort(ensurePublicUrl(src), signal);
