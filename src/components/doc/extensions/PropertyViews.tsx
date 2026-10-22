@@ -1,6 +1,6 @@
 import { useCallback, useState, type ComponentType } from "react";
 import { NodeViewContent, NodeViewWrapper, useEditorState, type NodeViewProps } from "@tiptap/react";
-import { ArrowUpRightIcon, CalendarBlankIcon, HashIcon, ListBulletsIcon, TextAlignLeftIcon, TextTIcon, type IconProps } from "@phosphor-icons/react";
+import { ArrowUpRightIcon, CalendarBlankIcon, HashIcon, ListBulletsIcon, PlusIcon, TextAlignLeftIcon, TextTIcon, type IconProps } from "@phosphor-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { POPOVER_SURFACE } from "../ui/menuSurface";
@@ -67,7 +67,7 @@ export function PropertyRowView({ node, editor, getPos }: NodeViewProps) {
   );
 }
 
-/** The rows plus a muted "+ Add a property" line (CSS hides it while the editor is read-only). */
+/** The rows plus a muted "Add a property" line with a plus icon in the rows' icon column; CSS hides it while read-only. */
 export function PropertyListView({ editor, getPos }: NodeViewProps) {
   return (
     <NodeViewWrapper className="doc-property-list" data-type="property-list">
@@ -82,7 +82,10 @@ export function PropertyListView({ editor, getPos }: NodeViewProps) {
           if (pos !== undefined) addPropertyRow(editor, pos);
         }}
       >
-        + Add a property
+        <span className="doc-property-icon" aria-hidden="true">
+          <PlusIcon size={16} />
+        </span>
+        Add a property
       </button>
     </NodeViewWrapper>
   );

@@ -333,7 +333,7 @@ function onBackspace(state: EditorState, dispatch: (tr: Transaction) => void): b
   return true;
 }
 
-/** Append an empty row to the list that starts at `listPos` and focus its key (the "+ Add a property" line). */
+/** Append an empty row to the list that starts at `listPos` and focus its key (the "Add a property" line). */
 export function addPropertyRow(editor: Editor, listPos: number): void {
   const { state, view } = editor;
   const list = state.doc.nodeAt(listPos);
