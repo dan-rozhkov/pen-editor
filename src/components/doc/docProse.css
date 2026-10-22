@@ -311,7 +311,9 @@
   position: relative;
   display: block;
   min-height: 34px;
-  padding: 5px 12px 5px 28px;
+  /* Wider left inset for the hover box; the negative margin keeps "+" and the label where the rows have them. */
+  margin-left: -6px;
+  padding: 5px 12px 5px 34px;
   border: 0;
   background: none;
   font: inherit;
@@ -319,6 +321,7 @@
   cursor: pointer;
   border-radius: 4px;
 }
+.doc-prose .doc-property-add > .doc-property-icon { left: 8px; }
 .doc-prose .doc-property-add:hover { background: var(--color-secondary); }
 .dark .doc-prose .doc-property-add:hover { background: var(--color-surface-hover); }
 .doc-prose .doc-property-add:focus-visible { outline: 2px solid var(--color-accent-primary, currentColor); outline-offset: 1px; }
