@@ -1,4 +1,3 @@
-import { peekOpenAdd } from "@/components/doc/extensions/docGallery";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Editor, JSONContent } from "@tiptap/core";
 import { filterSlashItems, IMAGE_PROMPT_EVENT, runSlashItem, SLASH_ITEMS } from "../slashItems";
@@ -85,11 +84,5 @@ describe("runSlashItem", () => {
     runSlashItem(editor, { from: 1, to: 3 }, SLASH_ITEMS.find((item) => item.id === "image")!);
     expect(asked).toBe(1);
     expect(editor.getText()).not.toContain("/x");
-  });
-
-  it("gallery inserts a selected empty gallery and asks its view to open the URL field", () => {
-    run("gallery");
-    expect(topTypes(editor)).toContain("imageGallery");
-    expect(peekOpenAdd(editor, editor.state.selection.from)).toBe(true);
   });
 });

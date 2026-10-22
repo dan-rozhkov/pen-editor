@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { Editor, Range } from "@tiptap/react";
 import type { ResolvedPos } from "@tiptap/pm/model";
-import { ImageIcon, ImagesIcon, InfoIcon, LinkSimpleIcon, ListDashesIcon, MinusIcon, TableIcon, TreeStructureIcon } from "@phosphor-icons/react";
+import { ImageIcon, InfoIcon, LinkSimpleIcon, ListDashesIcon, MinusIcon, TableIcon, TreeStructureIcon } from "@phosphor-icons/react";
 import { TURN_INTO_ITEMS } from "../ui/blockTransforms";
 
 /** The document picker (`DocLinkPicker`) listens for this on the editor DOM. */
@@ -101,15 +101,6 @@ export const SLASH_ITEMS: SlashItem[] = [
       chain.run();
       editor.view.dom.dispatchEvent(new CustomEvent(IMAGE_PROMPT_EVENT));
     },
-  },
-  {
-    id: "gallery",
-    title: "Image gallery",
-    hint: "Thumbnails that open full size",
-    keywords: ["gallery", "images", "photos", "grid", "галерея"],
-    icon: <ImagesIcon />,
-    hideInTable: true,
-    run: (_editor, chain) => chain.insertGallery(true).run(),
   },
   {
     id: "link-to-document",

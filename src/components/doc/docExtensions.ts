@@ -11,7 +11,6 @@ import { DocLogin } from "./extensions/docLogin";
 import { DocCallout } from "./extensions/docCallout";
 import { DocDetails, DocDetailsContent, DocDetailsSummary } from "./extensions/docDetails";
 import { DocImage } from "./extensions/docImage";
-import { DocGallery } from "./extensions/docGallery";
 
 // Cmd+Shift+S is the desktop menu's "Export as .json". Strike's default chord is
 // exactly that, and `extend` replaces (not merges) its shortcuts, so strike moves to
@@ -39,7 +38,6 @@ export const DOC_EXTENSIONS = [
   TaskList,
   TaskItem.configure({ nested: true }),
   DocImage,
-  DocGallery,
   DocDetails,
   DocDetailsSummary,
   DocDetailsContent,
