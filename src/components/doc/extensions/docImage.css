@@ -1,0 +1,40 @@
+/* Resizable image (docImage.ts): tiptap's ResizableNodeView wraps the <img> in
+   div[data-resize-container] > div[data-resize-wrapper] and adds absolutely positioned handles. */
+.doc-prose [data-resize-container][data-node="image"] { margin: 0.5em 0; }
+.doc-prose [data-resize-container][data-node="image"] [data-resize-wrapper] { max-width: 100%; min-width: 0; }
+.doc-prose [data-resize-container][data-node="image"] img { display: block; max-width: 100%; height: auto; }
+/* The selected node is the container, not the <img> itself. */
+.doc-prose [data-resize-container][data-node="image"].ProseMirror-selectednode img { outline: 2px solid var(--color-border-light); }
+
+/* Edge handles: a small vertical pill centred on each side (tiptap sets inline full-height edges). */
+.doc-prose [data-resize-container][data-node="image"] [data-resize-handle] {
+  top: 50% !important;
+  bottom: auto !important;
+  width: 6px;
+  height: 40px;
+  transform: translateY(-50%);
+  border-radius: 3px;
+  background: var(--color-surface-panel, #fff);
+  border: 1px solid var(--color-border-hover);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+  cursor: ew-resize;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.doc-prose [data-resize-container][data-node="image"] [data-resize-handle="left"] { left: 6px !important; right: auto !important; }
+.doc-prose [data-resize-container][data-node="image"] [data-resize-handle="right"] { right: 6px !important; left: auto !important; }
+/* A wider invisible hit area around the pill. */
+.doc-prose [data-resize-container][data-node="image"] [data-resize-handle]::after { content: ""; position: absolute; inset: -4px -6px; }
+
+.doc-prose [data-resize-container][data-node="image"]:hover [data-resize-handle],
+.doc-prose [data-resize-container][data-node="image"].ProseMirror-selectednode [data-resize-handle],
+.doc-prose [data-resize-container][data-node="image"][data-resize-state="true"] [data-resize-handle] { opacity: 1; }
+
+.dark .doc-prose [data-resize-container][data-node="image"] [data-resize-handle] {
+  background: var(--color-surface-panel, #2a2a2a);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.6);
+}
+
+/* Read-only documents get no handles (tiptap only removes them after the first editor update). */
+.doc-prose[contenteditable="false"] [data-resize-handle] { display: none; }
+@media print { .doc-prose [data-resize-handle] { display: none; } }

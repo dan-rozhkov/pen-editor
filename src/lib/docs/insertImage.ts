@@ -3,15 +3,21 @@
 
 export type InsertImageResult = { ok: true; markdown: string } | { ok: false; error: string };
 
-/** `![alt](url)` with `[`, `]` and newlines in alt escaped; URLs with spaces/parens go in `<...>`. */
-export function buildImageMarkdown(alt: string, url: string): string {
+/**
+ * `![alt](url "title")` with `[`, `]`, `\` and newlines in alt escaped, `"` and `\` in the title
+ * escaped, and URLs with spaces, parens or angle brackets in `<...>`.
+ */
+export function buildImageMarkdown(alt: string, url: string, title?: string): string {
   const safeAlt = alt
     .replace(/\\/g, "\\\\")
     .replace(/[[\]]/g, (c) => `\\${c}`)
     .replace(/\s*[\r\n]+\s*/g, " ")
     .trim();
-  const safeUrl = /[\s()]/.test(url) ? `<${url.replace(/[<>]/g, encodeURIComponent)}>` : url;
-  return `![${safeAlt}](${safeUrl})`;
+  const safeUrl = /[\s()<>]/.test(url) ? `<${url.replace(/[<>]/g, encodeURIComponent)}>` : url;
+  const safeTitle = title
+    ? title.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\s*[\r\n]+\s*/g, " ").trim()
+    : "";
+  return safeTitle ? `![${safeAlt}](${safeUrl} "${safeTitle}")` : `![${safeAlt}](${safeUrl})`;
 }
 
 interface HeadingLine {

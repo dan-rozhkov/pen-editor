@@ -1,4 +1,3 @@
-import Image from "@tiptap/extension-image";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import Strike from "@tiptap/extension-strike";
 import { TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
@@ -11,6 +10,8 @@ import { DocPropertyKeys, DocTable, PropertyKey, PropertyList, PropertyRow, Prop
 import { DocLogin } from "./extensions/docLogin";
 import { DocCallout } from "./extensions/docCallout";
 import { DocDetails, DocDetailsContent, DocDetailsSummary } from "./extensions/docDetails";
+import { DocImage } from "./extensions/docImage";
+import { DocGallery } from "./extensions/docGallery";
 
 // Cmd+Shift+S is the desktop menu's "Export as .json". Strike's default chord is
 // exactly that, and `extend` replaces (not merges) its shortcuts, so strike moves to
@@ -37,7 +38,8 @@ export const DOC_EXTENSIONS = [
   DocTableFilter,
   TaskList,
   TaskItem.configure({ nested: true }),
-  Image,
+  DocImage,
+  DocGallery,
   DocDetails,
   DocDetailsSummary,
   DocDetailsContent,

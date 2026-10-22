@@ -11,8 +11,13 @@ describe("buildImageMarkdown", () => {
     ["newlines", "a\nb\r\nc", "https://a/b.png", "![a b c](https://a/b.png)"],
     ["spaces in url", "x", "https://a/b c.png", "![x](<https://a/b c.png>)"],
     ["parens in url", "x", "https://a/b(1).png", "![x](<https://a/b(1).png>)"],
+    ["angle brackets in url", "x", "https://a/b<1>.png", "![x](<https://a/b%3C1%3E.png>)"],
   ])("%s", (_name, alt, url, expected) => {
     expect(buildImageMarkdown(alt, url)).toBe(expected);
+  });
+
+  it("escapes quotes and backslashes in the title", () => {
+    expect(buildImageMarkdown("x", "https://a/b.png", 'say "hi" \\o/')).toBe('![x](https://a/b.png "say \\"hi\\" \\\\o/")');
   });
 });
 

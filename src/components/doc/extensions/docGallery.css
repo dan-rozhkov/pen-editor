@@ -1,0 +1,37 @@
+/* Image gallery: square thumbnails that open a lightbox. Colours use the app tokens, so both themes work. */
+.doc-prose .doc-gallery {
+  margin: 0.5em 0; border-radius: 8px; padding: 2px;
+}
+.doc-prose .doc-gallery[data-selected] { outline: 2px solid var(--color-accent-primary); outline-offset: 2px; }
+.doc-prose .doc-gallery-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px;
+}
+.doc-prose .doc-gallery-tile { position: relative; aspect-ratio: 1; min-width: 0; }
+.doc-prose .doc-gallery-open {
+  display: block; width: 100%; height: 100%; padding: 0; overflow: hidden; cursor: zoom-in;
+  border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface-panel);
+}
+.doc-prose .doc-gallery-open:focus-visible { outline: 2px solid var(--color-accent-primary); outline-offset: 2px; }
+.doc-prose .doc-gallery-open img { display: block; width: 100%; height: 100%; margin: 0; object-fit: cover; border-radius: 0; }
+.doc-prose .doc-gallery-remove {
+  position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 22px; height: 22px;
+  border-radius: 999px; color: #fff; background: rgb(0 0 0 / 0.6); cursor: pointer; opacity: 0;
+}
+.doc-prose .doc-gallery-tile:hover .doc-gallery-remove,
+.doc-prose .doc-gallery-remove:focus-visible { opacity: 1; }
+.doc-prose .doc-gallery-remove:hover { background: rgb(0 0 0 / 0.8); }
+.doc-prose .doc-gallery-add {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 100%; aspect-ratio: 1;
+  border: 1px dashed var(--color-border); border-radius: 6px; color: var(--color-text-muted); font-size: 0.8125rem; cursor: pointer;
+}
+.doc-prose .doc-gallery-add:hover { background: var(--color-surface-panel); }
+.doc-prose .doc-gallery-add:focus-visible { outline: 2px solid var(--color-accent-primary); outline-offset: 2px; }
+.doc-prose .doc-gallery-form { grid-column: 1 / -1; }
+
+@media print {
+  html.route-doc .doc-prose .doc-gallery[data-selected] { outline: none !important; }
+  html.route-doc .doc-prose .doc-gallery-remove,
+  html.route-doc .doc-prose .doc-gallery-add,
+  html.route-doc .doc-prose .doc-gallery-form { display: none !important; }
+  html.route-doc .doc-prose .doc-gallery-tile { break-inside: avoid; }
+}
