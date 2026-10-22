@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import { useDocSync } from "@/components/doc/useDocSync";
 import { resetDesktopDocMirrorForTests, startDesktopDocMirror } from "@/lib/docs/desktopDocMirror";
-import { createDoc, getDoc, importDoc, listDocs, updateDoc, type Doc } from "@/lib/docs/docStore";
+import { createDoc, deleteDoc, getDoc, importDoc, listDocs, updateDoc, type Doc } from "@/lib/docs/docStore";
 
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }));
 
@@ -301,5 +301,34 @@ describe("useDocSync while the desktop mirror is still reconciling", () => {
     });
     expect(result.current.id).toBe(lands ? wanted : other.id);
     expect(result.current.markdown).toBe(lands ? "disk" : "");
+  });
+});
+
+describe("useDocSync back/forward", () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => cleanup());
+
+  it("walks back and forward after switching documents", () => {
+    const a = createDoc({ title: "A" }, "editor");
+    const b = createDoc({ title: "B" }, "editor");
+    const { result } = mount(a.id);
+    expect(result.current.canGoBack).toBe(false);
+    act(() => result.current.select(b.id));
+    expect(result.current.id).toBe(b.id);
+    expect(result.current.canGoBack).toBe(true);
+    act(() => result.current.goBack());
+    expect(result.current.id).toBe(a.id);
+    expect(result.current.canGoForward).toBe(true);
+    act(() => result.current.goForward());
+    expect(result.current.id).toBe(b.id);
+  });
+
+  it("does not keep a deleted document reachable", () => {
+    const a = createDoc({ title: "A" }, "editor");
+    const b = createDoc({ title: "B" }, "editor");
+    const { result } = mount(a.id);
+    act(() => result.current.select(b.id));
+    act(() => void deleteDoc(a.id, "editor"));
+    expect(result.current.canGoBack).toBe(false);
   });
 });

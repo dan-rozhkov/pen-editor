@@ -1,9 +1,21 @@
-import { useState } from "react";
-import { CheckIcon, DotsThreeVerticalIcon, FilePlusIcon, FileTextIcon, ListIcon, TrashIcon } from "@phosphor-icons/react";
+import { useEffect, useState } from "react";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  CheckIcon,
+  DotsThreeVerticalIcon,
+  DownloadSimpleIcon,
+  FilePlusIcon,
+  FileTextIcon,
+  ListIcon,
+  TrashIcon,
+} from "@phosphor-icons/react";
 import type { Editor } from "@tiptap/react";
 import { EditorProviders } from "@/components/EditorProviders";
 import { DocEditor } from "@/components/doc/DocEditor";
 import { DocTitle } from "@/components/doc/ui/DocTitle";
+import { docFilename, docMarkdownFile } from "@/lib/docs/docExport";
+import { saveBlob } from "@/lib/downloadFile";
 import { titleAfterTemplate } from "@/lib/docs/docTemplates";
 import { useDocSync } from "@/components/doc/useDocSync";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
@@ -29,6 +41,30 @@ export default function DocPage() {
   const sync = useDocSync();
   const [editor, setEditor] = useState<Editor | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const { goBack, goForward } = sync;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+      if (e.code !== "BracketLeft" && e.code !== "BracketRight") return;
+      if (confirmingDelete) return;
+      const target = e.target as HTMLElement | null;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+      e.preventDefault();
+      if (e.code === "BracketLeft") goBack();
+      else goForward();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [goBack, goForward, confirmingDelete]);
+
+  const downloadMarkdown = () => {
+    // Current editor text wins over the stored copy, which lags by the save debounce.
+    const body = editor ? editor.getMarkdown() : sync.markdown;
+    const blob = new Blob([docMarkdownFile(sync.title, body)], { type: "text/markdown;charset=utf-8" });
+    saveBlob(blob, docFilename(sync.title));
+  };
 
   return (
     <EditorProviders>
@@ -71,6 +107,12 @@ export default function DocPage() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              <IconButton variant="ghost" size="icon" tooltip="Back" aria-label="Back" disabled={!sync.canGoBack} onClick={sync.goBack}>
+                <ArrowLeftIcon className="size-4" weight="light" />
+              </IconButton>
+              <IconButton variant="ghost" size="icon" tooltip="Forward" aria-label="Forward" disabled={!sync.canGoForward} onClick={sync.goForward}>
+                <ArrowRightIcon className="size-4" weight="light" />
+              </IconButton>
               <span className="min-w-0 flex-1 truncate px-1 text-sm font-medium text-text-primary">
                 {sync.title.trim() || "Untitled"}
               </span>
@@ -83,6 +125,9 @@ export default function DocPage() {
                   }
                 />
                 <DropdownMenuContent align="end" sideOffset={4} className="min-w-44">
+                  <DropdownMenuItem onClick={downloadMarkdown}>
+                    <DownloadSimpleIcon /> Download as Markdown
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setConfirmingDelete(true)}>
                     <TrashIcon /> Delete document
                   </DropdownMenuItem>

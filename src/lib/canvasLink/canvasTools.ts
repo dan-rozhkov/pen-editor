@@ -7,6 +7,7 @@
  * the canvas tab. The one scene write a browser tool does (placing a node via
  * `placeNodeOnCanvas`) goes to the canvas tab as a `place-node` message.
  */
+import { READ_ONLY_PLUGIN_TOOLS } from "@/lib/plugins/toolAllowlist";
 
 const PANEL_LOCAL_PREFIXES = ["browse_", "qa_", "doc_", "workflow_", "trace_"] as const;
 
@@ -35,3 +36,26 @@ export function runsInPanel(toolName: string): boolean {
 export function runsInCanvasTab(toolName: string): boolean {
   return !runsInPanel(toolName);
 }
+
+/**
+ * Canvas-tab tools that only look at the canvas. With no canvas tab open they do not open one: there is
+ * nothing to look at. Built from `READ_ONLY_PLUGIN_TOOLS` plus the read-only tools a plugin may not run.
+ */
+const READ_ONLY_CANVAS_TOOL_NAMES: ReadonlySet<string> = new Set([
+  ...READ_ONLY_PLUGIN_TOOLS,
+  "get_screenshot",
+  "read_embed_html",
+  "read_comments",
+  "export_layers_svg",
+]);
+
+/** true when the tool only reads the canvas, so a chat without a canvas tab must not open one for it. */
+export function isReadOnlyCanvasTool(toolName: string): boolean {
+  return READ_ONLY_CANVAS_TOOL_NAMES.has(toolName);
+}
+
+/** The answer of a read-only tool when the chat has no canvas tab. It is not an error for the model. */
+export const NO_CANVAS_RESULT = JSON.stringify({
+  canvasOpen: false,
+  note: "No canvas tab is open, so there is nothing on a canvas. Do not open one only to look. Call open_canvas_tab only when the task needs the canvas.",
+});

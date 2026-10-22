@@ -14,7 +14,7 @@ function installPanel(tabs = [tab(1), tab(2)], answerContext = true) {
 }
 const run = async (args: unknown, ctx: Record<string, unknown> = { sessionId: "chat" }) =>
   JSON.parse(await openCanvasTab(args as never, ctx as never));
-const call = (id: string) => panelCallTool("chat", "batch_get", {}, { toolCallId: id, timeoutMs: 1000 });
+const call = (id: string) => panelCallTool("chat", "batch_design", {}, { toolCallId: id, timeoutMs: 1000 });
 
 afterEach(() => {
   resetPanelRuntimeForTests();

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { docCreate, docInsertImage } from "../docTools";
-import { getDoc } from "@/lib/docs/docStore";
+import { docInsertImage } from "../docTools";
+import { sampleTraceJson } from "@/components/trace/__fixtures__/sampleTrace";
+import { createDoc, getDoc } from "@/lib/docs/docStore";
 
 const mocks = vi.hoisted(() => ({
   apiFetch: vi.fn(),
@@ -22,7 +23,7 @@ const upload = (status: number, body: unknown = { url: "https://cdn/up.png" }) =
   mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify(body), { status }));
 
 async function makeDoc(markdown = "# A\n\ntext\n"): Promise<string> {
-  return JSON.parse(await docCreate({ title: "T", markdown })).docId;
+  return createDoc({ title: "T", markdown }, "agent").id;
 }
 
 beforeEach(() => {
@@ -167,5 +168,59 @@ describe("doc_insert_image", () => {
     const r = await run({ docId, nodeId: "n1", alt: "a" }, { sessionId: "s1" });
     expect(r.error).toMatch(pattern);
     expect(mocks.apiFetch).not.toHaveBeenCalled();
+  });
+
+  describe("traceId source", () => {
+    const setTrace = (result: unknown) => {
+      const read = vi.fn(async () => result as never);
+      window.penAgentPanel = { version: 3, traces: { listTabs: async () => ({ tabs: [] }), read } } as unknown as Window["penAgentPanel"];
+      return read;
+    };
+    const dataFrames = () => {
+      const json = sampleTraceJson() as { frames: { id: number; src: string }[] };
+      json.frames.forEach((f) => (f.src = `data:image/png;base64,F${f.id}`));
+      return json;
+    };
+
+    it("uploads the chosen frame and writes the https url", async () => {
+      const docId = await makeDoc();
+      const read = setTrace({ trace: dataFrames() });
+      upload(200);
+      const r = await run({ docId, traceId: "t1", frameId: 2, alt: "Pricing page" });
+      expect(r.url).toBe("https://cdn/up.png");
+      expect(read).toHaveBeenCalledWith("t1");
+      expect(JSON.parse(String(mocks.apiFetch.mock.calls[0][1].body))).toMatchObject({ image: expect.stringContaining("F2") });
+      expect(getDoc(docId)?.markdown).toContain("![Pricing page](https://cdn/up.png)");
+    });
+
+    it("takes the final frame when frameId is omitted", async () => {
+      const docId = await makeDoc();
+      setTrace({ trace: dataFrames() });
+      upload(200);
+      await run({ docId, traceId: "t1", alt: "x" });
+      expect(String(mocks.apiFetch.mock.calls[0][1].body)).toContain("F5");
+    });
+
+    it("errors on unknown frame, no bridge, shell error and a frame without image data", async () => {
+      const docId = await makeDoc();
+      setTrace({ trace: dataFrames() });
+      const unknown = await run({ docId, traceId: "t1", frameId: 99, alt: "x" });
+      expect(unknown.error).toMatch(/Unknown frameId 99.*0, 1, 2/);
+      setTrace({ error: "Unknown trace" });
+      expect((await run({ docId, traceId: "t1", alt: "x" })).error).toBe("Unknown trace");
+      const assetOnly = sampleTraceJson() as { frames: { src: string }[] };
+      assetOnly.frames.forEach((f) => (f.src = "frames/0.png"));
+      setTrace({ trace: assetOnly });
+      expect((await run({ docId, traceId: "t1", frameId: 0, alt: "x" })).error).toMatch(/no image data|could not be loaded/);
+      window.penAgentPanel = undefined;
+      expect((await run({ docId, traceId: "t1", alt: "x" })).error).toMatch(/desktop app only/);
+      expect(mocks.apiFetch).not.toHaveBeenCalled();
+    });
+
+    it("rejects two sources and frameId without traceId", async () => {
+      const docId = await makeDoc();
+      expect((await run({ docId, traceId: "t1", imageUrl: "https://x/y.png", alt: "x" })).error).toMatch(/exactly one/);
+      expect((await run({ docId, imageUrl: "https://x/y.png", frameId: 1, alt: "x" })).error).toMatch(/frameId needs traceId/);
+    });
   });
 });

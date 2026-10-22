@@ -1,11 +1,13 @@
 import type { ToolHandler } from "../toolRegistry";
 import { createDoc, getDoc, listDocs, updateDoc } from "../docs/docStore";
 import { applyDocEdits, type DocEdit } from "../docs/applyDocEdits";
-import { getAgentPanelDocsBridge } from "../agentPanel";
+import { getAgentPanelDocsBridge, getAgentPanelTraceTabsBridge } from "../agentPanel";
 import { whenDesktopDocsReady } from "../docs/desktopDocMirror";
 import { buildImageMarkdown, insertImageIntoMarkdown } from "../docs/insertImage";
+import { stripLeadingTitle } from "../docs/stripLeadingTitle";
 import { ensurePublicUrl } from "../imageOps/resolveSourceUrl";
 import { isPanelCanvasLinkActive, panelCallTool } from "../canvasLink/panelRuntime";
+import { parseBrowseTrace } from "@sideform/browser-agent/agent/session";
 import { getScreenshot } from "./getScreenshot";
 
 // Panel-local (canvasLink/canvasTools.ts, prefix "doc_"): markdown documents live in this
@@ -56,9 +58,13 @@ export const docList: ToolHandler = async () => {
 
 export const docCreate: ToolHandler = async (args) => {
   await whenDesktopDocsReady();
-  const title = str(args?.title);
-  const markdown = str(args?.markdown);
-  if (title === undefined || markdown === undefined) return err("title and markdown are required strings.");
+  const rawTitle = str(args?.title);
+  const rawMarkdown = str(args?.markdown);
+  if (rawTitle === undefined || rawMarkdown === undefined) return err("title and markdown are required strings.");
+  // The doc page shows the title above the body: a leading `# Title` in the body would show it twice.
+  const stripped = stripLeadingTitle(rawMarkdown, rawTitle);
+  const markdown = stripped.markdown;
+  const title = rawTitle.trim() === "" && stripped.title ? stripped.title : rawTitle;
   let doc;
   try {
     doc = createDoc({ title, markdown }, "agent");
@@ -83,15 +89,17 @@ export const docEdit: ToolHandler = async (args) => {
   const docId = str(args?.docId);
   if (!docId) return err("docId is required.");
   const edits = args?.edits as DocEdit[] | undefined;
-  const markdown = str(args?.markdown);
+  const rawMarkdown = str(args?.markdown);
   const title = str(args?.title);
   const hasEdits = Array.isArray(edits) && edits.length > 0;
-  if (hasEdits && markdown !== undefined) return err("Pass either edits or markdown, not both.");
-  if (!hasEdits && markdown === undefined && title === undefined) {
+  if (hasEdits && rawMarkdown !== undefined) return err("Pass either edits or markdown, not both.");
+  if (!hasEdits && rawMarkdown === undefined && title === undefined) {
     return err("Nothing to change: pass edits, markdown or title.");
   }
   const doc = getDoc(docId);
   if (!doc) return err(`Unknown docId "${docId}". Call doc_list to see the documents.`);
+  // Strip a leading H1 only when it repeats the (new or stored) title.
+  const markdown = rawMarkdown === undefined ? undefined : stripLeadingTitle(rawMarkdown, title ?? doc.title).markdown;
 
   let nextMarkdown = markdown;
   let applied = markdown !== undefined ? 1 : 0;
@@ -136,22 +144,63 @@ async function screenshotNode(nodeId: string, context: Parameters<ToolHandler>[1
           signal: context.signal,
         })
       : await getScreenshot({ nodeId, maxSide: DOC_SCREENSHOT_MAX_SIDE }, context);
-  let parsed: { imageData?: unknown; error?: unknown };
+  let parsed: { imageData?: unknown; error?: unknown; note?: unknown };
   try {
     parsed = JSON.parse(raw) as typeof parsed;
   } catch {
     throw new Error("The screenshot of the node could not be read.");
   }
   if (typeof parsed.error === "string") throw new Error(`Screenshot failed: ${parsed.error}`);
+  if (typeof parsed.note === "string") throw new Error(`Screenshot failed: ${parsed.note}`);
   if (typeof parsed.imageData !== "string" || !parsed.imageData.startsWith("data:")) {
     throw new Error("The screenshot of the node returned no image.");
   }
   return parsed.imageData;
 }
 
+/** The `src` of one frame of an open trace tab: a data: image URL or an http(s) URL. */
+async function traceFrameSrc(traceId: string, frameId: number | undefined): Promise<string> {
+  const bridge = getAgentPanelTraceTabsBridge();
+  if (!bridge) throw new Error("Trace tabs are not available here (desktop app only).");
+  const result: unknown = await bridge.read(traceId);
+  if (!result || typeof result !== "object") throw new Error("The desktop app returned an unexpected answer.");
+  if ("error" in result) throw new Error(String((result as { error: unknown }).error));
+  const parsed = parseBrowseTrace((result as { trace?: unknown }).trace);
+  if ("error" in parsed) throw new Error(`The trace is not valid: ${parsed.error}`);
+  const frames = parsed.trace.frames ?? [];
+  if (frames.length === 0) throw new Error(`The trace "${traceId}" has no screenshots.`);
+  let frame;
+  if (frameId === undefined) {
+    frame = [...frames].sort((a, b) => (a.kind === "final" ? 1 : 0) - (b.kind === "final" ? 1 : 0) || a.at - b.at || a.id - b.id).at(-1);
+  } else {
+    frame = frames.find((f) => f.id === frameId);
+    if (!frame) {
+      const ids = frames.slice(-10).map((f) => f.id).join(", ");
+      throw new Error(`Unknown frameId ${frameId} in trace "${traceId}". Latest frameIds: ${frames.length > 10 ? "..., " : ""}${ids}. Call trace_read to see the frames.`);
+    }
+  }
+  const src = frame?.src;
+  if (typeof src !== "string" || !(/^data:image\//i.test(src) || /^https?:\/\//i.test(src))) {
+    throw new Error("The frame image could not be loaded (the trace holds no image data for it).");
+  }
+  return src;
+}
+
 /** An https URL for the image source; never returns a data: URL. */
-async function resolveImageUrl(imageUrl: string | undefined, nodeId: string | undefined, context: Parameters<ToolHandler>[1]): Promise<string> {
+async function resolveImageUrl(
+  imageUrl: string | undefined,
+  nodeId: string | undefined,
+  traceId: string | undefined,
+  frameId: number | undefined,
+  context: Parameters<ToolHandler>[1],
+): Promise<string> {
   const signal = context?.signal;
+  if (traceId !== undefined) {
+    const src = await traceFrameSrc(traceId, frameId);
+    if (signal?.aborted) throw new Error("The call was cancelled.");
+    if (/^https?:\/\//i.test(src)) return src;
+    return raceAbort(ensurePublicUrl(src), signal);
+  }
   if (imageUrl !== undefined) {
     if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
     if (imageUrl.startsWith("data:")) return raceAbort(ensurePublicUrl(imageUrl), signal);
@@ -168,7 +217,12 @@ export const docInsertImage: ToolHandler = async (args, context) => {
   if (!docId) return err("docId is required.");
   const imageUrl = optStr(args?.imageUrl);
   const nodeId = optStr(args?.nodeId);
-  if ((imageUrl === undefined) === (nodeId === undefined)) return err("Pass exactly one of imageUrl or nodeId.");
+  const traceId = optStr(args?.traceId);
+  const frameIdRaw = args?.frameId;
+  const frameId = typeof frameIdRaw === "number" && Number.isInteger(frameIdRaw) && frameIdRaw >= 0 ? frameIdRaw : undefined;
+  if (frameIdRaw !== undefined && frameIdRaw !== null && frameId === undefined) return err("frameId must be an integer from 0.");
+  if (frameId !== undefined && traceId === undefined) return err("frameId needs traceId.");
+  if ([imageUrl, nodeId, traceId].filter((v) => v !== undefined).length !== 1) return err("Pass exactly one of imageUrl, nodeId or traceId.");
   const alt = str(args?.alt);
   if (!alt || !alt.trim()) return err("alt is required (a short description of the image).");
   const afterHeading = optStr(args?.afterHeading);
@@ -177,7 +231,7 @@ export const docInsertImage: ToolHandler = async (args, context) => {
 
   let url: string;
   try {
-    url = await resolveImageUrl(imageUrl, nodeId, context);
+    url = await resolveImageUrl(imageUrl, nodeId, traceId, frameId, context);
   } catch (e) {
     return err(e instanceof Error ? e.message : "The image could not be prepared.");
   }

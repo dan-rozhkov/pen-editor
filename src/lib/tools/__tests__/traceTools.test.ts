@@ -70,7 +70,23 @@ describe("trace_read", () => {
     expect(out.qa.checks.shown[1]).toMatchObject({ passed: false, actual: "text not found" });
     expect(out.consoleErrors.total).toBe(2);
     expect(out.failedRequests.shown[1].text).toContain("POST 500");
-    expect(text).not.toMatch(/data:image|base64|frames|iVBOR/);
+    expect(text).not.toMatch(/data:image|base64|"src"|iVBOR/);
+    expect(out.frames.total).toBe(6);
+    expect(out.frames.shown[5]).toEqual({ frameId: 5, kind: "final" });
+    expect(out.frames.shown[1]).toEqual({ frameId: 1, step: 2, kind: "step" });
+  });
+
+  it("keeps the last frames when a trace has more than the cap", async () => {
+    const trace = sampleTraceJson() as { frames: unknown[] };
+    trace.frames = Array.from({ length: 100 }, (_, i) => ({ id: i, at: 1000 + i, kind: i === 99 ? "final" : "step", src: "data:image/png;base64,AAAA", width: 10, height: 10 }));
+    withTrace(trace);
+    const out = await run(traceRead, { traceId: "sample-trace-1" });
+    expect(out.error).toBeUndefined();
+    expect(out.frames.total).toBe(100);
+    expect(out.frames.shown).toHaveLength(60);
+    expect(out.frames.shown[0].frameId).toBe(40);
+    expect(out.frames.shown[59]).toEqual({ frameId: 99, kind: "final" });
+    expect(out.frames.omitted).toBe(40);
   });
 
   it("lists the request log with failed requests first and summarizes batched actions", async () => {

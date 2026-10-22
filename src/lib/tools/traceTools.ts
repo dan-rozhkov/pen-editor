@@ -14,6 +14,7 @@ const MAX_TOTAL_CHARS = 30_000;
 const MAX_TEXT = 300;
 const MAX_ARGS = 200;
 const MAX_OUTPUT = 600;
+const MAX_FRAMES = 60;
 
 /** List caps. Halved until the summary fits MAX_TOTAL_CHARS. */
 interface Caps {
@@ -21,8 +22,9 @@ interface Caps {
   qaChecks: number;
   logEntries: number;
   labels: number;
+  frames: number;
 }
-const FULL_CAPS: Caps = { steps: 60, qaChecks: 30, logEntries: 20, labels: 20 };
+const FULL_CAPS: Caps = { steps: 60, qaChecks: 30, logEntries: 20, labels: 20, frames: MAX_FRAMES };
 
 /** Any `data:<type>/<subtype>...` URL, up to the next whitespace or quote (base64 or percent-encoded, with parameters). */
 const DATA_URL = /data:[a-z]+\/[a-z0-9.+-]+[^\s"'`<>)]*/gi;
@@ -90,10 +92,21 @@ function prepare<T>(items: unknown, max: number, map: (item: T) => unknown, drop
     ...(finite(dropped) && dropped > 0 ? { dropped } : {}),
   };
 }
-function render(p: Prepared, max: number) {
+/** `newestFirst`: the entries were prepared newest first; the newest `max` are shown, oldest of them first. */
+function render(p: Prepared, max: number, newestFirst = false) {
   const shown = p.entries.slice(0, max);
+  if (newestFirst) shown.reverse();
   const omitted = p.total - shown.length;
   return { total: p.total, shown, ...(omitted > 0 ? { omitted } : {}), ...(p.dropped ? { droppedByRecorder: p.dropped } : {}) };
+}
+
+function frameEntry(f: Record<string, unknown>): Record<string, unknown> {
+  if (!isObj(f)) return {};
+  return pick({
+    frameId: () => (finite(f.id) ? f.id : undefined),
+    step: () => (finite(f.stepIndex) ? f.stepIndex : undefined),
+    kind: () => (typeof f.kind === "string" ? clip(f.kind, 20) : undefined),
+  });
 }
 
 /** Everything that does not depend on the caps, computed once. */
@@ -105,6 +118,8 @@ interface PreparedSummary {
   network: Prepared;
   /** The recorder's request log, failed requests first. Absent when the trace has none. */
   requests?: { failed: number; list: Prepared };
+  /** Newest first: the last frames matter most (the final screenshot). */
+  frames: Prepared;
   qa?: { head: Record<string, unknown>; checks: Prepared };
 }
 
@@ -186,6 +201,8 @@ function prepareSummary(trace: BrowseTrace): PreparedSummary {
     console: prepare<Record<string, unknown>>(t.console, FULL_CAPS.logEntries, logEntry, dropped.console),
     network: prepare<Record<string, unknown>>(t.network, FULL_CAPS.logEntries, logEntry, dropped.network),
     requests: safe(() => prepareRequests(trace)),
+    // Ids only, never `src`: doc_insert_image takes traceId + frameId.
+    frames: prepare<Record<string, unknown>>(Array.isArray(t.frames) ? [...t.frames].reverse() : [], FULL_CAPS.frames, frameEntry),
     ...(qa
       ? {
           qa: {
@@ -230,6 +247,7 @@ function renderSummary(p: PreparedSummary, caps: Caps): Record<string, unknown> 
     ...(labels.length ? { labels: Object.fromEntries(labels) } : {}),
     ...(labelsOmitted > 0 ? { labelsOmitted } : {}),
     steps: render(p.steps, caps.steps),
+    ...(p.frames.total > 0 ? { frames: render(p.frames, caps.frames, true) } : {}),
     consoleErrors: render(p.console, caps.logEntries),
     // With a request log the failures are listed there; the console-derived list shrinks to its count.
     failedRequests: p.requests ? { total: p.network.total } : render(p.network, caps.logEntries),
@@ -276,7 +294,7 @@ export const traceRead: ToolHandler = async (args) => {
     let text = JSON.stringify(renderSummary(prepared, caps));
     // Halve the list caps until it fits (the summary says how many entries it left out).
     for (let i = 0; i < 6 && text.length > MAX_TOTAL_CHARS; i++) {
-      caps = { steps: Math.floor(caps.steps / 2), qaChecks: Math.floor(caps.qaChecks / 2), logEntries: Math.floor(caps.logEntries / 2), labels: Math.floor(caps.labels / 2) };
+      caps = { steps: Math.floor(caps.steps / 2), qaChecks: Math.floor(caps.qaChecks / 2), logEntries: Math.floor(caps.logEntries / 2), labels: Math.floor(caps.labels / 2), frames: Math.floor(caps.frames / 2) };
       text = JSON.stringify(renderSummary(prepared, caps));
     }
     return text.length > MAX_TOTAL_CHARS ? err(`The trace summary is too large (${text.length} chars).`) : text;

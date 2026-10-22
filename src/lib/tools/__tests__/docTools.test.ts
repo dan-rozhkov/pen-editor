@@ -165,3 +165,34 @@ describe("doc tools wait for the desktop disk mirror", () => {
     expect(listDocs()).toHaveLength(1);
   });
 });
+
+describe("doc tools drop a duplicated title heading", () => {
+  it("strips a leading H1 from created and replaced markdown, and fills a blank title from it", async () => {
+    const a = await run(docCreate, { title: "Plan", markdown: "# Plan\n\nbody" });
+    expect(getDoc(a.docId)?.markdown).toBe("body");
+    const b = await run(docCreate, { title: " ", markdown: "# From heading\n\nbody" });
+    expect(b.title).toBe("From heading");
+    await run(docEdit, { docId: a.docId, markdown: "# Plan\nnew" });
+    expect(getDoc(a.docId)?.markdown).toBe("new");
+  });
+
+  it("keeps a leading H1 that is real content and differs from the title", async () => {
+    const a = await run(docCreate, { title: "Release notes", markdown: "# Installation\n\nsteps" });
+    expect(getDoc(a.docId)?.markdown).toBe("# Installation\n\nsteps");
+    await run(docEdit, { docId: a.docId, markdown: "# Other heading\nnew" });
+    expect(getDoc(a.docId)?.markdown).toBe("# Other heading\nnew");
+  });
+
+  it("strips an H1 that repeats the title apart from its [Area] tag", async () => {
+    const a = await run(docCreate, { title: "Bug report: Total ignores discount", markdown: "# Bug report: [Checkout] Total ignores discount\n\nbody" });
+    expect(getDoc(a.docId)?.markdown).toBe("body");
+  });
+
+  it("doc_edit compares the H1 with the new title when given, else the stored title", async () => {
+    const a = await run(docCreate, { title: "Plan", markdown: "x" });
+    await run(docEdit, { docId: a.docId, markdown: "# Roadmap\ntext", title: "Roadmap" });
+    expect(getDoc(a.docId)?.markdown).toBe("text");
+    await run(docEdit, { docId: a.docId, markdown: "# Plan\ntext2" });
+    expect(getDoc(a.docId)?.markdown).toBe("# Plan\ntext2");
+  });
+});

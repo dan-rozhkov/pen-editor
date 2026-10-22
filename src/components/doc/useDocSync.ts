@@ -15,6 +15,7 @@ import {
   type DocChange,
   type DocMeta,
 } from "@/lib/docs/docStore";
+import { EMPTY_DOC_HISTORY, canStep, goBackDoc, goForwardDoc, pushDoc, type DocHistory } from "@/lib/docs/docHistory";
 import { isDesktopDocsReady, whenDesktopDocsReady } from "@/lib/docs/desktopDocMirror";
 
 const SAVE_DELAY_MS = 300;
@@ -60,6 +61,11 @@ export interface DocSync {
   revision: number;
   select: (id: string) => void;
   create: () => void;
+  /** Whether a previous / next document (visited earlier in this tab) can be opened. */
+  canGoBack: boolean;
+  canGoForward: boolean;
+  goBack: () => void;
+  goForward: () => void;
   remove: () => void;
   setTitle: (title: string) => void;
   /** The editor reports its current markdown on every user edit (debounced save). */
@@ -235,6 +241,11 @@ export function useDocSync(): DocSync {
     setTitleState(doc?.title ?? "");
   }, [id, flush]);
 
+  // Back/forward ids for this tab (memory only; the URL uses `replace`).
+  const [history, setHistory] = useState<DocHistory>(EMPTY_DOC_HISTORY);
+  // `docs` is a dependency so a deleted document stops counting at once.
+  const docExists = useCallback((docId: string) => docs.some((m) => m.id === docId), [docs]);
+
   // Creates a document and selects it, keeping every other param and dropping `new`.
   const createAndSelectNewDoc = useCallback(() => {
     flush();
@@ -246,6 +257,7 @@ export function useDocSync(): DocSync {
       return;
     }
     setDocs(listDocs());
+    setHistory((h) => pushDoc(h, idRef.current, doc.id));
     setParams(
       (p) => {
         const next = new URLSearchParams(p);
@@ -334,7 +346,7 @@ export function useDocSync(): DocSync {
     };
   }, [flush]);
 
-  const select = useCallback(
+  const open = useCallback(
     (next: string) => {
       flush();
       const p = new URLSearchParams(params);
@@ -343,6 +355,32 @@ export function useDocSync(): DocSync {
     },
     [flush, params, setParams],
   );
+
+  const select = useCallback(
+    (next: string) => {
+      if (next === idRef.current) return;
+      setHistory((h) => pushDoc(h, idRef.current, next));
+      open(next);
+    },
+    [open],
+  );
+
+  const goBack = useCallback(() => {
+    const s = goBackDoc(history, idRef.current, docExists);
+    if (!s) return;
+    setHistory(s.history);
+    open(s.target);
+  }, [history, docExists, open]);
+
+  const goForward = useCallback(() => {
+    const s = goForwardDoc(history, idRef.current, docExists);
+    if (!s) return;
+    setHistory(s.history);
+    open(s.target);
+  }, [history, docExists, open]);
+
+  const canGoBack = useMemo(() => canStep(history.back, id, docExists), [history.back, id, docExists]);
+  const canGoForward = useMemo(() => canStep(history.forward, id, docExists), [history.forward, id, docExists]);
 
   const create = createAndSelectNewDoc;
 
@@ -396,6 +434,10 @@ export function useDocSync(): DocSync {
     revision: loaded.revision,
     select,
     create,
+    canGoBack,
+    canGoForward,
+    goBack,
+    goForward,
     remove,
     setTitle,
     onEditorMarkdown,

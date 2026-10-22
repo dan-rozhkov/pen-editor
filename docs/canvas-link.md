@@ -35,6 +35,7 @@ first canvas tool of a turn with no live binding:
 1. exactly one canvas tab → bind it;
 2. several → the first in the list (the most recently active canvas tab), even if a browser tab is currently active;
 3. none → `openTab()` and bind the new tab with the `{ tabId, registrationId }` it resolves with (never look the registration up in the tab list: it may not have announced the new tab yet).
+A read-only canvas tool (`isReadOnlyCanvasTool`: `batch_get`, `get_editor_state`, `get_screenshot`, ...) never takes step 3: with no usable canvas tab it answers `{"canvasOpen":false,"note":...}` at once and opens nothing, so a chat that only writes a document does not open an empty canvas. Mutating tools still open a tab on demand.
 `listTabs()` is ordered most recently active canvas tab first; each
 `CanvasTabInfo` has a `registrationId` that increments every time the tab
 registers (a reloaded tab keeps its `tabId`, gets a new `registrationId`).

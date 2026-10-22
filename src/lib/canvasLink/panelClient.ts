@@ -13,6 +13,7 @@
  *   again and the binding is cleared. A reload registers anew and is usable.
  */
 import { AppendEncoder } from "./appendCodec";
+import { isReadOnlyCanvasTool, NO_CANVAS_RESULT } from "./canvasTools";
 import {
   linkNow,
   type AgentPanelCanvasBridge,
@@ -406,18 +407,26 @@ export class PanelClient {
   }
 
   /** Resolve per docs/canvas-link.md "Binding"; queued behind any bind of this chat in flight. */
-  private async bind(sessionId: string): Promise<Binding | null> {
+  private async bind(sessionId: string, openIfMissing = true): Promise<Binding | null> {
+    return (await this.bindOutcome(sessionId, openIfMissing)).binding;
+  }
+
+  /** `bind`, plus whether it found no listed tab (`noTab`: only possible with `openIfMissing` false). */
+  private async bindOutcome(
+    sessionId: string,
+    openIfMissing: boolean
+  ): Promise<{ binding: Binding | null; noTab: boolean }> {
     if (!this.binding$.has(sessionId)) {
       const live = this.liveBinding(sessionId);
-      if (live) return live;
+      if (live) return { binding: live, noTab: false };
     }
     const r = await this.establish(sessionId, {
       reuseLive: true,
       find: (tabs) => tabs.find((t) => !this.latched.has(keyOf(t))),
       // `openTab()` answers with the registration it waited for (see `establish`).
-      open: { activate: false },
+      ...(openIfMissing ? { open: { activate: false } } : {}),
     });
-    return r.ok ? r.binding : null;
+    return r.ok ? { binding: r.binding, noTab: false } : { binding: null, noTab: r.reason === "not_listed" };
   }
 
   /**
@@ -656,6 +665,7 @@ export class PanelClient {
       startGated: true,
       signal,
       cancelOnAbort: true,
+      readOnly: isReadOnlyCanvasTool(toolName),
       send: (binding, callId) => {
         if (stream && !stream.binding && stream.buffer.length > 0) {
           const buffered = stream.buffer;
@@ -713,6 +723,8 @@ export class PanelClient {
     timeoutMessage: string;
     signal?: AbortSignal;
     cancelOnAbort: boolean;
+    /** A read-only tool: with no canvas tab it settles with `NO_CANVAS_RESULT` and opens none. */
+    readOnly?: boolean;
     send(binding: Binding, callId: string): string;
   }): Promise<string> {
     const { callId, signal } = spec;
@@ -762,8 +774,9 @@ export class PanelClient {
       signal?.addEventListener("abort", onAbort);
       this.pending.set(callId, pending);
 
-      void this.bind(spec.sessionId).then((b) => {
+      void this.bindOutcome(spec.sessionId, !spec.readOnly).then(({ binding: b, noTab }) => {
         if (done) return;
+        if (!b && noTab) return pending.settle(NO_CANVAS_RESULT);
         if (!b) return pending.settle(errorResult("Could not open a canvas tab."), "bind_failed");
         if (this.latched.has(keyOf(b))) return pending.settle(TAB_CLOSED_ERROR, "tab_gone");
         binding = b;

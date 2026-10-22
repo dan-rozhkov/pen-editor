@@ -48,9 +48,34 @@ describe("binding", () => {
   it("opens a tab when there is none and binds it", async () => {
     setup([]);
     attachScriptedCanvas(fake);
-    await client.callTool("s", "batch_get", {}, { toolCallId: "c1", timeoutMs: 1000 });
+    await client.callTool("s", "batch_design", {}, { toolCallId: "c1", timeoutMs: 1000 });
     expect(fake.openTab).toHaveBeenCalledTimes(1);
     expect(client.getBinding("s")).toEqual({ tabId: 100, registrationId: 1 });
+  });
+
+  it("a read-only tool with no canvas tab opens none and answers the no-canvas note", async () => {
+    setup([]);
+    const result = JSON.parse(await client.callTool("s", "get_editor_state", {}, { toolCallId: "c1", timeoutMs: 1000 }));
+    expect(fake.openTab).not.toHaveBeenCalled();
+    expect(fake.ofKind("call")).toHaveLength(0);
+    expect(result.canvasOpen).toBe(false);
+    expect(result.note).toContain("open_canvas_tab");
+    expect(client.getBinding("s")).toBeNull();
+  });
+
+  it("a read-only tool runs in a listed canvas tab", async () => {
+    setup([tab(7)]);
+    attachScriptedCanvas(fake, { onCall: () => "ok" });
+    expect(await client.callTool("s", "get_editor_state", {}, { toolCallId: "c1", timeoutMs: 1000 })).toBe("ok");
+    expect(fake.openTab).not.toHaveBeenCalled();
+    expect(client.getBinding("s")?.tabId).toBe(7);
+  });
+
+  it("a mutating tool with no canvas tab still opens one", async () => {
+    setup([]);
+    attachScriptedCanvas(fake);
+    await client.callTool("s", "batch_design", { operations: "o" }, { toolCallId: "c1", timeoutMs: 1000 });
+    expect(fake.openTab).toHaveBeenCalledTimes(1);
   });
 
   it("binds with the registrationId openTab() resolved: no latch when the tab list lags behind", async () => {
