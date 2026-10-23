@@ -27,6 +27,7 @@ import { isIsolatedQaCall } from "@/lib/tools/browser/isolation";
 import { APP_LAUNCH_ALLOWANCE_MS, appArgOf } from "@/lib/tools/browser/isolation";
 import { BROWSE_AGENT_OUTER_TIMEOUT_MS } from "@/lib/tools/browser/browseAgent";
 import { extractStreamingToolInputs } from "@/hooks/streamingToolParts";
+import { useOwnedChat } from "@/hooks/useOwnedChat";
 import {
   panelCallTool,
   panelEndStream,
@@ -474,13 +475,11 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
   const pendingInterruptSendRef = useRef<ChatLaunchPayload | null>(null);
   const [parallelBrowseRuns, setParallelBrowseRuns] = useState(0);
 
-  const chat = useChat({
+  // Owned, not created by useChat: see useOwnedChat for why unmount must not
+  // stop the chat.
+  const ownedChat = useOwnedChat({
     id: sessionId,
     transport,
-    // AI SDK otherwise publishes a React update for every stream chunk. A
-    // short throttle keeps active Markdown rendering responsive while still
-    // feeling continuous, especially when multiple sessions run in parallel.
-    throttle: STREAM_RENDER_THROTTLE_MS,
     sendAutomaticallyWhen: (options) =>
       !turnStoppedRef.current && lastAssistantMessageIsCompleteWithToolCalls(options),
     // Feeds ContextMeter (components/chat/ContextMeter.tsx). This session's
@@ -613,6 +612,13 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
         );
       }
     },
+  });
+  const chat = useChat({
+    chat: ownedChat,
+    // AI SDK otherwise publishes a React update for every stream chunk. A
+    // short throttle keeps active Markdown rendering responsive while still
+    // feeling continuous, especially when multiple sessions run in parallel.
+    throttle: STREAM_RENDER_THROTTLE_MS,
   });
 
   // Same timeout / error handling as the awaited path (executeToolCall owns
