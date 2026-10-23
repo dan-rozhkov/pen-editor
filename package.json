@@ -18,7 +18,7 @@
     "check:dup:tests": "node scripts/check-test-dup.mjs"
   },
   "dependencies": {
-    "@ai-sdk/react": "^3.0.230",
+    "@ai-sdk/react": "^4.0.154",
     "@base-ui/react": "^1.1.0",
     "@better-auth/api-key": "1.7.7",
     "@better-auth/oauth-provider": "1.7.7",
@@ -26,8 +26,8 @@
     "@modelcontextprotocol/ext-apps": "^1.7.5",
     "@paper-design/shaders-react": "0.0.76",
     "@phosphor-icons/react": "^2.1.10",
-    "@sideform/agent-harness": "github:dan-rozhkov/agent-harness#v0.1.1",
-    "@sideform/browser-agent": "github:dan-rozhkov/browser-agent#v0.3.7",
+    "@sideform/agent-harness": "github:dan-rozhkov/agent-harness#8a71a09b4fe5950623f13004a7dac4909359f0a6",
+    "@sideform/browser-agent": "github:dan-rozhkov/browser-agent#eb8c0b08cdfa3c5dc851bbf929c7540eb1d819dc",
     "@tailwindcss/vite": "^4.3.1",
     "@tiptap/extension-code-block": "^3.32.0",
     "@tiptap/extension-details": "^3.32.0",
@@ -42,7 +42,7 @@
     "@tiptap/react": "^3.32.0",
     "@tiptap/starter-kit": "^3.32.0",
     "@tiptap/suggestion": "^3.32.0",
-    "ai": "^6.0.228",
+    "ai": "^7.0.150",
     "better-auth": "1.7.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

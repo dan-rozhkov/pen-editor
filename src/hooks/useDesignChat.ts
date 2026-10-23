@@ -480,7 +480,7 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     // AI SDK otherwise publishes a React update for every stream chunk. A
     // short throttle keeps active Markdown rendering responsive while still
     // feeling continuous, especially when multiple sessions run in parallel.
-    experimental_throttle: STREAM_RENDER_THROTTLE_MS,
+    throttle: STREAM_RENDER_THROTTLE_MS,
     sendAutomaticallyWhen: (options) =>
       !turnStoppedRef.current && lastAssistantMessageIsCompleteWithToolCalls(options),
     // Feeds ContextMeter (components/chat/ContextMeter.tsx). This session's
