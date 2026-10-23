@@ -27,7 +27,7 @@
     "@paper-design/shaders-react": "0.0.76",
     "@phosphor-icons/react": "^2.1.10",
     "@sideform/agent-harness": "github:dan-rozhkov/agent-harness#v0.1.1",
-    "@sideform/browser-agent": "github:dan-rozhkov/browser-agent#v0.3.7",
+    "@sideform/browser-agent": "github:dan-rozhkov/browser-agent#v0.3.8",
     "@tailwindcss/vite": "^4.3.1",
     "@tiptap/extension-code-block": "^3.32.0",
     "@tiptap/extension-details": "^3.32.0",
