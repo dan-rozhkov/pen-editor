@@ -1,0 +1,36 @@
+/* transitions.dev / UI generation — overlay styles, adapted for the canvas (see ui-generation.js).
+   Local change: the colours follow the editor's agent-work accent (#0d99ff, the pending-screen box and
+   the streaming writing head) instead of upstream's neutral greys, and dark mode follows the editor's
+   `.dark` class. */
+:root {
+  --gen-line: rgba(13, 153, 255, 0.75);   /* dotted lines: outline, parts, guides */
+  --gen-strong: #0d99ff;                  /* moving dot heads, handles, reticle, lit dots, labels */
+  --gen-ink: rgba(13, 153, 255, 0.28);    /* the resting dot field */
+  --gen-surface: #ffffff;                 /* fill of the corner handles */
+  --gen-dot: 2.1px;                       /* dot size on the traced lines */
+  --gen-font: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.dark { --gen-surface: #181818; --gen-ink: rgba(80, 180, 255, 0.3); }
+
+/* the overlay sits exactly over the element and never takes input */
+.t-gen { position: absolute; pointer-events: none; }
+.t-gen-svg { position: absolute; left: 0; top: 0; overflow: visible; }
+
+.t-gen-dot { fill: var(--gen-ink); }
+.t-gen-dot.is-lit { fill: var(--gen-strong); }
+.t-gen-wireframe { stroke-width: var(--gen-dot); }
+.t-gen-wire { fill: none; stroke: var(--gen-line); stroke-linecap: round; stroke-linejoin: round; } /* drawn as round dots */
+.t-gen-guide { fill: none; stroke: var(--gen-line); stroke-width: 1.6; stroke-linecap: round; }
+.t-gen-guide--dashed, .t-gen-guide--scan { stroke-dasharray: 0 5; }
+.t-gen-head { fill: var(--gen-strong); }
+.t-gen-flyer { fill: var(--gen-strong); }
+.t-gen-handle { fill: var(--gen-surface); stroke: var(--gen-strong); stroke-width: 1; }
+.t-gen-reticle { fill: none; stroke: var(--gen-strong); stroke-width: 1.2; stroke-linecap: round; }
+.t-gen-glow-stop { stop-color: var(--gen-strong); }
+.t-gen-label { font-family: var(--gen-font); font-size: 9px; fill: var(--gen-strong); letter-spacing: 0.02em; }
+.t-gen-label--small { font-size: 7.5px; }
+.t-gen-label--tag { font-size: 7.5px; letter-spacing: 0.05em; text-transform: uppercase; }
+
+@media (prefers-reduced-motion: reduce) {
+  .t-gen { display: none; }
+}

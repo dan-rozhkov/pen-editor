@@ -22,6 +22,7 @@ import { isEmbedContentEmpty } from "@/lib/embedDefaults";
 import { useCanLaunchAgent } from "@/lib/canvasLink/agentLaunch";
 import { EmbedPromptHost } from "./EmbedPromptHost";
 import { StreamingEmbedPreviewLayer } from "./StreamingEmbedPreviewLayer";
+import { useEmbedGenerationReveal } from "./useEmbedGenerationReveal";
 import { redispatchWheelAt } from "./forwardWheelToPixiCanvas";
 import {
   buildElementPath,
@@ -415,10 +416,13 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
   // the store subscriptions are handled by the shared overlay hook; this callback
   // is the embed-specific extra. (Geometry stays imperative so a React re-render —
   // e.g. on active toggle — never clobbers it.)
+  const { overlayRef: revealOverlayRef, syncOverlay, attachReveal, cancelReveal } =
+    useEmbedGenerationReveal(nodeId);
   const syncContentScale = useCallback((scale: number) => {
     const content = contentRef.current;
     if (content) content.style.transform = `scale(${scale})`;
-  }, []);
+    if (hostRef.current) syncOverlay(hostRef.current, scale);
+  }, [syncOverlay]);
 
   const position = useOverlayHostRect(hostRef, nodeId, syncContentScale);
 
@@ -464,9 +468,16 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
 
     // Position now that content exists (applies the current scale transform).
     position();
+    // A screen the agent just created stays hidden until the generation pass reveals it.
+    attachReveal(content);
 
-    return () => { contentRef.current = null; mountRootRef.current = null; };
-  }, [position, nodeId, htmlContent, width, height]);
+    return () => {
+      // The pass is drawn from this content's DOM; new content means a stale drawing.
+      cancelReveal();
+      contentRef.current = null;
+      mountRootRef.current = null;
+    };
+  }, [position, nodeId, htmlContent, width, height, attachReveal, cancelReveal]);
 
   // Live-update editor variables on the already-mounted content root when the
   // Variables tab changes, WITHOUT remounting the shadow DOM (the effect
@@ -1654,23 +1665,32 @@ function EmbedHost({ nodeId }: { nodeId: string }) {
   if (!node) return null;
 
   return (
-    <div
-      ref={hostRef}
-      data-embed-id={nodeId}
-      style={{
-        position: "absolute",
-        overflow: "hidden",
-        pointerEvents: isActive || isPicking ? "auto" : "none",
-        // Forcing "default" is what turns off the crosshair while merely
-        // hovering in pick mode, but a forced (non-"auto") cursor value
-        // inherits into shadow content — during `isEditingElement` that
-        // would paint an arrow over the contenteditable text instead of
-        // letting the browser show its native I-beam caret. So we simply
-        // don't force anything while editing; the shadow content picks its
-        // own cursor as normal.
-        cursor: isPicking && !isActive && !isEditingElement ? "default" : undefined,
-      }}
-    />
+    <>
+      <div
+        ref={hostRef}
+        data-embed-id={nodeId}
+        style={{
+          position: "absolute",
+          overflow: "hidden",
+          pointerEvents: isActive || isPicking ? "auto" : "none",
+          // Forcing "default" is what turns off the crosshair while merely
+          // hovering in pick mode, but a forced (non-"auto") cursor value
+          // inherits into shadow content — during `isEditingElement` that
+          // would paint an arrow over the contenteditable text instead of
+          // letting the browser show its native I-beam caret. So we simply
+          // don't force anything while editing; the shadow content picks its
+          // own cursor as normal.
+          cursor: isPicking && !isActive && !isEditingElement ? "default" : undefined,
+        }}
+      />
+      {/* "Agent generated this" pass (useEmbedGenerationReveal): a light-DOM
+          sibling, since a shadow host renders no children of its own. */}
+      <div
+        ref={revealOverlayRef}
+        data-embed-generation-reveal={nodeId}
+        style={{ position: "absolute", width: 0, height: 0, overflow: "visible", pointerEvents: "none", transformOrigin: "0 0" }}
+      />
+    </>
   );
 }
 

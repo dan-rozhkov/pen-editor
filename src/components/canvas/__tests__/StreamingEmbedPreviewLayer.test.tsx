@@ -4,6 +4,8 @@ import { EmbedLayer } from "../EmbedLayer";
 import { useAiPendingScreenStore, pendingScreenKey } from "@/store/aiPendingScreenStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { resetStores } from "@/test/fixtures";
+import { __resetEmbedGenerationRevealForTests, claimLiveRun } from "@/lib/embedGenerationReveal";
+import type { UIGenerationLiveRun } from "@/vendor/uiGeneration/ui-generation.js";
 
 const SCREEN = { index: 0, start: 0, htmlComplete: false, name: "Login", x: 0, y: 0, width: 390, height: 844 };
 
@@ -21,8 +23,30 @@ describe("<StreamingEmbedPreviewLayer />", () => {
   beforeEach(() => {
     resetStores();
     useAiPendingScreenStore.getState().reset();
+    __resetEmbedGenerationRevealForTests();
   });
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    localStorage.removeItem("pen.generationReveal");
+  });
+
+  it("hides the partial html behind the generation pass and parks the drawing for the landing embed", () => {
+    const { container } = render(<EmbedLayer />);
+    stage("<div><h1>Welcome back</h1><p>Sign in to con");
+    const shadowHost = container.querySelector<HTMLElement>("[data-streaming-embed-shadow]")!;
+    // Still built (the drawing measures it), but not shown.
+    expect(shadowHost.shadowRoot!.textContent).toContain("Welcome back");
+    expect(shadowHost.style.opacity).toBe("0");
+    expect(container.querySelector("[data-streaming-generation]")).not.toBeNull();
+
+    act(() => {
+      useAiPendingScreenStore.getState().clearDraft(pendingScreenKey("s1", "c1"));
+    });
+    let parked: UIGenerationLiveRun | null = null;
+    claimLiveRun("0,0,390,844", (run) => (parked = run));
+    expect(parked).not.toBeNull();
+    parked!.cancel();
+  });
 
   it("renders staged partial html in a non-interactive shadow host and removes it when cleared", () => {
     const { container } = render(<EmbedLayer />);
@@ -89,6 +113,8 @@ describe("<StreamingEmbedPreviewLayer />", () => {
   });
 
   it("morphs growing html in place: img identity kept, only new roots revealed, head is outside the shadow root", () => {
+    // The plain stream: the generation pass would hide it.
+    localStorage.setItem("pen.generationReveal", "off");
     vi.useFakeTimers();
     const animate = vi.fn(() => ({ cancel() {}, finished: Promise.resolve() }));
     const originalAnimate = Object.getOwnPropertyDescriptor(Element.prototype, "animate");

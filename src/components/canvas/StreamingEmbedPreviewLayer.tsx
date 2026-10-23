@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   useAiPendingScreenStore,
   pendingHtmlKey,
@@ -18,6 +18,13 @@ import {
   mountHtmlWithBodyStyles,
 } from "@/utils/embedHtmlUtils";
 import { collectVariableValues } from "@/utils/variableCssUtils";
+import {
+  isGenerationRevealEnabled,
+  parkLiveRun,
+  revealGeometryKey,
+} from "@/lib/embedGenerationReveal";
+import { generateLive, type UIGenerationLiveRun } from "@/vendor/uiGeneration/ui-generation.js";
+import "@/vendor/uiGeneration/ui-generation.css";
 import { embedScreenRect } from "./embedLayerGeometry";
 
 /**
@@ -30,6 +37,14 @@ import { embedScreenRect } from "./embedLayerGeometry";
  * sibling of the shadow host in the light DOM, out of reach of design CSS.
  * When the real embed node lands (same x/y/width/height) the draft disappears and the real
  * `EmbedHost` takes over in place.
+ *
+ * Generation pass (default; kill switch `localStorage pen.generationReveal=off`,
+ * and off under reduced motion): the partial markup is still built and
+ * morphed, but kept invisible. A live wireframe drawing of it
+ * (`generateLive`, `src/vendor/uiGeneration/`) is shown instead and grows as
+ * parts stream in. On unmount the run is parked for the landing `EmbedHost`,
+ * which reveals the finished screen under the scan line
+ * (`src/lib/embedGenerationReveal.ts`).
  *
  * Not a scene node — nothing here enters history, the `.pen` or selection. The
  * html is untrusted, so it goes through the same mount pipeline as `EmbedHost`
@@ -116,6 +131,14 @@ function StreamingPreviewHost({
   useEffect(() => {
     sizeRef.current = { width, height };
   }, [width, height]);
+  // Decided once per screen: switching modes mid-stream would show half of each.
+  const [generating] = useState(() => isGenerationRevealEnabled() && !prefersReducedMotion());
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const liveRef = useRef<UIGenerationLiveRun | null>(null);
+  const geometryKeyRef = useRef(revealGeometryKey(x, y, width, height));
+  useEffect(() => {
+    geometryKeyRef.current = revealGeometryKey(x, y, width, height);
+  }, [x, y, width, height]);
 
   const syncScale = useCallback((scale: number) => {
     const t = `scale(${scale})`;
@@ -139,6 +162,13 @@ function StreamingPreviewHost({
     outer.style.top = `${r.top}px`;
     outer.style.width = `${r.width}px`;
     outer.style.height = `${r.height}px`;
+    const overlay = overlayRef.current;
+    if (overlay) {
+      overlay.style.left = outer.style.left;
+      overlay.style.top = outer.style.top;
+      const live = liveRef.current;
+      overlay.style.transform = live ? `scale(${scale / live.scale})` : "";
+    }
     syncScale(scale);
   }, [x, y, width, height, syncScale]);
 
@@ -150,7 +180,7 @@ function StreamingPreviewHost({
   // Writing-head shimmer: WAAPI, so no stylesheet is needed in the light DOM.
   useEffect(() => {
     const line = headLineRef.current;
-    if (!line) return;
+    if (!line || generating) return;
     if (prefersReducedMotion() || typeof line.animate !== "function") {
       line.style.background = ACCENT;
       line.style.opacity = "0.6";
@@ -165,7 +195,7 @@ function StreamingPreviewHost({
       anim.finished?.catch(() => {});
       anim.cancel();
     };
-  }, []);
+  }, [generating]);
 
   const update = useCallback(() => {
     timerRef.current = null;
@@ -212,15 +242,26 @@ function StreamingPreviewHost({
     // Layout reads first, then cosmetic writes.
     const root = mountRootRef.current ?? liveContent;
     const scale = useViewportStore.getState().scale || 1;
-    const elements = Array.from(root.querySelectorAll<HTMLElement>("*")).filter(
-      (el) => !NON_VISUAL.has(el.tagName),
-    );
-    const frontier =
-      measureFrontier(elements, liveContent.getBoundingClientRect().top, root) / scale;
-    contentBottomRef.current = Math.min(Math.max(frontier, 0), h);
-    if (!prefersReducedMotion()) revealed.forEach(reveal);
+    // The writing head is hidden during the generation pass: skip its layout scan.
+    if (!generating) {
+      const elements = Array.from(root.querySelectorAll<HTMLElement>("*")).filter(
+        (el) => !NON_VISUAL.has(el.tagName),
+      );
+      const frontier =
+        measureFrontier(elements, liveContent.getBoundingClientRect().top, root) / scale;
+      contentBottomRef.current = Math.min(Math.max(frontier, 0), h);
+    }
+    if (!generating && !prefersReducedMotion()) revealed.forEach(reveal);
     position();
-  }, [htmlKey, position]);
+    if (generating) {
+      // The content is invisible: the wireframe drawing stands in for it. It
+      // is measured only now: the rebuilt style above dropped the scale
+      // transform, and `position()` put it back.
+      const mount = overlayRef.current;
+      if (!liveRef.current && mount) liveRef.current = generateLive(liveContent, { mount, scale });
+      liveRef.current?.update(scale, liveContent);
+    }
+  }, [htmlKey, position, generating]);
 
   useEffect(() => {
     // First update immediately; later ones on a trailing throttle.
@@ -245,47 +286,85 @@ function StreamingPreviewHost({
     () => () => {
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
       timerRef.current = null;
+      // The screen is landing (or the stream stopped): hand the drawing over
+      // to the embed that takes this place. Unclaimed, it is dropped.
+      const live = liveRef.current;
+      liveRef.current = null;
+      // A StrictMode remount must run the next update in full, or it never
+      // starts a new drawing (the html did not change).
+      mountedRef.current = null;
+      if (!live) return;
+      live.detach();
+      parkLiveRun(geometryKeyRef.current, live);
     },
     [],
   );
 
   return (
-    <div
-      ref={outerRef}
-      data-streaming-embed-preview
-      style={{ position: "absolute", overflow: "hidden", pointerEvents: "none" }}
-    >
-      {/* Design content only; nothing of ours lives in here. */}
+    <>
       <div
-        ref={shadowHostRef}
-        data-streaming-embed-shadow
-        style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%" }}
-      />
-      {/* Writing head: a light-DOM sibling so design CSS cannot restyle it. */}
-      <div
-        ref={headRef}
-        style={{
-          position: "absolute",
-          left: 0,
-          top: 0,
-          width,
-          transformOrigin: "top left",
-          pointerEvents: "none",
-        }}
+        ref={outerRef}
+        data-streaming-embed-preview
+        style={{ position: "absolute", overflow: "hidden", pointerEvents: "none" }}
       >
+        {/* Design content only; nothing of ours lives in here. Laid out but
+            invisible during the generation pass, which measures it. */}
         <div
-          ref={headLineRef}
+          ref={shadowHostRef}
+          data-streaming-embed-shadow
           style={{
             position: "absolute",
             left: 0,
-            right: 0,
-            background: `linear-gradient(90deg,transparent,${ACCENT},transparent)`,
-            backgroundSize: "40% 100%",
-            backgroundRepeat: "no-repeat",
+            top: 0,
+            width: "100%",
+            height: "100%",
+            opacity: generating ? 0 : undefined,
           }}
         />
+        {/* Writing head: a light-DOM sibling so design CSS cannot restyle it. */}
+        <div
+          ref={headRef}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width,
+            transformOrigin: "top left",
+            pointerEvents: "none",
+            // The generation pass has its own reticle and scan line.
+            display: generating ? "none" : undefined,
+          }}
+        >
+          <div
+            ref={headLineRef}
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              background: `linear-gradient(90deg,transparent,${ACCENT},transparent)`,
+              backgroundSize: "40% 100%",
+              backgroundRepeat: "no-repeat",
+            }}
+          />
+        </div>
       </div>
-    </div>
+      {/* Generation pass overlay: outside `outer`, which clips at the screen's
+          edges while the drawing runs ~44 px past them. */}
+      {generating && (
+        <div
+          ref={overlayRef}
+          data-streaming-generation={htmlKey}
+          style={{
+            position: "absolute",
+            width: 0,
+            height: 0,
+            overflow: "visible",
+            pointerEvents: "none",
+            transformOrigin: "0 0",
+          }}
+        />
+      )}
+    </>
   );
 }
 

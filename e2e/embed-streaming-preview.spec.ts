@@ -116,10 +116,16 @@ test("batch_design screen html streams onto the canvas before the node exists", 
     .toContain("Maya Chen");
   const embedsBefore = await countEmbeds(page);
   expect(embedsBefore).toBe(0);
+  // The partial screen is hidden; the generation pass draws its wireframe instead.
+  await expect(page.locator("[data-streaming-generation] .t-gen").first()).toBeVisible();
+  await expect(preview.locator("[data-streaming-embed-shadow]")).toHaveCSS("opacity", "0");
   // Stills for the demo/debugging, attached to the test output.
   await page.screenshot({ path: testInfo.outputPath("streaming-embed-mid.png") });
 
   await streamRange(midFirst, argsJson.length);
+  // The landed embed takes the drawing over and reveals itself under the scan line.
+  await expect(page.locator("[data-embed-generation-reveal] .t-gen").first()).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("generation-reveal-mid.png") });
   await push(page, 0, { type: "tool-input-available", toolCallId: "screens-1", toolName: "batch_design", input: { operations: OPERATIONS } });
   await push(page, 0, { type: "finish-step" });
   await push(page, 0, { type: "finish" });
@@ -133,5 +139,11 @@ test("batch_design screen html streams onto the canvas before the node exists", 
   const embedsAfter = await countEmbeds(page);
   expect(embedsAfter).toBe(2);
   await expect(page.getByText("Two screens are on the canvas.")).toBeVisible();
+  // The pass cleans up after itself: no overlay left, no mask left on the screens.
+  await expect(page.locator(".t-gen")).toHaveCount(0, { timeout: 10_000 });
+  const masks = await page.locator("[data-embed-id]").evaluateAll((hosts) =>
+    hosts.map((h) => (h.shadowRoot?.firstElementChild as HTMLElement | null)?.style.maskImage ?? "missing"),
+  );
+  expect(masks).toEqual(["", ""]);
   await page.screenshot({ path: testInfo.outputPath("streaming-embed-final.png") });
 });

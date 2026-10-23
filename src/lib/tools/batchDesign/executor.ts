@@ -23,6 +23,7 @@ import {
   repointConnectors,
 } from "@/store/sceneStore/helpers/flatStoreHelpers";
 import { syncTextDimensions } from "@/store/sceneStore/helpers/textSync";
+import { markEmbedForGenerationReveal } from "@/lib/embedGenerationReveal";
 import { cloneNodeWithNewId } from "@/utils/cloneNode";
 import { normalizeParagraphs, splitParagraphs } from "@/lib/textLists/paragraphs";
 import {
@@ -103,6 +104,8 @@ function normalizeEmbedNode(
 
   if (created) {
     ctx.createdEmbedIds.add(embed.id);
+    // Cosmetic only: the embed plays the "agent generated this" pass when it mounts.
+    markEmbedForGenerationReveal(embed.id);
   }
 
   // Component pipeline (see lib/embedComponents/pipeline.ts): expand
