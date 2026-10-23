@@ -17,5 +17,8 @@ playwright-report-pwa/
 coverage/
 .worktrees/
 
+# Vitest blob reports from CI shards (merged by test:coverage:merge)
+.vitest-reports
+
 # Flaky-test visibility (scripts/flakyReporter.ts, scripts/flaky-summary.mjs)
 flaky-tests.json

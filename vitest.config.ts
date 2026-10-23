@@ -3,6 +3,12 @@ import { configDefaults, defineConfig } from "vitest/config";
 
 // Standalone Vitest config (separate from vite.config.ts) so tests don't pull
 // in the Tailwind/React plugins or PixiJS-related build settings.
+
+// CI shards the suite (`npm run test:coverage:shard` sets this). A shard only
+// sees half the tests: it writes a blob report for the `coverage` job to
+// merge, and it neither renders coverage reports nor enforces the floors.
+const isCoverageShard = process.env.VITEST_COVERAGE_SHARD === "1";
+
 export default defineConfig({
   resolve: {
     alias: {
@@ -45,10 +51,14 @@ export default defineConfig({
     // retry counts anywhere actionable, see its doc comment) writes every
     // test that passed only after a retry to flaky-tests.json, which
     // scripts/flaky-summary.mjs turns into a CI step-summary table.
-    reporters: ["default", "./scripts/flakyReporter.ts"],
+    reporters: [
+      "default",
+      "./scripts/flakyReporter.ts",
+      ...(isCoverageShard ? ["blob"] : []),
+    ],
     coverage: {
       provider: "v8",
-      reporter: ["text", "html", "json-summary"],
+      reporter: isCoverageShard ? [] : ["text", "html", "json-summary"],
       include: ["src/**/*.{ts,tsx}"],
       exclude: [
         "src/**/__tests__/**",
@@ -63,12 +73,15 @@ export default defineConfig({
       // coverage so `npm run test:coverage` fails if coverage drops, without
       // flaking on minor v8 measurement variance. Ratchet these UP as
       // coverage grows; never lower them to make a red build pass.
-      thresholds: {
-        statements: 42,
-        branches: 35,
-        functions: 48,
-        lines: 43,
-      },
+      // The `coverage` job enforces them on the merged shard reports.
+      thresholds: isCoverageShard
+        ? undefined
+        : {
+            statements: 42,
+            branches: 35,
+            functions: 48,
+            lines: 43,
+          },
     },
   },
 });

@@ -6,7 +6,9 @@ on:
   pull_request:
 
 jobs:
-  test:
+  # Lint, duplication gates and the production build. Unit tests run in the
+  # sharded `unit` job below.
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -22,15 +24,64 @@ jobs:
       # Ratchet on duplicated lines in unit + e2e tests: may never exceed
       # test-dup-baseline.json (see CLAUDE.md → Testing).
       - run: npm run check:dup:tests
-      # test:coverage runs the full suite AND enforces the non-regression
-      # coverage thresholds in vitest.config.ts (fails if coverage drops).
-      - run: npm run test:coverage
+      - run: npm run build
+
+  # Unit tests run in 2 shards: the single coverage step took ~8 min and was
+  # the CI critical path. 2 shards bring it under the e2e job's ~7.5 min; a 3rd
+  # would not shorten wall time because e2e bounds it.
+  unit:
+    name: unit (${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Runs this shard with coverage and writes a blob report. Thresholds are
+      # NOT enforced here (a shard sees half the tests); the `coverage` job
+      # does that on the merged report.
+      - run: npm run test:coverage:shard -- --shard=${{ matrix.shard }}/2
       # Surfaces any test that only passed on retry (see vitest.config.ts's
-      # `retry`/`reporters`) as a step-summary table. Always runs, even if
-      # the suite above failed, and no-ops quietly if nothing was flaky.
+      # `retry`/`reporters`) as a step-summary table. Each shard writes its
+      # own summary, which is how flaky tests are collected from all shards.
+      # Always runs, even if the tests above failed, and no-ops quietly if
+      # nothing was flaky.
       - if: always()
         run: npm run test:flaky-summary
-      - run: npm run build
+      - uses: actions/upload-artifact@v6
+        if: ${{ !cancelled() }}
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: .vitest-reports/*
+          # upload-artifact v4+ skips hidden paths such as .vitest-reports.
+          include-hidden-files: true
+          retention-days: 1
+
+  coverage:
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: blob-report-*
+          merge-multiple: true
+          path: .vitest-reports
+      # Merges the shards' blob reports into one run AND enforces the
+      # non-regression coverage thresholds in vitest.config.ts (fails if
+      # coverage drops). This is the only place the thresholds are enforced.
+      - run: npm run test:coverage:merge
 
   e2e:
     runs-on: ubuntu-latest
@@ -92,7 +143,7 @@ jobs:
       # only a type from electron, so it loads with nothing installed.
       # modelContract belongs here and NOWHERE else: it self-skips
       # (describe.runIf) when ../pen-editor-backend is absent, which is every
-      # run of the ordinary test job, so leaving it out of this list meant
+      # run of the ordinary `unit (N/2)` shards, so leaving it out of this list meant
       # picker/DEFAULT_MODELS drift shipped green in both repos.
       - run: npx vitest run src/lib/__tests__/toolContract.test.ts src/lib/plugins/__tests__/pluginAllowlistContract.test.ts src/lib/__tests__/desktopMenuContract.test.ts src/lib/__tests__/modelContract.test.ts src/lib/__tests__/desktopTokensContract.test.ts src/lib/__tests__/desktopSettingsContract.test.ts
         working-directory: pen-editor
