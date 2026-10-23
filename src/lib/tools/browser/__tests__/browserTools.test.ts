@@ -669,13 +669,20 @@ describe("browse_screenshot placeOnCanvas", () => {
 
   it("places one image rect at x/y with the screenshot size and strips the args", async () => {
     resetStores();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 23, 9, 5, 7));
     const received: unknown[] = [];
     stubShot(async (a) => (received.push(a), shot));
-    const out = JSON.parse(await browseScreenshot({ placeOnCanvas: true, x: 30, y: 40 }));
+    let out: { placedNodeId: string; placedAt: unknown; imageData: string };
+    try {
+      out = JSON.parse(await browseScreenshot({ placeOnCanvas: true, x: 30, y: 40 }));
+    } finally {
+      vi.useRealTimers();
+    }
     expect(received).toEqual([{}]);
     expect(rootCount()).toBe(1);
     const node = useSceneStore.getState().nodesById[out.placedNodeId];
-    expect(node).toMatchObject({ type: "rect", x: 30, y: 40, width: 800, height: 600, name: "Screenshot — Example" });
+    expect(node).toMatchObject({ type: "rect", x: 30, y: 40, width: 800, height: 600, name: "Screenshot — Example · 09:05:07" });
     const fill = getFills(node)[0];
     expect(fill).toMatchObject({ type: "image", image: { url: shot.imageData, mode: "fill" } });
     expect(out.placedAt).toEqual({ x: 30, y: 40, width: 800, height: 600 });
@@ -686,11 +693,18 @@ describe("browse_screenshot placeOnCanvas", () => {
     resetStores();
     seedScene();
     stubShot(async () => ({ ...shot, title: "" }));
-    const out = JSON.parse(await browseScreenshot({ placeOnCanvas: true }));
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 23, 9, 5, 7));
+    let out: { placedNodeId: string; placedAt: unknown; imageData: string };
+    try {
+      out = JSON.parse(await browseScreenshot({ placeOnCanvas: true }));
+    } finally {
+      vi.useRealTimers();
+    }
     const node = useSceneStore.getState().nodesById[out.placedNodeId];
     // content spans x 100..800, y 100..400 -> right edge 800 + 50
     expect(node.x).toBe(850);
-    expect(node.name).toBe("Screenshot — example.com");
+    expect(node.name).toBe("Screenshot — example.com · 09:05:07");
   });
 
   it("uses a second plain capture for the fill when annotate is true", async () => {

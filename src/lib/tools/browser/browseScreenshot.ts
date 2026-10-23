@@ -4,7 +4,7 @@ import {
   type ExecuteBrowseToolOptions,
 } from "@sideform/browser-agent/agent/execute";
 import { getBrowserBridge } from "./bridge";
-import { pageNodeName, placeImageRect } from "./placeOnCanvas";
+import { localClockTime, pageNodeName, placeImageRect } from "./placeOnCanvas";
 import { peBase, safeParseObject } from "./shared";
 
 /**
@@ -52,7 +52,8 @@ const placeOnCanvasStep = async (
     shot = plain;
   }
   const dataUrl = shot.imageData as string;
-  const name = pageNodeName(shot, "Screenshot");
+  // A desktop app's window title never changes, so the capture time tells the nodes apart.
+  const name = `${pageNodeName(shot, "Screenshot")} · ${localClockTime()}`;
 
   // The capture is already in hand: a failed placement (e.g. the canvas tab refused it
   // in the agent panel) is reported next to it instead of throwing the screenshot away.

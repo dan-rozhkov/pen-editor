@@ -282,7 +282,7 @@ export const traceList: ToolHandler = async () => {
 
 export const traceRead: ToolHandler = async (args) => {
   const traceId = typeof args?.traceId === "string" ? args.traceId.trim() : "";
-  if (!traceId) return err("traceId is required. Call trace_list to see the open trace tabs.");
+  if (!traceId) return err("traceId is required. Use `trace.id` from the browse_agent result, or call trace_list to see the open trace tabs.");
   const bridge = getAgentPanelTraceTabsBridge();
   if (!bridge) return err("Trace tabs are not available here (desktop app only).");
   try {
@@ -319,7 +319,7 @@ function parseFrameId(raw: unknown): number | undefined {
  */
 export const traceFrame: ToolHandler = async (args, context) => {
   const traceId = typeof args?.traceId === "string" ? args.traceId.trim() : "";
-  if (!traceId) return err("traceId is required. Call trace_list to see the open trace tabs.");
+  if (!traceId) return err("traceId is required. Use `trace.id` from the browse_agent result, or call trace_list to see the open trace tabs.");
   const frameId = parseFrameId(args?.frameId);
   if (frameId === undefined) return err("frameId must be an integer from 0. Call trace_read and take it from frames.shown[].frameId.");
   let frame;
@@ -340,7 +340,7 @@ export const traceFrame: ToolHandler = async (args, context) => {
   if (args?.placeOnCanvas !== true) return JSON.stringify(out);
   // The image is in hand: a failed placement is reported next to it.
   try {
-    const placed = await placeImageRect(frame.src, frame as unknown as Record<string, unknown>, `Trace frame ${frame.id}`, args, context?.signal, context?.sessionId);
+    const placed = await placeImageRect(frame.src, frame as unknown as Record<string, unknown>, `Trace frame ${frame.id}${typeof frame.stepIndex === "number" ? ` · step ${frame.stepIndex}` : ""}`, args, context?.signal, context?.sessionId);
     if (!placed) return JSON.stringify({ ...out, placeError: "Placing the frame was aborted." });
     return JSON.stringify({ ...out, placedNodeId: placed.id, placedAt: { x: placed.x, y: placed.y, width: placed.width, height: placed.height } });
   } catch (e) {

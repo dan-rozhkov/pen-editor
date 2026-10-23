@@ -36,6 +36,11 @@ export function pageNodeName(page: Record<string, unknown>, prefix: string): str
   return `${prefix} — ${label}`;
 }
 
+/** Local 24-hour `HH:MM:SS`, zero-padded. */
+export function localClockTime(at: Date = new Date()): string {
+  return [at.getHours(), at.getMinutes(), at.getSeconds()].map((n) => String(n).padStart(2, "0")).join(":");
+}
+
 /**
  * Where the node is placed when this page has no scene of its own (the agent
  * panel, docs/canvas-link.md): receives the node WITHOUT position and

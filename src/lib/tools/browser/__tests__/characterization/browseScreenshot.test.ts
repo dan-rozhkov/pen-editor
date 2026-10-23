@@ -70,6 +70,14 @@ describe("browse_screenshot without placeOnCanvas", () => {
 });
 
 describe("browse_screenshot placeOnCanvas", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 23, 9, 5, 7));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("places one image rect at x/y and returns placedNodeId/placedAt after the capture fields", async () => {
     const bridge = bridgeWith({ screenshot: [SHOT] });
     const out = await browseScreenshot({ placeOnCanvas: true, x: 30, y: 40 });
@@ -81,7 +89,7 @@ describe("browse_screenshot placeOnCanvas", () => {
     const n = node(parsed.placedNodeId);
     expect(n).toMatchObject({
       type: "rect",
-      name: "Screenshot — Example",
+      name: "Screenshot — Example · 09:05:07",
       x: 30,
       y: 40,
       width: 800,
@@ -102,7 +110,7 @@ describe("browse_screenshot placeOnCanvas", () => {
     seedScene();
     bridgeWith({ screenshot: [{ ...SHOT, title: "   " }] });
     const parsed = JSON.parse(await browseScreenshot({ placeOnCanvas: true }));
-    expect(node(parsed.placedNodeId)).toMatchObject({ x: 850, name: "Screenshot — example.com" });
+    expect(node(parsed.placedNodeId)).toMatchObject({ x: 850, name: "Screenshot — example.com · 09:05:07" });
     expect(parsed.placedAt.x).toBe(850);
   });
 
@@ -136,10 +144,10 @@ describe("browse_screenshot placeOnCanvas", () => {
       names.push(node(p.placedNodeId).name ?? "<unnamed>");
     }
     expect(names).toEqual([
-      "Screenshot — browser",
-      "Screenshot — browser",
-      `Screenshot — ${"T".repeat(59)}…`,
-      "Screenshot — browser",
+      "Screenshot — browser · 09:05:07",
+      "Screenshot — browser · 09:05:07",
+      `Screenshot — ${"T".repeat(59)}… · 09:05:07`,
+      "Screenshot — browser · 09:05:07",
     ]);
   });
 
@@ -187,7 +195,7 @@ describe("browse_screenshot placeOnCanvas", () => {
     // Result = annotated capture + placement of the plain one.
     expect(parsed).toEqual({ ...annotated, placedNodeId: expect.any(String), placedAt: { x: 1, y: 2, width: 400, height: 300 } });
     const n = node(parsed.placedNodeId);
-    expect(n).toMatchObject({ width: 400, height: 300, name: "Screenshot — Plain" });
+    expect(n).toMatchObject({ width: 400, height: 300, name: "Screenshot — Plain · 09:05:07" });
     expect(getFills(n)[0]).toMatchObject({ image: { url: "data:image/jpeg;base64,PLAIN" } });
   });
 

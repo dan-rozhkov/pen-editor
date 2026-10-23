@@ -226,6 +226,20 @@ describe("trace_frame", () => {
     expect(node).toMatchObject({ type: "rect", width: 640 });
   });
 
+  it("names the placed node with the step the frame belongs to, when it has one", async () => {
+    withTrace();
+    const out = await call({ traceId: "t1", frameId: 1, placeOnCanvas: true });
+    expect(out.stepIndex).toBe(2);
+    expect(useSceneStore.getState().nodesById[out.placedNodeId].name).toBe("Trace frame 1 · step 2");
+  });
+
+  it("names the placed node without a step suffix when the frame has no stepIndex", async () => {
+    withTrace();
+    const out = await call({ traceId: "t1", frameId: 5, placeOnCanvas: true });
+    expect(out).not.toHaveProperty("stepIndex");
+    expect(useSceneStore.getState().nodesById[out.placedNodeId].name).toBe("Trace frame 5");
+  });
+
   it("errors on an unknown frame id and points at trace_read", async () => {
     withTrace();
     const out = await call({ traceId: "t1", frameId: 99 });
