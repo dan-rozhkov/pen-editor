@@ -107,7 +107,7 @@ export function WorkflowCanvas({ steps, setSteps }: WorkflowCanvasProps) {
 
   if (steps.length === 0) {
     return (
-      <div className="mx-auto flex w-full max-w-[460px] flex-col items-center rounded-2xl border border-dashed border-border-light bg-surface-panel px-6 py-10">
+      <div className="mx-auto flex w-full max-w-[460px] flex-col items-center rounded-xl border border-dashed border-border-light bg-surface-panel px-6 py-10">
         <EmptyState
           icon={<ListNumbersIcon weight="light" />}
           title="No steps yet"
@@ -172,7 +172,7 @@ export function WorkflowCanvas({ steps, setSteps }: WorkflowCanvasProps) {
           size="icon-lg"
           tooltip="Add step"
           onClick={() => addAt(steps.length)}
-          className="size-10 rounded-full bg-surface-panel text-text-muted shadow-[0_1px_2px_rgba(0,0,0,0.05),0_6px_16px_-6px_rgba(0,0,0,0.1)] hover:text-text-primary"
+          className="size-10 rounded-full bg-surface-panel text-text-muted shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:text-text-primary"
         >
           <PlusIcon weight="light" />
         </IconButton>

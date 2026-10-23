@@ -93,14 +93,14 @@ export function StepCard({ step, index, count, registerInput, onChange, onEnter,
         drag.onDrop(index);
       }}
       className={cn(
-        "group/step relative flex w-full items-start gap-3 rounded-2xl border border-border-default bg-surface-panel p-3 shadow-[0_1px_2px_rgba(0,0,0,0.05),0_6px_16px_-6px_rgba(0,0,0,0.1)] transition-[border-color,opacity] focus-within:border-text-muted",
+        "group/step relative flex w-full items-start gap-3 rounded-xl border border-border-default bg-surface-panel p-3 shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-[border-color,opacity] has-[textarea:focus]:border-accent-light",
         drag.dragging && "opacity-40",
-        drag.over && !drag.dragging && "border-text-muted",
+        drag.over && !drag.dragging && "border-accent-light",
       )}
     >
       <span
         aria-hidden
-        className="flex size-8 shrink-0 select-none items-center justify-center rounded-lg bg-surface-hover text-xs font-medium text-text-secondary tabular-nums"
+        className="flex size-8 shrink-0 select-none items-center justify-center rounded-lg bg-surface-hover text-xs font-medium text-text-secondary tabular-nums transition-colors group-has-[textarea:focus]/step:bg-accent-selection group-has-[textarea:focus]/step:text-accent-primary"
       >
         {number}
       </span>
