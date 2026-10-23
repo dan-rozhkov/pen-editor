@@ -105,19 +105,32 @@ describe("WorkflowPage", () => {
     await waitFor(() => expect(storedTexts(wf.id)).toEqual(["A", "B", "C"]), SAVED);
   });
 
-  it("deletes a step", async () => {
+  const chooseStepAction = async (n: number, action: string) => {
+    clickLabel(`Step ${n} menu`);
+    fireEvent.click(await screen.findByRole("menuitem", { name: action }));
+  };
+
+  it("deletes a step from its menu", async () => {
     const wf = openSeeded(["A", "B", "C"]);
-    clickLabel("Delete step 2");
+    await chooseStepAction(2, "Delete");
     await waitFor(() => expect(storedTexts(wf.id)).toEqual(["A", "C"]), SAVED);
   });
 
   it.each([
-    ["Move step 2 up", ["B", "A", "C"]],
-    ["Move step 2 down", ["A", "C", "B"]],
-  ])("%s persists the new order", async (label, expected) => {
+    ["Move up", ["B", "A", "C"]],
+    ["Move down", ["A", "C", "B"]],
+    ["Duplicate", ["A", "B", "B", "C"]],
+  ])("%s from the step menu persists the new order", async (action, expected) => {
     const wf = openSeeded(["A", "B", "C"]);
-    clickLabel(label);
+    await chooseStepAction(2, action);
     await waitFor(() => expect(storedTexts(wf.id)).toEqual(expected), SAVED);
+  });
+
+  it("adds a step below from the gutter", async () => {
+    const wf = openSeeded(["A", "C"]);
+    clickLabel("Add step after step 1");
+    fireEvent.change(stepField(2), { target: { value: "B" } });
+    await waitFor(() => expect(storedTexts(wf.id)).toEqual(["A", "B", "C"]), SAVED);
   });
 
   it("Enter adds the next step and Shift+Enter does not", async () => {

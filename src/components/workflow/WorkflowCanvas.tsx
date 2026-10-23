@@ -84,6 +84,18 @@ export function WorkflowCanvas({ steps, setSteps }: WorkflowCanvasProps) {
     [steps, setSteps],
   );
 
+  const duplicate = useCallback(
+    (index: number) => {
+      const id = newStepId();
+      focusId.current = id;
+      setSteps((current) => {
+        const source = current[index];
+        return source ? insertStepAt(current, index + 1, { id, text: source.text }) : current;
+      });
+    },
+    [setSteps],
+  );
+
   const remove = useCallback(
     (index: number) => {
       focusId.current = (steps[index - 1] ?? steps[index + 1])?.id ?? null;
@@ -143,6 +155,7 @@ export function WorkflowCanvas({ steps, setSteps }: WorkflowCanvasProps) {
                 if (steps.length > 1) remove(i);
               }}
               onMove={move}
+              onDuplicate={duplicate}
               onRemove={remove}
               onNeighbor={neighbor}
               drag={{
