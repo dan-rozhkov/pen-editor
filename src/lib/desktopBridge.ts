@@ -69,6 +69,31 @@ export interface DesktopDocsDiskApi {
   remove?(id: string): Promise<{ ok: true } | { error: string }>;
 }
 
+/** One canvas as the shell lists it (`<userData>/canvases/<id>.meta.json`). */
+export interface StoredCanvasMeta {
+  id: string;
+  title: string;
+  updatedAt: number;
+  rev: number;
+}
+
+/** A canvas as the shell stores it: `document` is the `.pen` JSON string (`serializeDocument`). */
+export interface StoredCanvas extends StoredCanvasMeta {
+  document: string;
+}
+
+/**
+ * The shell's on-disk canvas store (desktop editor tabs). Every method is optional: older
+ * shells lack them. Ids match `^[A-Za-z0-9_-]{1,64}$`; the document is at most 64 MB.
+ */
+export interface DesktopCanvasesApi {
+  list?(): Promise<{ canvases: StoredCanvasMeta[] } | { error: string }>;
+  read?(id: string): Promise<{ canvas: StoredCanvas | null } | { error: string }>;
+  /** Disk keeps the higher rev; `stale` = disk already has rev >= this one and nothing was written. */
+  save?(canvas: StoredCanvas): Promise<{ ok: true; rev: number } | { ok: true; stale: true; rev: number } | { error: string }>;
+  remove?(id: string): Promise<{ ok: true } | { error: string }>;
+}
+
 /** The shell's Settings tab. `section` is a SettingsSection id (src/lib/openSettings.ts). */
 export interface DesktopSettingsApi {
   open?(section?: string): Promise<{ ok: boolean }> | void;
@@ -118,6 +143,8 @@ export interface PenDesktopApi {
     /** Prints the current Document tab to a PDF (save dialog in the shell). Absent on an older shell. */
     exportPdf?(fileName: string): Promise<{ ok: true; path: string } | { canceled: true } | { error: string }>;
   };
+  /** Canvas disk store; see src/lib/canvases/desktopCanvasPersistence.ts. Absent on the web and on an older shell. */
+  canvases?: DesktopCanvasesApi;
   setDocumentTitle?(title: string): void;
   /** Opens or focuses the Settings tab (/settings), optionally on a section. Absent on an older shell. */
   settings?: DesktopSettingsApi;
@@ -179,6 +206,12 @@ export interface PenDesktopApi {
 declare global {
   interface Window {
     penDesktop?: PenDesktopApi;
+    /**
+     * Defined by desktopCanvasPersistence while canvas persistence is active. Forces a save of
+     * unsaved content and resolves after the shell's `canvases:save` reply (at once when nothing
+     * is pending). Never rejects. The shell awaits it before closing a tab and on quit.
+     */
+    penCanvasFlush?: () => Promise<void>;
   }
 }
 

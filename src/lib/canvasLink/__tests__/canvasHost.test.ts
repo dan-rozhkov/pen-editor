@@ -15,6 +15,11 @@ import { AppendEncoder } from "../appendCodec";
 import { resetChatModeForTests } from "@/lib/chatMode";
 import { maybeStartCanvasHost, startCanvasHost } from "../canvasHost";
 import { buildSceneContext } from "../sceneContext";
+import { serializeLiveDocument } from "@/lib/canvases/canvasIdentity";
+import {
+  resetDesktopCanvasPersistenceForTests,
+  startDesktopCanvasPersistence,
+} from "@/lib/canvases/desktopCanvasPersistence";
 import type {
   CanvasHostBridge,
   CanvasToChatMsg,
@@ -567,6 +572,83 @@ describe("maybeStartCanvasHost gate", () => {
     expect(f.bridge.register).toHaveBeenCalledTimes(1);
     stopFn?.();
     useEditorModeStore.getState().exitToEdit();
+  });
+
+  it("defers registering while the canvas is still loading from disk, and never hangs", async () => {
+    vi.useFakeTimers();
+    try {
+      resetDesktopCanvasPersistenceForTests();
+      const f = fakeBridge();
+      let resolveRead!: (v: unknown) => void;
+      window.penDesktop = {
+        onMenuCommand: () => () => {},
+        agentLayout: true,
+        canvasHost: f.bridge,
+        canvases: { read: () => new Promise((r) => (resolveRead = r)) as never, save: async () => ({ ok: true as const, rev: 1 }) },
+      };
+      const stopPersistence = startDesktopCanvasPersistence()!;
+      const stopFn = maybeStartCanvasHost();
+      expect(stopFn).not.toBeNull();
+      expect(f.bridge.register).not.toHaveBeenCalled();
+      resolveRead({ canvas: null });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(f.bridge.register).toHaveBeenCalledTimes(1);
+      stopFn?.();
+      stopPersistence();
+
+      // A read that never answers: the host still registers after the cap, unless stopped first.
+      resetDesktopCanvasPersistenceForTests();
+      const g = fakeBridge();
+      window.penDesktop = {
+        onMenuCommand: () => () => {},
+        agentLayout: true,
+        canvasHost: g.bridge,
+        canvases: { read: () => new Promise(() => {}) as never, save: async () => ({ ok: true as const, rev: 1 }) },
+      };
+      const stop2 = startDesktopCanvasPersistence()!;
+      const stopped = maybeStartCanvasHost();
+      const kept = maybeStartCanvasHost();
+      stopped?.();
+      await vi.advanceTimersByTimeAsync(5001);
+      expect(g.bridge.register).toHaveBeenCalledTimes(1);
+      kept?.();
+      stop2();
+    } finally {
+      resetDesktopCanvasPersistenceForTests();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps deferring through the post-apply settle of a stored canvas", async () => {
+    vi.useFakeTimers();
+    try {
+      resetDesktopCanvasPersistenceForTests();
+      seedScene();
+      const document = serializeLiveDocument();
+      resetStores();
+      const f = fakeBridge();
+      window.penDesktop = {
+        onMenuCommand: () => () => {},
+        agentLayout: true,
+        canvasHost: f.bridge,
+        canvases: {
+          read: async () => ({ canvas: { id: "cv_settle", title: "T", updatedAt: 1, rev: 1, document } }),
+          save: async () => ({ ok: true as const, rev: 2 }),
+        },
+      };
+      const stopPersistence = startDesktopCanvasPersistence()!;
+      const stopFn = maybeStartCanvasHost();
+      await vi.advanceTimersByTimeAsync(0);
+      // applied, but the baseline settle (macrotask + frame) is still running
+      expect(f.bridge.register).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(250);
+      expect(f.bridge.register).toHaveBeenCalledTimes(1);
+      stopFn?.();
+      stopPersistence();
+    } finally {
+      resetDesktopCanvasPersistenceForTests();
+      vi.useRealTimers();
+    }
   });
 
   it("starts when chatless and the bridge exists", () => {

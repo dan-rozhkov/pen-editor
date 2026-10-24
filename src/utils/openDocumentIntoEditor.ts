@@ -18,6 +18,12 @@ import { flattenRefNodesAcrossPages } from "@/store/migrations/flattenRefNodes";
 interface ApplyOpenedDocumentOptions {
   viewportWidth: number;
   viewportHeight: number;
+  /**
+   * false = also leave the editor-chrome (UI) theme alone. File > Open applies the
+   * document's saved theme to the chrome (default); a silent restore (desktop canvas
+   * autosave) must not flip it: that persists `ui-theme` and syncs other tabs and the panel.
+   */
+  syncUITheme?: boolean;
 }
 
 const DEFAULT_THEME: ThemeName = "light";
@@ -70,7 +76,7 @@ export function applyOpenedDocument(
   // resolution) and the editor-chrome theme store, so the document reopens in
   // the theme it was saved with instead of always falling back to light.
   useThemeStore.getState().setActiveTheme(themeToApply);
-  useUIThemeStore.getState().setUITheme(themeToApply);
+  if (options.syncUITheme !== false) useUIThemeStore.getState().setUITheme(themeToApply);
 
   // Clear selection and history before page init
   useSelectionStore.setState({

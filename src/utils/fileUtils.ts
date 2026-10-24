@@ -67,6 +67,8 @@ export function serializeDocument(
   textStyles: TextStyle[] = [],
   fillStyles: FillStyle[] = [],
   effectStyles: EffectStyle[] = [],
+  /** false = compact JSON (desktop canvas autosave); `deserializeDocument` reads both. */
+  pretty = true,
 ): string {
   const doc: PenDocument = {
     version: CURRENT_VERSION,
@@ -86,7 +88,7 @@ export function serializeDocument(
     effectStyles,
     activeTheme,
   }
-  return JSON.stringify(doc, null, 2)
+  return pretty ? JSON.stringify(doc, null, 2) : JSON.stringify(doc)
 }
 
 /**

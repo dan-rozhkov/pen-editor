@@ -6,6 +6,9 @@ import { useTextStyleStore } from "@/store/textStyleStore";
 import { useStyleStore } from "@/store/styleStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useDocumentStore } from "@/store/documentStore";
+import { useGuidesStore } from "@/store/guidesStore";
+import { useMeasurementsStore } from "@/store/measurementsStore";
+import { useCommentsStore } from "@/store/commentsStore";
 import { usePageStore } from "@/store/pageStore";
 import { downloadDocument, downloadPublicPen, openFilePicker } from "@/utils/fileUtils";
 import type { DocumentData } from "@/utils/fileUtils";
@@ -25,33 +28,56 @@ import type { PaletteCommand } from "./types";
  */
 
 /**
- * Gathers the live document state (all pages, variables, styles, theme) into
- * the shape `serializeDocument`/`applyOpenedDocument` expect. This is the
- * single source of truth for "what is the current document" — both
- * `exportAsJson()` below and canvas sharing (`src/lib/shareCanvas.ts`) call
- * it, so a `.json` export and a shared link can never drift apart by
- * gathering the live document two different ways.
+ * The ONE builder of "what is the current document" (all pages, variables, styles,
+ * theme) in the shape `serializeDocument`/`applyOpenedDocument` expect. It does not
+ * mutate any store: the active page is read from the live stores (scene, guides,
+ * measurements, comments), where its data lives until the page is switched away from;
+ * other pages come from pageStore. `collectDocumentData()` (export, share) and the desktop
+ * canvas autosave both use it, so they can never gather the document two different ways.
  */
-export function collectDocumentData(): DocumentData {
-  usePageStore.getState().saveCurrentPageState();
-  const { pages } = usePageStore.getState();
+export function buildLiveDocumentData(): DocumentData {
+  const { pages, activePageId } = usePageStore.getState();
+  const scene = useSceneStore.getState();
   return {
-    pages: pages.map((page) => ({
-      id: page.id,
-      name: page.name,
-      nodes: buildTree(page.rootIds, page.nodesById, page.childrenById),
-      pageBackground: page.pageBackground,
-      guides: page.guides,
-      slideOrder: page.slideOrder,
-      measurements: page.measurements,
-      comments: page.comments,
-    })),
+    pages: pages.map((page) =>
+      page.id === activePageId
+        ? {
+            id: page.id,
+            name: page.name,
+            nodes: buildTree(scene.rootIds, scene.nodesById, scene.childrenById),
+            pageBackground: scene.pageBackground,
+            guides: useGuidesStore.getState().guides,
+            slideOrder: scene.slideOrder,
+            measurements: useMeasurementsStore.getState().measurements,
+            comments: useCommentsStore.getState().threads,
+          }
+        : {
+            id: page.id,
+            name: page.name,
+            nodes: buildTree(page.rootIds, page.nodesById, page.childrenById),
+            pageBackground: page.pageBackground,
+            guides: page.guides,
+            slideOrder: page.slideOrder,
+            measurements: page.measurements,
+            comments: page.comments,
+          },
+    ),
     variables: useVariableStore.getState().variables,
     textStyles: useTextStyleStore.getState().textStyles,
     fillStyles: useStyleStore.getState().fillStyles,
     effectStyles: useStyleStore.getState().effectStyles,
     activeTheme: useThemeStore.getState().activeTheme,
   };
+}
+
+/**
+ * The live document for export and sharing: `exportAsJson()` below and canvas sharing
+ * (`src/lib/shareCanvas.ts`) call it. Unlike `buildLiveDocumentData()` it first writes the
+ * active page back into pageStore (`saveCurrentPageState`), which export/share rely on.
+ */
+export function collectDocumentData(): DocumentData {
+  usePageStore.getState().saveCurrentPageState();
+  return buildLiveDocumentData();
 }
 
 export function exportAsJson(): void {

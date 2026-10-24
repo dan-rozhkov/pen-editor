@@ -36,6 +36,7 @@ import { OfflineBanner } from "./components/status/OfflineBanner";
 import { ShareDialog } from "./components/share/ShareDialog";
 import { useSharedViewStore } from "./store/sharedViewStore";
 import { EditorProviders } from "./components/EditorProviders";
+import { startDesktopCanvasPersistence } from "./lib/canvases/desktopCanvasPersistence";
 import { registerMountedEditor } from "@/lib/uiTheme";
 
 const PixiCanvas = lazy(() => import("./pixi/PixiCanvas").then((m) => ({ default: m.PixiCanvas })));
@@ -158,6 +159,15 @@ function App() {
     void startWebMcp();
     return () => stopWebMcp();
   }, []);
+
+  // Desktop shell: load this tab's canvas from disk (`?canvas=<id>`, generated when absent),
+  // then autosave it. Declared after the `?view` effect above on purpose: it is a no-op in
+  // view mode (mode !== "edit"), which that effect has entered synchronously by now; it starts
+  // when the editor enters edit mode later too. Declared BEFORE the canvas
+  // host below on purpose: the host defers its registration while this load is pending.
+  // No-op on the web, in view mode and in the shared viewer. See src/lib/canvases/desktopCanvasPersistence.ts.
+  const isEditMode = mode === "edit";
+  useEffect(() => startDesktopCanvasPersistence(), [isSharedView, isEditMode]);
 
   // Canvas link (docs/canvas-link.md): in the desktop agent layout this chatless
   // tab registers as a canvas host so the agent panel can drive its document.

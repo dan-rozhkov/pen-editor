@@ -6,6 +6,7 @@
  * answers per-turn scene-context requests. Every message is keyed by an id and
  * every call is answered; a handler never throws out of `startCanvasHost`.
  */
+import { isCanvasLoadPending, whenCanvasLoadReady } from "@/lib/canvases/desktopCanvasPersistence";
 import { isChatDisabled } from "@/lib/chatMode";
 import { executeToolCall } from "@/hooks/useDesignChat";
 import { getStreamingToolAdapter, streamingToolAdapters } from "@/lib/streamingTools";
@@ -434,5 +435,16 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
 export function maybeStartCanvasHost(): (() => void) | null {
   const bridge = typeof window === "undefined" ? undefined : window.penDesktop?.canvasHost;
   if (!bridge || !isChatDisabled() || useSharedViewStore.getState().isSharedView) return null;
-  return startCanvasHost(bridge);
+  // The tab's canvas may still be loading from disk (desktopCanvasPersistence): registering now
+  // would let the agent's first batch_design land and then be replaced by the loaded scene.
+  if (!isCanvasLoadPending()) return startCanvasHost(bridge);
+  let cancelled = false;
+  let stop: (() => void) | null = null;
+  void whenCanvasLoadReady().then(() => {
+    if (!cancelled) stop = startCanvasHost(bridge);
+  });
+  return () => {
+    cancelled = true;
+    stop?.();
+  };
 }
