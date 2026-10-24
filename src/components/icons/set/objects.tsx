@@ -1,4 +1,5 @@
 import { createIcon } from "../createIcon";
+import { slashed } from "./slash";
 
 // Shapes, devices, containers and data objects.
 
@@ -41,7 +42,7 @@ export const SphereIcon = /*#__PURE__*/ createIcon(
   "Sphere",
   <>
     <circle cx="8" cy="8" r="6" />
-    <ellipse cx="8" cy="8" rx="6" ry="2.5" />
+    <path d="M2 8a6 2.5 0 0 0 12 0" />
   </>,
 );
 
@@ -56,8 +57,8 @@ export const CubeIcon = /*#__PURE__*/ createIcon(
 export const CubeFocusIcon = /*#__PURE__*/ createIcon(
   "CubeFocus",
   <>
-    <path d="M2.5 5.5v-1a2 2 0 0 1 2-2h1M10.5 2.5h1a2 2 0 0 1 2 2v1M13.5 10.5v1a2 2 0 0 1-2 2h-1M5.5 13.5h-1a2 2 0 0 1-2-2v-1" />
-    <path d="M8 5l2.6 1.5v3L8 11 5.4 9.5v-3zM5.4 6.5L8 8l2.6-1.5M8 8v3" />
+    <path d="M2.5 5.25v-.75a2 2 0 0 1 2-2h.75M10.75 2.5h.75a2 2 0 0 1 2 2v.75M13.5 10.75v.75a2 2 0 0 1-2 2h-.75M5.25 13.5H4.5a2 2 0 0 1-2-2v-.75" />
+    <path d="M8 4.5l2.9 1.65v3.7L8 11.5 5.1 9.85v-3.7zM5.1 6.15L8 7.85l2.9-1.7M8 7.85v3.65" />
   </>,
 );
 
@@ -65,15 +66,15 @@ export const StackIcon = /*#__PURE__*/ createIcon(
   "Stack",
   <>
     <path d="M8 2.5l6 3-6 3-6-3z" />
-    <path d="M2 8.25l6 3 6-3M2 11l6 3 6-3" />
+    <path d="M2 8.5l6 3 6-3M2 11.5l6 3 6-3" />
   </>,
 );
 
 export const CardsIcon = /*#__PURE__*/ createIcon(
   "Cards",
   <>
-    <rect x="2.5" y="5.5" width="11" height="8" rx="1.75" />
-    <path d="M4.5 2.75h7" />
+    <rect x="2.5" y="5.5" width="8" height="8" rx="1.75" />
+    <path d="M5.5 2.5h6.25a1.75 1.75 0 0 1 1.75 1.75V10" />
   </>,
 );
 
@@ -96,13 +97,14 @@ export const ImageIcon = /*#__PURE__*/ createIcon(
   </>,
 );
 
-export const ImageBrokenIcon = /*#__PURE__*/ createIcon(
-  "ImageBroken",
-  <>
-    <path d="M9 2.5H4.25A1.75 1.75 0 0 0 2.5 4.25v7.5a1.75 1.75 0 0 0 1.75 1.75H5.5L8.75 8 7.25 6.5z" />
-    <circle cx="4.9" cy="5.25" r="1" fill="currentColor" stroke="none" />
-    <path d="M11.25 2.5h.5a1.75 1.75 0 0 1 1.75 1.75v7.5a1.75 1.75 0 0 1-1.75 1.75H7.75L11 8 9.5 6.5z" />
-  </>,
+export const ImageBrokenIcon = /*#__PURE__*/ createIcon("ImageBroken", (uid) =>
+  slashed(uid, "ImageBroken",
+    <>
+      <rect x="2.5" y="2.5" width="11" height="11" rx="1.75" />
+      <circle cx="10.5" cy="5.75" r="1" fill="currentColor" stroke="none" />
+      <path d="M2.5 10.75L6.25 7l4 4 1.5-1.5 1.75 1.75" />
+    </>,
+  ),
 );
 
 export const ImageSquareIcon = /*#__PURE__*/ createIcon(
@@ -127,7 +129,7 @@ export const FilmStripIcon = /*#__PURE__*/ createIcon(
   "FilmStrip",
   <>
     <rect x="2.5" y="2.5" width="11" height="11" rx="1.75" />
-    <path d="M5.5 2.5v11M10.5 2.5v11M2.5 6h3M2.5 10h3M10.5 6h3M10.5 10h3" />
+    <path d="M5.5 2.5v11M10.5 2.5v11M2.5 8h3M10.5 8h3" />
   </>,
 );
 
@@ -180,15 +182,13 @@ export const LaptopIcon = /*#__PURE__*/ createIcon(
 export const KeyboardIcon = /*#__PURE__*/ createIcon(
   "Keyboard",
   <>
-    <rect x="2" y="4" width="12" height="8" rx="1.75" />
-    <circle cx="5" cy="6.75" r="0.9" fill="currentColor" stroke="none" />
-    <circle cx="8" cy="6.75" r="0.9" fill="currentColor" stroke="none" />
-    <circle cx="11" cy="6.75" r="0.9" fill="currentColor" stroke="none" />
-    <path d="M5.5 9.5h5" />
+    <rect x="1.75" y="3.5" width="12.5" height="9" rx="1.75" />
+    <path d="M5 6.5h.01M8 6.5h.01M11 6.5h.01" />
+    <path d="M5 9.5h6" />
   </>,
   <path
     fillRule="evenodd"
-    d="M3.4 3.4h9.2a2 2 0 0 1 2 2v5.2a2 2 0 0 1-2 2H3.4a2 2 0 0 1-2-2V5.4a2 2 0 0 1 2-2zM5 5.75a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM8 5.75a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM11 5.75a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM5.65 8.85h4.7a.65.65 0 0 1 0 1.3h-4.7a.65.65 0 0 1 0-1.3z"
+    d="M3.5 2.9h9a2.35 2.35 0 0 1 2.35 2.35v5.5a2.35 2.35 0 0 1-2.35 2.35h-9A2.35 2.35 0 0 1 1.15 10.75v-5.5A2.35 2.35 0 0 1 3.5 2.9zM5 5.6a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8zM8 5.6a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8zM11 5.6a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8zM5 8.85h6a.65.65 0 0 1 0 1.3H5a.65.65 0 0 1 0-1.3z"
   />,
 );
 
@@ -196,7 +196,7 @@ export const SidebarIcon = /*#__PURE__*/ createIcon(
   "Sidebar",
   <>
     <rect x="2" y="3" width="12" height="10" rx="1.75" />
-    <path d="M6.5 3v10M4 6h.01M4 8.5h.01" />
+    <path d="M7.25 3v10M3.75 6h1.5M3.75 8.5h1.5" />
   </>,
 );
 
@@ -210,22 +210,22 @@ export const SidebarSimpleIcon = /*#__PURE__*/ createIcon(
 
 export const PlugsIcon = /*#__PURE__*/ createIcon(
   "Plugs",
-  <g transform="rotate(-45 8 8)">
-    <path d="M1.5 8h2M3.5 5.5h3.5v5H3.5zM7 6.5h3.5M7 9.5h3.5M10.5 5.5h3.5v5h-3.5zM14 8h.5" />
-  </g>,
+  <>
+    <path d="M5.75 2v3M10.25 2v3M4.25 5h7.5v2.5a3.75 3.75 0 0 1-7.5 0zM8 11.25V14" />
+  </>,
 );
 
 export const PuzzlePieceIcon = /*#__PURE__*/ createIcon(
   "PuzzlePiece",
-  <path d="M3.5 5.5H5a1.75 1.75 0 1 1 3 0H9.5a1 1 0 0 1 1 1V8a1.75 1.75 0 1 1 0 3v1.5a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z" />,
-  <path d="M3.5 4.9H4.17A2.35 2.35 0 1 1 8.83 4.9H9.5A1.6 1.6 0 0 1 11.1 6.5V7.17A2.35 2.35 0 1 1 11.1 11.83V12.5A1.6 1.6 0 0 1 9.5 14.1H3.5A1.6 1.6 0 0 1 1.9 12.5V6.5A1.6 1.6 0 0 1 3.5 4.9z" />,
+  <path d="M3.5 5.5H5.55A1.8 1.8 0 1 1 7.95 5.5H10a1 1 0 0 1 1 1V7.8A1.8 1.8 0 1 1 11 10.2V12.5a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V11.4A1.8 1.8 0 1 0 2.5 9V6.5a1 1 0 0 1 1-1z" />,
+  <path d="M3.5 4.9H4.47A2.4 2.4 0 1 1 9.03 4.9H10a1.6 1.6 0 0 1 1.6 1.6V6.72A2.4 2.4 0 1 1 11.6 11.28V12.5a1.6 1.6 0 0 1-1.6 1.6H3.5a1.6 1.6 0 0 1-1.6-1.6V10.775H2.79A1.2 1.2 0 1 0 2.79 9.625H1.9V6.5a1.6 1.6 0 0 1 1.6-1.6z" />,
 );
 
 export const KeyIcon = /*#__PURE__*/ createIcon(
   "Key",
   <>
-    <circle cx="10.5" cy="5.5" r="3.25" />
-    <path d="M8.2 7.8L2.5 13.5M6.5 9.5L8 11M4.5 11.5L6 13" />
+    <circle cx="5" cy="8" r="3" />
+    <path d="M8 8h6M11 8v2.5M14 8v2" />
   </>,
 );
 
@@ -248,7 +248,7 @@ export const WrenchIcon = /*#__PURE__*/ createIcon(
 export const GearIcon = /*#__PURE__*/ createIcon(
   "Gear",
   <>
-    <path d="M6.26 3.64L6.73 1.73L9.27 1.73L9.74 3.64L9.85 3.68L11.54 2.67L13.33 4.46L12.32 6.15L12.36 6.26L14.27 6.73L14.27 9.27L12.36 9.74L12.32 9.85L13.33 11.54L11.54 13.33L9.85 12.32L9.74 12.36L9.27 14.27L6.73 14.27L6.26 12.36L6.15 12.32L4.46 13.33L2.67 11.54L3.68 9.85L3.64 9.74L1.73 9.27L1.73 6.73L3.64 6.26L3.68 6.15L2.67 4.46L4.46 2.67L6.15 3.68z" />
+    <path d="M6.55 3.53L6.67 1.74L9.33 1.74L9.45 3.53A4.7 4.7 0 0 1 11.14 4.51L12.76 3.72L14.09 6.02L12.6 7.02A4.7 4.7 0 0 1 12.6 8.98L14.09 9.98L12.76 12.28L11.14 11.49A4.7 4.7 0 0 1 9.45 12.47L9.33 14.26L6.67 14.26L6.55 12.47A4.7 4.7 0 0 1 4.86 11.49L3.24 12.28L1.91 9.98L3.4 8.98A4.7 4.7 0 0 1 3.4 7.02L1.91 6.02L3.24 3.72L4.86 4.51A4.7 4.7 0 0 1 6.55 3.53z" />
     <circle cx="8" cy="8" r="2" />
   </>,
 );

@@ -12,7 +12,7 @@ export const FileCodeIcon = /*#__PURE__*/ createIcon(
   "FileCode",
   <>
     <path d={FILE} />
-    <path d="M6.5 8.5 5.25 9.75l1.25 1.25M9.5 8.5l1.25 1.25L9.5 11" />
+    <path d="M6.75 8.75 5.75 10.25 6.75 11.75M9.25 8.75l1 1.5-1 1.5" />
   </>,
 );
 
@@ -20,7 +20,7 @@ export const FilePlusIcon = /*#__PURE__*/ createIcon(
   "FilePlus",
   <>
     <path d={FILE} />
-    <path d="M8 8v4M6 10h4" />
+    <path d="M8 8.75v3.5M6.25 10.5h3.5" />
   </>,
 );
 
@@ -28,7 +28,7 @@ export const FileXIcon = /*#__PURE__*/ createIcon(
   "FileX",
   <>
     <path d={FILE} />
-    <path d="M6.5 8.5l3 3M9.5 8.5l-3 3" />
+    <path d="M6.5 8.75l3 3M9.5 8.75l-3 3" />
   </>,
 );
 
@@ -36,15 +36,15 @@ export const FileTextIcon = /*#__PURE__*/ createIcon(
   "FileText",
   <>
     <path d={FILE} />
-    <path d="M6 8.5h4M6 11h4" />
+    <path d="M6 8.75h4M6 11.5h4" />
   </>,
 );
 
 export const FilesIcon = /*#__PURE__*/ createIcon(
   "Files",
   <>
-    <path d="M10.5 2.25H8.5A1.5 1.5 0 0 0 7 3.75v6.5a1.5 1.5 0 0 0 1.5 1.5h3a1.5 1.5 0 0 0 1.5-1.5V4.75Z M10.5 2.25v2.5H13" />
-    <path d="M3.5 5.5v7a1.5 1.5 0 0 0 1.5 1.5h4.5" />
+    <path d="M10.25 2.25H8A1.5 1.5 0 0 0 6.5 3.75v6.5A1.5 1.5 0 0 0 8 11.75h3.5a1.5 1.5 0 0 0 1.5-1.5V5Z M10.25 2.25V5H13" />
+    <path d="M3.5 5.5v7A1.5 1.5 0 0 0 5 14h4.5" />
   </>,
 );
 
@@ -61,7 +61,7 @@ export const ClipboardTextIcon = /*#__PURE__*/ createIcon(
   <>
     <path d="M6 3H5a1.5 1.5 0 0 0-1.5 1.5v8A1.5 1.5 0 0 0 5 14h6a1.5 1.5 0 0 0 1.5-1.5v-8A1.5 1.5 0 0 0 11 3h-1" />
     <rect x="6" y="1.75" width="4" height="2.5" rx="1" />
-    <path d="M6 8h4M6 10.5h4" />
+    <path d="M5.75 8.25h4.5M5.75 11h4.5" />
   </>,
 );
 
@@ -111,15 +111,15 @@ export const CodeBlockIcon = /*#__PURE__*/ createIcon(
   "CodeBlock",
   <>
     <rect x="2" y="3" width="12" height="10" rx="1.75" />
-    <path d="M6.5 6.25 4.75 8 6.5 9.75M9.5 6.25 11.25 8 9.5 9.75" />
+    <path d="M6.5 5.75 4.25 8l2.25 2.25M9.5 5.75 11.75 8 9.5 10.25" />
   </>,
 );
 
 export const ReceiptIcon = /*#__PURE__*/ createIcon(
   "Receipt",
   <>
-    <path d="M3.5 13.75v-10.5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10.5l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1Z" />
-    <path d="M6 5.75h4M6 8.25h4" />
+    <path d="M3.5 14V3.25a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1V14l-2.25-1.5L8 14l-2.25-1.5Z" />
+    <path d="M6 5.75h4M6 8.5h4" />
   </>,
 );
 
@@ -176,7 +176,7 @@ export const CalendarBlankIcon = /*#__PURE__*/ createIcon(
 
 export const TrashIcon = /*#__PURE__*/ createIcon(
   "Trash",
-  <path d="M2.5 4.25h11M6.25 4.25v-1c0-.4.35-.75.75-.75h2c.4 0 .75.35.75.75v1M3.75 4.25l.6 8.15c.06.8.72 1.35 1.5 1.35h4.3c.78 0 1.44-.55 1.5-1.35l.6-8.15M6.75 7v4M9.25 7v4" />,
+  <path d="M2.5 4.25h11M6.25 4.25v-1c0-.4.35-.75.75-.75h2c.4 0 .75.35.75.75v1M3.75 4.25l.6 8.15c.06.8.72 1.35 1.5 1.35h4.3c.78 0 1.44-.55 1.5-1.35l.6-8.15M6.5 7v4M9.5 7v4" />,
 );
 
 export const FlagIcon = /*#__PURE__*/ createIcon(
@@ -194,10 +194,10 @@ export const FlagIcon = /*#__PURE__*/ createIcon(
 export const FlagCheckeredIcon = /*#__PURE__*/ createIcon(
   "FlagCheckered",
   <>
-    <path d="M3.75 14V2.5" />
-    <rect x="3.75" y="3.25" width="9" height="6.5" />
-    <rect x="8.25" y="3.25" width="4.5" height="3.25" fill="currentColor" />
-    <rect x="3.75" y="6.5" width="4.5" height="3.25" fill="currentColor" />
+    <path d="M3.75 14V2.75" />
+    <rect x="3.75" y="2.75" width="9.5" height="7" />
+    <rect x="8.5" y="2.75" width="4.75" height="3.5" fill="currentColor" stroke="none" />
+    <rect x="3.75" y="6.25" width="4.75" height="3.5" fill="currentColor" stroke="none" />
   </>,
 );
 
@@ -225,9 +225,9 @@ export const MagnifyingGlassIcon = /*#__PURE__*/ createIcon(
 export const BinocularsIcon = /*#__PURE__*/ createIcon(
   "Binoculars",
   <>
-    <rect x="2.5" y="6" width="4.5" height="7.5" rx="2" />
-    <rect x="9" y="6" width="4.5" height="7.5" rx="2" />
-    <path d="M7 9h2M4 6V3M12 6V3" />
+    <rect x="2" y="7.5" width="5.25" height="6.5" rx="2" />
+    <rect x="8.75" y="7.5" width="5.25" height="6.5" rx="2" />
+    <path d="M3.25 7.5V4h2.75v3.5M10 7.5V4h2.75v3.5M7.25 10.5h1.5" />
   </>,
 );
 
@@ -235,7 +235,7 @@ export const CompassIcon = /*#__PURE__*/ createIcon(
   "Compass",
   <>
     <circle cx="8" cy="8" r="6" />
-    <path d="M10.5 5.5 9.25 9.25 5.5 10.5 6.75 6.75Z" />
+    <path d="M10.75 5.25 9.5 9.5 5.25 10.75 6.5 6.5Z" />
   </>,
 );
 
@@ -275,9 +275,9 @@ export const GitBranchIcon = /*#__PURE__*/ createIcon(
 export const TreeStructureIcon = /*#__PURE__*/ createIcon(
   "TreeStructure",
   <>
-    <rect x="5.75" y="2.5" width="4.5" height="3.5" rx="1" />
-    <rect x="2" y="10" width="4.5" height="3.5" rx="1" />
-    <rect x="9.5" y="10" width="4.5" height="3.5" rx="1" />
-    <path d="M8 6v2h-3.75v2M8 8h3.75v2" />
+    <rect x="5.5" y="2" width="5" height="4" rx="1.25" />
+    <rect x="1.75" y="10" width="5" height="4" rx="1.25" />
+    <rect x="9.25" y="10" width="5" height="4" rx="1.25" />
+    <path d="M8 6v2M4.25 10V8h7.5v2" />
   </>,
 );

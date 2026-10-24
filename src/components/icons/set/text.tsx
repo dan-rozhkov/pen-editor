@@ -88,16 +88,16 @@ export const TextStrikethroughIcon = /*#__PURE__*/ createIcon(
   "TextStrikethrough",
   <>
     <path d="M2.75 8h10.5" />
-    <path d="M10.5 4.5C10 3.4 9.2 2.75 8 2.75c-1.5 0-2.75.8-2.75 2.2 0 .9.4 1.4 1.1 1.8" />
-    <path d="M9.65 9.25c.7.45 1.1 1 1.1 1.75 0 1.4-1.25 2.25-2.75 2.25-1.2 0-2.2-.6-2.75-1.75" />
+    <path d="M11.5 5C11.5 3.7 10 2.75 8 2.75S4.5 3.7 4.5 5.1c0 1 .7 1.6 1.7 2" />
+    <path d="M9.8 8.9c1 .4 1.7 1 1.7 2 0 1.4-1.5 2.35-3.5 2.35s-3.5-.95-3.5-2.35" />
   </>,
 );
 
 export const TextSuperscriptIcon = /*#__PURE__*/ createIcon(
   "TextSuperscript",
   <>
-    <path d="M2 7h7M5.5 7v6.25" />
-    <path d="M11 3.75a1.5 1.5 0 0 1 3 0c0 1.1-1.2 1.7-3 3.25h3" />
+    <path d="M2.75 6.75l5.5 6.5M8.25 6.75l-5.5 6.5" />
+    <path d="M10.25 4.25a1.75 1.75 0 0 1 3.5 0c0 1.25-1.75 1.9-3.5 3h3.75" />
   </>,
 );
 
@@ -121,7 +121,7 @@ export const TextHThreeIcon = /*#__PURE__*/ createIcon(
   "TextHThree",
   <>
     <path d="M2.5 3.5v9M8 3.5v9M2.5 8H8" />
-    <path d="M10.3 6.9A1.7 1.7 0 1 1 12 8.6M12 8.6A2 2 0 1 1 10.4 12" />
+    <path d="M10.25 5h3.25L11.75 8M11.75 8a2 2 0 1 1-1.5 3.5" />
   </>,
 );
 
@@ -188,9 +188,9 @@ export const ListMagnifyingGlassIcon = /*#__PURE__*/ createIcon(
 export const ListNumbersIcon = /*#__PURE__*/ createIcon(
   "ListNumbers",
   <>
-    <path d="M3 4.5 4.5 3.25v3.25" />
-    <path d="M3 10.25a1.5 1.5 0 0 1 3 0c0 1-1.5 1.6-3 3h3" />
-    <path d="M8.5 4.75h4.75M8.5 11h4.75" />
+    <path d="M3.25 4.5 4.75 3.25v3.5" />
+    <path d="M3 10.5a1.75 1.75 0 0 1 3.5 0c0 1.1-1.75 1.8-3.5 3h3.5" />
+    <path d="M8.75 4.75h4.5M8.75 11.5h4.5" />
   </>,
 );
 
@@ -216,7 +216,7 @@ export const HashStraightIcon = /*#__PURE__*/ createIcon(
 
 export const NumberZeroIcon = /*#__PURE__*/ createIcon(
   "NumberZero",
-  <ellipse cx="8" cy="8" rx="3.5" ry="5.25" />,
+  <rect x="4.25" y="2.5" width="7.5" height="11" rx="3.75" />,
 );
 
 export const AsteriskIcon = /*#__PURE__*/ createIcon(
@@ -228,6 +228,6 @@ export const ArticleIcon = /*#__PURE__*/ createIcon(
   "Article",
   <>
     <rect x="2.5" y="2.5" width="11" height="11" rx="1.75" />
-    <path d="M5.5 5.25h5M5.5 8h5M5.5 10.75h2.75" />
+    <path d="M5.5 6h5M5.5 10h3" />
   </>,
 );

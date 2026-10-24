@@ -51,6 +51,27 @@ Nothing goes outside 1.25 → 14.75 (the stroke would be clipped).
   magnifier lens, badge "+" etc. Copy them from existing glyphs.
 - Detail budget: at 16px, no more than ~5 strokes. Drop decoration.
 
+## Against noise
+
+An icon is judged at 16px next to text, not in a zoomed sheet. It is noisy
+when it reads as a texture instead of a shape. Avoid:
+
+- Small parallel lines packed together (hatching, keyboard keys, film
+  sprocket holes, file text lines): use at most two, spaced ≥ 2.5 units.
+- Small closed shapes under ~3 units across (they fill in to a blob).
+- Grey (`fillOpacity`) fills: they read as dirt. Use solid `currentColor`
+  for an emphasised region, or nothing.
+- Badges crammed inside another glyph. A badge (+, ×, arrow) gets a clear
+  zone: cut the base glyph around it with a ≥ 1.25 gap, or drop the base
+  glyph's own details.
+- Literal silhouettes (brain folds, octocat, tooth-by-tooth gears). Prefer
+  the common UI metaphor, as Lucide / SF Symbols / Phosphor draw it.
+
+Before redrawing an unclear glyph, look at how 3–4 established sets draw the
+same idea (Lucide, Tabler, Phosphor, Heroicons, SF Symbols), take the
+metaphor that reads best at small size, and redraw it on our grid. Never
+paste their paths.
+
 ## Fill variant (`weight="fill"`)
 
 Only where the app uses `weight="fill"`. A solid silhouette of the outline

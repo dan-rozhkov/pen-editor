@@ -33,12 +33,12 @@ export const ArrowLineRightIcon = /*#__PURE__*/ createIcon(
 
 export const ArrowsInLineVerticalIcon = /*#__PURE__*/ createIcon(
   "ArrowsInLineVertical",
-  <path d="M2.75 8h10.5M8 2.5v2.5M5.75 3.25 8 5.5l2.25-2.25M8 13.5V11M5.75 12.75 8 10.5l2.25 2.25" />,
+  <path d="M2.75 8h10.5M5.25 2.75 8 5.5l2.75-2.75M5.25 13.25 8 10.5l2.75 2.75" />,
 );
 
 export const ArrowsInSimpleIcon = /*#__PURE__*/ createIcon(
   "ArrowsInSimple",
-  <path d="M2.75 2.75 6.5 6.5M6.5 3.25v3.25H3.25M13.25 13.25 9.5 9.5M9.5 12.75V9.5h3.25" />,
+  <path d="M13.25 2.75 9.5 6.5M9.5 3.25v3.25h3.25M2.75 13.25 6.5 9.5M6.5 12.75V9.5H3.25" />,
 );
 export const ArrowsOutSimpleIcon = /*#__PURE__*/ createIcon(
   "ArrowsOutSimple",
@@ -46,7 +46,7 @@ export const ArrowsOutSimpleIcon = /*#__PURE__*/ createIcon(
 );
 export const ArrowsOutIcon = /*#__PURE__*/ createIcon(
   "ArrowsOut",
-  <path d="M9.5 6.5l3.75-3.75M9.75 2.75h3.5v3.5M6.5 6.5 2.75 2.75M2.75 6.25v-3.5h3.5M9.5 9.5l3.75 3.75M13.25 9.75v3.5h-3.5M6.5 9.5l-3.75 3.75M6.25 13.25h-3.5v-3.5" />,
+  <path d="M9.75 2.75h3.5v3.5M13.25 2.75 10.5 5.5M6.25 2.75h-3.5v3.5M2.75 2.75 5.5 5.5M9.75 13.25h3.5v-3.5M13.25 13.25 10.5 10.5M6.25 13.25h-3.5v-3.5M2.75 13.25 5.5 10.5" />,
 );
 
 export const CornersOutIcon = /*#__PURE__*/ createIcon(
@@ -80,24 +80,24 @@ export const ExportIcon = /*#__PURE__*/ createIcon(
 
 export const SwapIcon = /*#__PURE__*/ createIcon(
   "Swap",
-  <path d="M2.75 4.5h10.5M11 2.25l2.25 2.25L11 6.75M13.25 11.5H2.75M5 9.25 2.75 11.5 5 13.75" />,
+  <path d="M5 13.25V2.75M2.5 5.25 5 2.75l2.5 2.5M11 2.75v10.5M8.5 10.75 11 13.25l2.5-2.5" />,
 );
 
 export const ResizeIcon = /*#__PURE__*/ createIcon(
   "Resize",
   <>
-    <rect x="2.5" y="2.5" width="11" height="11" rx="1.75" />
-    <path d="M10 6 6 10M7.75 6H10v2.25M8.25 10H6V7.75" />
+    <rect x="2.5" y="6.5" width="7" height="7" rx="1.5" />
+    <path d="M10.5 5.5 13.25 2.75M9.75 2.75h3.5v3.5" />
   </>,
 );
 
 export const SortAscendingIcon = /*#__PURE__*/ createIcon(
   "SortAscending",
-  <path d="M2.75 4.5h2.5M2.75 8h4.5M2.75 11.5h6.5M12.25 2.75v10.5M10 11 12.25 13.25 14.5 11" />,
+  <path d="M2.75 4.5h2M2.75 8h3.25M2.75 11.5h4.5M12 2.75v10.5M9.5 10.75 12 13.25l2.5-2.5" />,
 );
 export const SortDescendingIcon = /*#__PURE__*/ createIcon(
   "SortDescending",
-  <path d="M2.75 4.5h6.5M2.75 8h4.5M2.75 11.5h2.5M12.25 13.25V2.75M10 5 12.25 2.75 14.5 5" />,
+  <path d="M2.75 4.5h4.5M2.75 8h3.25M2.75 11.5h2M12 13.25V2.75M9.5 5.25 12 2.75l2.5 2.5" />,
 );
 
 export const FlowArrowIcon = /*#__PURE__*/ createIcon(
@@ -120,14 +120,14 @@ export const PaperPlaneRightIcon = /*#__PURE__*/ createIcon(
 
 export const FileArrowUpIcon = /*#__PURE__*/ createIcon(
   "FileArrowUp",
-  <path d="M9.25 2.25H5a1.5 1.5 0 0 0-1.5 1.5v8.5a1.5 1.5 0 0 0 1.5 1.5h6a1.5 1.5 0 0 0 1.5-1.5V5.5Z M9.25 2.25V5.5h3.25M8 12V8M6 9.75l2-2 2 2" />,
+  <path d="M9.25 2.25H5a1.5 1.5 0 0 0-1.5 1.5v8.5a1.5 1.5 0 0 0 1.5 1.5h6a1.5 1.5 0 0 0 1.5-1.5V5.5Z M9.25 2.25V5.5h3.25M8 12.25V7.75M5.75 10 8 7.75 10.25 10" />,
 );
 
 export const MonitorArrowUpIcon = /*#__PURE__*/ createIcon(
   "MonitorArrowUp",
   <>
-    <rect x="2.5" y="2.75" width="11" height="7.5" rx="1.5" />
-    <path d="M8 10.25v3M5.5 13.25h5M8 8.25V4.75M6.25 6.5 8 4.75l1.75 1.75" />
+    <rect x="2.5" y="2.5" width="11" height="8.5" rx="1.5" />
+    <path d="M8 11v2.25M5.5 13.25h5M8 8.5V4.75M6.25 6.5 8 4.75l1.75 1.75" />
   </>,
 );
 

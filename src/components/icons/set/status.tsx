@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { createIcon } from "../createIcon";
+import { slashed } from "./slash";
 
 // Status, feedback and small UI marks: check/x/plus, alerts, eye, chat,
 // grips, brand marks.
@@ -17,22 +18,6 @@ function cut(uid: string, tag: string, solid: ReactNode, mark: ReactNode): React
         </g>
       </mask>
       <rect x="0" y="0" width="16" height="16" mask={`url(#m${tag}${uid})`} stroke="none" />
-    </>
-  );
-}
-
-/** Slash cut flat through a glyph: the glyph is masked, the slash drawn on top. */
-function slashed(uid: string, tag: string, glyph: ReactNode): ReactNode {
-  return (
-    <>
-      <mask id={`m${tag}${uid}`} maskUnits="userSpaceOnUse" x="0" y="0" width="16" height="16">
-        <rect x="0" y="0" width="16" height="16" fill="white" stroke="none" />
-        {/* Screen-space like the slash itself (non-scaling stroke), so the
-            gap is 1.25px either side at every size. */}
-        <path d="M2.5 2.5l11 11" stroke="black" strokeWidth="3.75" />
-      </mask>
-      <g mask={`url(#m${tag}${uid})`}>{glyph}</g>
-      <path d="M2.5 2.5l11 11" />
     </>
   );
 }
@@ -131,6 +116,9 @@ export const WarningOctagonIcon = /*#__PURE__*/ createIcon(
 );
 
 const EYE = "M1.75 8C3 5.25 5.25 3.75 8 3.75S13 5.25 14.25 8C13 10.75 10.75 12.25 8 12.25S3 10.75 1.75 8Z";
+// Slashed eye: the pupil would sit under the slash and leave crumbs, so the
+// base glyph is the lens alone, a touch fuller.
+const EYE_LENS = "M1.75 8C3.25 4.75 5.5 3.25 8 3.25S12.75 4.75 14.25 8C12.75 11.25 10.5 12.75 8 12.75S3.25 11.25 1.75 8Z";
 
 export const EyeIcon = /*#__PURE__*/ createIcon(
   "Eye",
@@ -142,10 +130,7 @@ export const EyeIcon = /*#__PURE__*/ createIcon(
 
 export const EyeSlashIcon = /*#__PURE__*/ createIcon("EyeSlash", (uid) =>
   slashed(uid, "EyeSlash",
-    <>
-      <path d={EYE} />
-      <circle cx="8" cy="8" r="1.75" />
-    </>,
+    <path d={EYE_LENS} />,
   ),
 );
 
@@ -154,7 +139,7 @@ const HEART = "M8 13.25S2.25 10.1 2.25 6.1a3.1 3.1 0 0 1 5.75-1.6 3.1 3.1 0 0 1 
 export const HeartIcon = /*#__PURE__*/ createIcon(
   "Heart",
   <path d={HEART} />,
-  <path d={HEART} stroke="currentColor" strokeWidth={1.25} />,
+  <path d={HEART} stroke="currentColor" />,
 );
 
 const SPARKLE = "M8 2.25Q8.6 7.4 13.75 8Q8.6 8.6 8 13.75Q7.4 8.6 2.25 8Q7.4 7.4 8 2.25Z";
@@ -162,7 +147,7 @@ const SPARKLE = "M8 2.25Q8.6 7.4 13.75 8Q8.6 8.6 8 13.75Q7.4 8.6 2.25 8Q7.4 7.4 
 export const SparkleIcon = /*#__PURE__*/ createIcon(
   "Sparkle",
   <path d={SPARKLE} />,
-  <path d={SPARKLE} stroke="currentColor" strokeWidth={1.25} />,
+  <path d={SPARKLE} stroke="currentColor" />,
 );
 
 export const LightningIcon = /*#__PURE__*/ createIcon("Lightning", <path d="M9 2L3.75 9H8l-1 5 5.25-7H8Z" />);
@@ -176,8 +161,8 @@ export const LightbulbIcon = /*#__PURE__*/ createIcon(
     <path d="M6.25 13.5h3.5" />
   </>,
   <>
-    <path d={BULB} stroke="currentColor" strokeWidth={1.25} />
-    <path d="M6.25 13.5h3.5" stroke="currentColor" strokeWidth={1.25} />
+    <path d={BULB} stroke="currentColor" />
+    <path d="M6.25 13.5h3.5" stroke="currentColor" />
   </>,
 );
 
@@ -190,17 +175,19 @@ export const MegaphoneIcon = /*#__PURE__*/ createIcon(
     <path d="M5.25 10l.9 3h1.6" />
   </>,
   <>
-    <path d={HORN} stroke="currentColor" strokeWidth={1.25} />
-    <path d="M5.25 10l.9 3h1.6" stroke="currentColor" strokeWidth={1.25} />
+    <path d={HORN} stroke="currentColor" />
+    <path d="M5.25 10l.9 3h1.6" stroke="currentColor" />
   </>,
 );
+
+const BRAIN_L = "M8 3.5A1.75 1.75 0 0 0 4.9 4.6 1.95 1.95 0 0 0 3.4 8 2.2 2.2 0 0 0 5 12 1.6 1.6 0 0 0 8 12.5Z";
+const BRAIN_R = "M8 3.5A1.75 1.75 0 0 1 11.1 4.6 1.95 1.95 0 0 1 12.6 8 2.2 2.2 0 0 1 11 12 1.6 1.6 0 0 1 8 12.5Z";
 
 export const BrainIcon = /*#__PURE__*/ createIcon(
   "Brain",
   <>
-    <path d="M8 3.5v9" />
-    <path d="M8 3.5A2 2 0 0 0 4.4 4.3 2.4 2.4 0 0 0 3 6.5c0 .7.3 1.3.8 1.7A2.4 2.4 0 0 0 3.5 10.5 2.2 2.2 0 0 0 6 12.5a2 2 0 0 0 2 0" />
-    <path d="M8 3.5A2 2 0 0 1 11.6 4.3 2.4 2.4 0 0 1 13 6.5c0 .7-.3 1.3-.8 1.7a2.4 2.4 0 0 1 .3 2.3A2.2 2.2 0 0 1 10 12.5a2 2 0 0 1-2 0" />
+    <path d={BRAIN_L} />
+    <path d={BRAIN_R} />
   </>,
 );
 
@@ -269,22 +256,23 @@ export const DotsThreeVerticalIcon = /*#__PURE__*/ createIcon(
   </>,
 );
 
-const CLOUD = "M4.75 12.5a3 3 0 0 1-.4-5.97 3.9 3.9 0 0 1 7.4.9 2.55 2.55 0 0 1-.5 5.07Z";
+const CLOUD = "M4.5 12.75a3.25 3.25 0 0 1-.6-6.45 4.25 4.25 0 0 1 8.2.7 2.9 2.9 0 0 1-.6 5.75Z";
 
 export const CloudSlashIcon = /*#__PURE__*/ createIcon("CloudSlash", (uid) => slashed(uid, "CloudSlash", <path d={CLOUD} />));
 
 export const WifiSlashIcon = /*#__PURE__*/ createIcon("WifiSlash", (uid) =>
   slashed(uid, "WifiSlash",
     <>
-      <path d="M1.75 6a9.25 9.25 0 0 1 12.5 0M4.4 8.9a5.25 5.25 0 0 1 7.2 0" />
-      <circle cx="8" cy="12" r="0.95" {...DOT} />
+      <path d="M2.06 7.61A6.5 6.5 0 0 1 13.94 7.61" />
+      <path d="M5.13 9.09A3.1 3.1 0 0 1 10.87 9.09" />
+      <circle cx="8" cy="10.25" r="0.95" {...DOT} />
     </>,
   ),
 );
 
 const APPLE =
-  "M8 5.1C7 4.3 3.5 4.4 3.5 8.2c0 2.6 1.7 5.3 3.1 5.3.6 0 .9-.4 1.4-.4s.8.4 1.4.4c1.1 0 2.4-1.9 2.9-3.2-1.3-.5-1.9-1.7-1.8-2.7.1-.9.7-1.4 1.1-1.7-.7-.9-1.8-1.1-2.6-.9C8.6 5 8.3 5 8 5.1Z";
-const APPLE_LEAF = "M8.1 4.5C8 3.3 8.9 2.4 10.2 2.3c.1 1.2-.7 2.2-2.1 2.2Z";
+  "M8 6.25C7 5.2 3.5 5.4 3.5 9c0 2.6 1.6 5 3 5 .7 0 1-.4 1.5-.4s.8.4 1.5.4c1.2 0 2.4-1.5 2.9-2.9a2.1 2.1 0 0 1-.9-3.3c.3-.4.6-.6.9-.8C11.5 5.6 9.2 5.5 8 6.25Z";
+const APPLE_LEAF = "M8.4 4C8.3 2.8 9.2 2 10.5 1.9c.1 1.2-.7 2.1-2.1 2.1Z";
 
 export const AppleLogoIcon = /*#__PURE__*/ createIcon(
   "AppleLogo",
@@ -293,15 +281,16 @@ export const AppleLogoIcon = /*#__PURE__*/ createIcon(
     <path d={APPLE_LEAF} />
   </>,
   <>
-    <path d={APPLE} stroke="currentColor" strokeWidth={1.25} />
-    <path d={APPLE_LEAF} stroke="currentColor" strokeWidth={1.25} />
+    <path d={APPLE} stroke="currentColor" />
+    <path d={APPLE_LEAF} stroke="currentColor" />
   </>,
 );
 
 export const GithubLogoIcon = /*#__PURE__*/ createIcon(
   "GithubLogo",
   <>
-    <path d="M5.75 13.75v-1.4c-2 .45-2.6-.85-2.9-1.5-.25-.5-.75-.85-1.1-1 .75-.15 1.35.45 1.7.95.6.95 1.5.9 2.3.6.05-.5.25-.9.55-1.2-2.1-.25-3.4-1.2-3.4-3.35 0-.75.25-1.4.7-1.95-.15-.55-.2-1.3.15-2 .8 0 1.5.4 1.95.8a6.2 6.2 0 0 1 3.1 0c.45-.4 1.15-.8 1.95-.8.35.7.3 1.45.15 2 .45.55.7 1.2.7 1.95 0 2.15-1.3 3.1-3.4 3.35.35.3.55.8.55 1.5v2.5" />
+    <path d="M3.5 2.75L6.2 3.85A4.6 4.6 0 0 1 9.8 3.85L12.5 2.75Q13.1 4.7 12.2 6.4A4.6 4.6 0 1 1 3.8 6.4Q2.9 4.7 3.5 2.75Z" />
+    <path d="M6.6 12.9c-2.1.8-2.6-.9-4.1-.9" />
   </>,
 );
 
@@ -309,6 +298,6 @@ export const MobbinIcon = /*#__PURE__*/ createIcon(
   "Mobbin",
   <>
     <circle cx="8" cy="8" r="6" />
-    <path d="M5.25 10.75V5.5L8 8.75l2.75-3.25v5.25" />
+    <path d="M5.25 10.75v-5.5L8 8.25l2.75-3v5.5" />
   </>,
 );
