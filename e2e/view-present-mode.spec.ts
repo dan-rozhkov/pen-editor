@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { expectEditorMounted } from "./support/editor";
 
 // Smoke test for View (read-only) and Present (fullscreen) modes. No backend
 // needed. View mode is enabled only via the ?view URL param. We inject a
@@ -42,8 +43,10 @@ test("?view URL param enables read-only view mode", async ({ page }) => {
   await page.goto("/app?view=1");
   // The editor itself is lazy-loaded (its own chunk, separate from the
   // showcase at "/"), so wait for it to actually be mounted before touching
-  // window internals it exposes — a fresh dev-server transform of the
-  // editor's module graph can take a beat longer than an immediate poll.
+  // window internals it exposes. On CI the dev server's editor module graph
+  // routinely takes longer than the 5s expect default, hence the shared
+  // mount wait instead of a bare toBeVisible().
+  await expectEditorMounted(page);
   await expect(page.getByTestId("rail-pages")).toBeVisible();
   // The app enters view mode on load from the URL param.
   await expect.poll(() => getMode(page)).toBe("view");
@@ -59,6 +62,7 @@ test("Present mode via the Play button and overlay navigation", async ({ page })
   await page.goto("/app");
   // Wait for the (lazily-loaded) editor to mount before touching window
   // internals it exposes — see the comment in the test above.
+  await expectEditorMounted(page);
   await expect(page.getByTestId("rail-pages")).toBeVisible();
   await page.evaluate(SEED_FRAME);
 
