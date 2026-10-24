@@ -6,7 +6,7 @@ import {
   CommandGroup,
   CommandItem,
 } from "@/components/ui/command";
-import { GearIcon } from "@phosphor-icons/react";
+import { GearIcon } from "@/components/icons";
 import { SLASH_COMMANDS, YOUR_SKILLS_CATEGORY, type SlashCommand } from "./slashCommands";
 import { useUserSkillStore } from "@/store/userSkillStore";
 

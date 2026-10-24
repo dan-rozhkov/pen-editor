@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { CircleNotch, PencilSimpleLineIcon } from "@phosphor-icons/react";
+import { CircleNotchIcon, PencilSimpleLineIcon } from "@/components/icons";
 import type { EmbedNode } from "@/types/scene";
 import { PropertySection } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
@@ -66,7 +66,7 @@ export function EmbedContentSection({ node }: EmbedContentSectionProps) {
           aria-label={converting ? "Converting to Design" : undefined}
         >
           {converting ? (
-            <CircleNotch
+            <CircleNotchIcon
               aria-hidden="true"
               className="animate-spin"
               weight="thin"

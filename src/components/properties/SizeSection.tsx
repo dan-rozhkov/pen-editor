@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import {
-  LinkSimple,
-  LinkSimpleBreak,
+  LinkSimpleIcon,
+  LinkSimpleBreakIcon,
   ResizeIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import type {
   EmbedNode,
   FlatSceneNode,
@@ -743,9 +743,9 @@ export function SizeSection({
                   }
                 >
                   {node.aspectRatioLocked ? (
-                    <LinkSimple size={18} />
+                    <LinkSimpleIcon size={18} />
                   ) : (
-                    <LinkSimpleBreak size={18} />
+                    <LinkSimpleBreakIcon size={18} />
                   )}
                 </button>
               }

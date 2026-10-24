@@ -14,7 +14,7 @@ import {
   parseColor,
   type Color,
 } from "react-aria-components";
-import { Eyedropper } from "@phosphor-icons/react";
+import { EyedropperIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -204,7 +204,7 @@ export function CustomColorPicker({
                     }
                   }}
                 >
-                  <Eyedropper size={14} />
+                  <EyedropperIcon size={14} />
                 </button>
               )}
             </div>

@@ -4,7 +4,7 @@ import * as React from "react";
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 
 import { cn } from "@/lib/utils";
-import { CaretRightIcon, CheckIcon } from "@phosphor-icons/react";
+import { CaretRightIcon, CheckIcon } from "@/components/icons";
 import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {

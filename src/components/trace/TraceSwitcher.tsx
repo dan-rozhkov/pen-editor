@@ -1,4 +1,4 @@
-import { CheckIcon, ListIcon } from "@phosphor-icons/react";
+import { CheckIcon, ListIcon } from "@/components/icons";
 import { useCallback, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";

@@ -1,36 +1,36 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import {
-  AlignBottom,
-  AlignCenterVertical,
-  AlignTop,
-  ArrowsOut,
-  ArrowLineRight,
-  Article,
+  AlignBottomIcon,
+  AlignCenterVerticalIcon,
+  AlignTopIcon,
+  ArrowsOutIcon,
+  ArrowLineRightIcon,
+  ArticleIcon,
   CheckIcon,
   LinkIcon,
   LinkSimpleIcon,
-  ListBullets,
-  ListNumbers,
+  ListBulletsIcon,
+  ListNumbersIcon,
   MagnifyingGlassIcon,
   MinusIcon,
   PlusIcon,
   SlidersHorizontalIcon,
   NumberZeroIcon,
-  TextAlignCenter,
-  TextAlignLeft,
-  TextAlignRight,
-  TextIndent,
-  TextItalic,
-  TextOutdent,
+  TextAlignCenterIcon,
+  TextAlignLeftIcon,
+  TextAlignRightIcon,
+  TextIndentIcon,
+  TextItalicIcon,
+  TextOutdentIcon,
   TextAaIcon,
-  TextStrikethrough,
+  TextStrikethroughIcon,
   TextSuperscriptIcon,
   TextTIcon,
-  TextUnderline,
+  TextUnderlineIcon,
   XIcon,
   IconContext,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import type { SceneNode, TextNode } from "@/types/scene";
 import type { ThemeName, Variable } from "@/types/variable";
 import {
@@ -849,7 +849,7 @@ export function TypographySection({
               } as Partial<SceneNode>)
             }
           >
-            <TextItalic className="size-[18px]!" />
+            <TextItalicIcon className="size-[18px]!" />
           </IconButton>
         </div>
         <div className="flex items-center gap-1 flex-1">
@@ -869,7 +869,7 @@ export function TypographySection({
                 } as Partial<SceneNode>)
               }
             >
-              <TextUnderline size={14} />
+              <TextUnderlineIcon size={14} />
             </IconButton>
             <IconButton
               variant={node.strikethrough ? "default" : "secondary"}
@@ -886,7 +886,7 @@ export function TypographySection({
                 } as Partial<SceneNode>)
               }
             >
-              <TextStrikethrough size={14} />
+              <TextStrikethroughIcon size={14} />
             </IconButton>
           </ButtonGroup>
           <LinkPopover node={node} onUpdate={onUpdate} />
@@ -932,7 +932,7 @@ export function TypographySection({
                   onUpdate({ textAlign: "left" } as Partial<SceneNode>)
                 }
               >
-                <TextAlignLeft size={14} />
+                <TextAlignLeftIcon size={14} />
               </IconButton>
               <IconButton
                 variant={
@@ -949,7 +949,7 @@ export function TypographySection({
                   onUpdate({ textAlign: "center" } as Partial<SceneNode>)
                 }
               >
-                <TextAlignCenter size={14} />
+                <TextAlignCenterIcon size={14} />
               </IconButton>
               <IconButton
                 variant={
@@ -966,7 +966,7 @@ export function TypographySection({
                   onUpdate({ textAlign: "right" } as Partial<SceneNode>)
                 }
               >
-                <TextAlignRight size={14} />
+                <TextAlignRightIcon size={14} />
               </IconButton>
             </ButtonGroup>
           </div>
@@ -991,7 +991,7 @@ export function TypographySection({
                   } as Partial<SceneNode>)
                 }
               >
-                <AlignTop size={14} />
+                <AlignTopIcon size={14} />
               </IconButton>
               <IconButton
                 variant={
@@ -1012,7 +1012,7 @@ export function TypographySection({
                   } as Partial<SceneNode>)
                 }
               >
-                <AlignCenterVertical size={14} />
+                <AlignCenterVerticalIcon size={14} />
               </IconButton>
               <IconButton
                 variant={
@@ -1033,7 +1033,7 @@ export function TypographySection({
                   } as Partial<SceneNode>)
                 }
               >
-                <AlignBottom size={14} />
+                <AlignBottomIcon size={14} />
               </IconButton>
             </ButtonGroup>
           </div>
@@ -1060,7 +1060,7 @@ export function TypographySection({
                 }`}
                 onClick={() => applyListType("bullet")}
               >
-                <ListBullets size={14} />
+                <ListBulletsIcon size={14} />
               </IconButton>
               <IconButton
                 variant={firstParagraphAttrs.listType === "number" ? "default" : "secondary"}
@@ -1075,7 +1075,7 @@ export function TypographySection({
                 }`}
                 onClick={() => applyListType("number")}
               >
-                <ListNumbers size={14} />
+                <ListNumbersIcon size={14} />
               </IconButton>
             </ButtonGroup>
           </div>
@@ -1089,7 +1089,7 @@ export function TypographySection({
                 className="flex-1"
                 onClick={() => applyIndent(-1)}
               >
-                <TextOutdent size={14} />
+                <TextOutdentIcon size={14} />
               </IconButton>
               <IconButton
                 variant="secondary"
@@ -1099,7 +1099,7 @@ export function TypographySection({
                 className="flex-1"
                 onClick={() => applyIndent(1)}
               >
-                <TextIndent size={14} />
+                <TextIndentIcon size={14} />
               </IconButton>
             </ButtonGroup>
           </div>
@@ -1125,7 +1125,7 @@ export function TypographySection({
             }`}
             onClick={() => setTextWidthMode("auto")}
           >
-            <ArrowsOut size={14} />
+            <ArrowsOutIcon size={14} />
           </IconButton>
           <IconButton
             variant={
@@ -1141,7 +1141,7 @@ export function TypographySection({
             }`}
             onClick={() => setTextWidthMode("fixed")}
           >
-            <ArrowLineRight size={14} />
+            <ArrowLineRightIcon size={14} />
           </IconButton>
           <IconButton
             variant={
@@ -1159,7 +1159,7 @@ export function TypographySection({
             }`}
             onClick={() => setTextWidthMode("fixed-height")}
           >
-            <Article size={14} />
+            <ArticleIcon size={14} />
           </IconButton>
         </ButtonGroup>
       </div>
@@ -1313,7 +1313,7 @@ export function TypographySection({
                     } as Partial<SceneNode>)
                   }
                 >
-                  <ArrowLineRight size={14} />
+                  <ArrowLineRightIcon size={14} />
                 </IconButton>
                 <IconButton
                   variant={node.textPath.flip ? "default" : "secondary"}
@@ -1332,7 +1332,7 @@ export function TypographySection({
                     } as Partial<SceneNode>)
                   }
                 >
-                  <ArrowLineRight size={14} className="-scale-x-100" />
+                  <ArrowLineRightIcon size={14} className="-scale-x-100" />
                 </IconButton>
               </ButtonGroup>
             </div>
@@ -1360,7 +1360,7 @@ export function TypographySection({
                     } as Partial<SceneNode>)
                   }
                 >
-                  <AlignTop size={14} />
+                  <AlignTopIcon size={14} />
                 </IconButton>
                 <IconButton
                   variant={node.textPath.side === "right" ? "default" : "secondary"}
@@ -1379,7 +1379,7 @@ export function TypographySection({
                     } as Partial<SceneNode>)
                   }
                 >
-                  <AlignBottom size={14} />
+                  <AlignBottomIcon size={14} />
                 </IconButton>
               </ButtonGroup>
             </div>

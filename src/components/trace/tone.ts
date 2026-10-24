@@ -1,4 +1,4 @@
-import { CheckCircleIcon, CircleIcon, WarningCircleIcon, XCircleIcon, type Icon } from "@phosphor-icons/react";
+import { CheckCircleIcon, CircleIcon, WarningCircleIcon, XCircleIcon, type Icon } from "@/components/icons";
 import type { Tone } from "./traceModel";
 
 /** Outcome icon and its colour per tone; rendered by `ToneIcon`. */

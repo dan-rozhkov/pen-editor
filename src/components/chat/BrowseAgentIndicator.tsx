@@ -1,4 +1,4 @@
-import { FilmStripIcon } from "@phosphor-icons/react";
+import { FilmStripIcon } from "@/components/icons";
 import type { SavedTrace } from "@/lib/browseTraces";
 import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
 import { ToolCallIndicator } from "./ToolCallIndicator";

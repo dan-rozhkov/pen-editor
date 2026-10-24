@@ -12,7 +12,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { DotsSixVertical, DropHalfIcon, Eye, EyeSlash, MinusIcon } from "@phosphor-icons/react";
+import { DotsSixVerticalIcon, DropHalfIcon, EyeIcon, EyeSlashIcon, MinusIcon } from "@/components/icons";
 import { buildCSSGradient } from "@/utils/gradientUtils";
 
 // --- Shared pieces moved from FillSection.tsx (also used by StrokeSection) ---
@@ -266,7 +266,7 @@ export function StackRowShell({
         )}
         title={canReorder ? "Drag to reorder" : undefined}
       >
-        <DotsSixVertical size={16} />
+        <DotsSixVerticalIcon size={16} />
       </div>
 
       {/* Compact trigger: swatch + summary opens the detail popover */}
@@ -285,7 +285,7 @@ export function StackRowShell({
         onClick={onToggleVisible}
         tooltip={visible ? `Hide ${itemLabel}` : `Show ${itemLabel}`}
       >
-        <IconSwap active={visible} activeIcon={<Eye />} inactiveIcon={<EyeSlash />} />
+        <IconSwap active={visible} activeIcon={<EyeIcon />} inactiveIcon={<EyeSlashIcon />} />
       </IconButton>
       <IconButton variant="ghost" size="icon-sm" onClick={onRemove} tooltip={`Remove ${itemLabel}`}>
         <MinusIcon />

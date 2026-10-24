@@ -14,7 +14,7 @@ import {
   TableHead,
   TableCell,
 } from "./ui/table";
-import { PlusCircleIcon, PlusIcon, TrashIcon, ArrowLineLeftIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
+import { PlusCircleIcon, PlusIcon, TrashIcon, ArrowLineLeftIcon, MagnifyingGlassIcon } from "@/components/icons";
 import {
   DropdownMenu,
   DropdownMenuTrigger,

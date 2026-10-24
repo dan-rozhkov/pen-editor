@@ -1,6 +1,6 @@
 import { useState } from "react";
 import clsx from "clsx";
-import { DotsThreeVertical, PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import { DotsThreeVerticalIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { usePageStore } from "@/store/pageStore";
 import {
   DropdownMenu,
@@ -120,7 +120,7 @@ export function PagesPanel() {
                         size="icon-xs"
                         className="opacity-0 group-hover/page:opacity-100 data-popup-open:opacity-100 text-text-muted hover:text-text-default hover:bg-secondary shrink-0"
                       >
-                        <DotsThreeVertical size={14} weight="bold" />
+                        <DotsThreeVerticalIcon size={14} weight="bold" />
                       </IconButton>
                     }
                   />

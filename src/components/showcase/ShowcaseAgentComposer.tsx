@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { ArrowUpIcon } from "@phosphor-icons/react";
+import { ArrowUpIcon } from "@/components/icons";
 
 interface ShowcaseAgentComposerProps {
   onSubmit: (prompt: string) => void;

@@ -1,4 +1,4 @@
-import { CircleHalf } from "@phosphor-icons/react";
+import { CircleHalfIcon } from "@/components/icons";
 import { useSceneStore } from "@/store/sceneStore";
 import type { SceneNode } from "@/types/scene";
 import { PropertySection, SelectInput } from "@/components/ui/PropertyInputs";
@@ -34,7 +34,7 @@ export function TypeSection({ node, onUpdate }: TypeSectionProps) {
             aria-pressed={node.isMask === true}
             onClick={() => onUpdate({ isMask: !node.isMask } as Partial<SceneNode>)}
           >
-            <CircleHalf size={18} weight="light" />
+            <CircleHalfIcon size={18} weight="light" />
           </button>
         }
       />

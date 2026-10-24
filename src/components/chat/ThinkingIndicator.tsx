@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { CaretDownIcon } from "@phosphor-icons/react";
+import { CaretDownIcon } from "@/components/icons";
 import { SimpleMarkdown } from "./SimpleMarkdown";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { CHEVRON_WEIGHT } from "@/components/ui/chevron";

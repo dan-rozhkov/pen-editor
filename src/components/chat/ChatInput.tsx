@@ -4,7 +4,7 @@ import {
   StopIcon,
   XIcon,
   CodeIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
 import { useChatStore, NO_ATTACHED_IMAGES } from "@/store/chatStore";

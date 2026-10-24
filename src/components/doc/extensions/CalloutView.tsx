@@ -1,6 +1,6 @@
 import { useCallback, useState, type ComponentType } from "react";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
-import { InfoIcon, LightbulbIcon, MegaphoneIcon, WarningIcon, WarningOctagonIcon, type IconProps } from "@phosphor-icons/react";
+import { InfoIcon, LightbulbIcon, MegaphoneIcon, WarningIcon, WarningOctagonIcon, type IconProps } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { MENU_HOVER, POPOVER_SURFACE } from "../ui/menuSurface";

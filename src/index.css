@@ -272,6 +272,15 @@ html.disable-theme-transitions *::after {
   * {
     @apply border-border outline-ring/50;
   }
+  /* Pen icons keep a constant screen stroke at every size
+     (src/components/icons/createIcon.tsx). */
+  [data-pen-icon] * {
+    vector-effect: non-scaling-stroke;
+  }
+  /* Dot glyphs have no stroke for `bold` to thicken; grow the dots instead. */
+  [data-pen-icon^="Dots"][data-weight="bold"] circle {
+    r: 1.35px;
+  }
   body {
     @apply font-sans bg-background text-foreground;
   }

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChatCircleIcon, SlidersHorizontalIcon } from "@phosphor-icons/react";
+import { ChatCircleIcon, SlidersHorizontalIcon } from "@/components/icons";
 import { useCommentsStore, type CommentThread } from "@/store/commentsStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { usePageStore } from "@/store/pageStore";

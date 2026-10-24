@@ -1,4 +1,4 @@
-import { ArrowUpRightIcon, GitBranchIcon } from "@phosphor-icons/react";
+import { ArrowUpRightIcon, GitBranchIcon } from "@/components/icons";
 import { Link } from "react-router";
 
 const PLUGIN_URL = "https://github.com/dan-rozhkov/pen-editor-plugin#setup";

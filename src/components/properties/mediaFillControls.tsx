@@ -3,7 +3,7 @@ import type { ImageCropRect, ImageFillMode } from "@/types/scene";
 import { NumberInput, SelectInput } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
-import { CropIcon } from "@phosphor-icons/react";
+import { CropIcon } from "@/components/icons";
 
 /**
  * The 4-field crop grid (Left/Top/Width/Height) shared verbatim between the

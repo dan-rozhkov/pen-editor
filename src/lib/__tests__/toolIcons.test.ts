@@ -2,8 +2,7 @@ import { describe, it, expect } from "vitest";
 import { toolDisplayNames, mobbinToolDisplayNames } from "../toolDisplayNames";
 import { getToolIcon } from "../toolIcons";
 import { toolHandlers } from "../toolRegistry";
-import { MobbinIcon } from "@/components/icons/MobbinIcon";
-import { BinocularsIcon, NotePencilIcon } from "@phosphor-icons/react";
+import { BinocularsIcon, MobbinIcon, NotePencilIcon } from "@/components/icons";
 
 describe("toolIcons", () => {
   it("has a dedicated icon for every named tool", () => {

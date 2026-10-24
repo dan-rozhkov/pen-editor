@@ -1,6 +1,6 @@
 import { useCallback, useState, type ComponentType } from "react";
 import { NodeViewContent, NodeViewWrapper, useEditorState, type NodeViewProps } from "@tiptap/react";
-import { ArrowUpRightIcon, CalendarBlankIcon, HashIcon, ListBulletsIcon, PlusIcon, TextAlignLeftIcon, TextTIcon, type IconProps } from "@phosphor-icons/react";
+import { ArrowUpRightIcon, CalendarBlankIcon, HashIcon, ListBulletsIcon, PlusIcon, TextAlignLeftIcon, TextTIcon, type IconProps } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { POPOVER_SURFACE } from "../ui/menuSurface";

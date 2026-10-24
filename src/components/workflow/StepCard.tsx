@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
-import { ArrowDownIcon, ArrowUpIcon, CopyIcon, DotsSixVerticalIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import { ArrowDownIcon, ArrowUpIcon, CopyIcon, DotsSixVerticalIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { skipBaseUiOpen } from "@/components/doc/ui/baseUi";
 import {
   DropdownMenu,

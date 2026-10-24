@@ -3,10 +3,10 @@ import { toast } from "sonner";
 import {
   UploadSimpleIcon,
   PuzzlePieceIcon,
-  DotsThreeVertical,
+  DotsThreeVerticalIcon,
   MagnifyingGlassIcon,
   TrashIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { usePluginStore } from "@/store/pluginStore";
 import { useDevModeStore } from "@/store/devModeStore";
 import { useReadOnly } from "@/hooks/useReadOnly";
@@ -183,7 +183,7 @@ export function PluginsPanel() {
                         className="text-text-muted hover:text-text-primary"
                         onClick={(event) => event.stopPropagation()}
                       >
-                        <DotsThreeVertical size={16} weight="bold" />
+                        <DotsThreeVerticalIcon size={16} weight="bold" />
                       </IconButton>
                     }
                   />

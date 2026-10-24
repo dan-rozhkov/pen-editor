@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { CheckIcon, TrashIcon, SparkleIcon, ArrowCounterClockwiseIcon, ArrowUpIcon, XIcon } from "@phosphor-icons/react";
+import { CheckIcon, TrashIcon, SparkleIcon, ArrowCounterClockwiseIcon, ArrowUpIcon, XIcon } from "@/components/icons";
 import { useViewportStore } from "@/store/viewportStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useLayoutStore } from "@/store/layoutStore";

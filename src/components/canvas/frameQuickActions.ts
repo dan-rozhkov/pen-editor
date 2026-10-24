@@ -4,7 +4,7 @@ import {
   ImageIcon,
   MagnifyingGlassIcon,
   type Icon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 
 /**
  * A one-click prompt shown in the on-canvas frame agent popup. Clicking an

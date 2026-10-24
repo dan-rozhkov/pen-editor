@@ -12,7 +12,7 @@ import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import { CustomColorPicker } from "./ui/ColorPicker";
 import { EditableText } from "./ui/EditableText";
 import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
-import { PaintBrushIcon, PlusIcon, TrashIcon, ArrowLineLeftIcon } from "@phosphor-icons/react";
+import { PaintBrushIcon, PlusIcon, TrashIcon, ArrowLineLeftIcon } from "@/components/icons";
 import { buildCSSGradient } from "@/utils/gradientUtils";
 import {
   DropdownMenu,

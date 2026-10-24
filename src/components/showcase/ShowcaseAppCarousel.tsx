@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeftIcon, ArrowRightIcon, HeartIcon } from "@phosphor-icons/react";
+import { ArrowLeftIcon, ArrowRightIcon, HeartIcon } from "@/components/icons";
 
 import { Button } from "@/components/ui/button";
 import { ShowcaseCard, type ShowcaseCopyFeedback } from "@/components/showcase/ShowcaseCard";

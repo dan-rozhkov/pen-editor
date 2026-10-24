@@ -6,15 +6,15 @@ import {
   LineSegmentIcon,
   HexagonIcon,
   StarIcon,
-  HashStraight,
-  PencilSimple,
+  HashStraightIcon,
+  PencilSimpleIcon,
   PenNibIcon,
-  FlowArrow,
+  FlowArrowIcon,
   type IconWeight,
   CodeBlockIcon,
   ResizeIcon,
   ChatCircleIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { TextOnPathIcon } from "@/components/ui/custom-icons/TextOnPathIcon";
 import type { DrawToolType } from "@/store/drawModeStore";
 
@@ -66,12 +66,12 @@ export const RECT_TOOL: ToolDefinition = {
 export const RECT_SUB_TOOLS: ToolDefinition[] = [
   // Frame is not a shape, but it is the only other rectangle-drawn tool and
   // the shapes chevron is where the dock hides its secondary draw tools.
-  { icon: HashStraight, label: "Frame", tool: "frame", shortcut: "F" },
+  { icon: HashStraightIcon, label: "Frame", tool: "frame", shortcut: "F" },
   { icon: CircleIcon, label: "Ellipse", tool: "ellipse", shortcut: "O" },
   { icon: LineSegmentIcon, label: "Line", tool: "line", shortcut: "L" },
   { icon: HexagonIcon, label: "Polygon", tool: "polygon", shortcut: "G" },
   { icon: StarIcon, label: "Star", tool: "star", shortcut: "S" },
-  { icon: FlowArrow, label: "Connector", tool: "connector", shortcut: "N" },
+  { icon: FlowArrowIcon, label: "Connector", tool: "connector", shortcut: "N" },
 ];
 
 export const PEN_TOOL: ToolDefinition = {
@@ -82,7 +82,7 @@ export const PEN_TOOL: ToolDefinition = {
 };
 
 export const PEN_SUB_TOOLS: ToolDefinition[] = [
-  { icon: PencilSimple, label: "Pencil", tool: "pencil", shortcut: "D" },
+  { icon: PencilSimpleIcon, label: "Pencil", tool: "pencil", shortcut: "D" },
   // Click a vector path on canvas to convert it into text-on-a-path (fill
   // and effects migrate onto the new text layer; no source path node
   // remains). See src/pixi/interaction/textPathController.ts.

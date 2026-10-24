@@ -2,12 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeftIcon,
   BookOpenIcon,
-  DotsThreeVertical,
+  DotsThreeVerticalIcon,
   MagicWandIcon,
   PlusIcon,
   TrashIcon,
   UploadSimpleIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { useUserSkillStore } from "@/store/userSkillStore";
 import type { UserSkill } from "@/lib/userSkills";
 import { parseSkillMarkdown, serializeSkillMarkdown } from "@/lib/userSkills";
@@ -500,7 +500,7 @@ export function SkillsPage({ onClose }: SkillsPageProps) {
                               className="mr-1 text-text-muted hover:text-text-primary"
                               disabled={isPending}
                             >
-                              <DotsThreeVertical size={16} weight="bold" />
+                              <DotsThreeVerticalIcon size={16} weight="bold" />
                             </IconButton>
                           }
                         />

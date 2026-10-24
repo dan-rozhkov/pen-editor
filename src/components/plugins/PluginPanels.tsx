@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
-import { XIcon } from "@phosphor-icons/react";
+import { XIcon } from "@/components/icons";
 
 import { getRunningPlugin, stopPlugin } from "@/lib/plugins/pluginHost";
 import { usePluginPanelStore, type PluginPanelState } from "@/store/pluginPanelStore";

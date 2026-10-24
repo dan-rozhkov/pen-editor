@@ -9,7 +9,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import { CaretDownIcon, XIcon, CheckIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, XIcon, CheckIcon } from "@/components/icons";
 import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 const Combobox = ComboboxPrimitive.Root;

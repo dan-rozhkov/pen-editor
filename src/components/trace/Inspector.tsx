@@ -1,5 +1,5 @@
 import type { BrowseTrace, BrowseTraceLogEntry, BrowseTraceRequest } from "@sideform/browser-agent/agent/session";
-import { LinkSimpleIcon } from "@phosphor-icons/react";
+import { LinkSimpleIcon } from "@/components/icons";
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";

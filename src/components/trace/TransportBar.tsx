@@ -1,4 +1,4 @@
-import { CaretDownIcon, PauseIcon, PlayIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, PauseIcon, PlayIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/IconButton";

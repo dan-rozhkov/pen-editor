@@ -9,7 +9,7 @@ import {
   SortAscendingIcon,
   SortDescendingIcon,
   TrashIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import {
   DropdownMenu,
   DropdownMenuContent,

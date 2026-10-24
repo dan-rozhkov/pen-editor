@@ -5,7 +5,7 @@ import {
   useEffect,
   useMemo,
 } from "react";
-import { StackIcon } from "@phosphor-icons/react";
+import { StackIcon } from "@/components/icons";
 import { useSceneStore } from "../../store/sceneStore";
 import { useSelectionStore } from "../../store/selectionStore";
 import { getAncestorIds } from "../../utils/nodeUtils";

@@ -1,4 +1,4 @@
-import { CaretDownIcon, DeviceMobileIcon, LaptopIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, DeviceMobileIcon, LaptopIcon } from "@/components/icons";
 
 import { cn } from "@/lib/utils";
 import { getShowcaseModelLabel } from "@/components/showcase/showcaseApps";

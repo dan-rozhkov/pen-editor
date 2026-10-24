@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, useEffect } from "react";
 import clsx from "clsx";
-import { CopyIcon, CheckIcon } from "@phosphor-icons/react";
+import { CopyIcon, CheckIcon } from "@/components/icons";
 import { useSceneStore } from "@/store/sceneStore";
 import { useDevModeStore, type CodegenFormat, type CodegenReactStyle } from "@/store/devModeStore";
 import { buildCssCode } from "@/lib/codegen/css";

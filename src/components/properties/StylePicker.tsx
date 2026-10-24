@@ -1,4 +1,4 @@
-import { LinkSimpleIcon, LinkBreakIcon } from "@phosphor-icons/react";
+import { LinkSimpleIcon, LinkBreakIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import {

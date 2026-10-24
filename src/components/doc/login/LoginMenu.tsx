@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useMemo, useState } from "react";
-import { KeyIcon, PlusIcon } from "@phosphor-icons/react";
+import { KeyIcon, PlusIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { createRowLabel, filterLogins, loadSavedLogins, loginHost, type SavedLogin } from "@/lib/docs/savedLogins";
 import { MENU_SURFACE } from "../ui/menuSurface";

@@ -43,7 +43,7 @@ import {
   CaretDownIcon,
   FolderPlusIcon,
   XIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 

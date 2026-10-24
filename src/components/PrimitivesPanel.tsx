@@ -1,4 +1,4 @@
-import { CaretDownIcon } from "@phosphor-icons/react";
+import { CaretDownIcon } from "@/components/icons";
 import { Fragment } from "react";
 import { useDrawModeStore } from "../store/drawModeStore";
 import type { DrawToolType } from "../store/drawModeStore";

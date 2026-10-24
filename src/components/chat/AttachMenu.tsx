@@ -1,4 +1,4 @@
-import { CheckIcon, ImageIcon, PaperclipIcon } from "@phosphor-icons/react";
+import { CheckIcon, ImageIcon, PaperclipIcon } from "@/components/icons";
 import {
   DropdownMenu,
   DropdownMenuContent,

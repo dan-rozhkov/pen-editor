@@ -3,7 +3,7 @@ import type { GradientFill, GradientColorStop } from "@/types/scene";
 import { GradientBar } from "@/components/ui/GradientBar";
 import { ColorInput, NumberInput } from "@/components/ui/PropertyInputs";
 import { IconButton } from "@/components/ui/IconButton";
-import { Minus, Plus } from "@phosphor-icons/react";
+import { MinusIcon, PlusIcon } from "@/components/icons";
 import { getGradientAngle, setGradientAngle } from "@/utils/gradientUtils";
 
 interface GradientEditorProps {
@@ -94,7 +94,7 @@ export function GradientEditor({ gradient, onChange }: GradientEditorProps) {
           }}
           tooltip="Add stop"
         >
-          <Plus size={12} />
+          <PlusIcon size={12} />
         </IconButton>
         <IconButton
           variant="secondary"
@@ -104,7 +104,7 @@ export function GradientEditor({ gradient, onChange }: GradientEditorProps) {
           disabled={gradient.stops.length <= 2}
           tooltip="Remove stop"
         >
-          <Minus size={12} />
+          <MinusIcon size={12} />
         </IconButton>
       </div>
       {gradient.type === "linear" && (

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import clsx from "clsx";
-import { CaretRightIcon, XIcon } from "@phosphor-icons/react";
+import { CaretRightIcon, XIcon } from "@/components/icons";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useVariableStore } from "@/store/variableStore";

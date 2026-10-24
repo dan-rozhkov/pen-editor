@@ -8,7 +8,7 @@ import {
   PlusIcon,
   TrashIcon,
   TreeStructureIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import { EditorProviders } from "@/components/EditorProviders";
 import { WorkflowCanvas } from "@/components/workflow/WorkflowCanvas";

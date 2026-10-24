@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { AppleLogoIcon } from "@phosphor-icons/react";
+import { AppleLogoIcon } from "@/components/icons";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { AuthMenu } from "@/components/auth/AuthMenu";

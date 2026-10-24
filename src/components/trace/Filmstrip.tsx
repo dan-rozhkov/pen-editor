@@ -1,4 +1,4 @@
-import { CameraIcon, FlagIcon } from "@phosphor-icons/react";
+import { CameraIcon, FlagIcon } from "@/components/icons";
 import type { BrowseTrace, BrowseTraceFrame } from "@sideform/browser-agent/agent/session";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";

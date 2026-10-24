@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
-import { DotsSixIcon } from "@phosphor-icons/react";
+import { DotsSixIcon } from "@/components/icons";
 
 import { cn } from "@/lib/utils";
 

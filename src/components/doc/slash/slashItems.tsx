@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { Editor, Range } from "@tiptap/react";
 import type { ResolvedPos } from "@tiptap/pm/model";
-import { ImageIcon, InfoIcon, LinkSimpleIcon, ListDashesIcon, MinusIcon, TableIcon, TreeStructureIcon } from "@phosphor-icons/react";
+import { ImageIcon, InfoIcon, LinkSimpleIcon, ListDashesIcon, MinusIcon, TableIcon, TreeStructureIcon } from "@/components/icons";
 import { TURN_INTO_ITEMS } from "../ui/blockTransforms";
 
 /** The document picker (`DocLinkPicker`) listens for this on the editor DOM. */

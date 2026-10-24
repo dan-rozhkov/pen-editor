@@ -12,7 +12,7 @@ import {
   TableHead,
   TableCell,
 } from "./ui/table";
-import { PlusIcon, TextAaIcon, TrashIcon, ArrowLineLeftIcon } from "@phosphor-icons/react";
+import { PlusIcon, TextAaIcon, TrashIcon, ArrowLineLeftIcon } from "@/components/icons";
 import { Tooltip, TooltipTrigger, TooltipContent } from "./ui/tooltip";
 import { IconButton } from "./ui/IconButton";
 import { PanelEmptyState } from "./PanelEmptyState";

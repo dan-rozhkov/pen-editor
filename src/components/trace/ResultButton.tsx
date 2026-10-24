@@ -1,4 +1,4 @@
-import { FileTextIcon } from "@phosphor-icons/react";
+import { FileTextIcon } from "@/components/icons";
 import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
 import { memo, useState } from "react";
 import { IconButton } from "@/components/ui/IconButton";

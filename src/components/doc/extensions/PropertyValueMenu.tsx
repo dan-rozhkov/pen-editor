@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { Editor } from "@tiptap/core";
-import { CalendarBlankIcon, CheckIcon, ListBulletsIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
+import { CalendarBlankIcon, CheckIcon, ListBulletsIcon, PlusIcon, XIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getDoc, listDocs } from "@/lib/docs/docStore";

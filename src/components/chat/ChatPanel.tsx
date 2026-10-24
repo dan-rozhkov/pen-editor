@@ -11,7 +11,7 @@ import {
   BookOpenIcon,
   SphereIcon,
   LockIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import { useChatStore, NO_ACTIVITY_NOTES } from "@/store/chatStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";

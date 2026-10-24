@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from "react";
-import { PlusIcon, XIcon } from "@phosphor-icons/react";
+import { PlusIcon, XIcon } from "@/components/icons";
 import { useChatStore } from "@/store/chatStore";
 import type { ChatSummary } from "@/store/chatStore";
 import { Badge } from "@/components/ui/badge";

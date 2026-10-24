@@ -1,4 +1,4 @@
-import { FileXIcon, MagnifyingGlassIcon, PlugsIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { FileXIcon, MagnifyingGlassIcon, PlugsIcon, WarningCircleIcon } from "@/components/icons";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { Button, buttonVariants } from "@/components/ui/button";

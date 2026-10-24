@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Editor } from "@tiptap/react";
-import { LinkIcon } from "@phosphor-icons/react";
+import { LinkIcon } from "@/components/icons";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";

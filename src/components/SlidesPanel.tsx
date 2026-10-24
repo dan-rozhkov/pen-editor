@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { CardsIcon, PlusIcon } from "@phosphor-icons/react";
+import { CardsIcon, PlusIcon } from "@/components/icons";
 import { useSceneStore } from "../store/sceneStore";
 import { useSelectionStore } from "../store/selectionStore";
 import { useViewportStore } from "../store/viewportStore";

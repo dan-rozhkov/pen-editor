@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { ArrowsOutSimple, ArrowsInSimple, ArrowSquareOut, Sidebar, SidebarSimple } from "@phosphor-icons/react";
+import { ArrowsOutSimpleIcon, ArrowsInSimpleIcon, ArrowSquareOutIcon, SidebarIcon, SidebarSimpleIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
@@ -93,10 +93,10 @@ export function EmbedApp({ host }: { host: HostBridge | null }) {
           </span>
           <div className="flex-1" />
           <Button variant="ghost" size="icon-sm" aria-label="Toggle layers" aria-pressed={layersOpen} onClick={() => setLayersOpen((v) => !v)}>
-            <SidebarSimple size={14} />
+            <SidebarSimpleIcon size={14} />
           </Button>
           <Button variant="ghost" size="icon-sm" aria-label="Toggle properties" aria-pressed={propsOpen} onClick={() => setPropsOpen((v) => !v)}>
-            <Sidebar size={14} mirrored />
+            <SidebarIcon size={14} mirrored />
           </Button>
           <Tooltip>
             <TooltipTrigger
@@ -108,7 +108,7 @@ export function EmbedApp({ host }: { host: HostBridge | null }) {
                     disabled={!host || sharing || shareError !== null || apiMissing}
                     onClick={onShare}
                   >
-                    <ArrowSquareOut size={14} />
+                    <ArrowSquareOutIcon size={14} />
                     Open in Sideform
                   </Button>
                 </span>
@@ -118,7 +118,7 @@ export function EmbedApp({ host }: { host: HostBridge | null }) {
           </Tooltip>
           {host?.canExpand() && (
             <Button variant="ghost" size="sm" onClick={() => void host.toggleFullscreen()}>
-              {displayMode === "fullscreen" ? <ArrowsInSimple size={14} /> : <ArrowsOutSimple size={14} />}
+              {displayMode === "fullscreen" ? <ArrowsInSimpleIcon size={14} /> : <ArrowsOutSimpleIcon size={14} />}
               {displayMode === "fullscreen" ? "Collapse" : "Expand"}
             </Button>
           )}

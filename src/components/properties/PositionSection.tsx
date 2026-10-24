@@ -1,4 +1,4 @@
-import { ArrowClockwise } from "@phosphor-icons/react";
+import { ArrowClockwiseIcon } from "@/components/icons";
 import type { ReactNode } from "react";
 import type { SceneNode } from "@/types/scene";
 import type { FlatParentContext, ParentContext } from "@/utils/nodeUtils";
@@ -47,7 +47,7 @@ export function PositionSection({ node, onUpdate, mixedKeys, parentContext, alig
         <div className="flex gap-2">
           <div className="w-1/2">
             <NumberInput
-              icon={<ArrowClockwise size={14} />}
+              icon={<ArrowClockwiseIcon size={14} />}
               value={node.rotation ?? 0}
               onChange={(v) => onUpdate({ rotation: v })}
               min={0}

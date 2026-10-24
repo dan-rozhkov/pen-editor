@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CaretLeftIcon, CaretRightIcon, XIcon } from "@phosphor-icons/react";
+import { CaretLeftIcon, CaretRightIcon, XIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { IconButton } from "./ui/IconButton";

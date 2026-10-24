@@ -1,5 +1,5 @@
 import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
-import { SquareHalfBottomIcon } from "@phosphor-icons/react";
+import { SquareHalfBottomIcon } from "@/components/icons";
 import { memo, type ReactNode } from "react";
 import { IconButton } from "@/components/ui/IconButton";
 import { DownloadButton } from "./DownloadButton";

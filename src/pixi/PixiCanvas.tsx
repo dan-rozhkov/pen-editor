@@ -39,7 +39,7 @@ import {
   useCanvasResize,
   useAltKeyMeasurement,
 } from "@/hooks/useCanvasEffects";
-import { CircleNotch } from "@phosphor-icons/react";
+import { CircleNotchIcon } from "@/components/icons";
 import { useClipboardStore } from "@/store/clipboardStore";
 import { useDrawModeStore } from "@/store/drawModeStore";
 import { useHistoryStore } from "@/store/historyStore";
@@ -603,7 +603,7 @@ export function PixiCanvas() {
               editorMode === "present" ? "var(--color-present-background)" : pageBackground,
           }}
         >
-          <CircleNotch
+          <CircleNotchIcon
             size={28}
             weight="thin"
             className="text-text-muted"

@@ -10,7 +10,7 @@ import { canRemoveBackground, canVectorize } from "@/lib/imageOps/capabilities";
 import { resolveImageOpsTargetNodeId } from "./imageOpsTarget";
 import { runRemoveBackground, runVectorize } from "./imageOpsActions";
 import type { PaletteCommand } from "./types";
-import { MagicWandIcon, BezierCurveIcon } from "@phosphor-icons/react";
+import { MagicWandIcon, BezierCurveIcon } from "@/components/icons";
 
 // getCommands() rebuilds this list fresh every time the palette opens, so
 // reading selection/scene state directly here (rather than via a hook) is

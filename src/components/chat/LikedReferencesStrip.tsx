@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ImageBrokenIcon, XIcon } from "@phosphor-icons/react";
+import { ImageBrokenIcon, XIcon } from "@/components/icons";
 import { useChatStore } from "@/store/chatStore";
 import {
   Tooltip,

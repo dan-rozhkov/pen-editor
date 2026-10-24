@@ -1,4 +1,4 @@
-import { TreeStructureIcon, XIcon } from "@phosphor-icons/react";
+import { TreeStructureIcon, XIcon } from "@/components/icons";
 import { IconButton } from "@/components/ui/IconButton";
 
 interface WorkflowChipProps {

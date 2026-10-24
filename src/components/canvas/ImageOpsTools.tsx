@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { CircleNotch, MagicWandIcon, BezierCurveIcon } from "@phosphor-icons/react";
+import { CircleNotchIcon, MagicWandIcon, BezierCurveIcon } from "@/components/icons";
 import { IconButton } from "@/components/ui/IconButton";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";
@@ -98,7 +98,7 @@ export function ImageOpsTools({ toolStyle = TOOL_STYLES.floating }: { toolStyle?
           className={buttonClass}
         >
           {runningOp === "remove-background" ? (
-            <CircleNotch size={iconSize} className={`${iconClass} animate-spin`} weight="thin" />
+            <CircleNotchIcon size={iconSize} className={`${iconClass} animate-spin`} weight="thin" />
           ) : (
             <MagicWandIcon size={iconSize} className={iconClass} weight="light" />
           )}
@@ -116,7 +116,7 @@ export function ImageOpsTools({ toolStyle = TOOL_STYLES.floating }: { toolStyle?
           className={buttonClass}
         >
           {runningOp === "vectorize" ? (
-            <CircleNotch size={iconSize} className={`${iconClass} animate-spin`} weight="thin" />
+            <CircleNotchIcon size={iconSize} className={`${iconClass} animate-spin`} weight="thin" />
           ) : (
             <BezierCurveIcon size={iconSize} className={iconClass} weight="light" />
           )}

@@ -1,4 +1,4 @@
-import { FileArrowUpIcon } from "@phosphor-icons/react";
+import { FileArrowUpIcon } from "@/components/icons";
 import { useRef, useState, type DragEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";

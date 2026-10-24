@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
-import { WarningCircleIcon, XIcon } from "@phosphor-icons/react";
+import { WarningCircleIcon, XIcon } from "@/components/icons";
 import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";

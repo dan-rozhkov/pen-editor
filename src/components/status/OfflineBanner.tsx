@@ -1,4 +1,4 @@
-import { WifiSlashIcon } from "@phosphor-icons/react";
+import { WifiSlashIcon } from "@/components/icons";
 import { StatusPill } from "./StatusPill";
 
 // Small non-blocking status pill shown while the app has no network

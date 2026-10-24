@@ -1,4 +1,4 @@
-import { InfoIcon } from "@phosphor-icons/react";
+import { InfoIcon } from "@/components/icons";
 import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
 import { memo } from "react";
 import { Button } from "@/components/ui/button";

@@ -1,5 +1,5 @@
 import { Radio } from "@base-ui/react/radio";
-import { CheckIcon } from "@phosphor-icons/react";
+import { CheckIcon } from "@/components/icons";
 
 import type { UITheme } from "@/lib/uiTheme";
 

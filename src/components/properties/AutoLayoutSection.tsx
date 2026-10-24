@@ -1,4 +1,4 @@
-import { ArrowUDownLeftIcon, MinusIcon, PlusIcon } from "@phosphor-icons/react";
+import { ArrowUDownLeftIcon, MinusIcon, PlusIcon } from "@/components/icons";
 import type {
   AlignItems,
   FlexDirection,

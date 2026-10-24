@@ -1,4 +1,4 @@
-import { PerspectiveIcon } from "@phosphor-icons/react";
+import { PerspectiveIcon } from "@/components/icons";
 import { useLayers3DStore } from "@/store/layers3dStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useSceneStore } from "@/store/sceneStore";

@@ -1,4 +1,4 @@
-import type { IconWeight } from "@phosphor-icons/react";
+import type { IconWeight } from "@/components/icons";
 
 /**
  * Stroke weight for every chevron (Caret*Icon) in the app: dropdown carets,

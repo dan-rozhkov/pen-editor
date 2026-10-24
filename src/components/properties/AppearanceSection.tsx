@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/PropertyInputs";
 import { generatePolygonPoints, isStarRatio } from "@/utils/polygonUtils";
 import { hasPerCornerRadius } from "@/utils/renderUtils";
-import { Angle, Asterisk, CornersOut } from "@phosphor-icons/react";
+import { AngleIcon, AsteriskIcon, CornersOutIcon } from "@/components/icons";
 import clsx from "clsx";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
@@ -141,7 +141,7 @@ export function AppearanceSection({
                   )}
                   onClick={() => handleModeChange(cornerMode === "unified" ? "per-corner" : "unified")}
                 >
-                  <CornersOut size={18} />
+                  <CornersOutIcon size={18} />
                 </button>
               }
             />
@@ -159,7 +159,7 @@ export function AppearanceSection({
             max={12}
             step={1}
             labelOutside={true}
-            icon={<Asterisk size={14} />}
+            icon={<AsteriskIcon size={14} />}
           />
         )}
       </PropertyRow>
@@ -173,7 +173,7 @@ export function AppearanceSection({
             max={12}
             step={1}
             labelOutside={true}
-            icon={<Asterisk size={14} />}
+            icon={<AsteriskIcon size={14} />}
           />
           <NumberInput
             label="Ratio, %"
@@ -188,7 +188,7 @@ export function AppearanceSection({
             max={99}
             step={1}
             labelOutside={true}
-            icon={<Angle size={14} />}
+            icon={<AngleIcon size={14} />}
           />
         </PropertyRow>
       )}

@@ -11,7 +11,7 @@ import {
   SelectInput,
 } from "@/components/ui/PropertyInputs";
 import { IconButton } from "@/components/ui/IconButton";
-import { ArrowDown, ArrowUp, PlusIcon } from "@phosphor-icons/react";
+import { ArrowDownIcon, ArrowUpIcon, PlusIcon } from "@/components/icons";
 import { GradientEditor } from "@/components/properties/GradientEditor";
 import { ImageFillEditor } from "@/components/properties/ImageFillSection";
 import { PatternFillEditor } from "@/components/properties/PatternFillSection";
@@ -171,7 +171,7 @@ export function FillSection({
                       onClick={() => commit(moveItem(fills, arrayIndex, 1))}
                       tooltip="Move up"
                     >
-                      <ArrowUp />
+                      <ArrowUpIcon />
                     </IconButton>
                     <IconButton
                       variant="ghost"
@@ -180,7 +180,7 @@ export function FillSection({
                       onClick={() => commit(moveItem(fills, arrayIndex, -1))}
                       tooltip="Move down"
                     >
-                      <ArrowDown />
+                      <ArrowDownIcon />
                     </IconButton>
                     <BlendModeDropdown
                       value={paint.blendMode ?? "normal"}

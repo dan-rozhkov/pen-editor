@@ -6,7 +6,7 @@ import {
   SelectionIcon,
   SparkleIcon,
   UserCircleIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 
 import type { SettingsSection } from "@/lib/openSettings";
 

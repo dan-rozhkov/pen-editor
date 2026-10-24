@@ -1,4 +1,4 @@
-import { FileTextIcon } from "@phosphor-icons/react";
+import { FileTextIcon } from "@/components/icons";
 import type { Editor } from "@tiptap/react";
 import type { JSONContent } from "@tiptap/core";
 import type { DocTemplate } from "@/lib/docs/docTemplates";

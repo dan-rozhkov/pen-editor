@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PaperPlaneRightIcon } from "@phosphor-icons/react";
+import { PaperPlaneRightIcon } from "@/components/icons";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { useEditorModeStore, canEditScene } from "@/store/editorModeStore";

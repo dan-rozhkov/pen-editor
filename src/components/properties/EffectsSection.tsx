@@ -14,7 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ArrowDown, ArrowUp, PlusIcon } from "@phosphor-icons/react";
+import { ArrowDownIcon, ArrowUpIcon, PlusIcon } from "@/components/icons";
 import { parseHexAlpha } from "@/utils/shadowUtils";
 import {
   createBackgroundBlurEffect,
@@ -321,7 +321,7 @@ export function EffectsSection({ node, onUpdate, mixedKeys, allowedEffectTypes, 
                       disabled={!canMoveUp}
                       onClick={() => commit(moveItem(effects, arrayIndex, 1))}
                     >
-                      <ArrowUp />
+                      <ArrowUpIcon />
                     </IconButton>
                     <IconButton
                       tooltip="Move down"
@@ -330,7 +330,7 @@ export function EffectsSection({ node, onUpdate, mixedKeys, allowedEffectTypes, 
                       disabled={!canMoveDown}
                       onClick={() => commit(moveItem(effects, arrayIndex, -1))}
                     >
-                      <ArrowDown />
+                      <ArrowDownIcon />
                     </IconButton>
                     {effect.type === "noise" && (
                       <BlendModeDropdown

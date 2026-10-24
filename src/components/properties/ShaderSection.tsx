@@ -1,4 +1,4 @@
-import { PlusIcon, MinusIcon } from "@phosphor-icons/react";
+import { PlusIcon, MinusIcon } from "@/components/icons";
 import type { SceneNode, ShaderKind } from "@/types/scene";
 import {
   ColorInput,

@@ -38,7 +38,7 @@ import {
   isGenericScreenName,
   isPlausibleShowcaseSize,
 } from "@/lib/showcasePublish";
-import { CaretRightIcon } from "@phosphor-icons/react";
+import { CaretRightIcon } from "@/components/icons";
 import clsx from "clsx";
 import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 

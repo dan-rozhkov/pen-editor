@@ -9,7 +9,7 @@ import {
   ChatCircleIcon,
   PuzzlePieceIcon,
   CubeIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import type { LeftSection } from "@/store/leftSidebarStore";
 import { useIsMobile } from "@/hooks/useIsMobile";

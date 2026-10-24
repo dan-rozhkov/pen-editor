@@ -1,4 +1,4 @@
-import { ArrowsInLineVertical, CloudSlash } from "@phosphor-icons/react";
+import { ArrowsInLineVerticalIcon, CloudSlashIcon } from "@/components/icons";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { OFFLINE_DOCUMENT_TITLE } from "@/lib/apiBase";
@@ -113,7 +113,7 @@ export function LeftSidebarBase({ hiddenSections, renderHeader, renderAgents, to
               aria-label={OFFLINE_DOCUMENT_TITLE}
               className="shrink-0 flex items-center text-text-muted"
             >
-              <CloudSlash size={14} />
+              <CloudSlashIcon size={14} />
             </span>
           )}
         </div>
@@ -135,7 +135,7 @@ export function LeftSidebarBase({ hiddenSections, renderHeader, renderAgents, to
                       aria-label="Collapse all"
                       className="p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary transition-colors"
                     >
-                      <ArrowsInLineVertical size={14} />
+                      <ArrowsInLineVerticalIcon size={14} />
                     </button>
                   }
                 />

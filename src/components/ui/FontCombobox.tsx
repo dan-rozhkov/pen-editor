@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { TrashIcon } from "@phosphor-icons/react";
+import { TrashIcon } from "@/components/icons";
 import {
   Combobox,
   ComboboxInput,

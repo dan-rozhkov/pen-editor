@@ -1,4 +1,4 @@
-import type { IconWeight } from "@phosphor-icons/react";
+import type { IconWeight } from "@/components/icons";
 
 interface TextOnPathIconProps {
   className?: string;

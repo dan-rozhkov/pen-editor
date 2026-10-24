@@ -1,8 +1,8 @@
 import {
   ArrowCounterClockwiseIcon,
-  CircleNotch,
+  CircleNotchIcon,
   XIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   useLayers3DStore,
@@ -254,7 +254,7 @@ export function Layers3DOverlay() {
           data-3d-loading
           className="absolute inset-0 flex items-center justify-center pointer-events-none"
         >
-          <CircleNotch
+          <CircleNotchIcon
             size={28}
             weight="thin"
             className="text-text-muted"

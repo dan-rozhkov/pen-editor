@@ -1,6 +1,6 @@
 import { useDeferredValue, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CubeIcon, MagnifyingGlassIcon, WarningIcon } from "@phosphor-icons/react";
+import { CubeIcon, MagnifyingGlassIcon, WarningIcon } from "@/components/icons";
 import type { ComponentMaster } from "@/lib/embedComponents";
 import { countUsage, type ComponentUsage } from "@/store/componentOps";
 import { selectComponentRegistry, selectDuplicateMasters } from "@/store/componentRegistry";

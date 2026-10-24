@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BrainIcon, CaretDownIcon } from "@phosphor-icons/react";
+import { BrainIcon, CaretDownIcon } from "@/components/icons";
 import { formatChange, type ChangeDetail } from "@/lib/memoryActivity";
 import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 

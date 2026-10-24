@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { MonitorArrowUpIcon } from "@phosphor-icons/react";
+import { MonitorArrowUpIcon } from "@/components/icons";
 import { useCustomFontStore } from "@/store/customFontStore";
 import { IconButton } from "./IconButton";
 

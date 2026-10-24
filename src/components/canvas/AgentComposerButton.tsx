@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SparkleIcon, ArrowUpIcon } from "@phosphor-icons/react";
+import { SparkleIcon, ArrowUpIcon } from "@/components/icons";
 import { IconButton } from "@/components/ui/IconButton";
 import { cn } from "@/lib/utils";
 import { useDevModeStore } from "@/store/devModeStore";

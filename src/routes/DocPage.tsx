@@ -9,7 +9,7 @@ import {
   FileTextIcon,
   ListIcon,
   TrashIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import type { Editor } from "@tiptap/react";
 import { EditorProviders } from "@/components/EditorProviders";
 import { DocEditor } from "@/components/doc/DocEditor";

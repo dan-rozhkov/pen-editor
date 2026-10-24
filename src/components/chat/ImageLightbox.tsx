@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { CaretLeftIcon, CaretRightIcon } from "@/components/icons";
 import {
   Tooltip,
   TooltipTrigger,

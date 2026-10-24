@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PlusIcon, MinusIcon, SlidersHorizontalIcon } from "@phosphor-icons/react";
+import { PlusIcon, MinusIcon, SlidersHorizontalIcon } from "@/components/icons";
 import type { ExportSetting } from "@/types/scene";
 import { useCanvasRefStore } from "@/store/canvasRefStore";
 import { useExportPresetStore } from "@/store/exportPresetStore";

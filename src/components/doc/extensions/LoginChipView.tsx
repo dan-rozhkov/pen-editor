@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
-import { KeyIcon } from "@phosphor-icons/react";
+import { KeyIcon } from "@/components/icons";
 import { cachedLoginIcon, ensureLoginIconsLoaded, loginChipLabel, subscribeLoginIcons } from "@/lib/docs/savedLogins";
 
 /** The pill for a saved login: the site's favicon (or a key) and `@username · host`. Not editable, one backspace deletes it. */

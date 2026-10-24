@@ -1,5 +1,5 @@
 import { useContext } from "react";
-import { HeartIcon } from "@phosphor-icons/react";
+import { HeartIcon } from "@/components/icons";
 import { useChatStore } from "@/store/chatStore";
 import {
   Tooltip,

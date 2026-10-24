@@ -1,4 +1,4 @@
-import { TreeStructureIcon } from "@phosphor-icons/react";
+import { TreeStructureIcon } from "@/components/icons";
 import type { WorkflowAttachment } from "@/lib/workflows/workflowAttachment";
 
 /** A workflow attached to a user message: a small non-interactive chip with its title. */

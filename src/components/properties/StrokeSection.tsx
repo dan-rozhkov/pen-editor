@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/PropertyInputs";
 import { IconButton } from "@/components/ui/IconButton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ArrowDown, ArrowUp, PlusIcon, MinusIcon } from "@phosphor-icons/react";
+import { ArrowDownIcon, ArrowUpIcon, PlusIcon, MinusIcon } from "@/components/icons";
 import { GradientEditor } from "@/components/properties/GradientEditor";
 import {
   BlendModeDropdown,
@@ -507,7 +507,7 @@ function StrokePaintStack({
                   onClick={() => commit(moveItem(strokes, arrayIndex, 1))}
                   tooltip="Move up"
                 >
-                  <ArrowUp />
+                  <ArrowUpIcon />
                 </IconButton>
                 <IconButton
                   variant="ghost"
@@ -516,7 +516,7 @@ function StrokePaintStack({
                   onClick={() => commit(moveItem(strokes, arrayIndex, -1))}
                   tooltip="Move down"
                 >
-                  <ArrowDown />
+                  <ArrowDownIcon />
                 </IconButton>
                 <BlendModeDropdown
                   value={paint.blendMode ?? "normal"}

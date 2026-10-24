@@ -1,4 +1,4 @@
-import { LockIcon } from "@phosphor-icons/react";
+import { LockIcon } from "@/components/icons";
 import { useSyncExternalStore } from "react";
 
 import { OpenCodeKeyDialog } from "@/components/chat/OpenCodeKeyDialog";

@@ -9,11 +9,11 @@ import {
   SelectionIcon,
   LineSegmentIcon,
   HexagonIcon,
-  HashStraight,
-  FlowArrow,
+  HashStraightIcon,
+  FlowArrowIcon,
   ScissorsIcon,
   ImageSquareIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import clsx from "clsx";
 import type { SceneNode, LayoutProperties } from "../../types/scene";
 import type { EmbedLayerKind } from "@/lib/embedLayerTree";
@@ -130,7 +130,7 @@ export const NodeIcon = ({
       if (layout?.autoLayout) {
         return <AutoLayoutIcon layout={layout} />;
       }
-      return <HashStraight size={16} className={iconClass} weight="regular" />;
+      return <HashStraightIcon size={16} className={iconClass} weight="regular" />;
     case "group":
       return <SelectionIcon size={16} className={iconClass} />;
     case "rect":
@@ -146,9 +146,9 @@ export const NodeIcon = ({
     case "polygon":
       return <HexagonIcon size={16} className={iconClass} weight="regular" />;
     case "embed":
-      return <HashStraight size={16} className={iconClass} weight="regular" />;
+      return <HashStraightIcon size={16} className={iconClass} weight="regular" />;
     case "connector":
-      return <FlowArrow size={16} className={iconClass} weight="regular" />;
+      return <FlowArrowIcon size={16} className={iconClass} weight="regular" />;
     default:
       return null;
   }
@@ -161,7 +161,7 @@ export const NodeIcon = ({
  * for the three kinds that DO have an exact type equivalent (a jscpd
  * duplication gate runs in CI, so this must not re-render the same SVGs);
  * "image" has no scene-node equivalent (no bitmap-fill node type), so it
- * gets its own Phosphor icon instead. */
+ * gets its own icon instead. */
 export const EmbedElementIcon = ({ kind }: { kind: EmbedLayerKind }) => {
   if (kind === "image") {
     return (

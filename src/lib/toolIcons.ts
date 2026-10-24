@@ -64,8 +64,8 @@ import {
   VectorThreeIcon,
   QuestionIcon,
   WrenchIcon,
-} from "@phosphor-icons/react";
-import { MobbinIcon } from "@/components/icons/MobbinIcon";
+  MobbinIcon,
+} from "@/components/icons";
 import { mobbinToolDisplayNames } from "@/lib/toolDisplayNames";
 
 // Icon per tool, shown before the label in ToolCallIndicator. Keys mirror

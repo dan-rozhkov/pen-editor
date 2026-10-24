@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { Editor } from "@tiptap/react";
-import { FunnelSimpleIcon } from "@phosphor-icons/react";
+import { FunnelSimpleIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";

@@ -5,7 +5,7 @@ import {
   CaretUpIcon,
   GlobeIcon,
   XIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { getSessionStaleAt, useCloudBrowserStore } from "@/store/cloudBrowserStore";
 import { expireCloudBrowser, releaseCloudBrowser } from "@/lib/cloudBrowser";
 import { isDesktopBrowserAvailable } from "@/lib/tools/browser/bridge";

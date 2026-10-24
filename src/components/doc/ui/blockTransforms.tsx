@@ -11,7 +11,7 @@ import {
   TextHThreeIcon,
   TextHTwoIcon,
   TextTIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 export interface TurnIntoItem {

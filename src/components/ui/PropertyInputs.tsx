@@ -13,7 +13,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "./dropdown-menu";
-import { FlipHorizontalIcon, FlipVerticalIcon, IconContext } from "@phosphor-icons/react";
+import { FlipHorizontalIcon, FlipVerticalIcon, IconContext } from "@/components/icons";
 import { CustomColorPicker } from "./ColorPicker";
 import { useScrubLabel } from "@/hooks/useScrubLabel";
 import { useReadOnly } from "@/hooks/useReadOnly";

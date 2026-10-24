@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { CodeIcon, CopySimpleIcon } from "@phosphor-icons/react";
+import { CodeIcon, CopySimpleIcon } from "@/components/icons";
 import {
   ContextMenu,
   ContextMenuContent,

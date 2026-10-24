@@ -5,7 +5,7 @@ import { useHistoryStore } from "@/store/historyStore";
 import { useActiveSlideId } from "@/hooks/useActiveSlideId";
 import { useReadOnly } from "@/hooks/useReadOnly";
 import type { FlatFrameNode } from "@/types/scene";
-import { NoteIcon } from "@phosphor-icons/react";
+import { NoteIcon } from "@/components/icons";
 import { Button } from "./ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { TOOL_STYLES, type ToolStyle } from "./toolStyles";

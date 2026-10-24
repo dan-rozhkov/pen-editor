@@ -3,7 +3,7 @@ import {
   CaretDownIcon,
   DownloadSimpleIcon,
   XIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { getToolName } from "ai";
 import { getToolDisplayName } from "@/lib/toolDisplayNames";

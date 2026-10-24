@@ -4,7 +4,7 @@ import {
   StackIcon,
   SubtractSquareIcon,
   UniteSquareIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { useSceneStore } from "@/store/sceneStore";
 import { useSelectionStore } from "@/store/selectionStore";
 import { BOOLEAN_SUPPORTED_TYPES, type BooleanOpKind } from "@/lib/booleanOps";

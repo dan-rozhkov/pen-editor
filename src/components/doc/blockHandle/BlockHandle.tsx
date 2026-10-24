@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent, type RefObject } from "react";
 import type { Editor } from "@tiptap/react";
 import type { Transaction } from "@tiptap/pm/state";
-import { CopyIcon, DotsSixVerticalIcon, PaletteIcon, PlusIcon, TextTIcon, TrashIcon } from "@phosphor-icons/react";
+import { CopyIcon, DotsSixVerticalIcon, PaletteIcon, PlusIcon, TextTIcon, TrashIcon } from "@/components/icons";
 import {
   DropdownMenu,
   DropdownMenuContent,

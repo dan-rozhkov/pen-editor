@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Editor } from "@tiptap/react";
-import { FileTextIcon } from "@phosphor-icons/react";
+import { FileTextIcon } from "@/components/icons";
 import { Input } from "@/components/ui/input";
 import { listDocs, type DocMeta } from "@/lib/docs/docStore";
 import { cn } from "@/lib/utils";

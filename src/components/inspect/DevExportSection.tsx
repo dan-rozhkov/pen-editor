@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { PlusIcon } from "@phosphor-icons/react";
+import { PlusIcon } from "@/components/icons";
 import type { ExportSetting } from "@/types/scene";
 import { useDevExportStore } from "@/store/devExportStore";
 import { addExportSetting, createExportSetting } from "@/utils/exportSettingsUtils";

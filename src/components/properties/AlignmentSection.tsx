@@ -1,14 +1,14 @@
 import { useState } from "react";
 import {
-  AlignBottom,
-  AlignCenterHorizontal,
-  AlignCenterVertical,
-  AlignLeft,
-  AlignRight,
-  AlignTop,
-  GridNine,
+  AlignBottomIcon,
+  AlignCenterHorizontalIcon,
+  AlignCenterVerticalIcon,
+  AlignLeftIcon,
+  AlignRightIcon,
+  AlignTopIcon,
+  GridNineIcon,
   IconContext,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import {
   alignNodes,
   alignNodeInFrame,
@@ -75,30 +75,30 @@ export function AlignmentControls({
         <div className="flex w-full gap-2">
           <ButtonGroup orientation="horizontal" className="min-w-0 flex-1">
             <IconButton variant="secondary" size="sm" className="flex-1" onClick={() => handleAlign("left")} tooltip="Align left">
-              <AlignLeft className="size-[18px]!" />
+              <AlignLeftIcon className="size-[18px]!" />
             </IconButton>
             <IconButton variant="secondary" size="sm" className="flex-1" onClick={() => handleAlign("centerH")} tooltip="Align center horizontally">
-              <AlignCenterHorizontal className="size-[18px]!" />
+              <AlignCenterHorizontalIcon className="size-[18px]!" />
             </IconButton>
             <IconButton variant="secondary" size="sm" className="flex-1" onClick={() => handleAlign("right")} tooltip="Align right">
-              <AlignRight className="size-[18px]!" />
+              <AlignRightIcon className="size-[18px]!" />
             </IconButton>
           </ButtonGroup>
           <ButtonGroup orientation="horizontal" className="min-w-0 flex-1">
             <IconButton variant="secondary" size="sm" className="flex-1" onClick={() => handleAlign("top")} tooltip="Align top">
-              <AlignTop className="size-[18px]!" />
+              <AlignTopIcon className="size-[18px]!" />
             </IconButton>
             <IconButton variant="secondary" size="sm" className="flex-1" onClick={() => handleAlign("centerV")} tooltip="Align center vertically">
-              <AlignCenterVertical className="size-[18px]!" />
+              <AlignCenterVerticalIcon className="size-[18px]!" />
             </IconButton>
             <IconButton variant="secondary" size="sm" className="flex-1" onClick={() => handleAlign("bottom")} tooltip="Align bottom">
-              <AlignBottom className="size-[18px]!" />
+              <AlignBottomIcon className="size-[18px]!" />
             </IconButton>
           </ButtonGroup>
           {!isSingleNodeInFrame && (
             <ButtonGroup orientation="horizontal" className="shrink-0">
               <IconButton variant="secondary" size="sm" onClick={handleTidyUp} tooltip="Tidy up (Ctrl+Alt+T)">
-                <GridNine className="size-[18px]!" />
+                <GridNineIcon className="size-[18px]!" />
               </IconButton>
             </ButtonGroup>
           )}

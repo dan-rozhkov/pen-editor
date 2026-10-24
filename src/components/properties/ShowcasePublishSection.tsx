@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { SlidersHorizontalIcon } from "@phosphor-icons/react";
+import { SlidersHorizontalIcon } from "@/components/icons";
 import { track } from "@/lib/analytics";
 import {
   publishScreensToShowcase,

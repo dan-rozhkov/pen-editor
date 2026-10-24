@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { PlusIcon, MinusIcon, EyeIcon, EyeSlashIcon } from "@phosphor-icons/react";
+import { PlusIcon, MinusIcon, EyeIcon, EyeSlashIcon } from "@/components/icons";
 import type {
   FrameNode,
   SceneNode,

@@ -1,7 +1,7 @@
 import { useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
 import { toast } from "sonner";
-import { CaretRightIcon } from "@phosphor-icons/react";
+import { CaretRightIcon } from "@/components/icons";
 import { writeTextToClipboard } from "@/utils/clipboard";
 import type { InspectValue } from "@/lib/inspect/buildInspectData";
 import { CHEVRON_WEIGHT } from "@/components/ui/chevron";

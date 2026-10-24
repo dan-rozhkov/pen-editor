@@ -7,7 +7,7 @@ import {
   CopyIcon,
   CheckIcon,
   SparkleIcon,
-} from "@phosphor-icons/react";
+} from "@/components/icons";
 import { PanelEmptyState } from "@/components/PanelEmptyState";
 import { messageToClipboardText } from "@/lib/chatExport";
 import { IconSwap } from "@/components/ui/IconSwap";
