@@ -447,6 +447,18 @@ describe("browse_agent QA mode", () => {
     expect(out.qa.steps[0]).toMatchObject({ tool: "qa_verdict", ok: false });
   });
 
+  it("qa on: per-item results of a grouped scenario reach qa.items", async () => {
+    toolHandlers.browse_open = vi.fn(async () => JSON.stringify({ ok: true }));
+    const items = [
+      { id: "FT-01", result: "pass", reason: "the list shows 3 tasks" },
+      { id: "FT-02", result: "fail", reason: "no badge after the deadline" },
+      { id: "IX-03", result: "blocked", reason: "the video did not load" },
+    ];
+    stubFetch([() => toolTurn("qa_verdict", { verdict: "fail", reason: "FT-02 failed", items }, "c1")]);
+    const out = JSON.parse(await run(true));
+    expect(out.qa).toMatchObject({ outcome: "failed", verdict: "fail", items });
+  });
+
   const assertThenVerdict = () =>
     stubFetch([
       () => toolTurn("qa_assert", { checks: [{ type: "text", text: "Hello" }] }, "c1"),
