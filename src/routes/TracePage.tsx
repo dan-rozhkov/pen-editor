@@ -3,10 +3,12 @@ import { useParams, useSearchParams } from "react-router";
 import { EditorProviders } from "@/components/EditorProviders";
 import { TraceFilePicker } from "@/components/trace/TraceFilePicker";
 import { TraceFailure, TraceSkeleton } from "@/components/trace/TraceStates";
+import { TraceSwitcher } from "@/components/trace/TraceSwitcher";
 import { TraceViewer } from "@/components/trace/TraceViewer";
 import { traceTitle } from "@/components/trace/traceModel";
 import { useHtmlRouteClass } from "@/hooks/useHtmlRouteClass";
 import type { TraceSource } from "@/lib/browseTraces";
+import { canListLocalTraces } from "@/lib/browseTraceList";
 import { loadBrowseTrace, traceSourceFromParam, type TraceLoadResult } from "@/lib/browseTraceLoad";
 
 /**
@@ -53,12 +55,14 @@ function RemoteTrace({ id, source }: { id: string; source: TraceSource }) {
   }, [goal, notFound]);
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  // Only where the shell can list traces; a bare element would draw an empty top bar on the web.
+  const switcher = canListLocalTraces() ? <TraceSwitcher currentId={id} source={source} /> : undefined;
 
   return result === null ? (
     <TraceSkeleton />
   ) : result.ok ? (
-    <TraceViewer key={result.trace.id} trace={result.trace} initialStep={stepParam} />
+    <TraceViewer key={result.trace.id} trace={result.trace} initialStep={stepParam} switcher={switcher} />
   ) : (
-    <TraceFailure failure={result} onRetry={retry} />
+    <TraceFailure failure={result} onRetry={retry} switcher={switcher} />
   );
 }

@@ -21,6 +21,7 @@ import {
   buildTimeline,
   describeCheck,
   describeOutcome,
+  describeOutcomeOf,
   filmstripLayout,
   filmstripTiles,
   formatDuration,
@@ -82,6 +83,17 @@ describe("describeOutcome", () => {
     ["weird", "Weird", "neutral"],
   ])("maps status %s", (status, label, tone) => {
     expect(describeOutcome({ ...sampleTrace, qa: undefined, status })).toEqual({ label, tone });
+  });
+});
+
+describe("describeOutcomeOf", () => {
+  it.each([
+    [{ status: "done", qaOutcome: "passed" }, "QA passed", "success"],
+    [{ status: "done" }, "Done", "success"],
+    [{ status: "error_limit" }, "Error limit", "danger"],
+    [{ status: "" }, "Unknown", "neutral"],
+  ])("maps %j", (input, label, tone) => {
+    expect(describeOutcomeOf(input)).toEqual({ label, tone });
   });
 });
 

@@ -130,30 +130,33 @@ export interface Outcome {
   tone: Tone;
 }
 
-/** The headline badge: the QA outcome when there is one, else the run status. */
-export function describeOutcome(trace: BrowseTrace): Outcome {
-  if (trace.qa) {
-    switch (trace.qa.outcome) {
-      case "passed":
-        return { label: "QA passed", tone: "success" };
-      case "failed":
-        return { label: "QA failed", tone: "danger" };
-      case "inconclusive":
-        return { label: "QA inconclusive", tone: "warning" };
-      case "setup_failed":
-        return { label: "Setup failed", tone: "danger" };
-      case "error":
-        return { label: "QA error", tone: "danger" };
-      case "aborted":
-        return { label: "Aborted", tone: "neutral" };
-    }
+/** The badge for a status and an optional QA outcome: the QA outcome when there is one, else the run status. */
+export function describeOutcomeOf({ status, qaOutcome }: { status: string; qaOutcome?: string }): Outcome {
+  switch (qaOutcome) {
+    case "passed":
+      return { label: "QA passed", tone: "success" };
+    case "failed":
+      return { label: "QA failed", tone: "danger" };
+    case "inconclusive":
+      return { label: "QA inconclusive", tone: "warning" };
+    case "setup_failed":
+      return { label: "Setup failed", tone: "danger" };
+    case "error":
+      return { label: "QA error", tone: "danger" };
+    case "aborted":
+      return { label: "Aborted", tone: "neutral" };
   }
-  const status = trace.status.toLowerCase();
-  const label = status.replace(/[_-]+/g, " ").replace(/^./, (c) => c.toUpperCase());
-  if (status === "done" || status === "completed" || status === "success") return { label: "Done", tone: "success" };
-  if (/error|fail/.test(status)) return { label, tone: "danger" };
-  if (/abort|cancel|timeout|limit|stopped/.test(status)) return { label, tone: "warning" };
+  const lower = status.toLowerCase();
+  const label = lower.replace(/[_-]+/g, " ").replace(/^./, (c) => c.toUpperCase());
+  if (lower === "done" || lower === "completed" || lower === "success") return { label: "Done", tone: "success" };
+  if (/error|fail/.test(lower)) return { label, tone: "danger" };
+  if (/abort|cancel|timeout|limit|stopped/.test(lower)) return { label, tone: "warning" };
   return { label: label || "Unknown", tone: "neutral" };
+}
+
+/** The headline badge of a loaded trace. */
+export function describeOutcome(trace: BrowseTrace): Outcome {
+  return describeOutcomeOf({ status: trace.status, qaOutcome: trace.qa?.outcome });
 }
 
 /** "cloud" -> "Cloud browser", "desktop" -> "Desktop browser"; a run in a desktop app -> the app's name. */

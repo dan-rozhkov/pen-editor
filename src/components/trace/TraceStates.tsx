@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { BAR_ROW } from "./parts";
 import type { TraceLoadResult } from "@/lib/browseTraceLoad";
 
 function Bar({ className }: { className: string }) {
@@ -40,9 +41,9 @@ export function TraceSkeleton() {
   );
 }
 
-function Message({ icon, title, children, action }: { icon: ReactNode; title: string; children: ReactNode; action?: ReactNode }) {
+function Message({ icon, title, children, action, fill }: { icon: ReactNode; title: string; children: ReactNode; action?: ReactNode; fill?: boolean }) {
   return (
-    <main className="flex h-dvh items-center justify-center bg-surface-panel px-4">
+    <main className={`flex ${fill ? "h-full" : "h-dvh"} items-center justify-center bg-surface-panel px-4`}>
       <EmptyState titleAs="h1" icon={icon} title={title} description={children} action={action} />
     </main>
   );
@@ -57,23 +58,38 @@ const openFile = (
   </Link>
 );
 
-export function TraceFailure({ failure, onRetry }: { failure: Failure; onRetry(): void }) {
+/** The failure message; with a switcher, under a minimal top bar so the viewer can leave a dead trace. */
+export function TraceFailure({ failure, onRetry, switcher }: { failure: Failure; onRetry(): void; switcher?: ReactNode }) {
+  if (!switcher) return <FailureMessage failure={failure} onRetry={onRetry} />;
+  return (
+    <div className="flex h-dvh flex-col bg-surface-panel">
+      <header className="shrink-0 border-b border-border-default">
+        <div className={BAR_ROW}>{switcher}</div>
+      </header>
+      <div className="min-h-0 flex-1">
+        <FailureMessage failure={failure} onRetry={onRetry} fill />
+      </div>
+    </div>
+  );
+}
+
+function FailureMessage({ failure, onRetry, fill }: { failure: Failure; onRetry(): void; fill?: boolean }) {
   switch (failure.reason) {
     case "not-found":
       return (
-        <Message icon={<MagnifyingGlassIcon weight="light" />} title="Trace not found" action={openFile}>
+        <Message fill={fill} icon={<MagnifyingGlassIcon weight="light" />} title="Trace not found" action={openFile}>
           It may have been deleted, or the link is wrong.
         </Message>
       );
     case "no-bridge":
       return (
-        <Message icon={<PlugsIcon weight="light" />} title="Open this trace in the desktop app">
+        <Message fill={fill} icon={<PlugsIcon weight="light" />} title="Open this trace in the desktop app">
           {failure.message}
         </Message>
       );
     case "invalid":
       return (
-        <Message icon={<FileXIcon weight="light" />} title="This is not a Sideform trace" action={openFile}>
+        <Message fill={fill} icon={<FileXIcon weight="light" />} title="This is not a Sideform trace" action={openFile}>
           The file is not in a format this viewer knows.
           <code className="mt-2 block break-words rounded-md bg-surface-elevated px-2 py-1 font-mono text-[11px] text-text-secondary">{failure.message}</code>
         </Message>
@@ -81,6 +97,7 @@ export function TraceFailure({ failure, onRetry }: { failure: Failure; onRetry()
     default:
       return (
         <Message
+          fill={fill}
           icon={<WarningCircleIcon weight="light" />}
           title="The trace could not be loaded"
           action={

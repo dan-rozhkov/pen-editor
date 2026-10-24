@@ -1,5 +1,5 @@
 import type { BrowseTrace, BrowseTraceFrame } from "@sideform/browser-agent/agent/session";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Filmstrip } from "./Filmstrip";
 import { FrameView } from "./FrameView";
@@ -65,6 +65,8 @@ interface ViewerProps {
   initialStep?: string | null;
   /** Keep `?step=` in the address bar in step with the selection. Off for a file opened in memory. */
   deepLink?: boolean;
+  /** Trace switcher for the header. */
+  switcher?: ReactNode;
 }
 
 /** Writes `?step=N` into the address without a navigation: the router and the trace loader never see it. */
@@ -72,7 +74,7 @@ function writeStepToUrl(stepIndex: number): void {
   window.history.replaceState(window.history.state, "", stepLinkUrl(window.location, stepIndex));
 }
 
-export function TraceViewer({ trace, initialStep, deepLink = true }: ViewerProps) {
+export function TraceViewer({ trace, initialStep, deepLink = true, switcher }: ViewerProps) {
   const rows = useMemo(() => buildStepRows(trace), [trace]);
   const flagged = useMemo(() => stepsWithProblems(trace), [trace]);
   const frames = useMemo(() => sortedFrames(trace), [trace]);
@@ -205,7 +207,7 @@ export function TraceViewer({ trace, initialStep, deepLink = true }: ViewerProps
 
   return (
     <div className="flex h-dvh flex-col bg-surface-panel text-text-primary">
-      <TraceHeader trace={trace} detailsOpen={detailsOpen} onToggleDetails={toggleDetails} />
+      <TraceHeader trace={trace} detailsOpen={detailsOpen} onToggleDetails={toggleDetails} switcher={switcher} />
       <Filmstrip
         trace={trace}
         selectedFrameId={shown?.id}

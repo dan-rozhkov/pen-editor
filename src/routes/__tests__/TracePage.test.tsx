@@ -231,6 +231,12 @@ describe("TracePage", () => {
     expect(await screen.findByRole("heading", { name: /desktop app/ })).toBeTruthy();
   });
 
+  it("draws no top bar on a failure when the shell cannot list traces", async () => {
+    renderTrace("/trace/abc?src=local");
+    await screen.findByRole("heading", { name: /desktop app/ });
+    expect(document.querySelector("header")).toBeNull();
+  });
+
   it("loads a local trace through the bridge", async () => {
     const read = vi.fn(async () => ({ trace: sampleTraceJson() }));
     (window as unknown as { penDesktop: unknown }).penDesktop = { traces: { read } };

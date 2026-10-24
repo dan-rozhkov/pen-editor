@@ -11,6 +11,16 @@ export interface BrowseTraceSavePayload {
   assets: { path: string; dataUrl: string; contentType: string }[];
 }
 
+/** One saved local trace as `traces.list` reports it (no frames, no steps). */
+export interface StoredTraceSummary {
+  id: string;
+  goal: string;
+  /** Epoch milliseconds. */
+  startedAt: number;
+  status: string;
+  qaOutcome?: string;
+}
+
 /** The shell's answer to a trace save: the stored id, or an error text. Never throws. */
 export type BrowseTraceSaveResult = { id: string } | { error: string };
 
@@ -133,6 +143,8 @@ export interface PenDesktopApi {
   traces?: {
     save(payload: BrowseTraceSavePayload): Promise<BrowseTraceSaveResult>;
     read(id: string): Promise<{ trace: BrowseTrace } | { error: string }>;
+    /** Saved local traces, newest first. Optional: absent on an older shell. There is no cloud list. */
+    list?(): Promise<{ traces: StoredTraceSummary[] } | { error: string }>;
   };
   /**
    * Opens a Markdown document (by its docStore id) in a Document tab. Exposed on the

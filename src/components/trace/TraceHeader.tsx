@@ -1,6 +1,6 @@
 import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
 import { SquareHalfBottomIcon } from "@phosphor-icons/react";
-import { memo } from "react";
+import { memo, type ReactNode } from "react";
 import { IconButton } from "@/components/ui/IconButton";
 import { DownloadButton } from "./DownloadButton";
 import { ResultButton } from "./ResultButton";
@@ -12,15 +12,18 @@ interface Props {
   trace: BrowseTrace;
   detailsOpen: boolean;
   onToggleDetails(): void;
+  /** Trace switcher, first in the toolbar row. */
+  switcher?: ReactNode;
 }
 
-export const TraceHeader = memo(function TraceHeader({ trace, detailsOpen, onToggleDetails }: Props) {
+export const TraceHeader = memo(function TraceHeader({ trace, detailsOpen, onToggleDetails, switcher }: Props) {
   const outcome = describeOutcome(trace);
   const title = goalFirstLine(trace.goal);
   return (
     <header className="shrink-0 border-b border-border-default bg-surface-panel">
       {/* Toolbar row of the trace viewer; the 16px gutter lines up with the filmstrip, steps and details panel. */}
       <div className={BAR_ROW}>
+        {switcher}
         <h1 className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary" title={trace.goal}>
           {title}
         </h1>
