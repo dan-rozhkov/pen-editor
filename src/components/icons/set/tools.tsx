@@ -169,9 +169,9 @@ export const PaletteIcon = /*#__PURE__*/ createIcon(
 export const PenNibIcon = /*#__PURE__*/ createIcon(
   "PenNib",
   <g transform="rotate(45 8 8)">
-    <path d="M8 14.5 4 8.5l1-5.75h6l1 5.75Z" />
-    <path d="M8 14.5V9.75" />
-    <circle cx="8" cy="8.5" r="1.1" />
+    <path d="M8 14.25 3.75 8l1.5-5.5h5.5l1.5 5.5Z" />
+    <path d="M8 14.25V8.9" />
+    <circle cx="8" cy="7.5" r="1.4" />
   </g>,
 );
 

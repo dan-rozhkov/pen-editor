@@ -133,7 +133,8 @@ export const TagIcon = /*#__PURE__*/ createIcon(
 
 export const PaperclipIcon = /*#__PURE__*/ createIcon(
   "Paperclip",
-  <path d="M12.75 7.5 8 12.25a3 3 0 0 1-4.25-4.25l5.5-5.5a2 2 0 0 1 2.83 2.83L6.75 10.75a1 1 0 0 1-1.42-1.42L10 4.67" />,
+  // Two strands only, ≥ 2.5 apart; drawn upright and leaned like Lucide's.
+  <path d="M11 4v7.25a3 3 0 0 1-6 0V3a1.75 1.75 0 0 1 3.5 0V10" transform="rotate(45 8 8)" />,
 );
 
 /** One chain link, horizontal; the diagonal icons rotate it. */

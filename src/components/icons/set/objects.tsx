@@ -133,17 +133,25 @@ export const FilmStripIcon = /*#__PURE__*/ createIcon(
   </>,
 );
 
+/** Body and viewfinder hump as one closed outline (no separate hump line). */
+const CAMERA_BODY =
+  "M2 6a1.75 1.75 0 0 1 1.75-1.75h1.5l1-1.5h3.5l1 1.5h1.5A1.75 1.75 0 0 1 14 6v5.5a1.75 1.75 0 0 1-1.75 1.75h-8.5A1.75 1.75 0 0 1 2 11.5Z";
+
 export const CameraIcon = /*#__PURE__*/ createIcon(
   "Camera",
   <>
-    <rect x="2" y="4.5" width="12" height="8.5" rx="1.75" />
-    <path d="M5.5 4.5l.9-1.75h3.2l.9 1.75" />
-    <circle cx="8" cy="8.75" r="2.5" />
+    <path d={CAMERA_BODY} />
+    <circle cx="8" cy="8.5" r="2.25" />
   </>,
-  <path
-    fillRule="evenodd"
-    d="M1.4 5.9a2 2 0 0 1 2-2h2.1l.9-1.75h3.2l.9 1.75h2.1a2 2 0 0 1 2 2v5.7a2 2 0 0 1-2 2H3.4a2 2 0 0 1-2-2zM8 6.55a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4z"
-  />,
+  (uid) => (
+    <>
+      <mask id={`mCamera${uid}`} maskUnits="userSpaceOnUse" x="0" y="0" width="16" height="16">
+        <path d={CAMERA_BODY} fill="white" stroke="white" />
+        <circle cx="8" cy="8.5" r="2.25" fill="black" stroke="none" />
+      </mask>
+      <rect x="0" y="0" width="16" height="16" mask={`url(#mCamera${uid})`} stroke="none" />
+    </>
+  ),
 );
 
 export const BrowserIcon = /*#__PURE__*/ createIcon(
