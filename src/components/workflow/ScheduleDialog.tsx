@@ -116,7 +116,7 @@ function ScheduleForm({ workflowId, schedule, onDone }: ScheduleFormProps) {
       </DialogHeader>
 
       <div className="flex flex-col gap-3">
-        <SegmentedControl aria-label="Frequency" options={FREQUENCY_OPTIONS} value={frequency} onValueChange={changeFrequency} />
+        <SegmentedControl aria-label="Frequency" options={FREQUENCY_OPTIONS} value={frequency} onValueChange={changeFrequency} className="flex w-full *:flex-1" />
 
         {frequency !== "off" && active === "hourly" && (
           <div className="flex items-center gap-2">
@@ -153,7 +153,7 @@ function ScheduleForm({ workflowId, schedule, onDone }: ScheduleFormProps) {
             options={WEEKDAY_OPTIONS}
             value={String(weekday)}
             onValueChange={(value) => setWeekday(Number(value))}
-            className="flex-wrap"
+            className="flex w-full *:flex-1"
           />
         )}
 
