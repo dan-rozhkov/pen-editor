@@ -250,3 +250,15 @@ describe("WorkflowPage", () => {
     expect(storedTexts(wf.id)).toEqual(["typed just now"]);
   });
 });
+
+describe("WorkflowPage schedule button", () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(cleanup);
+
+  it("opens the schedule dialog and shows the schedule in the header after saving", async () => {
+    openSeeded(["a"]);
+    fireEvent.click(screen.getByRole("button", { name: "Schedule" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    expect(await screen.findByRole("button", { name: /Every weekday at 09:00/ })).toBeTruthy();
+  });
+});

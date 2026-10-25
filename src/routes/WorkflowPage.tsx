@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   CheckIcon,
+  ClockIcon,
   ClipboardTextIcon,
   CopyIcon,
   DotsThreeVerticalIcon,
@@ -11,6 +12,8 @@ import {
 } from "@/components/icons";
 import { toast } from "sonner";
 import { EditorProviders } from "@/components/EditorProviders";
+import { ScheduleDialog } from "@/components/workflow/ScheduleDialog";
+import { useWorkflowSchedule } from "@/components/workflow/useWorkflowSchedule";
 import { WorkflowCanvas } from "@/components/workflow/WorkflowCanvas";
 import { useWorkflowSync } from "@/components/workflow/useWorkflowSync";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
@@ -28,6 +31,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Textarea } from "@/components/ui/textarea";
 import { useHtmlRouteClass } from "@/hooks/useHtmlRouteClass";
 import { markdownToSteps, stepsToMarkdown } from "@/lib/workflows/workflowMarkdown";
+import { describeSchedule } from "@/lib/workflows/workflowSchedule";
 import { stepsFromTexts } from "@/lib/workflows/workflowStore";
 
 // Dots scroll with the content ("local"), not with the viewport.
@@ -36,6 +40,9 @@ const DOT_GRID_STYLE = {
   backgroundSize: "20px 20px",
   backgroundAttachment: "local",
 } as const;
+
+// Schedules run in the desktop agent panel only; the button is hidden in a plain production browser.
+const SCHEDULING_AVAILABLE = typeof window !== "undefined" && (typeof window.penDesktop !== "undefined" || import.meta.env.DEV);
 
 /**
  * "/workflow": a visual editor for a workflow, a sequential chain of text steps
@@ -48,6 +55,8 @@ export default function WorkflowPage() {
   const sync = useWorkflowSync();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [pasteText, setPasteText] = useState<string | null>(null);
+  const [scheduling, setScheduling] = useState(false);
+  const schedule = useWorkflowSchedule(sync.id);
 
   const copyMarkdown = () => {
     const markdown = stepsToMarkdown(sync.steps.map((s) => s.text));
@@ -118,6 +127,17 @@ export default function WorkflowPage() {
                 }}
                 className="min-w-0 flex-1 rounded-md border-0 bg-transparent px-1 py-1 text-sm font-medium text-text-primary outline-none placeholder:text-text-muted/60 focus-visible:ring-1 focus-visible:ring-accent-light"
               />
+              {SCHEDULING_AVAILABLE &&
+                (schedule?.enabled ? (
+                  <Button variant="ghost" size="sm" onClick={() => setScheduling(true)} className="max-w-40 shrink-0 gap-1 sm:max-w-64">
+                    <ClockIcon className="size-4 shrink-0" weight="light" />
+                    <span className="truncate text-xs">{describeSchedule(schedule)}</span>
+                  </Button>
+                ) : (
+                  <IconButton variant="ghost" size="icon" tooltip="Schedule" onClick={() => setScheduling(true)}>
+                    <ClockIcon className="size-4" weight="light" />
+                  </IconButton>
+                ))}
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
@@ -170,6 +190,8 @@ export default function WorkflowPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <ScheduleDialog workflowId={sync.id} open={scheduling} onOpenChange={setScheduling} />
 
         <ConfirmDeleteDialog open={confirmingDelete} onOpenChange={setConfirmingDelete} name={title} onConfirm={sync.remove} />
       </div>

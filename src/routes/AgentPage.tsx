@@ -6,6 +6,7 @@ import { useHtmlRouteClass } from "@/hooks/useHtmlRouteClass";
 import { useChatBootstrap } from "@/hooks/useChatBootstrap";
 import { isAgentPanelHost } from "@/lib/agentPanel";
 import { startPanelRuntime } from "@/lib/canvasLink/panelRuntime";
+import { startWorkflowScheduler } from "@/lib/workflows/workflowScheduler";
 
 /**
  * "/agent": the agent chat on its own (chat list + open chat), full height.
@@ -24,6 +25,8 @@ function AgentPanel() {
   useEffect(() => {
     startPanelRuntime();
   }, []);
+  // Scheduled workflows start new chats from this panel (desktop only: AgentPage is gated by isAgentPanelHost).
+  useEffect(() => startWorkflowScheduler(), []);
   // body defaults to --color-surface-base; paint the panel surface edge to
   // edge (overscroll, resize gaps) so the page matches the desktop island.
   useHtmlRouteClass("route-agent");

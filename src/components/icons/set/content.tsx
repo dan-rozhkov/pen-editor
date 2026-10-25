@@ -65,6 +65,14 @@ export const ClipboardTextIcon = /*#__PURE__*/ createIcon(
   </>,
 );
 
+export const ClockIcon = /*#__PURE__*/ createIcon(
+  "Clock",
+  <>
+    <circle cx="8" cy="8" r="6" />
+    <path d="M8 4.75V8l2.25 1.5" />
+  </>,
+);
+
 export const CopyIcon = /*#__PURE__*/ createIcon(
   "Copy",
   <>
