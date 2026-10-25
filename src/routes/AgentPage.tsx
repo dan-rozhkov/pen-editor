@@ -6,6 +6,7 @@ import { useHtmlRouteClass } from "@/hooks/useHtmlRouteClass";
 import { useChatBootstrap } from "@/hooks/useChatBootstrap";
 import { isAgentPanelHost } from "@/lib/agentPanel";
 import { startPanelRuntime } from "@/lib/canvasLink/panelRuntime";
+import { startDesktopChatPersistence } from "@/lib/chats/desktopChatPersistence";
 import { startWorkflowScheduler } from "@/lib/workflows/workflowScheduler";
 
 /**
@@ -24,6 +25,10 @@ function AgentPanel() {
   // The canvas-link client listens from the start, not from the first chat request (canvas `launch`es).
   useEffect(() => {
     startPanelRuntime();
+  }, []);
+  // Desktop shell: show the chats stored on disk and keep saving them. No-op without the bridge.
+  useEffect(() => {
+    void startDesktopChatPersistence();
   }, []);
   // Scheduled workflows start new chats from this panel (desktop only: AgentPage is gated by isAgentPanelHost).
   useEffect(() => startWorkflowScheduler(), []);

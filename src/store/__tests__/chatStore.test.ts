@@ -262,6 +262,21 @@ describe("chatStore — chat list state", () => {
     expect(state.chats.find((c) => c.id === newId)?.parallelCount).toBe(1);
   });
 
+  it("createChat numbers titles with the smallest free N, even next to restored 'Chat N' titles", () => {
+    const base = useChatStore.getState().chats[0];
+    useChatStore.setState({
+      chats: [
+        { ...base, id: "r1", title: "Chat 2" },
+        { ...base, id: "r2", title: "Chat 3" },
+        { ...base, id: "r3", title: "My chat 1" },
+      ],
+    });
+    const a = useChatStore.getState().createChat({ activate: false });
+    expect(useChatStore.getState().chats.find((c) => c.id === a)?.title).toBe("Chat 1");
+    const b = useChatStore.getState().createChat({ activate: false });
+    expect(useChatStore.getState().chats.find((c) => c.id === b)?.title).toBe("Chat 4");
+  });
+
   it("setChatActivity merges flags that did change", () => {
     useChatStore.getState().setChatActivity("tab-A", { isBusy: true });
     useChatStore.getState().setChatActivity("tab-A", { needsAnswer: true });

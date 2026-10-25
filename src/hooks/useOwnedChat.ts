@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { Chat } from "@ai-sdk/react";
 import type { ChatInit, ChatTransport, UIMessage } from "ai";
+import { takeInitialMessages } from "@/lib/chats/desktopChatPersistence";
 
 export interface OwnedChatOptions {
   id: string;
@@ -41,6 +42,8 @@ export function useOwnedChat(options: OwnedChatOptions): Chat<UIMessage> {
 function createOwnedChat(id: string, latest: () => OwnedChatOptions): Chat<UIMessage> {
   return new Chat<UIMessage>({
     id,
+    // A chat restored from disk starts with its whole history (undefined for any other chat).
+    messages: takeInitialMessages(id),
     transport: {
       get resumeStreamIsReplay() {
         return latest().transport.resumeStreamIsReplay;

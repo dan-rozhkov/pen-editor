@@ -294,12 +294,14 @@ function ChatSession({
   // chat gets both. Refs track the previous values so this fires once per
   // event rather than on every streamed token (assistant message count grows
   // once per reply, not once per delta — deltas mutate an existing message
-  // rather than adding one).
-  const prevAssistantCountRef = useRef(0);
+  // rather than adding one). The first run only records the count: a chat
+  // restored from disk mounts with its replies already there, and they are
+  // not new activity.
+  const prevAssistantCountRef = useRef<number | null>(null);
   const prevAwaitingAnswerRef = useRef(false);
   useEffect(() => {
     const assistantCount = messages.filter((m) => m.role === "assistant").length;
-    const assistantGrew = assistantCount > prevAssistantCountRef.current;
+    const assistantGrew = prevAssistantCountRef.current !== null && assistantCount > prevAssistantCountRef.current;
     prevAssistantCountRef.current = assistantCount;
     const awaitingAnswerStarted = awaitingAnswer && !prevAwaitingAnswerRef.current;
     prevAwaitingAnswerRef.current = awaitingAnswer;

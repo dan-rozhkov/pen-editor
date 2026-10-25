@@ -290,6 +290,18 @@ function makeChat(
 
 const initialChatId = generateChatId();
 
+/** "Chat N" with the smallest N >= 1 that no existing chat title uses (restored chats keep their numbers). */
+export function nextChatTitle(chats: ReadonlyArray<{ title: string }>): string {
+  const used = new Set<number>();
+  for (const c of chats) {
+    const m = /^Chat (\d+)$/.exec(c.title);
+    if (m) used.add(Number(m[1]));
+  }
+  let n = 1;
+  while (used.has(n)) n += 1;
+  return `Chat ${n}`;
+}
+
 export const useChatStore = create<ChatState>((set, get) => ({
   isOpen: false,
   isExpanded: localStorage.getItem("chat-expanded") === "true",
@@ -363,7 +375,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const activate = opts?.activate ?? true;
     const { chats } = get();
     const id = generateChatId();
-    const title = `Chat ${chats.length + 1}`;
+    const title = nextChatTitle(chats);
     // A caller fanning a single send out to extra parallel chats passes an
     // explicit parallelCount (always 1) instead of restoring localStorage's
     // last choice — those chats are twins created *because of* an x2/x3 send,
@@ -422,7 +434,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const newActivityNotes = { ...activityNotes };
       delete newActivityNotes[chatId];
       set({
-        chats: [makeChat(newId, "Chat 1", model, parallelCount)],
+        chats: [makeChat(newId, nextChatTitle([]), model, parallelCount)],
         // Only jump into the replacement chat if the user was already looking
         // at one — deleting the last chat from the *list* view must leave
         // them on the list, not yank them into a new empty chat.

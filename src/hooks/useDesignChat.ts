@@ -28,6 +28,7 @@ import { APP_LAUNCH_ALLOWANCE_MS, appArgOf } from "@/lib/tools/browser/isolation
 import { BROWSE_AGENT_OUTER_TIMEOUT_MS } from "@/lib/tools/browser/browseAgent";
 import { extractStreamingToolInputs } from "@/hooks/streamingToolParts";
 import { useOwnedChat } from "@/hooks/useOwnedChat";
+import { notifyChatState } from "@/lib/chats/desktopChatPersistence";
 import {
   panelCallTool,
   panelEndStream,
@@ -620,6 +621,12 @@ export function useDesignChat({ sessionId }: UseDesignChatOptions) {
     // feeling continuous, especially when multiple sessions run in parallel.
     throttle: STREAM_RENDER_THROTTLE_MS,
   });
+
+  // Desktop chat storage (no-op without the shell's bridge): hand the Chat to the persistence module.
+  // It keeps the handle until the chat is deleted and subscribes to the Chat itself, so once per Chat is enough.
+  useEffect(() => {
+    notifyChatState(sessionId, ownedChat);
+  }, [sessionId, ownedChat]);
 
   // Same timeout / error handling as the awaited path (executeToolCall owns
   // both). The output is ALWAYS written, even after Stop (an input-available

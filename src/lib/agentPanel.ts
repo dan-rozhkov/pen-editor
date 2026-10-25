@@ -1,5 +1,6 @@
 import type { BrowseTraceSavePayload, BrowseTraceSaveResult, DesktopAuthApi, DesktopDocsDiskApi, DesktopSettingsApi, PenDesktopApi } from "@/lib/desktopBridge";
 import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
+import type { UIMessage } from "ai";
 import type { AgentPanelCanvasBridge } from "@/lib/canvasLink/protocol";
 
 /** Preload API of the agent panel view (docs/canvas-link.md). */
@@ -23,6 +24,8 @@ export interface PenAgentPanelApi {
   workflows?: AgentPanelWorkflowsBridge;
   /** Opens or focuses the Settings tab. Absent on an older shell. */
   settings?: DesktopSettingsApi;
+  /** version >= 2: the shell's on-disk chat store. Absent on an older shell. Feature-detect every function. */
+  chats?: AgentPanelChatsBridge;
   /** Local browse-run traces. Absent on a shell without trace tabs. */
   traces?: {
     save(payload: BrowseTraceSavePayload): Promise<BrowseTraceSaveResult>;
@@ -39,6 +42,36 @@ export interface PenAgentPanelApi {
   };
 }
 
+/** Chat metadata the shell lists (no messages), newest first. */
+export interface StoredChatMeta {
+  id: string;
+  title: string;
+  titleIsAuto: boolean;
+  model: string;
+  updatedAt: number;
+  rev: number;
+  messageCount: number;
+}
+
+/** A chat as stored on disk: the meta fields (minus messageCount) plus the AI SDK messages as JSON. */
+export interface StoredChat {
+  id: string;
+  title: string;
+  titleIsAuto: boolean;
+  model: string;
+  updatedAt: number;
+  rev: number;
+  messages: UIMessage[];
+}
+
+/** The agent panel's chat storage (pen-editor-desktop `chats:*` IPC). */
+export interface AgentPanelChatsBridge {
+  list(): Promise<{ chats: StoredChatMeta[] } | { error: string }>;
+  read(id: string): Promise<{ chat: StoredChat | null } | { error: string }>;
+  save(chat: StoredChat): Promise<{ ok: boolean; rev: number; stale?: boolean } | { error: string }>;
+  remove(id: string): Promise<{ ok: boolean } | { error: string }>;
+}
+
 /** Opens or activates the doc tab that shows `docId`. Resolves after the tab exists. */
 export interface AgentPanelDocsBridge extends DesktopDocsDiskApi {
   open(docId: string): Promise<{ ok: boolean; error?: string }>;
@@ -51,6 +84,11 @@ export interface AgentPanelWorkflowsBridge {
 
 declare global {
   interface Window {
+    /**
+     * Defined by the agent page while the disk chat store is active: runs pending chat saves now and
+     * resolves after their replies. Never rejects. The shell awaits it on quit and window close.
+     */
+    penChatsFlush?: () => Promise<void>;
     /** Exposed by the desktop shell's preload ONLY inside the agent panel view. */
     penAgentPanel?: PenAgentPanelApi;
   }

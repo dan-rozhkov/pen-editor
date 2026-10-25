@@ -226,6 +226,7 @@ let visionFallback = false;
 // offering one the backend can't actually serve would just fail every call.
 let imageOpsCapabilities = { removeBackground: false, vectorize: false };
 let loadPromise: Promise<void> | null = null;
+let modelsSettled = false;
 const listeners = new Set<() => void>();
 
 function notify() {
@@ -301,6 +302,11 @@ export function subscribeModels(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
+/** True once loadModels() has settled (the backend list, or the fallback after a failure, is final). */
+export function areModelsLoaded(): boolean {
+  return modelsSettled;
+}
+
 // Fetch the model metadata from the backend once. Safe to call repeatedly —
 // the in-flight promise is shared. On any failure we silently keep the
 // fallback.
@@ -329,6 +335,7 @@ export function loadModels(): Promise<void> {
     } catch {
       // Network/parse error — keep the hardcoded fallback.
     } finally {
+      modelsSettled = true;
       notify();
     }
   })();
