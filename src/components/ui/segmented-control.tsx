@@ -44,7 +44,7 @@ function SegmentedControl<T extends string>({
           key={option.value}
           value={option.value}
           data-slot="segmented-control-item"
-          className="inline-flex h-6 cursor-default items-center justify-center rounded-md px-2.5 text-xs/relaxed font-medium whitespace-nowrap text-text-muted outline-none transition-colors select-none hover:text-text-primary focus-visible:ring-[2px] focus-visible:ring-ring data-checked:bg-surface-panel data-checked:text-text-primary data-checked:shadow-sm data-disabled:cursor-not-allowed data-disabled:opacity-50"
+          className="inline-flex h-6 cursor-default items-center justify-center rounded-md px-2.5 text-xs/relaxed font-medium whitespace-nowrap text-text-muted outline-none transition-colors select-none hover:text-text-primary focus-visible:ring-[2px] focus-visible:ring-ring data-checked:bg-surface-panel dark:data-checked:bg-surface-hover data-checked:text-text-primary data-checked:shadow-sm data-disabled:cursor-not-allowed data-disabled:opacity-50"
         >
           {option.label}
         </Radio.Root>

@@ -143,7 +143,7 @@ function ScheduleForm({ workflowId, schedule, onDone }: ScheduleFormProps) {
         {frequency !== "off" && active !== "hourly" && (
           <div className="flex items-center gap-2">
             <Label htmlFor="schedule-time">Time</Label>
-            <Input id="schedule-time" type="time" value={time} onChange={(event) => setTime(event.target.value)} className="w-28" />
+            <Input id="schedule-time" type="time" value={time} onChange={(event) => setTime(event.target.value)} className="w-28 dark:[color-scheme:dark]" />
           </div>
         )}
 
