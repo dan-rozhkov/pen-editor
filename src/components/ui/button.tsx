@@ -10,6 +10,8 @@ const buttonVariants = cva(
       variant: {
         default:
           "border-border bg-primary text-primary-foreground hover:bg-[color-mix(in_oklab,var(--primary),var(--primary-foreground)_8%)]",
+        /** The accent-blue primary action (Save, …). */
+        accent: "bg-accent-primary text-white hover:bg-accent-primary/90",
         outline:
           "border-border dark:bg-secondary/30 hover:bg-secondary/50 hover:text-foreground aria-expanded:bg-secondary aria-expanded:text-foreground",
         secondary:

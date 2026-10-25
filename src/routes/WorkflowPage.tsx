@@ -184,7 +184,7 @@ export default function WorkflowPage() {
               <Button variant="outline" onClick={() => applyPaste("append")} disabled={markdownToSteps(pasteText ?? "").length === 0}>
                 Add to end
               </Button>
-              <Button onClick={() => applyPaste("replace")} disabled={markdownToSteps(pasteText ?? "").length === 0}>
+              <Button variant="accent" onClick={() => applyPaste("replace")} disabled={markdownToSteps(pasteText ?? "").length === 0}>
                 Replace steps
               </Button>
             </DialogFooter>

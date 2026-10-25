@@ -23,7 +23,7 @@ export default function AccountSectionInner() {
     return (
       <SettingsGroup inline title="Not signed in" description="Sign in to sync your skills and use API keys.">
         <SignInControl
-          className="inline-flex h-7 items-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground outline-none hover:opacity-90 focus-visible:ring-[2px] focus-visible:ring-ring"
+          className="inline-flex h-7 items-center rounded-md bg-accent-primary px-3 text-xs font-medium text-white outline-none hover:bg-accent-primary/90 focus-visible:ring-[2px] focus-visible:ring-ring"
         />
       </SettingsGroup>
     );

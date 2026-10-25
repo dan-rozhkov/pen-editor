@@ -389,7 +389,7 @@ export function FileMenu() {
             </Button>
             <Button
               size="sm"
-              className="bg-accent-light text-white hover:bg-accent-light/80"
+              variant="accent"
               onClick={handleImport}
             >
               Import

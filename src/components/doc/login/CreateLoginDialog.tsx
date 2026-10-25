@@ -118,7 +118,7 @@ export function CreateLoginForm({ initialUsername, onDone, onCancel, onBusy }: F
         <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" size="sm" disabled={saving}>
+        <Button type="submit" size="sm" variant="accent" disabled={saving}>
           {saving ? "Saving…" : "Save"}
         </Button>
       </DialogFooter>

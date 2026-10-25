@@ -260,7 +260,7 @@ export function OpenCodeKeyDialog({ open, onOpenChange }: OpenCodeKeyDialogProps
                   Remove key
                 </Button>
               )}
-              <Button size="sm" onClick={handleSave} disabled={!inputValue.trim()}>
+              <Button size="sm" variant="accent" onClick={handleSave} disabled={!inputValue.trim()}>
                 Save
               </Button>
             </div>

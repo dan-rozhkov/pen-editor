@@ -106,7 +106,7 @@ export function ShareDialog() {
               <p className="text-xs text-destructive">{error}</p>
             )}
             <div className="flex justify-end">
-              <Button size="sm" onClick={handleShare} disabled={isSharing}>
+              <Button size="sm" variant="accent" onClick={handleShare} disabled={isSharing}>
                 {isSharing ? "Sharing…" : "Share"}
               </Button>
             </div>

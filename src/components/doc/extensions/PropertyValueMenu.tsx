@@ -102,7 +102,7 @@ function DatePicker({ editor, getRowPos, valueText, onDone }: Props) {
           commit();
         }}
       />
-      <Button type="button" size="sm" disabled={!valid} onClick={commit}>
+      <Button type="button" size="sm" variant="accent" disabled={!valid} onClick={commit}>
         Set
       </Button>
     </div>

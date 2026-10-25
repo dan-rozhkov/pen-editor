@@ -151,7 +151,7 @@ export function ComponentMetaForm({ master, otherKeys, onDone }: ComponentMetaFo
         <Button type="button" variant="ghost" size="sm" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" size="sm" disabled={saving}>
+        <Button type="submit" size="sm" variant="accent" disabled={saving}>
           Save
         </Button>
       </div>

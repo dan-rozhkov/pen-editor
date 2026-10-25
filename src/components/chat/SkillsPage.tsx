@@ -540,7 +540,7 @@ export function SkillsPage({ onClose }: SkillsPageProps) {
             />
           </div>
           <div className="flex justify-end gap-2">
-            <Button onClick={() => void handleGenerate()} disabled={!prompt.trim() || generating}>
+            <Button variant="accent" onClick={() => void handleGenerate()} disabled={!prompt.trim() || generating}>
               {generating ? "Generating…" : "Generate"}
             </Button>
           </div>
@@ -584,7 +584,7 @@ export function SkillsPage({ onClose }: SkillsPageProps) {
             />
           </div>
           <div className="flex justify-end gap-2">
-            <Button onClick={() => void handleSaveForm()} disabled={saving}>
+            <Button variant="accent" onClick={() => void handleSaveForm()} disabled={saving}>
               {saving ? "Saving…" : "Save"}
             </Button>
           </div>

@@ -162,7 +162,7 @@ export function AskUserForm({
           onNote={(n) => setNote(q.id, n)}
         />
       ))}
-      <Button size="sm" onClick={handleSubmit} disabled={!canSubmit}>
+      <Button size="sm" variant="accent" onClick={handleSubmit} disabled={!canSubmit}>
         Continue
       </Button>
     </div>

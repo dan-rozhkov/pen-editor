@@ -195,7 +195,7 @@ function ScheduleForm({ workflowId, schedule, onDone }: ScheduleFormProps) {
             Remove schedule
           </Button>
         )}
-        <Button onClick={save} disabled={frequency !== "off" && !timeValid}>
+        <Button variant="accent" onClick={save} disabled={frequency !== "off" && !timeValid}>
           Save
         </Button>
       </DialogFooter>
