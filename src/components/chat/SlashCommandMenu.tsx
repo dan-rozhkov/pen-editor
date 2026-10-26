@@ -150,11 +150,11 @@ export function SlashCommandMenu({ query, onSelect, onClose, onManageSkills }: S
 
   return (
     <div className="absolute bottom-full left-3 right-3 mb-2 z-50">
-      <Command shouldFilter={false} className="border border-border-default rounded-lg bg-white p-0 shadow-[0_2px_8px_rgba(0,0,0,0.08)]">
-        <CommandList ref={listRef} className="py-1">
+      <Command shouldFilter={false} className="menu-surface">
+        <CommandList ref={listRef}>
           <CommandEmpty>No commands found.</CommandEmpty>
           {groupedCategories.map((category) => (
-            <CommandGroup key={category} heading={category} className="p-0 px-1 pt-2 first:pt-0 **:[[cmdk-group-heading]]:text-[10px] **:[[cmdk-group-heading]]:tracking-wide **:[[cmdk-group-heading]]:text-text-muted **:[[cmdk-group-heading]]:uppercase **:[[cmdk-group-heading]]:py-1 **:[[cmdk-group-heading]]:px-2">
+            <CommandGroup key={category} heading={category} className="p-0">
               {filtered
                 .filter((c) => c.category === category)
                 .map((cmd) => (
@@ -168,10 +168,10 @@ export function SlashCommandMenu({ query, onSelect, onClose, onManageSkills }: S
                       onSelect(cmd);
                     }}
                     onSelect={() => onSelect(cmd)}
-                    className="!py-1.5 !min-h-0 !px-2 overflow-hidden"
+                    className="overflow-hidden"
                   >
-                    <span className="font-normal text-text-primary shrink-0">/{cmd.name}</span>
-                    <span className="text-text-muted truncate">{cmd.description}</span>
+                    <span className="font-normal text-menu-foreground shrink-0">/{cmd.name}</span>
+                    <span className="text-menu-muted-foreground truncate">{cmd.description}</span>
                   </CommandItem>
                 ))}
             </CommandGroup>
@@ -193,8 +193,8 @@ export function SlashCommandMenu({ query, onSelect, onClose, onManageSkills }: S
               onManageSkills();
               onClose();
             }}
-            className={`flex w-full items-center gap-1.5 border-t border-border-default px-2.5 py-1.5 text-left text-xs text-text-muted hover:bg-secondary/60 ${
-              selectedValue === MANAGE_SKILLS_VALUE ? "bg-secondary/60" : ""
+            className={`mt-1 -mx-1 -mb-1 flex w-auto items-center gap-2.5 rounded-b-[14px] border-t border-menu-separator px-3.5 py-2.5 text-left text-[13px] leading-5 text-menu-muted-foreground hover:bg-menu-highlight ${
+              selectedValue === MANAGE_SKILLS_VALUE ? "bg-menu-highlight" : ""
             }`}
           >
             <GearIcon size={13} />

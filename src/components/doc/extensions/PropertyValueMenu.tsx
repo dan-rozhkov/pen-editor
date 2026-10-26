@@ -10,7 +10,7 @@ import { MENU_HOVER, MENU_INPUT } from "../ui/menuSurface";
 import { clearProperty, setPropertyDate, setPropertyOption } from "./propertyEdits";
 import { docTagOccurrences, rankTagOptions, tagOccurrences, toIsoDate, type TagOption } from "./propertyOptions";
 
-const ITEM = cn(MENU_HOVER, "text-popover-foreground flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm");
+const ITEM = cn(MENU_HOVER, "text-menu-foreground flex min-h-8 w-full items-center gap-2.5 rounded-[10px] px-2.5 py-1.5 text-left text-[13px] leading-5");
 const cap = (name: string) => name.charAt(0).toUpperCase() + name.slice(1);
 
 function run(getRowPos: () => number | undefined, edit: (pos: number) => boolean): void {
@@ -44,7 +44,7 @@ export function PropertyValueMenu(props: Props) {
   const [view, setView] = useState<View>("menu");
   const { editor, getRowPos, onDone } = props;
   return (
-    <div className="doc-palette text-popover-foreground flex flex-col gap-0.5" onMouseDown={(event) => event.stopPropagation()}>
+    <div className="doc-palette text-menu-foreground flex flex-col gap-0.5" onMouseDown={(event) => event.stopPropagation()}>
       {view === "menu" && (
         <div role="menu" aria-label="Value type" className="flex flex-col gap-0.5">
           <MenuItem icon={<CalendarBlankIcon size={16} />} label="Date" onPick={() => setView("date")} />
@@ -68,7 +68,7 @@ export function PropertyValueMenu(props: Props) {
 function MenuItem({ icon, label, onPick }: { icon: ReactNode; label: string; onPick: () => void }) {
   return (
     <button type="button" role="menuitem" className={ITEM} onClick={onPick}>
-      <span className="text-popover-foreground/60 flex">{icon}</span>
+      <span className="text-menu-muted-foreground flex">{icon}</span>
       {label}
     </button>
   );
@@ -153,7 +153,7 @@ function OptionPicker({ editor, getRowPos, keyText, currentTag, onDone }: Props)
             </button>
           );
         })}
-        {shown.length === 0 && !canCreate && <span className="text-popover-foreground/60 px-2 py-1.5 text-xs">No options yet</span>}
+        {shown.length === 0 && !canCreate && <span className="text-menu-muted-foreground px-2.5 py-1.5 text-[13px]">No options yet</span>}
       </div>
       {canCreate && (
         <>
@@ -171,7 +171,7 @@ function OptionPicker({ editor, getRowPos, keyText, currentTag, onDone }: Props)
                 onClick={() => setColor(name)}
                 className={cn("flex size-5 items-center justify-center rounded-md", color === name && "ring-accent-primary ring-2")}
               >
-                <span data-bg={name} className="size-4 !p-0 ring-1 ring-popover-foreground/20" />
+                <span data-bg={name} className="size-4 !p-0 ring-1 ring-menu-foreground/25" />
               </button>
             ))}
           </div>

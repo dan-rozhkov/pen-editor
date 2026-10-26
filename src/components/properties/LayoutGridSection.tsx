@@ -158,7 +158,7 @@ function GridPopover({
     <div
       ref={popoverRef}
       style={style}
-      className="bg-surface-panel border border-border-default rounded-lg shadow-xl p-3 w-56 flex flex-col gap-2"
+      className="menu-surface p-3 w-56 flex flex-col gap-2"
     >
       <SelectInput
         label="Type"

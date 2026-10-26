@@ -136,7 +136,7 @@ describe("<PluginPanels />", () => {
     const panel = container.querySelector('[data-slot="plugin-panel"]');
     const handle = container.querySelector('[data-slot="popover-drag-handle"]');
     const title = screen.getByText("Color picker");
-    expect(panel?.className).toContain("rounded-xl");
+    expect(panel?.className).toContain("menu-surface");
     expect(panel?.className).not.toContain("p-3");
     expect(handle?.className).toContain("mx-3");
     expect(handle?.className).toContain("h-5");

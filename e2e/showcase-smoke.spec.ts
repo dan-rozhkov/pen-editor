@@ -147,20 +147,21 @@ test("the model filter sizes itself to its selected option", async ({ page }, te
   await expect(sortSelect).toBeVisible();
   expect(
     await page
-      .locator('select[aria-label="Model"], select[aria-label="Sort"]')
+      .locator('[role="combobox"][aria-label="Model"], [role="combobox"][aria-label="Sort"]')
       .evaluateAll((controls) => controls.map((control) => control.getAttribute("aria-label"))),
   ).toEqual(["Model", "Sort"]);
   const allModelsWidth = await select.evaluate((element) => element.getBoundingClientRect().width);
-  await expect(select).toHaveCSS("field-sizing", "content");
 
-  await select.selectOption("deepseek/deepseek-v4-pro");
+  await select.click();
+  await page.getByRole("option", { name: "Deepseek V4 Pro" }).click();
   await expect(page).toHaveURL(/model=deepseek%2Fdeepseek-v4-pro/);
   await expect
     .poll(() => select.evaluate((element) => element.getBoundingClientRect().width))
     .toBeGreaterThan(allModelsWidth);
 
-  await select.selectOption("test/an-extremely-long-model-name-that-exceeds-the-two-hundred-pixel-limit");
-  await expect(select).toHaveCSS("text-overflow", "ellipsis");
+  await select.click();
+  await page.getByRole("option", { name: /An Extremely Long Model Name/ }).click();
+  await expect(select.locator('[data-slot="select-value"]')).toHaveCSS("text-overflow", "ellipsis");
   await expect
     .poll(() => select.evaluate((element) => element.getBoundingClientRect().width))
     .toBeLessThanOrEqual(200);

@@ -49,6 +49,17 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  /* Popup menus (dropdown, context, select, combobox, popover, doc menus).
+     Follow the UI theme: an airy near-white card with a hairline border and
+     a soft layered shadow in light, its dark twin in dark. --popover stays
+     the always-dark tooltip surface. */
+  --menu: oklch(0.992 0 0);
+  --menu-foreground: oklch(0.21 0 0);
+  --menu-muted-foreground: oklch(0.52 0 0);
+  --menu-highlight: oklch(0.955 0 0);
+  --menu-border: oklch(0 0 0 / 0.08);
+  --menu-separator: oklch(0 0 0 / 0.07);
+  --menu-shadow: 0 1px 2px oklch(0 0 0 / 0.04), 0 4px 10px -2px oklch(0 0 0 / 0.05), 0 18px 40px -8px oklch(0 0 0 / 0.14);
 }
 
 .dark {
@@ -83,6 +94,13 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --menu: oklch(0.235 0 0);
+  --menu-foreground: oklch(0.96 0 0);
+  --menu-muted-foreground: oklch(0.7 0 0);
+  --menu-highlight: oklch(1 0 0 / 0.08);
+  --menu-border: oklch(1 0 0 / 0.1);
+  --menu-separator: oklch(1 0 0 / 0.08);
+  --menu-shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 4px 10px -2px oklch(0 0 0 / 0.25), 0 18px 40px -8px oklch(0 0 0 / 0.55);
 }
 
 @theme inline {
@@ -116,6 +134,12 @@
   --color-primary: var(--primary);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
+  --color-menu: var(--menu);
+  --color-menu-foreground: var(--menu-foreground);
+  --color-menu-muted-foreground: var(--menu-muted-foreground);
+  --color-menu-highlight: var(--menu-highlight);
+  --color-menu-border: var(--menu-border);
+  --color-menu-separator: var(--menu-separator);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --color-foreground: var(--foreground);
@@ -445,6 +469,15 @@ html.route-showcase body {
 html.route-showcase::-webkit-scrollbar,
 html.route-showcase body::-webkit-scrollbar {
   display: none;
+}
+
+/* The popup card shared by every floating menu/popover. Radius 14px with
+   4px inner padding makes 10px item highlights concentric (menu-item). */
+@utility menu-surface {
+  background-color: var(--menu);
+  color: var(--menu-foreground);
+  border-radius: 14px;
+  box-shadow: 0 0 0 1px var(--menu-border), var(--menu-shadow);
 }
 
 /* 1px outline for images against surfaces of a similar tone (better-ui

@@ -46,7 +46,7 @@ export function CalloutView({ node, updateAttributes, editor }: NodeViewProps) {
                     key={option}
                     type="button"
                     role="menuitem"
-                    className={cn(MENU_HOVER, "doc-callout-option text-popover-foreground flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm")}
+                    className={cn(MENU_HOVER, "doc-callout-option text-menu-foreground flex min-h-8 w-full items-center gap-2.5 rounded-[10px] px-2.5 py-1.5 text-left text-[13px] leading-5")}
                     data-kind={option}
                     onClick={() => {
                       updateAttributes({ kind: option });

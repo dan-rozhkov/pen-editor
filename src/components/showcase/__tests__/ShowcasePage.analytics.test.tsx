@@ -19,6 +19,7 @@ import {
   screen2,
   withCategories,
 } from "./showcaseFixtures";
+import { chooseOption } from "./selectHelpers";
 
 afterEach(() => {
   cleanup();
@@ -61,9 +62,7 @@ describe("ShowcasePage analytics", () => {
 
     // Changing sort re-fetches the feed but must not re-fire showcase_viewed
     // — that event is mount-scoped only.
-    fireEvent.change(screen.getByRole("combobox", { name: "Sort" }), {
-      target: { value: "latest" },
-    });
+    await chooseOption("Sort", "Latest");
     await screen.findByAltText("Onboarding flow");
 
     expect(trackMock.mock.calls.some(([event]) => event === "showcase_viewed")).toBe(false);
@@ -79,9 +78,7 @@ describe("ShowcasePage analytics", () => {
     await screen.findByAltText("Onboarding flow");
     trackMock.mockClear();
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Sort" }), {
-      target: { value: "latest" },
-    });
+    await chooseOption("Sort", "Latest");
 
     await waitFor(() =>
       expect(trackMock).toHaveBeenCalledWith("showcase_filter_applied", {

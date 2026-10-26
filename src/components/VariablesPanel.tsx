@@ -178,7 +178,7 @@ function AddVariableDropdown({
       <DropdownMenuContent
         side={side}
         align="end"
-        className="min-w-[120px] bg-popover text-popover-foreground ring-foreground/10 rounded-lg shadow-md ring-1"
+        className="min-w-[120px]"
       >
         {(["color", "number", "string"] as VariableType[]).map((type) => (
           <DropdownMenuItem

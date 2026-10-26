@@ -4,6 +4,8 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ShowcaseFilterBar } from "@/components/showcase/ShowcaseFilterBar";
 import type { ShowcaseCategory, ShowcaseModel } from "@/lib/showcase";
 
+import { chooseOption, clickOption, openSelect, selectedLabel } from "./selectHelpers";
+
 afterEach(() => {
   cleanup();
 });
@@ -19,7 +21,7 @@ const models: ShowcaseModel[] = [
 ];
 
 describe("<ShowcaseFilterBar />", () => {
-  it("renders a controlled sort select", () => {
+  it("renders a controlled sort select", async () => {
     render(
       <ShowcaseFilterBar
         sort="popular"
@@ -35,14 +37,13 @@ describe("<ShowcaseFilterBar />", () => {
       />,
     );
 
-    const sortSelect = screen.getByRole("combobox", { name: "Sort" }) as HTMLSelectElement;
-    expect(sortSelect.value).toBe("popular");
-    expect(Array.from(sortSelect.options).map((option) => option.textContent)).toEqual([
-      "Most popular",
-      "Latest",
-    ]);
-    const sortContainer = sortSelect.parentElement;
-    const sortGroup = sortContainer?.parentElement;
+    const sortSelect = screen.getByRole("combobox", { name: "Sort" });
+    expect(selectedLabel("Sort")).toBe("Most popular");
+    openSelect("Sort");
+    const sortOptions = await screen.findAllByRole("option");
+    expect(sortOptions.map((option) => option.textContent)).toEqual(["Most popular", "Latest"]);
+    expect(sortOptions[0].getAttribute("aria-selected")).toBe("true");
+    const sortGroup = sortSelect.parentElement;
     const filterBar = sortGroup?.parentElement;
 
     expect(sortGroup?.classList.contains("shrink-0")).toBe(true);
@@ -54,14 +55,13 @@ describe("<ShowcaseFilterBar />", () => {
     expect(categoryRow.classList.contains("sm:overflow-x-auto")).toBe(true);
     expect(sortSelect.classList.contains("rounded-full")).toBe(true);
     expect(sortSelect.classList.contains("border-text-primary")).toBe(true);
-    expect(sortSelect.classList.contains("[field-sizing:content]")).toBe(true);
     expect(sortSelect.classList.contains("focus-visible:outline-text-primary")).toBe(true);
     expect(screen.getByRole("button", { name: "All" }).classList.contains("text-sm")).toBe(
       true,
     );
   });
 
-  it("calls onSortChange when the selected sort changes", () => {
+  it("calls onSortChange when the selected sort changes", async () => {
     const onSortChange = vi.fn();
     render(
       <ShowcaseFilterBar
@@ -78,9 +78,7 @@ describe("<ShowcaseFilterBar />", () => {
       />,
     );
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Sort" }), {
-      target: { value: "latest" },
-    });
+    await chooseOption("Sort", "Latest");
     expect(onSortChange).toHaveBeenCalledWith("latest");
   });
 
@@ -253,7 +251,7 @@ describe("<ShowcaseFilterBar />", () => {
     }
   });
 
-  it("renders a controlled model select with 'All models' plus a label-only option per model", () => {
+  it("renders a controlled model select with 'All models' plus a label-only option per model", async () => {
     const onModelChange = vi.fn();
     const { rerender } = render(
       <ShowcaseFilterBar
@@ -270,24 +268,23 @@ describe("<ShowcaseFilterBar />", () => {
       />,
     );
 
-    const select = screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
+    const select = screen.getByRole("combobox", { name: "Model" });
     const sortSelect = screen.getByRole("combobox", { name: "Sort" });
-    expect(select.value).toBe("");
+    expect(selectedLabel("Model")).toBe("All models");
     expect(select.compareDocumentPosition(sortSelect) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(select.classList.contains("[field-sizing:content]")).toBe(true);
     expect(select.classList.contains("max-w-[200px]")).toBe(true);
-    expect(select.classList.contains("truncate")).toBe(true);
     expect(select.classList.contains("focus-visible:outline-1")).toBe(true);
     expect(select.classList.contains("focus-visible:outline-text-primary")).toBe(true);
     expect(select.classList.contains("focus-visible:outline-accent-primary")).toBe(false);
-    const options = Array.from(select.querySelectorAll("option")).map((o) => o.textContent);
+    openSelect("Model");
+    const options = (await screen.findAllByRole("option")).map((o) => o.textContent);
     expect(options[0]).toBe("All models");
     // Labels are derived from the model id: published apps carry whatever
     // model generated them, including ones the editor never ran on.
     expect(options).toContain("Deepseek V4 Pro");
     expect(options).not.toContain("Deepseek V4 Pro (12)");
 
-    fireEvent.change(select, { target: { value: "deepseek/deepseek-v4-pro" } });
+    clickOption(screen.getByRole("option", { name: "Deepseek V4 Pro" }));
 
     // Selecting an option calls onModelChange...
     expect(onModelChange).toHaveBeenCalledWith("deepseek/deepseek-v4-pro");
@@ -310,7 +307,7 @@ describe("<ShowcaseFilterBar />", () => {
         onModelChange={onModelChange}
       />,
     );
-    expect(select.value).toBe("");
+    expect(selectedLabel("Model")).toBe("All models");
 
     rerender(
       <ShowcaseFilterBar
@@ -327,7 +324,7 @@ describe("<ShowcaseFilterBar />", () => {
       />,
     );
 
-    expect(select.value).toBe("deepseek/deepseek-v4-pro");
+    expect(selectedLabel("Model")).toBe("Deepseek V4 Pro");
   });
 
   it("does not render the model select when there are no models", () => {
@@ -349,7 +346,7 @@ describe("<ShowcaseFilterBar />", () => {
     expect(screen.queryByRole("combobox", { name: "Model" })).toBeNull();
   });
 
-  it("keeps a stale deep-linked model selected and visible even though it's absent from `models`", () => {
+  it("keeps a stale deep-linked model selected and visible even though it's absent from `models`", async () => {
     render(
       <ShowcaseFilterBar
         sort="popular"
@@ -365,13 +362,13 @@ describe("<ShowcaseFilterBar />", () => {
       />,
     );
 
-    const select = screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
-    expect(select.value).toBe("mistral/old-retired-model");
-    const options = Array.from(select.querySelectorAll("option")).map((o) => o.textContent);
+    expect(selectedLabel("Model")).toBe("Old Retired Model");
+    openSelect("Model");
+    const options = (await screen.findAllByRole("option")).map((o) => o.textContent);
     expect(options).toContain("Old Retired Model");
   });
 
-  it("still renders the model select (showing the active model) when `models` is empty but a model filter is set", () => {
+  it("still renders the model select (showing the active model) when `models` is empty but a model filter is set", async () => {
     const onModelChange = vi.fn();
     render(
       <ShowcaseFilterBar
@@ -388,10 +385,10 @@ describe("<ShowcaseFilterBar />", () => {
       />,
     );
 
-    const select = screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
-    expect(select.value).toBe("mistral/old-retired-model");
+    expect(screen.getByRole("combobox", { name: "Model" })).toBeTruthy();
+    expect(selectedLabel("Model")).toBe("Old Retired Model");
 
-    fireEvent.change(select, { target: { value: "" } });
+    await chooseOption("Model", "All models");
     expect(onModelChange).toHaveBeenCalledWith(null);
   });
 });

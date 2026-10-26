@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
  * plugin panels. Keeping it here prevents those two surfaces from drifting
  * apart visually. */
 export const DRAGGABLE_SURFACE_CLASS =
-  "rounded-xl border border-border-light bg-surface-panel text-text-primary shadow-lg outline-none";
+  "menu-surface outline-none";
 
 interface DraggableSurfaceHandleProps extends Omit<ComponentProps<"div">, "children"> {
   children?: ReactNode;

@@ -49,9 +49,9 @@ export const LoginMenu = forwardRef<LoginMenuHandle, Props>(function LoginMenu({
       className={cn(MENU_SURFACE, "max-h-80 w-64 overflow-y-auto p-1")}
       onMouseDown={(event) => event.preventDefault()}
     >
-      {load.state === "loading" && <div className="px-2 py-1.5 text-xs text-popover-foreground/60">Loading…</div>}
+      {load.state === "loading" && <div className="px-2.5 py-1.5 text-[13px] text-menu-muted-foreground">Loading…</div>}
       {load.state === "error" && (
-        <div role="alert" className="px-2 py-1.5 text-xs text-destructive">
+        <div role="alert" className="px-2.5 py-1.5 text-[13px] text-destructive">
           {load.error}
         </div>
       )}
@@ -61,22 +61,22 @@ export const LoginMenu = forwardRef<LoginMenuHandle, Props>(function LoginMenu({
           role="option"
           aria-selected={index === selected}
           className={cn(
-            "flex cursor-default items-center gap-2 rounded-md px-1.5 py-1 aria-selected:bg-accent aria-selected:text-accent-foreground",
+            "text-menu-foreground flex cursor-default items-center gap-2.5 rounded-[10px] px-2 py-1.5 aria-selected:bg-menu-highlight aria-selected:text-menu-foreground",
             pick.kind === "create" && index > 0 && "mt-1",
           )}
           onMouseMove={() => setSelected(index)}
           onClick={() => command(pick)}
         >
-          <span className="bg-popover-foreground/10 flex size-8 shrink-0 items-center justify-center rounded-md [&_svg]:size-4">
+          <span className="ring-menu-border bg-menu flex size-8 shrink-0 items-center justify-center rounded-lg ring-1 [&_svg]:size-4">
             {pick.kind === "create" ? <PlusIcon /> : pick.login.icon ? <img src={pick.login.icon} alt="" className="size-4 rounded-sm" /> : <KeyIcon />}
           </span>
           <span className="min-w-0">
             {pick.kind === "create" ? (
-              <span className="block truncate text-xs font-medium">{createRowLabel(query)}</span>
+              <span className="block truncate text-[13px] leading-5 font-medium">{createRowLabel(query)}</span>
             ) : (
               <>
-                <span className="block truncate text-xs font-medium">{pick.login.username || pick.login.label}</span>
-                <span className="block truncate text-[0.6875rem] text-popover-foreground/60">
+                <span className="block truncate text-[13px] leading-5 font-medium">{pick.login.username || pick.login.label}</span>
+                <span className="block truncate text-[11px] text-menu-muted-foreground">
                   {pick.login.label && pick.login.label !== pick.login.username ? `${pick.login.label} · ` : ""}
                   {loginHost(pick.login.origin)}
                 </span>

@@ -290,7 +290,7 @@ function TextStylesPopover({ node }: { node: TextNode }) {
         side="left"
         align="start"
         sideOffset={TYPOGRAPHY_POPOVER_PANEL_OFFSET}
-        className="w-[240px] max-h-[360px] gap-0 overflow-hidden rounded-xl border-border-default p-0"
+        className="w-[240px] max-h-[360px] gap-0 overflow-hidden p-0"
         draggable
         dragHandleContent={<span className="text-[11px] font-semibold text-text-primary">Text styles</span>}
       >

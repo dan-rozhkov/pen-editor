@@ -1,4 +1,4 @@
-import { CaretDownIcon, DeviceMobileIcon, LaptopIcon } from "@/components/icons";
+import { DeviceMobileIcon, LaptopIcon } from "@/components/icons";
 
 import { cn } from "@/lib/utils";
 import { getShowcaseModelLabel } from "@/components/showcase/showcaseApps";
@@ -8,7 +8,13 @@ import type {
   ShowcasePlatform,
   ShowcaseSort,
 } from "@/lib/showcase";
-import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface ShowcaseFilterBarProps {
   sort: ShowcaseSort;
@@ -32,6 +38,22 @@ const FOCUS_RING =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary";
 const SELECT_FOCUS_RING =
   "focus-visible:outline-1 focus-visible:outline-offset-0 focus-visible:outline-text-primary";
+
+// base-ui items cannot reliably use "" as a value; map "all models" to a sentinel.
+const ALL_MODELS_VALUE = "__all__";
+
+// Pill look of the old native selects, overriding SelectTrigger's compact
+// defaults (height, radius, text size, panel background, focus ring).
+const PILL_TRIGGER = cn(
+  "h-auto data-[size=default]:h-auto shrink-0 gap-2 rounded-full bg-transparent py-1.5 pr-3 pl-4 text-sm font-medium focus-visible:ring-0",
+  SELECT_FOCUS_RING,
+);
+
+const CONTENT_PROPS = {
+  align: "start" as const,
+  alignItemWithTrigger: false,
+  className: "w-max max-w-(--available-width) min-w-(--anchor-width)",
+};
 
 function capitalizeFirst(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -148,67 +170,69 @@ export function ShowcaseFilterBar({
 
       {(models.length > 0 || model !== null) && (
         <div className="flex shrink-0 items-center">
-          <div className="relative shrink-0">
-            <select
+          <Select
+            value={model ?? ALL_MODELS_VALUE}
+            onValueChange={(value) =>
+              onModelChange(value === null || value === ALL_MODELS_VALUE ? null : value)
+            }
+          >
+            <SelectTrigger
               aria-label="Model"
-              value={model ?? ""}
-              onChange={(event) => onModelChange(event.target.value || null)}
               className={cn(
-                "max-w-[200px] shrink-0 appearance-none truncate rounded-full border bg-transparent py-1.5 pr-8 pl-4 text-sm font-medium transition-colors [field-sizing:content]",
-                SELECT_FOCUS_RING,
+                PILL_TRIGGER,
+                "max-w-[200px]",
                 model !== null
                   ? "border-text-primary text-text-primary"
                   : "border-border-default text-text-muted hover:text-text-primary",
               )}
             >
-              <option value="">All models</option>
+              <SelectValue>
+                {model === null ? "All models" : getShowcaseModelLabel(model)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent {...CONTENT_PROPS}>
+              <SelectItem value={ALL_MODELS_VALUE}>All models</SelectItem>
               {/* A deep-linked/bookmarked `model` can outlive its entry in
                   `models` (e.g. the models list fetch failed, or the model
                   was dropped from GET /api/showcase/models). Without this,
-                  the select would silently fall back to "All models" while
-                  the feed stays filtered, with no option to select that
-                  matches the active value. */}
+                  the select would have no item matching the active value
+                  while the feed stays filtered. */}
               {model !== null && !models.some((m) => m.model === model) && (
-                <option value={model}>{getShowcaseModelLabel(model)}</option>
+                <SelectItem value={model}>{getShowcaseModelLabel(model)}</SelectItem>
               )}
               {models.map((m) => (
-                <option key={m.model} value={m.model}>
+                <SelectItem key={m.model} value={m.model}>
                   {getShowcaseModelLabel(m.model)}
-                </option>
+                </SelectItem>
               ))}
-            </select>
-            <CaretDownIcon
-              aria-hidden="true"
-              className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-text-muted"
-              weight={CHEVRON_WEIGHT}
-            />
-          </div>
+            </SelectContent>
+          </Select>
         </div>
       )}
 
       <div className="flex shrink-0 items-center">
-        <div className="relative shrink-0">
-          <select
+        <Select
+          value={sort}
+          onValueChange={(value) => {
+            if (value !== null) onSortChange(value as ShowcaseSort);
+          }}
+        >
+          <SelectTrigger
             aria-label="Sort"
-            value={sort}
-            onChange={(event) => onSortChange(event.target.value as ShowcaseSort)}
-            className={cn(
-              "shrink-0 appearance-none rounded-full border border-text-primary bg-transparent py-1.5 pr-8 pl-4 text-sm font-medium text-text-primary transition-colors [field-sizing:content]",
-              SELECT_FOCUS_RING,
-            )}
+            className={cn(PILL_TRIGGER, "border-text-primary text-text-primary")}
           >
+            <SelectValue>
+              {SORT_OPTIONS.find((option) => option.value === sort)?.label ?? sort}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent {...CONTENT_PROPS}>
             {SORT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
+              <SelectItem key={option.value} value={option.value}>
                 {option.label}
-              </option>
+              </SelectItem>
             ))}
-          </select>
-          <CaretDownIcon
-            aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-text-muted"
-            weight={CHEVRON_WEIGHT}
-          />
-        </div>
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );

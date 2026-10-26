@@ -155,7 +155,7 @@ function FilterForm({ editor, tablePos, col, onDone }: { editor: Editor; tablePo
           setColumnFilter(editor, tablePos, col, event.target.value);
         }}
       />
-      <div className="flex items-center justify-between text-xs text-popover-foreground/70">
+      <div className="flex items-center justify-between text-xs text-menu-muted-foreground">
         <span data-testid="table-filter-count">
           {shown} of {total} rows
         </span>

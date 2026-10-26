@@ -66,17 +66,17 @@ export function DocLinkPicker({ editor, currentDocId }: { editor: Editor; curren
       />
       <div role="listbox" aria-label="Documents" className="mt-1 max-h-60 overflow-y-auto">
         {matches.length === 0 ? (
-          <div className="px-2 py-1.5 text-xs text-popover-foreground/60">No documents</div>
+          <div className="px-2.5 py-1.5 text-[13px] text-menu-muted-foreground">No documents</div>
         ) : (
           matches.map((doc) => (
             <div
               key={doc.id}
               role="option"
               aria-selected={false}
-              className="flex cursor-default items-center gap-2 rounded-md px-1.5 py-1 text-xs hover:bg-accent hover:text-accent-foreground"
+              className="text-menu-foreground flex min-h-8 cursor-default items-center gap-2.5 rounded-[10px] px-2.5 py-1.5 text-[13px] leading-5 hover:bg-menu-highlight hover:text-menu-foreground"
               onClick={() => pick(doc)}
             >
-              <FileTextIcon className="size-4 shrink-0" />
+              <FileTextIcon className="text-menu-muted-foreground size-4 shrink-0" />
               <span className="truncate">{doc.title.trim() || "Untitled"}</span>
             </div>
           ))

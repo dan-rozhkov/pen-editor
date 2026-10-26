@@ -23,26 +23,26 @@ export const SlashMenu = forwardRef<SlashMenuHandle, Props>(function SlashMenu({
       onMouseDown={(event) => event.preventDefault()}
     >
       {items.length === 0 ? (
-        <div className="px-2 py-1.5 text-xs text-popover-foreground/60">No results</div>
+        <div className="px-2.5 py-1.5 text-[13px] text-menu-muted-foreground">No results</div>
       ) : (
         items.map((item, index) => (
           <Fragment key={item.id}>
             {item.group && item.group !== items[index - 1]?.group && (
-              <div className="px-2 pt-2 pb-1 text-[0.6875rem] font-medium text-popover-foreground/60">{item.group}</div>
+              <div className="px-2.5 pt-2 pb-1 text-[11px] font-medium text-menu-muted-foreground">{item.group}</div>
             )}
             <div
               role="option"
               aria-selected={index === selected}
-              className="flex cursor-default items-center gap-2 rounded-md px-1.5 py-1 aria-selected:bg-accent aria-selected:text-accent-foreground"
+              className="text-menu-foreground flex cursor-default items-center gap-2.5 rounded-[10px] px-2 py-1.5 aria-selected:bg-menu-highlight aria-selected:text-menu-foreground"
               onMouseMove={() => setSelected(index)}
               onClick={() => command(item)}
             >
-              <span className="bg-popover-foreground/10 flex size-8 shrink-0 items-center justify-center rounded-md [&_svg]:size-4">
+              <span className="ring-menu-border bg-menu flex size-8 shrink-0 items-center justify-center rounded-lg ring-1 [&_svg]:size-4">
                 {item.icon}
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-xs font-medium">{item.title}</span>
-                <span className="block truncate text-[0.6875rem] text-popover-foreground/60">{item.hint}</span>
+                <span className="block truncate text-[13px] leading-5 font-medium">{item.title}</span>
+                <span className="block truncate text-[11px] text-menu-muted-foreground">{item.hint}</span>
               </span>
             </div>
           </Fragment>

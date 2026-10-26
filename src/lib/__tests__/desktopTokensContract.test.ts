@@ -22,6 +22,9 @@ const MIRRORED: Record<string, string> = {
   "--agent-cursor": "--color-accent-primary",
 };
 
+/** Popup tokens: same name on both sides; frontend values live in `:root` / `.dark`. */
+const MENU_TOKENS = ["--menu", "--menu-border", "--menu-muted-foreground", "--menu-highlight", "--menu-separator"];
+
 const norm = (value: string) => value.replace(/\s+/g, "").toLowerCase();
 
 /** Value of `--name:` in the first block opened by exactly `selector {` that defines it. */
@@ -65,6 +68,12 @@ describe.runIf(desktopExists)("desktop token contract", () => {
     const pair = desktopPair(desktop, desktopName);
     expect(norm(pair.light)).toBe(norm(blockValue(frontend, "@theme", frontendName) ?? "missing in @theme"));
     expect(norm(pair.dark)).toBe(norm(blockValue(frontend, ".dark", frontendName) ?? "missing in .dark"));
+  });
+
+  it.each(MENU_TOKENS)("%s equals the frontend popup token in both themes", (name) => {
+    const pair = desktopPair(desktop, name);
+    expect(norm(pair.light)).toBe(norm(blockValue(frontend, ":root", name) ?? "missing in :root"));
+    expect(norm(pair.dark)).toBe(norm(blockValue(frontend, ".dark", name) ?? "missing in .dark"));
   });
 
   // Button tokens: the desktop's own buttons mirror the frontend ghost button.

@@ -80,9 +80,9 @@ export function BubbleToolbar({ editor }: { editor: Editor }) {
         bubbleVisible(s, view.hasFocus() || holds.any() || element.contains(document.activeElement), editor.isEditable)
       }
     >
-      <div role="toolbar" aria-label="Text formatting" className={cn(MENU_SURFACE, "flex items-center gap-1 rounded-xl p-1.5")}>
+      <div role="toolbar" aria-label="Text formatting" className={cn(MENU_SURFACE, "flex items-center gap-1 p-1.5")}>
         <DropdownMenu onOpenChange={changeTurn}>
-          <DropdownMenuTrigger render={<Button variant="ghost" aria-label="Turn into" className={cn(BUBBLE_HOVER, "h-9 rounded-lg px-3 text-sm text-popover-foreground [&_svg]:size-4")} />}>
+          <DropdownMenuTrigger render={<Button variant="ghost" aria-label="Turn into" className={cn(BUBBLE_HOVER, "h-9 rounded-lg px-3 text-sm text-menu-foreground [&_svg]:size-4")} />}>
             {state.block} <CaretDownIcon weight={CHEVRON_WEIGHT} />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" finalFocus={false} className="w-auto min-w-44">
@@ -93,7 +93,7 @@ export function BubbleToolbar({ editor }: { editor: Editor }) {
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-        <span aria-hidden className="bg-popover-foreground/20 mx-1 h-6 w-px" />
+        <span aria-hidden className="bg-menu-separator mx-1 h-6 w-px" />
         {MARKS.map((mark) => {
           const active = state.marks.includes(mark.name);
           return (
