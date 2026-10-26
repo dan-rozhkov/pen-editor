@@ -1,15 +1,13 @@
 import { useState } from "react";
 
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { JSON_HEADERS, requestJson } from "@/lib/apiJson";
@@ -81,15 +79,16 @@ function DeleteAccount({ email, onDeleted }: { email: string; onDeleted: () => v
       <Button variant="destructive" onClick={() => setOpen(true)}>
         Delete account
       </Button>
-      <AlertDialog open={open} onOpenChange={onOpenChange}>
-        <AlertDialogContent size="sm">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete your account?</AlertDialogTitle>
-            <AlertDialogDescription>
+      {/* Same shell as the other settings dialogs (OpenCodeKeyDialog): left-aligned, close cross, buttons at the edges. */}
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md" showCloseButton={!busy}>
+          <DialogHeader>
+            <DialogTitle>Delete your account?</DialogTitle>
+            <DialogDescription>
               This permanently deletes your account and its data on our servers. Docs and workflows in this browser
               are not removed. Export them first.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
+            </DialogDescription>
+          </DialogHeader>
           <form
             className="flex flex-col gap-2"
             onSubmit={(e) => {
@@ -114,14 +113,16 @@ function DeleteAccount({ email, onDeleted }: { email: string; onDeleted: () => v
               </p>
             )}
           </form>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" disabled={!canDelete} onClick={() => void submit()}>
+          <div className="flex items-center justify-between gap-2">
+            <DialogClose render={<Button size="sm" variant="outline" />} disabled={busy}>
+              Cancel
+            </DialogClose>
+            <Button size="sm" variant="destructive" disabled={!canDelete} onClick={() => void submit()}>
               Delete account
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
