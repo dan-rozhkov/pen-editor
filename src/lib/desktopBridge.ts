@@ -132,6 +132,17 @@ export interface DesktopLoginsApi {
   add(payload: { site: string; username: string; password: string; label?: string }): Promise<DesktopLoginsAddResult>;
 }
 
+/** Built-in browser switches, held by the shell. Exposed to the Settings tab only; absent on the web and on an older shell. */
+export interface DesktopBrowserSettings {
+  adBlock: boolean;
+  mcpBrowser: boolean;
+}
+
+export interface DesktopBrowserSettingsApi {
+  get(): Promise<DesktopBrowserSettings | { error: string }>;
+  set(patch: Partial<DesktopBrowserSettings>): Promise<DesktopBrowserSettings | { error: string }>;
+}
+
 export interface PenDesktopApi {
   auth?: DesktopAuthApi;
   /** Saved logins for `@` mentions in documents. Absent on the web and on an older shell. */
@@ -160,6 +171,8 @@ export interface PenDesktopApi {
   setDocumentTitle?(title: string): void;
   /** Opens or focuses the Settings tab (/settings), optionally on a section. Absent on an older shell. */
   settings?: DesktopSettingsApi;
+  /** Ad blocking and MCP control of the built-in browser. Settings tab only. */
+  browserSettings?: DesktopBrowserSettingsApi;
   /** true when the desktop agent layout flag is on: the editor tab is chatless. */
   agentLayout?: boolean;
   /** Canvas link host bridge (desktop agent layout only); see docs/canvas-link.md. */
