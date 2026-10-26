@@ -29,6 +29,38 @@ shapes, round ends. Read this before drawing or changing a glyph.
 A circle sits slightly larger than a square so both read as the same size.
 Nothing goes outside 1.25 → 14.75 (the stroke would be clipped).
 
+## Optical balance
+
+Equal boxes do not look equal. A circle, a triangle or a star fills less of
+its box than a square, and a glyph with a tail or a knob looks bigger than
+its main shape. Keylines (Material Design's keyline shapes) are the starting
+point. The final check is optical: put the glyph in a row with Square and
+Circle at the size it is used, then blur the row (about 2px at 20px) and
+compare the blobs. Every blob must read as the same size and weight.
+
+Rules of thumb, measured on this set (area of the ink's convex hull, in grid
+units², 1.25px stroke):
+
+- Closed objects (Square, Circle, File, Browser, Cube) sit at 120–146.
+  Circle 141 and Square 146 are the reference pair.
+- A triangle needs a bigger box than a square: Warning is 12.5 × 11.25,
+  Play is 11.5 tall against Pause/Stop at 10.5.
+- Play's triangle sits right of centre (`x 4.75 → 13.75`): its ink centre
+  must land near x = 8, not its box.
+- Concave shapes (Sparkle) and narrow ones (Lightbulb, Lock) grow until they
+  reach the keyline in their long direction.
+- A shape that adds mass outside its keyline (the chat bubble's tail) draws
+  smaller to compensate.
+- Diagonal tools (pencils, brush, wand) span corner to corner. Their hull is
+  small by nature; do not enlarge them by that number.
+
+To correct a glyph without redrawing it, pass `optics` as the fourth
+`createIcon` argument: `{ scale, dx, dy }` scales about (8, 8), then moves
+by `dx`/`dy` units. Strokes keep their width; dots and solid fills scale
+with the glyph. Prefer real coordinates for a
+new glyph; use `optics` for a correction to an existing one, with a comment
+that says why. Never let the result cross the 1.25 → 14.75 safe zone.
+
 ## Construction
 
 - Start from horizontal, vertical and 45° lines. Other angles only where the

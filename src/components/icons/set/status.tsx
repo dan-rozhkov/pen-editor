@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { createIcon } from "../createIcon";
+import { createIcon, opticsTransform } from "../createIcon";
 import { slashed } from "./slash";
 
 // Status, feedback and small UI marks: check/x/plus, alerts, eye, chat,
@@ -83,8 +83,8 @@ export const QuestionIcon = /*#__PURE__*/ createIcon(
   </>,
 );
 
-const TRI = "M8 2.75L14 13H2Z";
-const TRI_MARK = <path d="M8 6.5v3M8 11.25v.01" />;
+const TRI = "M8 2L14.25 13.25H1.75Z";
+const TRI_MARK = <path d="M8 6.25v3.25M8 11.25v.01" />;
 
 export const WarningIcon = /*#__PURE__*/ createIcon(
   "Warning",
@@ -142,12 +142,14 @@ export const HeartIcon = /*#__PURE__*/ createIcon(
   <path d={HEART} stroke="currentColor" />,
 );
 
-const SPARKLE = "M8 2.25Q8.6 7.4 13.75 8Q8.6 8.6 8 13.75Q7.4 8.6 2.25 8Q7.4 7.4 8 2.25Z";
+const SPARKLE = "M8 2.25Q9 7 13.75 8Q9 9 8 13.75Q7 9 2.25 8Q7 7 8 2.25Z";
 
 export const SparkleIcon = /*#__PURE__*/ createIcon(
   "Sparkle",
   <path d={SPARKLE} />,
   <path d={SPARKLE} stroke="currentColor" />,
+  // Concave sides read smaller than a square of the same box.
+  { scale: 1.07 },
 );
 
 export const LightningIcon = /*#__PURE__*/ createIcon("Lightning", <path d="M9 2L3.75 9H8l-1 5 5.25-7H8Z" />);
@@ -164,6 +166,7 @@ export const LightbulbIcon = /*#__PURE__*/ createIcon(
     <path d={BULB} stroke="currentColor" />
     <path d="M6.25 13.5h3.5" stroke="currentColor" />
   </>,
+  { scale: 1.08, dy: -0.2 },
 );
 
 const HORN = "M2.5 6.25h3L12.5 3v10l-7-3.25h-3Z";
@@ -178,6 +181,7 @@ export const MegaphoneIcon = /*#__PURE__*/ createIcon(
     <path d={HORN} stroke="currentColor" />
     <path d="M5.25 10l.9 3h1.6" stroke="currentColor" />
   </>,
+  { scale: 1.1, dx: 0.15 },
 );
 
 const BRAIN_L = "M8 3.5A1.75 1.75 0 0 0 4.9 4.6 1.95 1.95 0 0 0 3.4 8 2.2 2.2 0 0 0 5 12 1.6 1.6 0 0 0 8 12.5Z";
@@ -192,8 +196,10 @@ export const BrainIcon = /*#__PURE__*/ createIcon(
 );
 
 const BUBBLE = "M2.5 13.5L2.8 11A6 6 0 1 1 5.95 13.64Z";
+// The tail adds mass outside the circle keyline, so the bubble draws smaller.
+const BUBBLE_OPTICS = { scale: 0.95, dx: 0.15, dy: -0.15 };
 
-export const ChatCircleIcon = /*#__PURE__*/ createIcon("ChatCircle", <path d={BUBBLE} />);
+export const ChatCircleIcon = /*#__PURE__*/ createIcon("ChatCircle", <path d={BUBBLE} />, undefined, BUBBLE_OPTICS);
 
 export const ChatCircleDotsIcon = /*#__PURE__*/ createIcon(
   "ChatCircleDots",
@@ -203,6 +209,8 @@ export const ChatCircleDotsIcon = /*#__PURE__*/ createIcon(
     <circle cx="8" cy="8" r="0.85" {...DOT} />
     <circle cx="10.8" cy="8" r="0.85" {...DOT} />
   </>,
+  undefined,
+  BUBBLE_OPTICS,
 );
 
 export const ChatCircleTextIcon = /*#__PURE__*/ createIcon(
@@ -211,6 +219,8 @@ export const ChatCircleTextIcon = /*#__PURE__*/ createIcon(
     <path d={BUBBLE} />
     <path d="M5.5 6.5h5M5.5 9.25h3" />
   </>,
+  undefined,
+  BUBBLE_OPTICS,
 );
 
 const PERSON = (
@@ -258,7 +268,11 @@ export const DotsThreeVerticalIcon = /*#__PURE__*/ createIcon(
 
 const CLOUD = "M4.5 12.75a3.25 3.25 0 0 1-.6-6.45 4.25 4.25 0 0 1 8.2.7 2.9 2.9 0 0 1-.6 5.75Z";
 
-export const CloudSlashIcon = /*#__PURE__*/ createIcon("CloudSlash", (uid) => slashed(uid, "CloudSlash", <path d={CLOUD} />));
+// The cloud alone reached x 0.6 → 15.1, past the safe zone. Only the cloud
+// shrinks; the slash keeps its size.
+export const CloudSlashIcon = /*#__PURE__*/ createIcon("CloudSlash", (uid) =>
+  slashed(uid, "CloudSlash", <path d={CLOUD} transform={opticsTransform({ scale: 0.92 })} />),
+);
 
 export const WifiSlashIcon = /*#__PURE__*/ createIcon("WifiSlash", (uid) =>
   slashed(uid, "WifiSlash",

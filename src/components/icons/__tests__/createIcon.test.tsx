@@ -82,4 +82,19 @@ describe("createIcon", () => {
     const second = svg.parentElement!.querySelectorAll("svg")[1];
     expect(second.getAttribute("stroke-width")).toBe("1");
   });
+
+  it("applies optics to both variants, scaled about the grid centre", () => {
+    const Corrected = createIcon(
+      "Corrected",
+      <path data-part="outline" d="M2 8h12" />,
+      (uid) => <path data-part="fill" data-uid={uid} d="M2 2h12v12H2Z" />,
+      { scale: 1.1, dy: -0.2 },
+    );
+    const transform = "translate(8 7.8) scale(1.1) translate(-8 -8)";
+    for (const weight of ["regular", "fill"] as const) {
+      const g = svgOf(<Corrected weight={weight} />).querySelector("g");
+      expect(g?.getAttribute("transform")).toBe(transform);
+    }
+    expect(svgOf(<Outline />).querySelector("g")).toBeNull();
+  });
 });

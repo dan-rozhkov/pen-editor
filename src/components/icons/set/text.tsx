@@ -63,9 +63,9 @@ export const TextTIcon = /*#__PURE__*/ createIcon("TextT", <path d="M3 3.25h10M8
 export const TextAaIcon = /*#__PURE__*/ createIcon(
   "TextAa",
   <>
-    <path d="M2 12.5 4.75 4l2.75 8.5M3 9.5h3.5" />
-    <circle cx="11.75" cy="10.5" r="2" />
-    <path d="M13.75 8.5v4" />
+    <path d="M1.75 13 4.5 3l2.75 10M2.7 9.75h3.6" />
+    <circle cx="11.75" cy="10.75" r="2.25" />
+    <path d="M14 8.5V13" />
   </>,
 );
 

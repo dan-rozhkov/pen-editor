@@ -57,12 +57,30 @@ const STROKE: Record<IconWeight, number> = {
 export type Glyph = ReactNode | ((uid: string) => ReactNode);
 
 /**
+ * Optical correction (STYLE.md, "Optical balance"): the glyph is scaled about
+ * the grid centre (8, 8), then moved by `dx`/`dy` grid units. Strokes keep
+ * their screen width (non-scaling-stroke); filled parts (dots, solid
+ * variants) scale with the glyph.
+ */
+export interface IconOptics {
+  scale?: number;
+  dx?: number;
+  dy?: number;
+}
+
+export function opticsTransform({ scale = 1, dx = 0, dy = 0 }: IconOptics): string {
+  return `translate(${8 + dx} ${8 + dy}) scale(${scale}) translate(-8 -8)`;
+}
+
+/**
  * Build an icon component. `outline` is stroked (fill none) on the 16 grid;
  * `fill`, when given, is the solid variant used for `weight="fill"` — painted
  * with fill and no stroke by default, details cut out with evenodd or a mask
  * keyed by `uid`. Icons without a fill variant fall back to the outline.
+ * `optics` applies to both variants.
  */
-export function createIcon(name: string, outline: Glyph, fill?: Glyph): Icon {
+export function createIcon(name: string, outline: Glyph, fill?: Glyph, optics?: IconOptics): Icon {
+  const transform = optics ? opticsTransform(optics) : undefined;
   const Component = forwardRef<SVGSVGElement, IconProps>(function PenIcon(props, ref) {
     const ctx = useContext(IconContext);
     const {
@@ -77,6 +95,7 @@ export function createIcon(name: string, outline: Glyph, fill?: Glyph): Icon {
     const rawId = useId();
     const solid = weight === "fill" && fill !== undefined;
     const glyph = solid ? fill : outline;
+    const drawn = typeof glyph === "function" ? glyph(rawId.replace(/:/g, "")) : glyph;
     const stroke = STROKE[weight] + (typeof size === "number" && size >= 22 ? 0.25 : 0);
     // `color` goes on the svg's own `color`, so dots and fill-variant rims
     // drawn with `currentColor` take it too, not just the root fill/stroke.
@@ -100,7 +119,7 @@ export function createIcon(name: string, outline: Glyph, fill?: Glyph): Icon {
       >
         {alt ? <title>{alt}</title> : null}
         {children}
-        {typeof glyph === "function" ? glyph(rawId.replace(/:/g, "")) : glyph}
+        {transform ? <g transform={transform}>{drawn}</g> : drawn}
       </svg>
     );
   });

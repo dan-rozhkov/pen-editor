@@ -131,12 +131,12 @@ export const MonitorArrowUpIcon = /*#__PURE__*/ createIcon(
   </>,
 );
 
-export const PlayIcon = /*#__PURE__*/ createIcon("Play", <path d="M4.75 3.25 12.5 8l-7.75 4.75Z" />);
+export const PlayIcon = /*#__PURE__*/ createIcon("Play", <path d="M4.75 2.25 13.75 8l-9 5.75Z" />);
 export const PauseIcon = /*#__PURE__*/ createIcon(
   "Pause",
   <>
-    <rect x="3.75" y="3" width="3" height="10" rx="1" />
-    <rect x="9.25" y="3" width="3" height="10" rx="1" />
+    <rect x="3.75" y="2.75" width="3" height="10.5" rx="1" />
+    <rect x="9.25" y="2.75" width="3" height="10.5" rx="1" />
   </>,
 );
-export const StopIcon = /*#__PURE__*/ createIcon("Stop", <rect x="3.25" y="3.25" width="9.5" height="9.5" rx="1.75" />);
+export const StopIcon = /*#__PURE__*/ createIcon("Stop", <rect x="2.75" y="2.75" width="10.5" height="10.5" rx="1.75" />);

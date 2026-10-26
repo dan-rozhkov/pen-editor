@@ -232,8 +232,8 @@ export const PuzzlePieceIcon = /*#__PURE__*/ createIcon(
 export const KeyIcon = /*#__PURE__*/ createIcon(
   "Key",
   <>
-    <circle cx="5" cy="8" r="3" />
-    <path d="M8 8h6M11 8v2.5M14 8v2" />
+    <circle cx="5.25" cy="8" r="3.25" />
+    <path d="M8.5 8H14M11.25 8v2.75M14 8v2.5" />
   </>,
 );
 
@@ -244,6 +244,8 @@ export const LockIcon = /*#__PURE__*/ createIcon(
     <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
     <circle cx="8" cy="10.25" r="1" fill="currentColor" stroke="none" />
   </>,
+  undefined,
+  { scale: 1.06 },
 );
 
 export const WrenchIcon = /*#__PURE__*/ createIcon(
