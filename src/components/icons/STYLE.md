@@ -88,18 +88,45 @@ that says why. Never let the result cross the 1.25 → 14.75 safe zone.
 - Prefer closed shapes over open ones.
 - Extend lines as far as they can go (monospace-type feel).
 - Keep natural proportions: a phone is tall, a laptop is wide.
-- Gaps between separate shapes: at least 1.75 units edge to edge (≈ 3 grid
-  units at 16px stroke centre distance ≥ 3). Below that they merge at 12px.
+- Gaps between strokes: at least 3.25 units centre to centre (see "Gaps").
 - Diagonal things (arrows, rockets, stacked objects) point bottom-left →
   top-right; the smaller object sits top-right.
 - Slashes (EyeSlash, CloudSlash, WifiSlash) run top-left → bottom-right,
   `M2.5 2.5l11 11`, and cut flat through the glyph: remove the glyph's
-  strokes under the slash with a gap ≥ 1.25 on each side (use a mask keyed by
+  strokes under the slash with a gap ≥ 2 on each side edge to edge (the
+  "Gaps" rule; older slashes use 1.25) (use a mask keyed by
   `uid` or split the paths).
 - Recurring elements are drawn the same way every time: file corner fold,
   arrow head (two 45° strokes of length ~3.5), caret (`M4 6l4 4 4-4`),
   magnifier lens, badge "+" etc. Copy them from existing glyphs.
 - Detail budget: at 16px, no more than ~5 strokes. Drop decoration.
+
+## Gaps
+
+The stroke does not scale (1.25px at every size), but the grid does: one
+unit is 1px at 16px, 0.875px at 14px and 0.75px at 12px. So a gap that is
+fine at 16px closes up in a 14px panel. The rule, as in Lucide and most sets:
+the clear gap between two strokes is at least the stroke width (a circle as
+wide as the stroke fits in it).
+
+- Two parallel strokes, or a stroke and a shape edge, sit at least 3.25 units
+  apart, centre to centre. That leaves 1.75px at 16px and 1.6px at 14px (the
+  panel size, which the check grades). At 12px it is 1.2px, just under the
+  stroke: 12px is only for chevrons and close buttons, keep those simple.
+  The end of a stroke facing another stroke counts; a join does not.
+- A closed detail narrower than about 3.5 units (pause bars, the boxes of the
+  Align icons) is drawn solid, like a dot: `fill="currentColor" stroke="none"`,
+  rx 1. Outlined, its inside is a slit narrower than the stroke and it reads
+  as a smudge. Solid parts are about 2.5 units thick so they stay lighter
+  than a filled square.
+- When a detail does not fit with those gaps, drop it (Table keeps one row,
+  Trash one rib, Sidebar no row dashes) or move it (Files, ImagesSquare: the
+  back sheet sits 3.5 units off the front one and loses the stub that came
+  close to it).
+- `npm run check:icon-gaps` renders every glyph at 12/14/16px and lists the
+  ones with gaps narrower than the stroke at 14px. Run it after drawing or
+  changing a glyph. A glyph that must stay tight goes into
+  `scripts/icon-gaps-allowlist.json` with the reason.
 
 ## Against noise
 
@@ -107,12 +134,13 @@ An icon is judged at 16px next to text, not in a zoomed sheet. It is noisy
 when it reads as a texture instead of a shape. Avoid:
 
 - Small parallel lines packed together (hatching, keyboard keys, film
-  sprocket holes, file text lines): use at most two, spaced ≥ 2.5 units.
-- Small closed shapes under ~3 units across (they fill in to a blob).
+  sprocket holes, file text lines): use at most two, spaced ≥ 3.25 units.
+- Small outlined shapes under ~3.5 units across (they fill in to a blob):
+  draw them solid (see "Gaps").
 - Grey (`fillOpacity`) fills: they read as dirt. Use solid `currentColor`
   for an emphasised region, or nothing.
 - Badges crammed inside another glyph. A badge (+, ×, arrow) gets a clear
-  zone: cut the base glyph around it with a ≥ 1.25 gap, or drop the base
+  zone: cut the base glyph around it with a ≥ 2 gap (edge to edge, the "Gaps" rule), or drop the base
   glyph's own details.
 - Literal silhouettes (brain folds, octocat, tooth-by-tooth gears). Prefer
   the common UI metaphor, as Lucide / SF Symbols / Phosphor draw it.

@@ -119,12 +119,15 @@ export const EyedropperIcon = /*#__PURE__*/ createIcon(
 
 export const FlipHorizontalIcon = /*#__PURE__*/ createIcon(
   "FlipHorizontal",
-  <path d="M6.75 3v10h-4.25ZM9.25 3v10h4.25Z" />,
+  // Isosceles halves, bases 3.25 apart (see FlipVertical).
+  <path d="M6.375 3v10L2.375 8ZM9.625 3v10l4-5Z" />,
 );
 
 export const FlipVerticalIcon = /*#__PURE__*/ createIcon(
   "FlipVertical",
-  <path d="M3 6.75h10V2.5ZM3 9.25h10v4.25Z" />,
+  // Isosceles halves, bases 3.25 apart: the right-angled ones ended in a
+  // sliver that closed up at 14px (STYLE.md, "Gaps").
+  <path d="M3 6.375h10L8 2.375ZM3 9.625h10L8 13.625Z" />,
 );
 
 export const LineSegmentIcon = /*#__PURE__*/ createIcon(

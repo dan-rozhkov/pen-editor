@@ -15,7 +15,8 @@
     "test:coverage:merge": "vitest --merge-reports --coverage",
     "test:flaky-summary": "node scripts/flaky-summary.mjs",
     "check:dup": "jscpd src",
-    "check:dup:tests": "node scripts/check-test-dup.mjs"
+    "check:dup:tests": "node scripts/check-test-dup.mjs",
+    "check:icon-gaps": "node scripts/check-icon-gaps.mjs"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.154",

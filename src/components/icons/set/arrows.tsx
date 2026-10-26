@@ -137,12 +137,20 @@ export const MonitorArrowUpIcon = /*#__PURE__*/ createIcon(
   </>,
 );
 
-export const PlayIcon = /*#__PURE__*/ createIcon("Play", <path d="M4.75 2.25 13.75 8l-9 5.75Z" />);
+export const PlayIcon = /*#__PURE__*/ createIcon(
+  "Play",
+  <path d="M4.75 2.25 13.75 8l-9 5.75Z" />,
+  // Solid, for media controls next to the solid Pause bars. The stroke keeps
+  // the outline's size and round corners.
+  <path d="M4.75 2.25 13.75 8l-9 5.75Z" stroke="currentColor" strokeWidth={1.25} strokeLinejoin="round" />,
+);
 export const PauseIcon = /*#__PURE__*/ createIcon(
   "Pause",
+  // Solid bars: an outlined 3-wide bar leaves a slit narrower than the
+  // stroke at 14px (STYLE.md, "Gaps").
   <>
-    <rect x="3.75" y="2.75" width="3" height="10.5" rx="1" />
-    <rect x="9.25" y="2.75" width="3" height="10.5" rx="1" />
+    <rect x="4.25" y="3.25" width="2.5" height="9.5" rx="1" fill="currentColor" stroke="none" />
+    <rect x="9.25" y="3.25" width="2.5" height="9.5" rx="1" fill="currentColor" stroke="none" />
   </>,
 );
 export const StopIcon = /*#__PURE__*/ createIcon("Stop", <rect x="2.75" y="2.75" width="10.5" height="10.5" rx="1.75" />);

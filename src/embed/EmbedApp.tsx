@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { ArrowsOutSimpleIcon, ArrowsInSimpleIcon, ArrowSquareOutIcon, SidebarIcon, SidebarSimpleIcon } from "@/components/icons";
+import { ArrowsOutSimpleIcon, ArrowsInSimpleIcon, ArrowSquareOutIcon, SidebarSimpleIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
@@ -96,7 +96,7 @@ export function EmbedApp({ host }: { host: HostBridge | null }) {
             <SidebarSimpleIcon size={14} />
           </Button>
           <Button variant="ghost" size="icon-sm" aria-label="Toggle properties" aria-pressed={propsOpen} onClick={() => setPropsOpen((v) => !v)}>
-            <SidebarIcon size={14} mirrored />
+            <SidebarSimpleIcon size={14} mirrored />
           </Button>
           <Tooltip>
             <TooltipTrigger

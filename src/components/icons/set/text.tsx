@@ -7,8 +7,8 @@ export const AlignTopIcon = /*#__PURE__*/ createIcon(
   "AlignTop",
   <>
     <path d="M2.75 2.75h10.5" />
-    <rect x="4" y="5.5" width="3" height="8" rx="0.75" />
-    <rect x="9" y="5.5" width="3" height="5" rx="0.75" />
+    <rect x="4" y="5" width="2.5" height="8.5" rx="1" fill="currentColor" stroke="none" />
+    <rect x="9.5" y="5" width="2.5" height="6" rx="1" fill="currentColor" stroke="none" />
   </>,
 );
 
@@ -16,17 +16,19 @@ export const AlignBottomIcon = /*#__PURE__*/ createIcon(
   "AlignBottom",
   <>
     <path d="M2.75 13.25h10.5" />
-    <rect x="4" y="2.5" width="3" height="8" rx="0.75" />
-    <rect x="9" y="5.5" width="3" height="5" rx="0.75" />
+    <rect x="4" y="2.5" width="2.5" height="8.5" rx="1" fill="currentColor" stroke="none" />
+    <rect x="9.5" y="5" width="2.5" height="6" rx="1" fill="currentColor" stroke="none" />
   </>,
 );
 
 export const AlignLeftIcon = /*#__PURE__*/ createIcon(
   "AlignLeft",
+  // Solid objects on a stroked axis (like Figma's align icons): outlined
+  // 3-wide boxes closed up at 14px (STYLE.md, "Gaps").
   <>
     <path d="M2.75 2.75v10.5" />
-    <rect x="5.5" y="4" width="8" height="3" rx="0.75" />
-    <rect x="5.5" y="9" width="5" height="3" rx="0.75" />
+    <rect x="5" y="4" width="8.5" height="2.5" rx="1" fill="currentColor" stroke="none" />
+    <rect x="5" y="9.5" width="6" height="2.5" rx="1" fill="currentColor" stroke="none" />
   </>,
 );
 
@@ -34,26 +36,26 @@ export const AlignRightIcon = /*#__PURE__*/ createIcon(
   "AlignRight",
   <>
     <path d="M13.25 2.75v10.5" />
-    <rect x="2.5" y="4" width="8" height="3" rx="0.75" />
-    <rect x="5.5" y="9" width="5" height="3" rx="0.75" />
+    <rect x="2.5" y="4" width="8.5" height="2.5" rx="1" fill="currentColor" stroke="none" />
+    <rect x="5" y="9.5" width="6" height="2.5" rx="1" fill="currentColor" stroke="none" />
   </>,
 );
 
 export const AlignCenterHorizontalIcon = /*#__PURE__*/ createIcon(
   "AlignCenterHorizontal",
   <>
-    <path d="M8 2.75V4M8 7v2M8 12v1.25" />
-    <rect x="3" y="4" width="10" height="3" rx="0.75" />
-    <rect x="5" y="9" width="6" height="3" rx="0.75" />
+    <path d="M8 2.75v10.5" />
+    <rect x="3" y="4" width="10" height="2.5" rx="1" fill="currentColor" stroke="none" />
+    <rect x="5" y="9.5" width="6" height="2.5" rx="1" fill="currentColor" stroke="none" />
   </>,
 );
 
 export const AlignCenterVerticalIcon = /*#__PURE__*/ createIcon(
   "AlignCenterVertical",
   <>
-    <path d="M2.75 8H4M7 8h2M12 8h1.25" />
-    <rect x="4" y="3" width="3" height="10" rx="0.75" />
-    <rect x="9" y="5" width="3" height="6" rx="0.75" />
+    <path d="M2.75 8h10.5" />
+    <rect x="4" y="3" width="2.5" height="10" rx="1" fill="currentColor" stroke="none" />
+    <rect x="9.5" y="5" width="2.5" height="6" rx="1" fill="currentColor" stroke="none" />
   </>,
 );
 

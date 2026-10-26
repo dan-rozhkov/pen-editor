@@ -5,9 +5,11 @@ import { slashed } from "./slash";
 
 export const TableIcon = /*#__PURE__*/ createIcon(
   "Table",
+  // Header row and one column: a second row line sat 3.25 under the header
+  // and closed up at small sizes (STYLE.md, "Gaps").
   <>
     <rect x="2.5" y="3" width="11" height="10" rx="1.75" />
-    <path d="M2.5 6.5h11M6.5 6.5V13M2.5 9.75h11" />
+    <path d="M2.5 6.75h11M6.5 6.75V13" />
   </>,
 );
 
@@ -118,10 +120,12 @@ export const ImageSquareIcon = /*#__PURE__*/ createIcon(
 
 export const ImagesSquareIcon = /*#__PURE__*/ createIcon(
   "ImagesSquare",
+  // The back image is only its top and right edges, 3.5 units off the
+  // front one; its left stub used to stop 1.75 above it (STYLE.md, "Gaps").
   <>
-    <rect x="2.5" y="6" width="7.5" height="7.5" rx="1.5" />
-    <path d="M2.5 11.5L5 9l3 3 1-1" />
-    <path d="M5.5 4V4.25A1.75 1.75 0 0 1 7.25 2.5h4.5a1.75 1.75 0 0 1 1.75 1.75v4.5a1.75 1.75 0 0 1-1.75 1.75" />
+    <rect x="2.25" y="5.75" width="8" height="8" rx="1.5" />
+    <path d="M2.25 11.25 5.5 9l4.75 3.25" />
+    <path d="M7.25 2.25H12A1.75 1.75 0 0 1 13.75 4v4.75" />
   </>,
 );
 
@@ -202,9 +206,11 @@ export const KeyboardIcon = /*#__PURE__*/ createIcon(
 
 export const SidebarIcon = /*#__PURE__*/ createIcon(
   "Sidebar",
+  // A panel half the window wide (SidebarSimple's is a third). The row
+  // dashes inside it sat < 2 units from the edges (STYLE.md, "Gaps").
   <>
     <rect x="2" y="3" width="12" height="10" rx="1.75" />
-    <path d="M7.25 3v10M3.75 6h1.5M3.75 8.5h1.5" />
+    <path d="M8 3v10" />
   </>,
 );
 

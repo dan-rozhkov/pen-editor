@@ -42,9 +42,10 @@ export const FileTextIcon = /*#__PURE__*/ createIcon(
 
 export const FilesIcon = /*#__PURE__*/ createIcon(
   "Files",
+  // The back sheet keeps 3.5 units from the front one (STYLE.md, "Gaps").
   <>
-    <path d="M10.25 2.25H8A1.5 1.5 0 0 0 6.5 3.75v6.5A1.5 1.5 0 0 0 8 11.75h3.5a1.5 1.5 0 0 0 1.5-1.5V5Z M10.25 2.25V5H13" />
-    <path d="M3.5 5.5v7A1.5 1.5 0 0 0 5 14h4.5" />
+    <path d="M10.5 1.75H8.25a1.5 1.5 0 0 0-1.5 1.5v6a1.5 1.5 0 0 0 1.5 1.5h3.5a1.5 1.5 0 0 0 1.5-1.5V4.5Z M10.5 1.75V4.5h2.75" />
+    <path d="M3.25 5v7.75a1.5 1.5 0 0 0 1.5 1.5H9.5" />
   </>,
 );
 
@@ -190,7 +191,9 @@ export const CalendarBlankIcon = /*#__PURE__*/ createIcon(
 
 export const TrashIcon = /*#__PURE__*/ createIcon(
   "Trash",
-  <path d="M2.5 4.25h11M6.25 4.25v-1c0-.4.35-.75.75-.75h2c.4 0 .75.35.75.75v1M3.75 4.25l.6 8.15c.06.8.72 1.35 1.5 1.35h4.3c.78 0 1.44-.55 1.5-1.35l.6-8.15M6.5 7v4M9.5 7v4" />,
+  // One short rib: two ribs sat 2.25 units from the walls, and the rib keeps
+  // 3.25 from the lid and the bottom (STYLE.md, "Gaps").
+  <path d="M2.5 4.25h11M6.25 4.25v-1c0-.4.35-.75.75-.75h2c.4 0 .75.35.75.75v1M3.75 4.25l.6 8.15c.06.8.72 1.35 1.5 1.35h4.3c.78 0 1.44-.55 1.5-1.35l.6-8.15M8 7.5v3" />,
 );
 
 export const FlagIcon = /*#__PURE__*/ createIcon(
@@ -291,10 +294,12 @@ export const GitBranchIcon = /*#__PURE__*/ createIcon(
 
 export const TreeStructureIcon = /*#__PURE__*/ createIcon(
   "TreeStructure",
+  // Solid nodes: with 3.25 units between each node and the branch line,
+  // only 3 units are left for a node, too small to outline (STYLE.md, "Gaps").
   <>
-    <rect x="5.5" y="2" width="5" height="4" rx="1.25" />
-    <rect x="1.75" y="10" width="5" height="4" rx="1.25" />
-    <rect x="9.25" y="10" width="5" height="4" rx="1.25" />
-    <path d="M8 6v2M4.25 10V8h7.5v2" />
+    <rect x="5.75" y="1.75" width="4.5" height="3" rx="1" fill="currentColor" stroke="none" />
+    <rect x="1.5" y="11.25" width="4.5" height="3" rx="1" fill="currentColor" stroke="none" />
+    <rect x="10" y="11.25" width="4.5" height="3" rx="1" fill="currentColor" stroke="none" />
+    <path d="M8 4.75V8M3.75 11.25V8h8.5v3.25" />
   </>,
 );
