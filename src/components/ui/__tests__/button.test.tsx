@@ -22,7 +22,7 @@ describe("<Button /> radius", () => {
     expect(tokens.filter((t) => t.startsWith("rounded-"))).toEqual([cls]);
   });
 
-  it("outline is raised, not bordered; accent glows", () => {
+  it("outline is raised, not bordered; accent has no glow", () => {
     render(
       <>
         <Button variant="outline">o</Button>
@@ -35,7 +35,7 @@ describe("<Button /> radius", () => {
     // compiled CSS, so the hairline colour must come from a merged class.
     expect(screen.getByRole("button", { name: "o" }).className).toContain("border-menu-border");
     expect(screen.getByRole("button", { name: "o" }).className).not.toContain("border-transparent");
-    expect(screen.getByRole("button", { name: "a" }).className).toContain("control-glow");
+    expect(screen.getByRole("button", { name: "a" }).className).not.toMatch(/shadow|glow/);
   });
 });
 

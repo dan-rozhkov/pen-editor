@@ -509,12 +509,6 @@ html.route-showcase body::-webkit-scrollbar {
   background-color: var(--color-surface-panel);
 }
 
-/* Soft accent-coloured glow under the blue primary action. */
-@utility control-glow {
-  @apply control-shadow-stack;
-  --tw-shadow: 0 1px 2px oklch(0 0 0 / 0.12), 0 4px 12px -4px color-mix(in oklab, var(--color-accent-primary) 55%, transparent);
-}
-
 /* The popup card shared by every floating menu/popover. Radius 14px with
    4px inner padding makes 10px item highlights concentric (menu-item). */
 @utility menu-surface {
