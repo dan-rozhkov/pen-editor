@@ -94,7 +94,7 @@ export function GradientEditor({ gradient, onChange }: GradientEditorProps) {
           }}
           tooltip="Add stop"
         >
-          <PlusIcon size={12} />
+          <PlusIcon size={14} />
         </IconButton>
         <IconButton
           variant="secondary"
@@ -104,7 +104,7 @@ export function GradientEditor({ gradient, onChange }: GradientEditorProps) {
           disabled={gradient.stops.length <= 2}
           tooltip="Remove stop"
         >
-          <MinusIcon size={12} />
+          <MinusIcon size={14} />
         </IconButton>
       </div>
       {gradient.type === "linear" && (

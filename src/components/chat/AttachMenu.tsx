@@ -30,8 +30,8 @@ export function AttachMenu({ imageDisabledReason, imageHint, onPickImage, select
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <IconButton type="button" variant="ghost" size="icon" tooltip="Attach" className="size-[30px] text-text-muted hover:bg-secondary">
-            <PaperclipIcon size={18} weight="light" />
+          <IconButton type="button" variant="ghost" size="icon" tooltip="Attach" className="size-[30px] hover:bg-secondary">
+            <PaperclipIcon size={16} weight="light" />
           </IconButton>
         }
       />

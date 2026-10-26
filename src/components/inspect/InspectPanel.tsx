@@ -158,7 +158,7 @@ export function InspectPanel() {
             data-testid="inspect-exit-dev-mode"
             onClick={() => useDevModeStore.getState().setActive(false)}
           >
-            <XIcon size={14} weight="light" />
+            <XIcon size={16} weight="light" />
           </IconButton>
         </div>
       </div>

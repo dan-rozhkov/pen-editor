@@ -348,15 +348,15 @@ export function SkillsPage({ onClose }: SkillsPageProps) {
               />
               <DropdownMenuContent align="end" className="min-w-52">
                 <DropdownMenuItem onClick={openCreateForm}>
-                  <PlusIcon size={16} />
+                  <PlusIcon />
                   New skill
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setView("generate")}>
-                  <MagicWandIcon size={16} />
+                  <MagicWandIcon />
                   Generate with the agent
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                  <UploadSimpleIcon size={16} />
+                  <UploadSimpleIcon />
                   Upload .md
                 </DropdownMenuItem>
               </DropdownMenuContent>

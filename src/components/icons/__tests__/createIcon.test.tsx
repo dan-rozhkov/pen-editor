@@ -97,4 +97,32 @@ describe("createIcon", () => {
     }
     expect(svgOf(<Outline />).querySelector("g")).toBeNull();
   });
+
+  it("renders an explicit size as inline width/height", () => {
+    // Button and menu rules size bare svgs with a class, which beats the
+    // width/height attributes; an inline style beats the class in the browser
+    // (happy-dom applies no Tailwind, so this checks the style is written).
+    const { container } = render(
+      <div className="[&_svg:not([class*='size-'])]:size-5">
+        <Outline size={16} style={{ opacity: 0.5 }} />
+        <Outline />
+      </div>,
+    );
+    const [sized, bare] = Array.from(container.querySelectorAll("svg"));
+    expect(sized.style.width).toBe("16px");
+    expect(sized.style.height).toBe("16px");
+    expect(sized.style.opacity).toBe("0.5");
+    expect(bare.getAttribute("style")).toBeNull();
+  });
+
+  it("treats a provider's size as explicit, but not the default 1em", () => {
+    const fromContext = svgOf(
+      <IconContext.Provider value={{ size: 14 }}>
+        <Outline />
+      </IconContext.Provider>,
+    );
+    expect(fromContext.style.width).toBe("14px");
+    cleanup();
+    expect(svgOf(<Outline />).getAttribute("style")).toBeNull();
+  });
 });

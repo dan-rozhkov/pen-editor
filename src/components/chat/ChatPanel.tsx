@@ -565,9 +565,9 @@ export function ChatPanelContent({
                 variant="ghost"
                 size="icon"
                 tooltip={`Model: ${activeModelLabel}`}
-                className="size-[30px] text-text-muted hover:bg-secondary"
+                className="size-[30px] hover:bg-secondary"
               >
-                <SphereIcon size={18} weight="light" />
+                <SphereIcon size={16} weight="light" />
               </IconButton>
             }
           />
@@ -610,10 +610,10 @@ export function ChatPanelContent({
               type="button"
               variant="ghost"
               size="default"
-              className="inline-flex h-[30px] shrink-0 items-center gap-1 rounded-lg px-2 text-xs leading-none text-text-muted hover:bg-secondary"
+              className="inline-flex h-[30px] shrink-0 items-center gap-1 rounded-lg px-2 text-xs leading-none hover:bg-secondary"
               aria-label={`Parallel agents: x${parallelCount}`}
             >
-              <LightningIcon className="size-4" />
+              <LightningIcon size={16} weight="light" />
               <span>x{parallelCount}</span>
               <CaretDownIcon className="size-3" weight={CHEVRON_WEIGHT} />
             </Button>
@@ -639,10 +639,10 @@ export function ChatPanelContent({
               <button
                 type="button"
                 onClick={stop}
-                className="inline-flex size-[30px] shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-secondary transition-colors"
+                className="inline-flex size-[30px] shrink-0 items-center justify-center rounded-lg hover:bg-secondary transition-colors"
                 aria-label="Stop"
               >
-                <StopIcon size={18} />
+                <StopIcon size={16} weight="light" />
               </button>
             }
           />
@@ -668,7 +668,7 @@ export function ChatPanelContent({
                 }
                 aria-label={isLoading ? "Send now" : "Send"}
               >
-                <ArrowUpIcon size={18} weight="regular" />
+                <ArrowUpIcon size={16} weight="light" />
               </button>
             }
           />

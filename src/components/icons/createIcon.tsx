@@ -90,6 +90,7 @@ export function createIcon(name: string, outline: Glyph, fill?: Glyph, optics?: 
       weight = ctx.weight ?? "regular",
       mirrored = ctx.mirrored ?? false,
       children,
+      style,
       ...rest
     } = props;
     const rawId = useId();
@@ -97,6 +98,17 @@ export function createIcon(name: string, outline: Glyph, fill?: Glyph, optics?: 
     const glyph = solid ? fill : outline;
     const drawn = typeof glyph === "function" ? glyph(rawId.replace(/:/g, "")) : glyph;
     const stroke = STROKE[weight] + (typeof size === "number" && size >= 22 ? 0.25 : 0);
+    // An explicit `size` prop is the icon's size. Containers such as Button,
+    // menus and InputGroup size bare svgs with `[&_svg:not([class*='size-'])]`
+    // rules, and a class beats the width/height attributes, so the prop used
+    // to be ignored silently (an 18px composer icon drew at 20px). Inline
+    // width/height beat those rules and any plain `size-*` class, so give an
+    // icon its size in one place. Only an `!important` class (TypographySection's
+    // `[&_svg]:size-[18px]!`) still overrides it.
+    // A size set by an IconContext provider is explicit too; only the
+    // context's built-in "1em" default is not.
+    const explicit = props.size !== undefined || (ctx.size !== undefined && ctx.size !== "1em");
+    const sized = explicit ? { width: size, height: size, ...style } : style;
     // `color` goes on the svg's own `color`, so dots and fill-variant rims
     // drawn with `currentColor` take it too, not just the root fill/stroke.
     return (
@@ -115,6 +127,7 @@ export function createIcon(name: string, outline: Glyph, fill?: Glyph, optics?: 
         strokeLinecap="round"
         strokeLinejoin="round"
         transform={mirrored ? "scale(-1, 1)" : undefined}
+        style={sized}
         {...rest}
       >
         {alt ? <title>{alt}</title> : null}

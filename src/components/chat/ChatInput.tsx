@@ -615,10 +615,10 @@ export function ChatInput({
                 <button
                   type="button"
                   onClick={stop}
-                  className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted transition-colors"
+                  className="shrink-0 p-1.5 rounded-lg hover:bg-secondary transition-colors"
                   aria-label="Stop"
                 >
-                  <StopIcon size={18} />
+                  <StopIcon size={16} weight="light" />
                 </button>
               }
             />
@@ -635,12 +635,12 @@ export function ChatInput({
                 <button
                   type="submit"
                   disabled={!canSubmit}
-                  className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled transition-colors"
+                  className="shrink-0 p-1.5 rounded-lg hover:bg-secondary disabled:text-text-disabled transition-colors"
                   aria-label={
                     isLoading ? "Send now" : isOnline ? "Send" : OFFLINE_SEND_TITLE
                   }
                 >
-                  <PaperPlaneRightIcon size={18} />
+                  <PaperPlaneRightIcon size={16} weight="light" />
                 </button>
               }
             />

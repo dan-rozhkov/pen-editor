@@ -171,3 +171,9 @@ export const TableIcon = createIcon(
 
 `createIcon(name, outline, fill?)`; `outline`/`fill` may also be
 `(uid) => JSX` when a mask needs a unique id. Export name is `<Name>Icon`.
+
+Size an icon in ONE place: the numeric `size` prop. It renders as inline
+width/height, so it beats the `[&_svg]:size-*` rules of Button, menus and
+input groups (they only size icons that have no prop). Do not also pass a
+`size-*` class; it loses to the prop. Toolbars, panel headers and the chat
+composer use 16; property-panel controls 14; chevrons 12.
