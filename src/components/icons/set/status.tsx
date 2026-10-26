@@ -154,9 +154,10 @@ export const SparkleIcon = /*#__PURE__*/ createIcon(
 
 export const LightningIcon = /*#__PURE__*/ createIcon(
   "Lightning",
-  // One open zigzag: the outlined bolt pinched to ~2 units at its waist and
-  // read as noise at 14-16px (STYLE.md, "Gaps").
-  <path d="M9.75 1.75 5 8.25h6l-4.75 6" />,
+  // A wide bolt: its two horizontal edges sit 3.25 units apart at the waist.
+  // The old one pinched to 2 units there and read as noise at 14-16px
+  // (STYLE.md, "Gaps").
+  <path d="M9.5 1.75 2.5 9.5h5.25l-1.25 4.75 7-8H8.25Z" />,
 );
 
 const BULB = "M5.5 11.25V10.6C4.4 9.8 3.75 8.5 3.75 7.1a4.25 4.25 0 0 1 8.5 0c0 1.4-.65 2.7-1.75 3.5v.65Z";
