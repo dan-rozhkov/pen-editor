@@ -173,7 +173,7 @@ export function TextStylesPanelContent() {
 
       <div className="flex-1 overflow-auto">
         {textStyles.length === 0 ? (
-          <PanelEmptyState icon={<TextAaIcon size={28} weight="light" />}>
+          <PanelEmptyState icon={<TextAaIcon size={20} weight="light" />}>
             No text styles yet
           </PanelEmptyState>
         ) : (

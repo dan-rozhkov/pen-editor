@@ -36,7 +36,7 @@ export function TraceFilePicker() {
     >
       <EmptyState
         titleAs="h1"
-        icon={<FileArrowUpIcon weight="light" />}
+        icon={<FileArrowUpIcon size={32} weight="light" />}
         title="Open a trace file"
         description={
           <>

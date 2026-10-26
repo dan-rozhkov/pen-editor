@@ -121,7 +121,7 @@ export function WorkflowCanvas({ steps, setSteps }: WorkflowCanvasProps) {
     return (
       <div className="mx-auto flex w-full max-w-[460px] flex-col items-center rounded-xl border border-dashed border-border-light bg-surface-panel px-6 py-10">
         <EmptyState
-          icon={<ListNumbersIcon weight="light" />}
+          icon={<ListNumbersIcon size={32} weight="light" />}
           title="No steps yet"
           description="A workflow is a list of steps the agent completes in order."
           action={
@@ -187,7 +187,7 @@ export function WorkflowCanvas({ steps, setSteps }: WorkflowCanvasProps) {
           onClick={() => addAt(steps.length)}
           className="size-10 rounded-full bg-surface-panel text-text-muted shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:text-text-primary"
         >
-          <PlusIcon weight="light" />
+          <PlusIcon size={24} weight="light" />
         </IconButton>
       </li>
     </ol>

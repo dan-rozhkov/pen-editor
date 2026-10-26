@@ -78,7 +78,7 @@ export default function DocPage() {
         {sync.id === null ? (
           <main className="flex flex-1 flex-col items-center justify-center px-4">
             <EmptyState
-              icon={<FileTextIcon weight="light" />}
+              icon={<FileTextIcon size={32} weight="light" />}
               title="No documents yet"
               description="Create a document to start writing."
               action={

@@ -48,7 +48,7 @@ export function ThemePreviewCard({ theme, label }: { theme: UITheme; label: stri
           <Line width="60%" color={c.line} />
         </span>
         <Radio.Indicator className="absolute right-1.5 bottom-1.5 flex size-4 items-center justify-center rounded-full bg-accent-primary text-white">
-          <CheckIcon className="size-2.5" weight="bold" />
+          <CheckIcon className="size-2.5" />
         </Radio.Indicator>
       </span>
       <span className="text-xs font-medium text-text-primary">{label}</span>

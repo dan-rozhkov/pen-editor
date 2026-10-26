@@ -105,7 +105,7 @@ export function CommentsPanelContent() {
 
       <div className="flex-1 overflow-y-auto">
         {rows.length === 0 ? (
-          <PanelEmptyState icon={<ChatCircleIcon size={28} weight="light" />}>
+          <PanelEmptyState icon={<ChatCircleIcon size={20} weight="light" />}>
             No comments yet. Press C and click the canvas to add one.
           </PanelEmptyState>
         ) : (

@@ -44,7 +44,6 @@ function SlideThumbnail({
   return (
     <CardsIcon
       size={28}
-      weight="thin"
       className="text-text-secondary"
     />
   );
@@ -291,7 +290,7 @@ export function SlidesPanel() {
       </div>
       <div className="flex-1 overflow-y-auto px-4 pt-3 pb-5">
         {slides.length === 0 ? (
-          <PanelEmptyState icon={<CardsIcon size={28} weight="light" />}>
+          <PanelEmptyState icon={<CardsIcon size={20} weight="light" />}>
             No slides yet
           </PanelEmptyState>
         ) : (

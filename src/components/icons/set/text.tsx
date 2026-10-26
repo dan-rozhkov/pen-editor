@@ -58,7 +58,7 @@ export const AlignCenterVerticalIcon = /*#__PURE__*/ createIcon(
 );
 
 // Letterforms, monoline.
-export const TextTIcon = /*#__PURE__*/ createIcon("TextT", <path d="M3 3.25h10M8 3.25v9.5" />);
+export const TextTIcon = /*#__PURE__*/ createIcon("TextT", <path d="M2.75 2.75h10.5M8 2.75v10.5" />);
 
 export const TextAaIcon = /*#__PURE__*/ createIcon(
   "TextAa",

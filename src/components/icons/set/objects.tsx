@@ -253,6 +253,9 @@ export const WrenchIcon = /*#__PURE__*/ createIcon(
   <g transform="translate(0 .6) rotate(45 8 7.55)">
     <path d="M6.75 1.98V4.5h2.5V1.98A3.5 3.5 0 0 1 9.3 8.5V13a1.3 1.3 0 0 1-2.6 0V8.5A3.5 3.5 0 0 1 6.75 1.98z" />
   </g>,
+  undefined,
+  // Optics: grown to the 13 × 13 diagonal box (STYLE.md, "Optical balance").
+  { scale: 1.15 },
 );
 
 export const GearIcon = /*#__PURE__*/ createIcon(

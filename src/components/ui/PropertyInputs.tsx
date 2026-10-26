@@ -13,7 +13,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "./dropdown-menu";
-import { FlipHorizontalIcon, FlipVerticalIcon, IconContext } from "@/components/icons";
+import { FlipHorizontalIcon, FlipVerticalIcon, HashIcon, IconContext, XIcon } from "@/components/icons";
 import { CustomColorPicker } from "./ColorPicker";
 import { useScrubLabel } from "@/hooks/useScrubLabel";
 import { useReadOnly } from "@/hooks/useReadOnly";
@@ -301,14 +301,7 @@ export function ColorInput({
               className="text-text-muted hover:text-text-primary mr-0.5"
               title="Unbind variable"
             >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <path
-                  d="M3 3L9 9M9 3L3 9"
-                  stroke="currentColor"
-                  strokeWidth="1"
-                  strokeLinecap="round"
-                />
-              </svg>
+              <XIcon size={12} />
             </button>
           </InputGroupAddon>
         </InputGroup>
@@ -358,14 +351,7 @@ export function ColorInput({
             className="h-6 w-6 flex items-center justify-center rounded bg-secondary text-text-muted hover:text-text-primary transition-colors"
             title="Bind to variable"
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path
-                d="M2 5h10M2 9h10M5 2v10M9 2v10"
-                stroke="currentColor"
-                strokeWidth="0.8"
-                strokeLinecap="round"
-              />
-            </svg>
+            <HashIcon size={14} />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" side="bottom">
             {availableVariables.map((variable) => {

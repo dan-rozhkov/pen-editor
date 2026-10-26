@@ -605,7 +605,6 @@ export function PixiCanvas() {
         >
           <CircleNotchIcon
             size={28}
-            weight="thin"
             className="text-text-muted"
             style={{ animation: "spin 1s linear infinite" }}
           />

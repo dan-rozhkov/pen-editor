@@ -489,25 +489,19 @@ function TruncateTextIcon() {
   return (
     <svg
       aria-hidden="true"
+      data-pen-icon="TruncateText"
       viewBox="0 0 16 16"
       fill="none"
+      stroke="currentColor"
+      strokeWidth={1.25}
+      strokeLinecap="round"
+      strokeLinejoin="round"
     >
-      <path
-        d="M3.2 10.4L6 4H7.3L10.1 10.4"
-        stroke="currentColor"
-        strokeWidth="0.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M4.4 8H8.9"
-        stroke="currentColor"
-        strokeWidth="0.75"
-        strokeLinecap="round"
-      />
-      <circle cx="5.2" cy="12.2" r="0.7" fill="currentColor" />
-      <circle cx="8" cy="12.2" r="0.7" fill="currentColor" />
-      <circle cx="10.8" cy="12.2" r="0.7" fill="currentColor" />
+      <path d="M4.5 10 8 2.5l3.5 7.5" />
+      <path d="M6.2 7.5h3.6" />
+      <circle cx="4" cy="13" r="1" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="13" r="1" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="13" r="1" fill="currentColor" stroke="none" />
     </svg>
   );
 }

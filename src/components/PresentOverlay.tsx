@@ -75,7 +75,7 @@ export function PresentOverlay() {
           size="lg"
           className={navButtonClass}
         >
-          <CaretLeftIcon size={40} className="size-6" weight={CHEVRON_WEIGHT} />
+          <CaretLeftIcon size={24} className="size-6" weight={CHEVRON_WEIGHT} />
         </IconButton>
         <span
           data-testid="present-counter"
@@ -93,7 +93,7 @@ export function PresentOverlay() {
           size="lg"
           className={navButtonClass}
         >
-          <CaretRightIcon size={40} className="size-6" weight={CHEVRON_WEIGHT} />
+          <CaretRightIcon size={24} className="size-6" weight={CHEVRON_WEIGHT} />
         </IconButton>
         <IconButton
           data-testid="present-exit"
@@ -105,7 +105,7 @@ export function PresentOverlay() {
           size="lg"
           className={`${navButtonClass} ml-1`}
         >
-          <XIcon size={40} className="size-6" weight="light" />
+          <XIcon size={24} className="size-6" weight="light" />
         </IconButton>
       </div>
     </div>

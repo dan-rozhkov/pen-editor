@@ -56,31 +56,37 @@ function gridSummary(grid: LayoutGridConfig): string {
 }
 
 function GridTypeIcon({ type }: { type: LayoutGridType }) {
+  const svgProps = {
+    width: 14,
+    height: 14,
+    viewBox: "0 0 16 16",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.25,
+    strokeLinejoin: "round" as const,
+    "data-pen-icon": "LayoutGrid",
+  };
   if (type === "grid") {
     return (
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-        <rect x="1" y="1" width="5" height="5" stroke="currentColor" strokeWidth="1" />
-        <rect x="8" y="1" width="5" height="5" stroke="currentColor" strokeWidth="1" />
-        <rect x="1" y="8" width="5" height="5" stroke="currentColor" strokeWidth="1" />
-        <rect x="8" y="8" width="5" height="5" stroke="currentColor" strokeWidth="1" />
+      <svg {...svgProps}>
+        <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" />
+        <path d="M8 2.5v11M2.5 8h11" />
       </svg>
     );
   }
   if (type === "columns") {
     return (
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-        <rect x="1" y="1" width="3" height="12" stroke="currentColor" strokeWidth="1" />
-        <rect x="5.5" y="1" width="3" height="12" stroke="currentColor" strokeWidth="1" />
-        <rect x="10" y="1" width="3" height="12" stroke="currentColor" strokeWidth="1" />
+      <svg {...svgProps}>
+        <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" />
+        <path d="M6.17 2.5v11M9.83 2.5v11" />
       </svg>
     );
   }
   // rows
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <rect x="1" y="1" width="12" height="3" stroke="currentColor" strokeWidth="1" />
-      <rect x="1" y="5.5" width="12" height="3" stroke="currentColor" strokeWidth="1" />
-      <rect x="1" y="10" width="12" height="3" stroke="currentColor" strokeWidth="1" />
+    <svg {...svgProps}>
+      <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" />
+      <path d="M2.5 6.17h11M2.5 9.83h11" />
     </svg>
   );
 }

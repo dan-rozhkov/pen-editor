@@ -69,7 +69,6 @@ export function EmbedContentSection({ node }: EmbedContentSectionProps) {
             <CircleNotchIcon
               aria-hidden="true"
               className="animate-spin"
-              weight="thin"
             />
           ) : (
             "Convert to Design"

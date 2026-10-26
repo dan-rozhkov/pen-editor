@@ -104,7 +104,7 @@ export function ChatList({ trailingAction }: { trailingAction?: ReactNode } = {}
         {trailingAction}
       </div>
       {sortedChats.length === 0 ? (
-        <PanelEmptyState icon={<PlusIcon size={24} weight="light" />}>
+        <PanelEmptyState icon={<PlusIcon size={20} weight="light" />}>
           No chats yet — start one above.
         </PanelEmptyState>
       ) : (

@@ -73,19 +73,24 @@ export const ClockIcon = /*#__PURE__*/ createIcon(
   </>,
 );
 
+export const ClockCounterClockwiseIcon = /*#__PURE__*/ createIcon(
+  "ClockCounterClockwise",
+  <path d="M2.75 8A5.25 5.25 0 1 0 4.3 4.3M4.3 1.8v2.5h2.5M8 5.25V8l2 1.25" />,
+);
+
 export const CopyIcon = /*#__PURE__*/ createIcon(
   "Copy",
   <>
-    <rect x="6.25" y="2.5" width="7.25" height="7.25" rx="1.5" />
-    <path d="M6.25 6.25H4A1.5 1.5 0 0 0 2.5 7.75V12A1.5 1.5 0 0 0 4 13.5h4.25A1.5 1.5 0 0 0 9.75 12V9.75" />
+    <rect x="5.5" y="2" width="8.5" height="8.5" rx="1.5" />
+    <path d="M5.5 5.25H3.75a1.5 1.5 0 0 0-1.5 1.5v5.5a1.5 1.5 0 0 0 1.5 1.5h5.5a1.5 1.5 0 0 0 1.5-1.5V10.5" />
   </>,
 );
 
 export const CopySimpleIcon = /*#__PURE__*/ createIcon(
   "CopySimple",
   <>
-    <rect x="5.5" y="2.5" width="8" height="8" rx="1.5" />
-    <path d="M5.5 5.5v0H4A1.5 1.5 0 0 0 2.5 7v5A1.5 1.5 0 0 0 4 13.5h5A1.5 1.5 0 0 0 10.5 12v-1.5" />
+    <rect x="5.5" y="2" width="8.5" height="8.5" rx="1.5" />
+    <path d="M2.5 5.5v7.25a1 1 0 0 0 1 1h7.25" />
   </>,
 );
 
@@ -229,6 +234,9 @@ export const MagnifyingGlassIcon = /*#__PURE__*/ createIcon(
     <circle cx="7" cy="7" r="4.5" />
     <path d="M10.25 10.25 13.5 13.5" />
   </>,
+  undefined,
+  // Optics: grown so the lens matches Circle beside it (STYLE.md, "Optical balance").
+  { scale: 1.06 },
 );
 
 export const BinocularsIcon = /*#__PURE__*/ createIcon(

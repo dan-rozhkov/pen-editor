@@ -311,7 +311,7 @@ export function MessageList({
       className="flex-1 overflow-y-auto layers-scrollbar px-3 py-3 space-y-3"
     >
       {messages.length === 0 && (
-        <PanelEmptyState icon={<SparkleIcon size={28} weight="light" />}>
+        <PanelEmptyState icon={<SparkleIcon size={20} weight="light" />}>
           Ask Sideform Agent anything
         </PanelEmptyState>
       )}

@@ -11,6 +11,16 @@ shapes, round ends. Read this before drawing or changing a glyph.
 - The stroke is set by `createIcon`, never per path: 1.25px on screen
   (`vector-effect: non-scaling-stroke`), 1.5px for `weight="bold"` and for
   numeric `size >= 22`, 1px for `thin`. Do not put `strokeWidth` on shapes.
+- One weight in the app. Call sites use the default (`regular`/`light`, both
+  1.25px). `bold` is only for the Dots* icons (it enlarges the dots, see
+  index.css); `thin` is not used. Size a large icon (22px and up) with the
+  numeric `size` prop, not a `size-*` class: only the prop gets the 1.5px step.
+- A hand-drawn `<svg>` outside this set that acts as an icon gets
+  `data-pen-icon="<Name>"` (non-scaling stroke) and `strokeWidth={1.25}`.
+- The desktop shell (pen-editor-desktop) draws its tab bar, Recent list,
+  History, Passwords and address-bar glyphs from this set (copied markup in
+  its `src/tabbar/glyphs.ts`; `desktopIconsContract.test.tsx` keeps the copy
+  equal to these glyphs). Change a glyph here, then re-copy it there.
 - Round caps, round joins — inherited from the `<svg>`. Do not override.
 - Outline glyphs are strokes only (`fill="none"` inherited). A dot is a small
   filled circle: `<circle cx cy r="1" fill="currentColor" stroke="none" />`
@@ -51,8 +61,16 @@ units², 1.25px stroke):
   reach the keyline in their long direction.
 - A shape that adds mass outside its keyline (the chat bubble's tail) draws
   smaller to compensate.
-- Diagonal tools (pencils, brush, wand) span corner to corner. Their hull is
-  small by nature; do not enlarge them by that number.
+- Diagonal objects (pencils, pen nib, brush, wand, wrench, eyedropper, the
+  cursor arrows) run corner to corner: their ink box reaches about
+  1.5 → 14.5 on both axes (13 × 13). Their hull stays small by nature (75–115),
+  so judge them by that box, not by the hull. Drawn at 11.5, the Pen tool
+  looked a size smaller than Square beside it in the canvas toolbar.
+- Two overlapping objects (Copy, CopySimple, Files) read by the front object.
+  Copy's front square is 8.5 wide (most of a Square), with the back one offset
+  by 3.25; at 7.25 the icon looked small next to single shapes.
+- Center by the ink box after scaling. A glyph rotated 45° drifts off centre
+  when it grows (PenNib, Eyedropper, MagicWand): move it back with `dx`/`dy`.
 
 To correct a glyph without redrawing it, pass `optics` as the fourth
 `createIcon` argument: `{ scale, dx, dy }` scales about (8, 8), then moves

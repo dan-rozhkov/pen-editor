@@ -22,13 +22,16 @@ const PALETTE_BODY =
 export const PencilSimpleIcon = /*#__PURE__*/ createIcon(
   "PencilSimple",
   <path d="M2.75 13.25 3.3 10.6l7.4-7.4a1.25 1.25 0 0 1 1.77 0l.33.33a1.25 1.25 0 0 1 0 1.77l-7.4 7.4-2.65.55ZM9.5 4.5l2 2" />,
+  undefined,
+  // Optics: grown to the 13 × 13 diagonal box (STYLE.md, "Optical balance").
+  { scale: 1.14 },
 );
 
 export const PencilSimpleLineIcon = /*#__PURE__*/ createIcon(
   "PencilSimpleLine",
   <>
     <path
-      transform="translate(.3 -.4) scale(.9)"
+      transform="translate(-.25 -.75)"
       d="M2.75 13.25 3.3 10.6l7.4-7.4a1.25 1.25 0 0 1 1.77 0l.33.33a1.25 1.25 0 0 1 0 1.77l-7.4 7.4-2.65.55ZM9.5 4.5l2 2"
     />
     <path d="M8.5 13.5h5" />
@@ -39,7 +42,7 @@ export const PencilLineIcon = /*#__PURE__*/ createIcon(
   "PencilLine",
   <>
     <path
-      transform="translate(.3 -.4) scale(.9)"
+      transform="translate(-.25 -.75)"
       d="M2.75 13.25 3.3 10.6l7.4-7.4a1.25 1.25 0 0 1 1.77 0l.33.33a1.25 1.25 0 0 1 0 1.77l-7.4 7.4-2.65.55ZM3.3 10.6l2.1 2.1"
     />
     <path d="M8.5 13.5h5" />
@@ -87,6 +90,9 @@ export const CursorClickIcon = /*#__PURE__*/ createIcon(
     <path d="M6.25 6.25 13.5 9 10.5 10.5 9 13.5Z" />
     <path d="M6.25 2v2M2 6.25h2M3.4 3.4l1.4 1.4M9.1 3.4 7.7 4.8" />
   </>,
+  undefined,
+  // Optics: grown to the 13 × 13 diagonal box (STYLE.md, "Optical balance").
+  { scale: 1.04 },
 );
 
 export const EraserIcon = /*#__PURE__*/ createIcon(
@@ -95,6 +101,9 @@ export const EraserIcon = /*#__PURE__*/ createIcon(
     <path d="M3.38 8.62 8.12 3.88a1.25 1.25 0 0 1 1.76 0l2.24 2.24a1.25 1.25 0 0 1 0 1.76l-4.74 4.74a1.25 1.25 0 0 1-1.76 0L3.38 10.38a1.25 1.25 0 0 1 0-1.76ZM5.1 6.9l4 4" />
     <path d="M10.5 13.5h3" />
   </>,
+  undefined,
+  // Optics: grown and re-centred; it read small next to the pencils (STYLE.md).
+  { scale: 1.1, dx: -0.3, dy: -0.55 },
 );
 
 export const EyedropperIcon = /*#__PURE__*/ createIcon(
@@ -103,6 +112,9 @@ export const EyedropperIcon = /*#__PURE__*/ createIcon(
     <rect x="6" y="0.75" width="4" height="3.75" rx="1.75" />
     <path d="M4.75 7.5h6.5M6 7.5V12L8 15l2-3V7.5" />
   </g>,
+  undefined,
+  // Optics: grown to the 13 × 13 diagonal box (STYLE.md, "Optical balance").
+  { scale: 1.1, dx: -0.45, dy: 0.45 },
 );
 
 export const FlipHorizontalIcon = /*#__PURE__*/ createIcon(
@@ -130,6 +142,9 @@ export const MagicWandIcon = /*#__PURE__*/ createIcon(
     <rect x="6.75" y="7.5" width="2.5" height="7" rx="1.25" transform="rotate(45 8 8)" />
     <path d="M11.5 1.75c.3 1.9.8 2.4 2.75 2.75-1.95.35-2.45.85-2.75 2.75-.3-1.9-.8-2.4-2.75-2.75 1.95-.35 2.45-.85 2.75-2.75Z" />
   </>,
+  undefined,
+  // Optics: grown to the 13 × 13 diagonal box (STYLE.md, "Optical balance").
+  { scale: 1.06, dx: -0.7, dy: 0.7 },
 );
 
 export const PaintBrushIcon = /*#__PURE__*/ createIcon(
@@ -141,6 +156,9 @@ export const PaintBrushIcon = /*#__PURE__*/ createIcon(
     <path d="M10.81 7.31 8.69 5.19 7.28 6.6 9.4 8.72Z" />
     <path d="M7.28 6.6C4 6.6 2.3 9.2 2.5 13.5c4.3.2 6.9-1.5 6.9-4.78" />
   </>,
+  undefined,
+  // Optics: grown to the 13 × 13 diagonal box (STYLE.md, "Optical balance").
+  { scale: 1.06 },
 );
 
 export const PaintBucketIcon = /*#__PURE__*/ createIcon(
@@ -173,6 +191,9 @@ export const PenNibIcon = /*#__PURE__*/ createIcon(
     <path d="M8 14.25V8.9" />
     <circle cx="8" cy="7.5" r="1.4" />
   </g>,
+  undefined,
+  // Optics: grown to the 13 × 13 diagonal box (STYLE.md, "Optical balance").
+  { scale: 1.15, dx: -0.8, dy: 0.8 },
 );
 
 export const PerspectiveIcon = /*#__PURE__*/ createIcon(

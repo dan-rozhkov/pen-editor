@@ -411,7 +411,7 @@ export function ShowcaseAppCarousel({
             !canScrollPrev && "cursor-default group-hover/carousel:opacity-30 hover:bg-surface-active/80",
           )}
         >
-          <ArrowLeftIcon aria-hidden="true" weight="thin" />
+          <ArrowLeftIcon aria-hidden="true" />
           <span className="sr-only">Previous screen</span>
         </Button>
       )}
@@ -429,7 +429,7 @@ export function ShowcaseAppCarousel({
             !canScrollNext && "cursor-default group-hover/carousel:opacity-30 hover:bg-surface-active/80",
           )}
         >
-          <ArrowRightIcon aria-hidden="true" weight="thin" />
+          <ArrowRightIcon aria-hidden="true" />
           <span className="sr-only">Next screen</span>
         </Button>
       )}

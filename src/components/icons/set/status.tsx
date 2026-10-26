@@ -315,3 +315,8 @@ export const MobbinIcon = /*#__PURE__*/ createIcon(
     <path d="M5.25 10.75v-5.5L8 8.25l2.75-3v5.5" />
   </>,
 );
+
+export const PulseIcon = /*#__PURE__*/ createIcon(
+  "Pulse",
+  <path d="M1.75 8h2.5l2-4.75 3.5 9.5 2-4.75h2.5" />,
+);

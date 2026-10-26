@@ -31,7 +31,7 @@ export const TOOL_STYLES: Record<PrimitivesVariant, ToolStyle> = {
     active: ACTIVE,
     inactive: INACTIVE,
     icon: "size-6",
-    iconSize: 40,
+    iconSize: 24,
     caret: "size-3",
     caretButton: "-ml-1 w-6 justify-center",
     tooltipSide: "top",

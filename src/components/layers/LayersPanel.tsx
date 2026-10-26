@@ -330,7 +330,7 @@ export function LayersPanel() {
         ref={scrollRef}
       >
         {reversedNodes.length === 0 ? (
-          <PanelEmptyState icon={<StackIcon size={28} weight="light" />}>
+          <PanelEmptyState icon={<StackIcon size={20} weight="light" />}>
             No layers yet
           </PanelEmptyState>
         ) : (

@@ -111,11 +111,17 @@ export const FlowArrowIcon = /*#__PURE__*/ createIcon(
 export const NavigationArrowIcon = /*#__PURE__*/ createIcon(
   "NavigationArrow",
   <path d="M13.25 2.75 2.75 7.25l4.5 1.5 1.5 4.5Z" />,
+  undefined,
+  // Optics: grown to the 13 × 13 diagonal box (STYLE.md, "Optical balance").
+  { scale: 1.12 },
 );
 
 export const PaperPlaneRightIcon = /*#__PURE__*/ createIcon(
   "PaperPlaneRight",
   <path d="M2.75 2.75 13.25 8 2.75 13.25 4.5 8ZM4.5 8h4.75" />,
+  undefined,
+  // Optics: grown to the 13 × 13 diagonal box (STYLE.md, "Optical balance").
+  { scale: 1.1 },
 );
 
 export const FileArrowUpIcon = /*#__PURE__*/ createIcon(

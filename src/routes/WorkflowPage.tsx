@@ -82,7 +82,7 @@ export default function WorkflowPage() {
         {sync.id === null ? (
           <main className="flex flex-1 flex-col items-center justify-center px-4">
             <EmptyState
-              icon={<TreeStructureIcon weight="light" />}
+              icon={<TreeStructureIcon size={32} weight="light" />}
               title="No workflows yet"
               description="Create a workflow to describe the steps the agent should follow."
               action={

@@ -291,7 +291,7 @@ export function VariablesPanelContent() {
       {/* Table */}
       <div className="flex-1 overflow-y-auto">
         {variables.length === 0 ? (
-          <PanelEmptyState icon={<PlusCircleIcon size={28} weight="light" />}>
+          <PanelEmptyState icon={<PlusCircleIcon size={20} weight="light" />}>
             No variables yet
           </PanelEmptyState>
         ) : filteredVariables.length === 0 ? (

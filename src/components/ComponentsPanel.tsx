@@ -211,7 +211,7 @@ export function ComponentsPanel() {
       )}
       <div className="flex-1 overflow-y-auto px-2 pb-3">
         {rows.length === 0 ? (
-          <PanelEmptyState icon={<CubeIcon aria-hidden size={28} weight="light" />}>
+          <PanelEmptyState icon={<CubeIcon aria-hidden size={20} weight="light" />}>
             No slots yet. Ask the agent to extract one from a screen.
           </PanelEmptyState>
         ) : visible.length === 0 ? (

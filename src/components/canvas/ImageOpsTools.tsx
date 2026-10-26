@@ -98,7 +98,7 @@ export function ImageOpsTools({ toolStyle = TOOL_STYLES.floating }: { toolStyle?
           className={buttonClass}
         >
           {runningOp === "remove-background" ? (
-            <CircleNotchIcon size={iconSize} className={`${iconClass} animate-spin`} weight="thin" />
+            <CircleNotchIcon size={iconSize} className={`${iconClass} animate-spin`} />
           ) : (
             <MagicWandIcon size={iconSize} className={iconClass} weight="light" />
           )}
@@ -116,7 +116,7 @@ export function ImageOpsTools({ toolStyle = TOOL_STYLES.floating }: { toolStyle?
           className={buttonClass}
         >
           {runningOp === "vectorize" ? (
-            <CircleNotchIcon size={iconSize} className={`${iconClass} animate-spin`} weight="thin" />
+            <CircleNotchIcon size={iconSize} className={`${iconClass} animate-spin`} />
           ) : (
             <BezierCurveIcon size={iconSize} className={iconClass} weight="light" />
           )}

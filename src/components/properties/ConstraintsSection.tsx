@@ -26,11 +26,11 @@ const pinActiveClass = "before:bg-accent-bright";
 
 function AxisIcon({ axis }: { axis: "horizontal" | "vertical" }) {
   return (
-    <svg aria-hidden="true" className="size-3 shrink-0 text-text-muted" viewBox="0 0 12 12" fill="none">
+    <svg aria-hidden="true" data-pen-icon="ConstraintAxis" className="size-3 shrink-0 text-text-muted" viewBox="0 0 12 12" fill="none" strokeLinejoin="round">
       {axis === "horizontal" ? (
-        <path d="M1 6H11M1 4V8M11 4V8" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+        <path d="M1 6H11M1 4V8M11 4V8" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
       ) : (
-        <path d="M6 1V11M4 1H8M4 11H8" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+        <path d="M6 1V11M4 1H8M4 11H8" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
       )}
     </svg>
   );

@@ -77,19 +77,19 @@ function FailureMessage({ failure, onRetry, fill }: { failure: Failure; onRetry(
   switch (failure.reason) {
     case "not-found":
       return (
-        <Message fill={fill} icon={<MagnifyingGlassIcon weight="light" />} title="Trace not found" action={openFile}>
+        <Message fill={fill} icon={<MagnifyingGlassIcon size={32} weight="light" />} title="Trace not found" action={openFile}>
           It may have been deleted, or the link is wrong.
         </Message>
       );
     case "no-bridge":
       return (
-        <Message fill={fill} icon={<PlugsIcon weight="light" />} title="Open this trace in the desktop app">
+        <Message fill={fill} icon={<PlugsIcon size={32} weight="light" />} title="Open this trace in the desktop app">
           {failure.message}
         </Message>
       );
     case "invalid":
       return (
-        <Message fill={fill} icon={<FileXIcon weight="light" />} title="This is not a Sideform trace" action={openFile}>
+        <Message fill={fill} icon={<FileXIcon size={32} weight="light" />} title="This is not a Sideform trace" action={openFile}>
           The file is not in a format this viewer knows.
           <code className="mt-2 block break-words rounded-md bg-surface-elevated px-2 py-1 font-mono text-[11px] text-text-secondary">{failure.message}</code>
         </Message>
@@ -98,7 +98,7 @@ function FailureMessage({ failure, onRetry, fill }: { failure: Failure; onRetry(
       return (
         <Message
           fill={fill}
-          icon={<WarningCircleIcon weight="light" />}
+          icon={<WarningCircleIcon size={32} weight="light" />}
           title="The trace could not be loaded"
           action={
             <Button variant="outline" onClick={onRetry}>

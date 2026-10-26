@@ -222,7 +222,7 @@ export function StylesPanelContent() {
 
       <div className="flex-1 overflow-y-auto">
         {fillStyles.length === 0 && effectStyles.length === 0 ? (
-          <PanelEmptyState icon={<PaintBrushIcon size={28} weight="light" />}>
+          <PanelEmptyState icon={<PaintBrushIcon size={20} weight="light" />}>
             No styles yet
           </PanelEmptyState>
         ) : (

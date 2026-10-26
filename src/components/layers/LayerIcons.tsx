@@ -28,11 +28,11 @@ const AutoLayoutIcon = ({ layout }: { layout: LayoutProperties }) => {
 
   const sizes = [7, 5];
   const thick = 3.5;
-  const sw = 1;
+  const sw = 1.25;
   const pad = 2.5;
   const area = 11; // 16 - 2*pad
 
-  const gap = 2;
+  const gap = 2.5;
   const totalMain = thick * 2 + gap;
   let mainPositions: number[];
   switch (justifyContent) {
@@ -87,6 +87,8 @@ const AutoLayoutIcon = ({ layout }: { layout: LayoutProperties }) => {
       fill="none"
       stroke="currentColor"
       strokeWidth={sw}
+      strokeLinejoin="round"
+      data-pen-icon="AutoLayout"
     >
       {bars.map((bar, i) => (
         <rect
@@ -95,7 +97,7 @@ const AutoLayoutIcon = ({ layout }: { layout: LayoutProperties }) => {
           y={bar.y}
           width={bar.width}
           height={bar.height}
-          rx={0.5}
+          rx={0.75}
         />
       ))}
     </svg>
@@ -120,7 +122,6 @@ export const NodeIcon = ({
       <ScissorsIcon
         size={16}
         className={clsx("w-4 h-4 shrink-0 text-accent-bright")}
-        weight="regular"
       />
     );
   }
@@ -130,25 +131,25 @@ export const NodeIcon = ({
       if (layout?.autoLayout) {
         return <AutoLayoutIcon layout={layout} />;
       }
-      return <HashStraightIcon size={16} className={iconClass} weight="regular" />;
+      return <HashStraightIcon size={16} className={iconClass} />;
     case "group":
       return <SelectionIcon size={16} className={iconClass} />;
     case "rect":
-      return <RectangleIcon size={16} className={iconClass} weight="regular" />;
+      return <RectangleIcon size={16} className={iconClass} />;
     case "ellipse":
-      return <CircleIcon size={16} className={iconClass} weight="regular" />;
+      return <CircleIcon size={16} className={iconClass} />;
     case "text":
-      return <TextTIcon size={16} className={iconClass} weight="regular" />;
+      return <TextTIcon size={16} className={iconClass} />;
     case "path":
-      return <PenNibIcon size={16} className={iconClass} weight="regular" />;
+      return <PenNibIcon size={16} className={iconClass} />;
     case "line":
-      return <LineSegmentIcon size={16} className={iconClass} weight="regular" />;
+      return <LineSegmentIcon size={16} className={iconClass} />;
     case "polygon":
-      return <HexagonIcon size={16} className={iconClass} weight="regular" />;
+      return <HexagonIcon size={16} className={iconClass} />;
     case "embed":
-      return <HashStraightIcon size={16} className={iconClass} weight="regular" />;
+      return <HashStraightIcon size={16} className={iconClass} />;
     case "connector":
-      return <FlowArrowIcon size={16} className={iconClass} weight="regular" />;
+      return <FlowArrowIcon size={16} className={iconClass} />;
     default:
       return null;
   }
@@ -168,7 +169,6 @@ export const EmbedElementIcon = ({ kind }: { kind: EmbedLayerKind }) => {
       <ImageSquareIcon
         size={16}
         className={clsx("w-4 h-4 shrink-0", "text-text-muted")}
-        weight="regular"
       />
     );
   }
@@ -181,9 +181,9 @@ export const EyeIcon = ({ visible }: { visible: boolean }) => {
   const iconClass = clsx("w-4 h-4", "text-text-muted");
 
   return visible ? (
-    <EyeIconIcon size={16} className={iconClass} weight="regular" />
+    <EyeIconIcon size={16} className={iconClass} />
   ) : (
-    <EyeSlashIcon size={16} className={iconClass} weight="regular" />
+    <EyeSlashIcon size={16} className={iconClass} />
   );
 };
 
