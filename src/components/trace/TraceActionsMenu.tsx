@@ -19,7 +19,7 @@ export const TraceActionsMenu = memo(function TraceActionsMenu({ trace, cloudTra
             </IconButton>
           }
         />
-        <DropdownMenuContent align="end" sideOffset={4} className="min-w-48 whitespace-nowrap">
+        <DropdownMenuContent align="end" sideOffset={4} className="w-auto min-w-48 whitespace-nowrap">
           {result.available && (
             <DropdownMenuItem onClick={result.open}>
               <FileTextIcon weight="light" /> Open result
