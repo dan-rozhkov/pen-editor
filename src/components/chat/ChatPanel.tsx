@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
+  BrainIcon,
   PlusIcon,
   LightningIcon,
   ArrowUpIcon,
@@ -9,7 +10,6 @@ import {
   ArrowLineLeftIcon,
   DotsThreeVerticalIcon,
   BookOpenIcon,
-  SphereIcon,
   LockIcon,
 } from "@/components/icons";
 import { toast } from "sonner";
@@ -469,7 +469,7 @@ function ChatSession({
           onDismissSuggestion={dismissSuggestion}
           onManageSkills={onManageSkills}
           renderFooter={(footerProps) => (
-            <div className="flex items-center gap-1 px-2 pb-2 pt-1.5">
+            <div className="flex items-center gap-0.5 px-2 pb-1.5 pt-1">
               {composerControls(footerProps)}
             </div>
           )}
@@ -555,7 +555,7 @@ export function ChatPanelContent({
   }) => (
     <>
       {attachMenu}
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex items-center gap-0.5">
         <ContextMeter />
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -567,7 +567,7 @@ export function ChatPanelContent({
                 tooltip={`Model: ${activeModelLabel}`}
                 className="size-[30px] hover:bg-secondary"
               >
-                <SphereIcon size={16} weight="light" />
+                <BrainIcon size={16} weight="light" />
               </IconButton>
             }
           />
@@ -610,7 +610,7 @@ export function ChatPanelContent({
               type="button"
               variant="ghost"
               size="default"
-              className="inline-flex h-[30px] shrink-0 items-center gap-1 rounded-lg px-2 text-xs leading-none hover:bg-secondary"
+              className="inline-flex h-[30px] shrink-0 items-center gap-1 rounded-lg px-1.5 text-xs leading-none hover:bg-secondary"
               aria-label={`Parallel agents: x${parallelCount}`}
             >
               <LightningIcon size={16} weight="light" />

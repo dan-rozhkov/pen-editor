@@ -97,7 +97,9 @@ that says why. Never let the result cross the 1.25 → 14.75 safe zone.
   "Gaps" rule; older slashes use 1.25) (use a mask keyed by
   `uid` or split the paths).
 - Recurring elements are drawn the same way every time: file corner fold,
-  arrow head (two 45° strokes of length ~3.5), caret (`M4 6l4 4 4-4`),
+  arrow head (two 45° strokes reaching 4.5 back from the tip on each axis, as
+  Lucide's; shorter only where 4.5 would break the "Gaps" rule: Export,
+  Swap, Sort, FlowArrow, the small arrows inside files and screens), caret (`M4 6l4 4 4-4`),
   magnifier lens, badge "+" etc. Copy them from existing glyphs.
 - Detail budget: at 16px, no more than ~5 strokes. Drop decoration.
 

@@ -7,10 +7,10 @@ export const CaretUpIcon = /*#__PURE__*/ createIcon("CaretUp", <path d="M4 10l4-
 export const CaretLeftIcon = /*#__PURE__*/ createIcon("CaretLeft", <path d="M10 4l-4 4 4 4" />);
 export const CaretRightIcon = /*#__PURE__*/ createIcon("CaretRight", <path d="M6 4l4 4-4 4" />);
 
-export const ArrowRightIcon = /*#__PURE__*/ createIcon("ArrowRight", <path d="M2.75 8h10.5M9.75 4.5 13.25 8l-3.5 3.5" />);
-export const ArrowLeftIcon = /*#__PURE__*/ createIcon("ArrowLeft", <path d="M13.25 8H2.75M6.25 4.5 2.75 8l3.5 3.5" />);
-export const ArrowUpIcon = /*#__PURE__*/ createIcon("ArrowUp", <path d="M8 13.25V2.75M4.5 6.25 8 2.75l3.5 3.5" />);
-export const ArrowDownIcon = /*#__PURE__*/ createIcon("ArrowDown", <path d="M8 2.75v10.5M4.5 9.75 8 13.25l3.5-3.5" />);
+export const ArrowRightIcon = /*#__PURE__*/ createIcon("ArrowRight", <path d="M2.75 8h10.5M8.75 3.5 13.25 8l-4.5 4.5" />);
+export const ArrowLeftIcon = /*#__PURE__*/ createIcon("ArrowLeft", <path d="M13.25 8H2.75M7.25 3.5 2.75 8l4.5 4.5" />);
+export const ArrowUpIcon = /*#__PURE__*/ createIcon("ArrowUp", <path d="M8 13.25V2.75M3.5 7.25 8 2.75l4.5 4.5" />);
+export const ArrowDownIcon = /*#__PURE__*/ createIcon("ArrowDown", <path d="M8 2.75v10.5M3.5 8.75 8 13.25l4.5-4.5" />);
 export const ArrowUpRightIcon = /*#__PURE__*/ createIcon("ArrowUpRight", <path d="M3.25 12.75l9.5-9.5M5.5 3.25h7.25v7.25" />);
 
 export const ArrowClockwiseIcon = /*#__PURE__*/ createIcon(
@@ -24,11 +24,11 @@ export const ArrowCounterClockwiseIcon = /*#__PURE__*/ createIcon(
 
 export const ArrowLineLeftIcon = /*#__PURE__*/ createIcon(
   "ArrowLineLeft",
-  <path d="M2.75 2.75v10.5M13.25 8H5.75M9.25 4.5 5.75 8l3.5 3.5" />,
+  <path d="M2.75 2.75v10.5M13.25 8H5.75M10.25 3.5 5.75 8l4.5 4.5" />,
 );
 export const ArrowLineRightIcon = /*#__PURE__*/ createIcon(
   "ArrowLineRight",
-  <path d="M13.25 2.75v10.5M2.75 8h7.5M6.75 4.5 10.25 8l-3.5 3.5" />,
+  <path d="M13.25 2.75v10.5M2.75 8h7.5M5.75 3.5 10.25 8l-4.5 4.5" />,
 );
 
 export const ArrowsInLineVerticalIcon = /*#__PURE__*/ createIcon(
@@ -42,7 +42,7 @@ export const ArrowsInSimpleIcon = /*#__PURE__*/ createIcon(
 );
 export const ArrowsOutSimpleIcon = /*#__PURE__*/ createIcon(
   "ArrowsOutSimple",
-  <path d="M9.5 6.5l3.75-3.75M9.5 2.75h3.75v3.75M6.5 9.5l-3.75 3.75M6.5 13.25H2.75V9.5" />,
+  <path d="M9.5 6.5l3.75-3.75M8.75 2.75h4.5v4.5M6.5 9.5l-3.75 3.75M7.25 13.25h-4.5v-4.5" />,
 );
 export const ArrowsOutIcon = /*#__PURE__*/ createIcon(
   "ArrowsOut",
@@ -56,21 +56,21 @@ export const CornersOutIcon = /*#__PURE__*/ createIcon(
 
 export const ArrowSquareOutIcon = /*#__PURE__*/ createIcon(
   "ArrowSquareOut",
-  <path d="M7.25 2.75H4.5a1.75 1.75 0 0 0-1.75 1.75v7a1.75 1.75 0 0 0 1.75 1.75h7a1.75 1.75 0 0 0 1.75-1.75V8.75M8.5 7.5l4.75-4.75M9.75 2.75h3.5v3.5" />,
+  <path d="M5.5 2.75h-1a1.75 1.75 0 0 0-1.75 1.75v7a1.75 1.75 0 0 0 1.75 1.75h7a1.75 1.75 0 0 0 1.75-1.75v-1M8.5 7.5l4.75-4.75M8.75 2.75h4.5v4.5" />,
 );
 
 export const ArrowUDownLeftIcon = /*#__PURE__*/ createIcon(
   "ArrowUDownLeft",
-  <path d="M13.25 3.25v4.5a2 2 0 0 1-2 2H3.25M6.75 6.25l-3.5 3.5 3.5 3.5" />,
+  <path d="M13.25 3.25v4.5a2 2 0 0 1-2 2H3.25M7.5 5.5 3.25 9.75 7.5 14" />,
 );
 
 export const DownloadSimpleIcon = /*#__PURE__*/ createIcon(
   "DownloadSimple",
-  <path d="M8 2.75v7.5M4.5 6.75 8 10.25l3.5-3.5M2.75 13.25h10.5" />,
+  <path d="M8 2.75v7.5M3.5 5.75 8 10.25l4.5-4.5M2.75 13.25h10.5" />,
 );
 export const UploadSimpleIcon = /*#__PURE__*/ createIcon(
   "UploadSimple",
-  <path d="M8 10.25v-7.5M4.5 6.25 8 2.75l3.5 3.5M2.75 13.25h10.5" />,
+  <path d="M8 10.25v-7.5M3.5 7.25 8 2.75l4.5 4.5M2.75 13.25h10.5" />,
 );
 
 export const ExportIcon = /*#__PURE__*/ createIcon(
@@ -87,7 +87,7 @@ export const ResizeIcon = /*#__PURE__*/ createIcon(
   "Resize",
   <>
     <rect x="2.5" y="6.5" width="7" height="7" rx="1.5" />
-    <path d="M10.5 5.5 13.25 2.75M9.75 2.75h3.5v3.5" />
+    <path d="M10.5 5.5 13.25 2.75M8.75 2.75h4.5v4.5" />
   </>,
 );
 
