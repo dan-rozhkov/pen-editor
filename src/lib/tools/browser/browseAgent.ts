@@ -34,6 +34,7 @@ import {
   parseQaJudgeVerdict,
   QA_JUDGE_PAGE_MAX_CHARS,
   QA_JUDGE_TIMEOUT_MS,
+  createTraceDomSource,
   type QaCheck,
   type QaJudgePage,
   type QaJudgeResult,
@@ -136,13 +137,14 @@ async function boundedQaAssert(
   bridge: BrowserBridge,
   recorder: ReturnType<typeof createStepRecorder>,
   signal: AbortSignal,
+  repro = false,
 ): Promise<string> {
   const fail = (message: string) => JSON.stringify({ error: `${QA_ASSERT_TOOL}: ${message}` });
   if (signal.aborted) return fail("aborted.");
   // A rejection of the assert itself is not a timeout: it goes on to the caller, as before.
   const out = await withTimeout<{ value: string } | { thrown: unknown } | undefined>(
     () =>
-      executeQaAssert(input, bridge, recorder).then(
+      executeQaAssert(input, bridge, recorder, repro ? { repro: true } : {}).then(
         (value) => ({ value }),
         (thrown: unknown) => ({ thrown }),
       ),
@@ -633,10 +635,20 @@ const runBrowseAgentBody = async (
         goal,
         labels: { browser: desktopRun ? "desktop" : "cloud", mode: qaOn ? "qa" : "browse", ...(app ? { app: appLabelOf(app) } : {}) },
         ...(typeof bridge?.screenshot === "function" ? { capture: () => captureTraceFrame(bridge) } : {}),
+        // DOM snapshot of failed steps (viewer: Screenshot / DOM). Needs a bridge that can read the page at all.
+        ...(bridge && typeof bridge.capture === "function" ? { captureDom: createTraceDomSource(bridge) } : {}),
         // Network log of the page; a shell without `requests` records none.
         ...(typeof bridge?.requests === "function" ? { requests: () => bridge.requests!() } : {}),
+        repro: true,
       })
     : undefined;
+
+  // Playwright export: only a run that keeps a trace records the repro captures. The run's setup (a fixture, or the app).
+  if (traceRecorder) {
+    const reproSetup = app ? { app: true } : args.setup && typeof args.setup === "object" && !Array.isArray(args.setup) ? args.setup : undefined;
+    traceRecorder.setRepro({ setup: reproSetup as Parameters<typeof traceRecorder.setRepro>[0]["setup"] });
+  }
+  const reproOn = !!traceRecorder;
 
   const flushReserve = traceRecorder && typeof bridge?.requests === "function" ? TRACE_FLUSH_RESERVE_MS : 0;
 
@@ -701,11 +713,11 @@ const runBrowseAgentBody = async (
           qaOn && call.toolName === QA_VERDICT_TOOL
             ? executeQaVerdict(call.input)
             : qaOn && recorder && assertAllowed && call.toolName === QA_ASSERT_TOOL
-              ? await boundedQaAssert(call.input, bridge ?? INERT_BRIDGE, recorder, signal)
+              ? await boundedQaAssert(call.input, bridge ?? INERT_BRIDGE, recorder, signal, reproOn)
               : await executeToolCall(
                 call.toolName,
                 call.input,
-                { sessionId: parentSessionId, ...browserContext, toolCallId: call.toolCallId, signal },
+                { sessionId: parentSessionId, ...browserContext, ...(reproOn ? { repro: true } : {}), toolCallId: call.toolCallId, signal },
                 "browse_agent",
               );
         end?.({ output });
@@ -1049,6 +1061,8 @@ const runBrowseAgentBody = async (
         : { ok: false, error: "setup must be an object" };
   }
   if (parsed.ok) network = parsed.value.network;
+  // The validated fixture (a resumed checkpoint's too) is what the exported test must set up.
+  if (parsed.ok) traceRecorder?.setRepro({ setup: parsed.value });
   let setupApplied = false;
   const fs = parsed.ok
     ? createFixtureSetup(bridge ?? INERT_BRIDGE, parsed.value, {

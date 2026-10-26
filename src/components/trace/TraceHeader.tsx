@@ -3,6 +3,7 @@ import { SquareHalfBottomIcon } from "@/components/icons";
 import { memo, type ReactNode } from "react";
 import { IconButton } from "@/components/ui/IconButton";
 import { DownloadButton } from "./DownloadButton";
+import { PlaywrightButton } from "./PlaywrightButton";
 import { ResultButton } from "./ResultButton";
 import { RunDetails } from "./RunDetails";
 import { BAR_ROW, OutcomeBadge } from "./parts";
@@ -10,13 +11,14 @@ import { describeOutcome, goalFirstLine } from "./traceModel";
 
 interface Props {
   trace: BrowseTrace;
+  cloudTraceId?: string;
   detailsOpen: boolean;
   onToggleDetails(): void;
   /** Trace switcher, first in the toolbar row. */
   switcher?: ReactNode;
 }
 
-export const TraceHeader = memo(function TraceHeader({ trace, detailsOpen, onToggleDetails, switcher }: Props) {
+export const TraceHeader = memo(function TraceHeader({ trace, cloudTraceId, detailsOpen, onToggleDetails, switcher }: Props) {
   const outcome = describeOutcome(trace);
   const title = goalFirstLine(trace.goal);
   return (
@@ -30,7 +32,8 @@ export const TraceHeader = memo(function TraceHeader({ trace, detailsOpen, onTog
         <OutcomeBadge tone={outcome.tone} label={outcome.label} data-testid="trace-outcome" />
         <RunDetails trace={trace} />
         <ResultButton trace={trace} />
-        <DownloadButton trace={trace} />
+        <DownloadButton trace={trace} cloudTraceId={cloudTraceId} />
+        <PlaywrightButton trace={trace} />
         <IconButton
           tooltip={detailsOpen ? "Hide details" : "Show details"}
           aria-label="Details panel"

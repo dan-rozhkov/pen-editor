@@ -61,7 +61,7 @@ function RemoteTrace({ id, source }: { id: string; source: TraceSource }) {
   return result === null ? (
     <TraceSkeleton />
   ) : result.ok ? (
-    <TraceViewer key={result.trace.id} trace={result.trace} initialStep={stepParam} switcher={switcher} />
+    <TraceViewer key={result.trace.id} trace={result.trace} initialStep={stepParam} switcher={switcher} cloudTraceId={source === "cloud" ? id : undefined} />
   ) : (
     <TraceFailure failure={result} onRetry={retry} switcher={switcher} />
   );

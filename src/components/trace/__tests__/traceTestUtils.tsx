@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { vi } from "vitest";
-import { sampleTraceJson, sampleTraceWithExtrasJson } from "@/components/trace/__fixtures__/sampleTrace";
+import { sampleTraceJson, sampleTraceWithDomsJson, sampleTraceWithExtrasJson } from "@/components/trace/__fixtures__/sampleTrace";
 import TracePage from "@/routes/TracePage";
 
 // Shared by the trace page tests: render the page at a URL, serve the sample trace.
@@ -20,6 +20,7 @@ export function renderTrace(url = "/trace/sample-trace-1") {
 export const answer = (response: Partial<Response>) => vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(response)));
 export const serveSample = () => answer({ ok: true, status: 200, json: async () => sampleTraceJson() });
 export const serveExtras = () => answer({ ok: true, status: 200, json: async () => sampleTraceWithExtrasJson() });
+export const serveDoms = () => answer({ ok: true, status: 200, json: async () => sampleTraceWithDomsJson() });
 export const frameId = () => screen.getByTestId("trace-frame").getAttribute("data-frame-id");
 /** The n-th (1-based) row button of the step list. */
 export const stepButton = (n: number) => within(screen.getByRole("region", { name: "Steps" })).getAllByRole("button")[n - 1]!;

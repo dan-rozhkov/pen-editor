@@ -10,12 +10,14 @@ import { StepList } from "./StepList";
 import { TraceHeader } from "./TraceHeader";
 import {
   buildStepRows,
+  domOfStep,
   framesOfStep,
   pickStepFrame,
   sortedFrames,
   stepFromParam,
   stepLinkUrl,
   stepOfFrame,
+  stepsWithDom,
   stepsWithProblems,
   type FrameSide,
 } from "./traceModel";
@@ -67,6 +69,8 @@ interface ViewerProps {
   deepLink?: boolean;
   /** Trace switcher for the header. */
   switcher?: ReactNode;
+  /** Id of the trace when it was loaded from the backend (cloud); DOM snapshots and downloads then go through its routes. */
+  cloudTraceId?: string;
 }
 
 /** Writes `?step=N` into the address without a navigation: the router and the trace loader never see it. */
@@ -74,10 +78,11 @@ function writeStepToUrl(stepIndex: number): void {
   window.history.replaceState(window.history.state, "", stepLinkUrl(window.location, stepIndex));
 }
 
-export function TraceViewer({ trace, initialStep, deepLink = true, switcher }: ViewerProps) {
+export function TraceViewer({ trace, initialStep, deepLink = true, switcher, cloudTraceId }: ViewerProps) {
   const rows = useMemo(() => buildStepRows(trace), [trace]);
   const flagged = useMemo(() => stepsWithProblems(trace), [trace]);
   const frames = useMemo(() => sortedFrames(trace), [trace]);
+  const withDom = useMemo(() => stepsWithDom(trace), [trace]);
   const linked = useMemo(() => (deepLink ? stepFromParam(initialStep ?? null, trace) : undefined), [deepLink, initialStep, trace]);
   const [stepIndex, setStepIndex] = useState<number | null>(linked ?? trace.steps[0]?.index ?? null);
   const [frameId, setFrameId] = useState<number | null>(null);
@@ -207,7 +212,7 @@ export function TraceViewer({ trace, initialStep, deepLink = true, switcher }: V
 
   return (
     <div className="flex h-dvh flex-col bg-surface-panel text-text-primary">
-      <TraceHeader trace={trace} detailsOpen={detailsOpen} onToggleDetails={toggleDetails} switcher={switcher} />
+      <TraceHeader trace={trace} cloudTraceId={cloudTraceId} detailsOpen={detailsOpen} onToggleDetails={toggleDetails} switcher={switcher} />
       <Filmstrip
         trace={trace}
         selectedFrameId={shown?.id}
@@ -234,7 +239,7 @@ export function TraceViewer({ trace, initialStep, deepLink = true, switcher }: V
         }
       >
         <div className="order-2 max-h-96 min-h-0 border-t border-border-default min-[900px]:order-none min-[900px]:max-h-none min-[900px]:border-e min-[900px]:border-t-0 flex flex-col">
-          <StepList rows={rows} selected={stepIndex} flagged={flagged} onSelect={selectStep} />
+          <StepList rows={rows} selected={stepIndex} flagged={flagged} withDom={withDom} onSelect={selectStep} />
         </div>
         <div className="order-1 flex min-h-0 flex-col min-[900px]:order-none">
           <FrameView
@@ -242,6 +247,9 @@ export function TraceViewer({ trace, initialStep, deepLink = true, switcher }: V
             startedAt={trace.startedAt}
             position={position}
             kind={stepPick?.kind}
+            dom={domOfStep(trace, stepIndex)}
+            cloudTraceId={cloudTraceId}
+            stepNumber={stepIndex === null ? 0 : stepIndex + 1}
             compare={
               stepPick?.canCompare && stepIndex !== null
                 ? { view: stepPick.kind === "before" ? "before" : "after", onChange: (view) => setSide({ step: stepIndex, view }) }

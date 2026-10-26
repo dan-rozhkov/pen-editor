@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TRACE_DOM_BUDGET_MS } from "@sideform/browser-agent/agent/session";
 import { toolHandlers, type ToolHandler } from "@/lib/toolRegistry";
 import { clearOpenCodeKey, setOpenCodeKey } from "@/lib/opencodeKey";
 import { useChatStore } from "@/store/chatStore";
@@ -828,6 +829,66 @@ describe("browse_agent run trace", () => {
     const manifest = await desktopQaManifest({ requests }, "local-req");
     expect(requests).toHaveBeenCalled();
     expect(manifest.requests).toEqual([expect.objectContaining({ url: "https://shop.test/api/cart", status: 500 })]);
+  });
+
+  describe("DOM snapshots in the trace", () => {
+    /** A desktop QA run whose browse_open fails, so the recorder asks for a DOM snapshot. Resolves to the saved payload. */
+    const failingRun = async (bridge: Partial<PenDesktopBrowser>) => {
+      const save = vi.fn(async () => ({ id: "local-dom" }));
+      setPenDesktop(stubBrowser(bridge));
+      window.penDesktop!.traces = { save, read: async () => ({ error: "n/a" }) };
+      toolHandlers.browse_open = vi.fn(async () => JSON.stringify({ error: "Navigation failed: net::ERR_CONNECTION_RESET" }));
+      stubFetch([() => toolTurn("browse_open", { url: "https://shop.test/cart" }, "c1"), () => textTurn("done")]);
+      try {
+        await browseAgent({ goal: "x", qa: true }, ctx);
+        return (save.mock.calls[0] as unknown as [{ manifest: { doms?: Array<{ kind: string }> }; assets: Array<{ path: string; dataUrl: string }> }])[0];
+      } finally {
+        delete window.penDesktop;
+      }
+    };
+
+    it("a failed step stores the page html from the run bridge capture", async () => {
+      const capture = vi.fn(async () => ({ html: "<html>cart</html>", url: "https://shop.test/cart", title: "Cart", width: 10, height: 20, forTrace: true }));
+      const payload = await failingRun({ capture } as Partial<PenDesktopBrowser>);
+      expect(capture).toHaveBeenCalledWith({ budgetMs: TRACE_DOM_BUDGET_MS, forTrace: true });
+      expect(payload.manifest.doms).toEqual([expect.objectContaining({ kind: "html", src: "dom/0.html", title: "Cart" })]);
+      expect(payload.assets.map((a) => a.path)).toContain("dom/0.html");
+    });
+
+    it("capture returning an error stores no snapshot and never calls bridge.snapshot", async () => {
+      const capture = vi.fn(async () => ({ error: "capture is not available for apps" }));
+      const snapshot = vi.fn(async () => ({}));
+      const payload = await failingRun({ capture, snapshot } as Partial<PenDesktopBrowser>);
+      expect(capture).toHaveBeenCalled();
+      expect(snapshot).not.toHaveBeenCalled();
+      expect(payload.assets.map((a) => a.path)).not.toContain("dom/0.html");
+    });
+  });
+
+  describe("trace DOM source wiring", () => {
+    const run = async (bridge: Partial<PenDesktopBrowser>, qa: boolean) => {
+      setPenDesktop(stubBrowser(bridge));
+      window.penDesktop!.traces = { save: async () => ({ id: "local-w" }), read: async () => ({ error: "n/a" }) };
+      toolHandlers.browse_open = vi.fn(async () => JSON.stringify({ error: "Navigation failed: net::ERR_CONNECTION_RESET" }));
+      stubFetch([() => toolTurn("browse_open", { url: "https://shop.test/cart" }, "c1"), () => textTurn("done")]);
+      try {
+        await browseAgent({ goal: "x", ...(qa ? { qa: true } : {}) }, ctx);
+      } finally {
+        delete window.penDesktop;
+      }
+    };
+
+    it("uses the run's own bridge capture", async () => {
+      const capture = vi.fn(async () => ({ html: "<p>x</p>", url: "https://a.test" }));
+      await run({ capture } as Partial<PenDesktopBrowser>, true);
+      expect(capture).toHaveBeenCalled();
+    });
+
+    it("a run without a trace gets no capture", async () => {
+      const capture = vi.fn(async () => ({ html: "<p>x</p>" }));
+      await run({ capture } as Partial<PenDesktopBrowser>, false);
+      expect(capture).not.toHaveBeenCalled();
+    });
   });
 
   it("a bridge without requests records no request log", async () => {

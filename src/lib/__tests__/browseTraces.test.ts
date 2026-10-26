@@ -160,6 +160,16 @@ describe("fitTracePayload", () => {
     expect(dropped.some((d, i) => i > 0 && d - dropped[i - 1] > 1) || dropped.length === 1).toBe(true);
   });
 
+  it("keeps DOM snapshot assets when frames are dropped", () => {
+    const p = payload(10);
+    const manifest = { ...p.manifest, doms: [{ id: 0, at: 1, stepIndex: 2, kind: "html" as const, src: "dom/0.html", bytes: 5 }] };
+    const assets = [...p.assets, { path: "dom/0.html", dataUrl: "data:text/html;base64,PGI+", contentType: "text/html; charset=utf-8" }];
+    const out = fitTracePayload({ manifest, assets }, 6_000 + JSON.stringify(manifest).length);
+    expect(out.manifest.frames.length).toBeLessThan(10);
+    expect(out.manifest.doms).toHaveLength(1);
+    expect(out.assets.map((a) => a.path)).toContain("dom/0.html");
+  });
+
   it("adds to an existing dropped count and never goes below the kept frames", () => {
     const p = payload(6);
     p.manifest.dropped = { frames: 3 };

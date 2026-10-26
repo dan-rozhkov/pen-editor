@@ -90,3 +90,17 @@ export function sampleTraceWithExtrasJson(): unknown {
   ];
   return trace;
 }
+
+const utf8DataUrl = (mime: string, text: string): string => `data:${mime};base64,${btoa(String.fromCharCode(...new TextEncoder().encode(text)))}`;
+export const SAMPLE_DOM_HTML = "<html><body><h1>Pricing</h1><p>Ünïcode ok</p></body></html>";
+export const SAMPLE_DOM_AX = "[0] link Home\n[1] button Start free trial";
+
+/** The sample with DOM snapshots: step 2 as html, step 4 as an accessibility tree. */
+export function sampleTraceWithDomsJson(): unknown {
+  const trace = sampleTraceJson() as Record<string, unknown>;
+  trace.doms = [
+    { id: 0, at: T0 + 3000, stepIndex: 2, kind: "html", src: utf8DataUrl("text/html", SAMPLE_DOM_HTML), bytes: SAMPLE_DOM_HTML.length },
+    { id: 1, at: T0 + 7500, stepIndex: 4, kind: "ax", src: utf8DataUrl("text/plain", SAMPLE_DOM_AX), bytes: SAMPLE_DOM_AX.length },
+  ];
+  return trace;
+}

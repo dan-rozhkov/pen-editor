@@ -1,4 +1,4 @@
-import type { BrowseTrace, BrowseTraceFrame, BrowseTraceLogEntry, BrowseTraceRequest, BrowseTraceStep } from "@sideform/browser-agent/agent/session";
+import type { BrowseTrace, BrowseTraceDom, BrowseTraceFrame, BrowseTraceLogEntry, BrowseTraceRequest, BrowseTraceStep } from "@sideform/browser-agent/agent/session";
 
 export { batchProgress, droppedRequests, requestFailed, stepActions, traceRequests, type BatchProgress } from "@/lib/trace/traceData";
 
@@ -474,4 +474,15 @@ export function stepLinkUrl(location: { href: string }, stepIndex: number): stri
   const url = new URL(location.href);
   url.searchParams.set("step", String(stepIndex + 1));
   return url.toString();
+}
+
+/** The DOM snapshot of a step (the last one when there are several); undefined when the step has none. */
+export function domOfStep(trace: BrowseTrace, stepIndex: number | null): BrowseTraceDom | undefined {
+  if (stepIndex === null) return undefined;
+  return (trace.doms ?? []).filter((d) => d.stepIndex === stepIndex).at(-1);
+}
+
+/** Step indexes that have a DOM snapshot. */
+export function stepsWithDom(trace: BrowseTrace): Set<number> {
+  return new Set((trace.doms ?? []).map((d) => d.stepIndex));
 }

@@ -10,10 +10,12 @@ interface Props {
   selected: number | null;
   /** Step indexes with a failure or a console/network entry. */
   flagged: Set<number>;
+  /** Step indexes that have a DOM snapshot. */
+  withDom?: Set<number>;
   onSelect(index: number): void;
 }
 
-export const StepList = memo(function StepList({ rows, selected, flagged, onSelect }: Props) {
+export const StepList = memo(function StepList({ rows, selected, flagged, withDom, onSelect }: Props) {
   const listRef = useRef<HTMLOListElement>(null);
   useEffect(() => {
     // Keyboard navigation moves the selection; keep the row in view.
@@ -43,6 +45,11 @@ export const StepList = memo(function StepList({ rows, selected, flagged, onSele
                     <span data-testid="step-title" className="flex h-[18px] items-center gap-1.5">
                       <span className="truncate text-[13px] leading-[18px] font-medium text-text-primary">{label}</span>
                       {!step.ok && <ToneIcon tone="danger" label="Failed" className="size-3.5 shrink-0" />}
+                      {withDom?.has(step.index) && (
+                        <span title="This step has a DOM snapshot" className="shrink-0 rounded border border-border-default px-1 text-[10px] leading-[14px] font-medium text-text-muted">
+                          DOM
+                        </span>
+                      )}
                       {flagged.has(step.index) && step.ok && (
                         <StatusDot tone="warning" title="Console or network problems" className="size-1.5 shrink-0" />
                       )}

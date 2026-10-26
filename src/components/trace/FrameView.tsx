@@ -1,8 +1,9 @@
-import type { BrowseTraceFrame } from "@sideform/browser-agent/agent/session";
+import type { BrowseTraceDom, BrowseTraceFrame } from "@sideform/browser-agent/agent/session";
 import { memo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { BAR_ROW, FRAME_SURFACE, Segmented } from "./parts";
+import { DomView } from "./DomView";
 import { formatOffset, type FrameKind, type FrameSide } from "./traceModel";
 
 interface Props {
@@ -14,6 +15,12 @@ interface Props {
   kind?: FrameKind;
   /** Before / After switch, when the selected step has two frames to compare. */
   compare?: { view: FrameSide; onChange(view: FrameSide): void };
+  /** The DOM snapshot of the selected step, when it has one: adds the Screenshot / DOM switch. */
+  dom?: BrowseTraceDom;
+  /** 1-based number of the selected step, for the DOM view's labels. */
+  stepNumber?: number;
+  /** Set for a trace loaded from the backend: its DOM text is fetched through the backend route. */
+  cloudTraceId?: string;
 }
 
 const KIND_LABEL: Record<BrowseTraceFrame["kind"], string> = { step: "After step", screenshot: "Screenshot", final: "Final state" };
@@ -27,7 +34,10 @@ function altLabel(frame: BrowseTraceFrame, kind: FrameKind): string {
 /** Natural sizes of loaded frames, cached per src so revisiting a frame does not jump. */
 const measuredSizes = new Map<string, { width: number; height: number }>();
 
-export const FrameView = memo(function FrameView({ frame, startedAt, position, kind = "own", compare }: Props) {
+export const FrameView = memo(function FrameView({ frame, startedAt, position, kind = "own", compare, dom, stepNumber = 0, cloudTraceId }: Props) {
+  // Screenshot is the default; the choice is per snapshot, so another step starts on Screenshot again.
+  const [domPick, setDomPick] = useState<{ id: number | null; view: "screenshot" | "dom" }>({ id: null, view: "screenshot" });
+  const showDom = !!dom && domPick.id === dom.id && domPick.view === "dom";
   // Remember which source failed, so a new frame gets a fresh attempt.
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const broken = frame !== undefined && failedSrc === frame.src;
@@ -41,7 +51,18 @@ export const FrameView = memo(function FrameView({ frame, startedAt, position, k
   return (
     <section aria-label="Frame" className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-panel">
       <div className={cn(BAR_ROW, "h-10 shrink-0 py-0")}>
-        {compare && (
+        {dom && (
+          <Segmented
+            label="Page view"
+            value={showDom ? "dom" : "screenshot"}
+            options={[
+              { value: "screenshot", label: "Screenshot" },
+              { value: "dom", label: "DOM" },
+            ]}
+            onChange={(view) => setDomPick({ id: dom.id, view })}
+          />
+        )}
+        {compare && !showDom && (
           <Segmented
             label="Frame view"
             value={compare.view}
@@ -76,7 +97,9 @@ export const FrameView = memo(function FrameView({ frame, startedAt, position, k
       </div>
       <div className="relative min-h-[16rem] flex-1">
         <div className="absolute inset-x-4 top-0 bottom-4 flex items-center justify-center [container-type:size]">
-          {frame && !broken ? (
+          {showDom && dom ? (
+            <DomView dom={dom} stepNumber={stepNumber} cloudTraceId={cloudTraceId} />
+          ) : frame && !broken ? (
             <img
               key={frame.id}
               src={frame.src}

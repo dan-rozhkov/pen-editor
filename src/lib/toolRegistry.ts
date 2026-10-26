@@ -76,6 +76,11 @@ export interface ToolExecutionContext extends HarnessToolExecutionContext {
    */
   browserSession?: string;
   /**
+   * Set only on nested calls of a browse_agent run that records a trace: `browse_act` then runs with the package's
+   * `repro: true` (its output carries `__repro` for the Playwright export). The session core strips it before the model.
+   */
+  repro?: boolean;
+  /**
    * Called once, inside the queued task, right before the handler runs (not
    * when the call was already aborted: then it never runs). The canvas link
    * host posts `started` from it.

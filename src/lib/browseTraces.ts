@@ -53,7 +53,8 @@ export function fitTracePayload(payload: BrowseTraceSavePayload, maxChars: numbe
     const gone = new Set<number>();
     for (let i = 0; i < count; i++) gone.add(droppable[Math.floor(((i + 0.5) * droppable.length) / count)]!.id);
     const frames = manifest.frames.filter((f) => !gone.has(f.id));
-    const paths = new Set(frames.map((f) => f.src));
+    // DOM snapshots are never dropped here: they are few, small text, and belong to failed steps.
+    const paths = new Set([...frames.map((f) => f.src), ...(manifest.doms ?? []).map((d) => d.src)]);
     return {
       manifest: { ...manifest, frames, dropped: { ...manifest.dropped, frames: (manifest.dropped?.frames ?? 0) + gone.size } },
       assets: assets.filter((a) => paths.has(a.path)),

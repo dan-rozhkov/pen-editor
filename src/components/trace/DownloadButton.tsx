@@ -6,14 +6,14 @@ import { IconButton } from "@/components/ui/IconButton";
 import { exportBrowseTrace, traceFileName } from "@/lib/browseTraceFile";
 
 /** "Download trace": the run as one portable JSON file, frames inlined. */
-export const DownloadButton = memo(function DownloadButton({ trace }: { trace: BrowseTrace }) {
+export const DownloadButton = memo(function DownloadButton({ trace, cloudTraceId }: { trace: BrowseTrace; cloudTraceId?: string }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const download = async () => {
     setBusy(true);
     setFailed(false);
     try {
-      const { blob, notInlined } = await exportBrowseTrace(trace);
+      const { blob, notInlined } = await exportBrowseTrace(trace, undefined, cloudTraceId);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
