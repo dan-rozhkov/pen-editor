@@ -42,7 +42,7 @@ export function BooleanOperationsSection({ selectedIds, selectedNodes }: Boolean
 
   const iconSize = 16;
   const buttonClass =
-    "p-2 rounded transition-colors bg-secondary hover:bg-secondary text-text-muted hover:text-text-primary";
+    "p-2 rounded-control-lg transition-colors bg-secondary hover:bg-secondary text-text-muted hover:text-text-primary";
 
   return (
     <PropertySection title="Boolean operations">

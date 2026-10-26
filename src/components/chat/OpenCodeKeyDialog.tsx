@@ -223,7 +223,7 @@ export function OpenCodeKeyDialog({ open, onOpenChange }: OpenCodeKeyDialogProps
             placeholder={hasStoredKey ? "Enter a new key to replace it" : "sk-…"}
             autoComplete="off"
             spellCheck={false}
-            className="h-7 w-full min-w-0 rounded-md border border-border-default bg-secondary px-2 text-xs text-text-default outline-none"
+            className="h-7 w-full min-w-0 rounded-control border border-border-default bg-secondary px-2 text-xs text-text-default outline-none"
             aria-label="OpenCode key"
           />
 

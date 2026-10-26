@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 
 const DEFAULT_INPUT_CLASSNAME =
-  "w-full bg-secondary rounded px-2 py-1 text-xs text-text-primary outline-none";
+  "w-full bg-secondary rounded-control-sm px-2 py-1 text-xs text-text-primary outline-none";
 const DEFAULT_DISPLAY_CLASSNAME =
-  "text-xs text-text-secondary truncate cursor-text hover:text-text-primary block px-2 py-1 rounded hover:bg-secondary";
+  "text-xs text-text-secondary truncate cursor-text hover:text-text-primary block px-2 py-1 rounded-control-sm hover:bg-secondary";
 
 interface EditableTextProps {
   value: string;

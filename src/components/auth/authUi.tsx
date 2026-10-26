@@ -56,7 +56,7 @@ export function TextField({
         {...props}
         // 16px: below that iOS Safari zooms the page on focus.
         className={cn(
-          "h-10 w-full rounded-md border border-border-default bg-surface-panel px-3 text-base text-text-primary placeholder:text-text-disabled",
+          "h-10 w-full rounded-control-xl border border-border-default bg-surface-panel px-3 text-base text-text-primary placeholder:text-text-disabled",
           FOCUS,
           props.className,
         )}
@@ -80,7 +80,7 @@ export function AuthButton({
       type="button"
       {...props}
       className={cn(
-        "inline-flex h-10 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex h-10 items-center justify-center gap-2 rounded-control-xl px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
         FOCUS,
         variant === "primary" && "bg-accent-primary text-white hover:opacity-90",
         variant === "secondary" &&

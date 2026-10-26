@@ -5,6 +5,40 @@ import { Badge } from "@/components/ui/badge";
 
 afterEach(cleanup);
 
+describe("<Button /> radius", () => {
+  it.each([
+    ["xs", "rounded-control-xs"],
+    ["sm", "rounded-control-sm"],
+    ["default", "rounded-control"],
+    ["lg", "rounded-control-lg"],
+    ["icon", "rounded-control"],
+    ["icon-xs", "rounded-control-xs"],
+    ["icon-sm", "rounded-control-sm"],
+    ["icon-lg", "rounded-control-lg"],
+  ] as const)("size %s uses %s", (size, cls) => {
+    render(<Button size={size}>x</Button>);
+    const tokens = screen.getByRole("button").className.split(/\s+/);
+    expect(tokens).toContain(cls);
+    expect(tokens.filter((t) => t.startsWith("rounded-"))).toEqual([cls]);
+  });
+
+  it("outline is raised, not bordered; accent glows", () => {
+    render(
+      <>
+        <Button variant="outline">o</Button>
+        <Button variant="accent">a</Button>
+      </>,
+    );
+    expect(screen.getByRole("button", { name: "o" }).className).toContain("control-raised");
+    expect(screen.getByRole("button", { name: "o" }).className).not.toContain("border-border");
+    // The base `border-transparent` sorts after the custom utility in the
+    // compiled CSS, so the hairline colour must come from a merged class.
+    expect(screen.getByRole("button", { name: "o" }).className).toContain("border-menu-border");
+    expect(screen.getByRole("button", { name: "o" }).className).not.toContain("border-transparent");
+    expect(screen.getByRole("button", { name: "a" }).className).toContain("control-glow");
+  });
+});
+
 describe("<Button />", () => {
   it("carries the press-feedback class by default", () => {
     render(<Button>Click me</Button>);

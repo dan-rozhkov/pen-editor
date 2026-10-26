@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 const SELECT_CLASS =
-  "h-7 w-full rounded-md bg-secondary px-2 text-xs text-secondary-foreground outline-none focus-visible:ring-1 focus-visible:ring-accent-light";
+  "h-7 w-full rounded-control bg-secondary px-2 text-xs text-secondary-foreground outline-none focus-visible:ring-1 focus-visible:ring-accent-light";
 
 type Status = NonNullable<EmbedComponentMeta["status"]>;
 

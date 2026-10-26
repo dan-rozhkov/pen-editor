@@ -60,7 +60,7 @@ function Swatch({ label, active, onPick, children }: { label: string; active: bo
       onClick={onPick}
       className={cn(
         MENU_HOVER,
-        "focus-visible:ring-menu-foreground/40 flex size-6 items-center justify-center rounded-lg outline-none focus-visible:ring-2",
+        "focus-visible:ring-menu-foreground/40 flex size-6 items-center justify-center rounded-control-sm outline-none focus-visible:ring-2",
         active && "bg-menu-highlight ring-menu-foreground/40 ring-1",
       )}
     >

@@ -72,7 +72,7 @@ function FillStyleRow({ style }: { style: FillStyle }) {
           value={style.name}
           onCommit={(name) => updateFillStyle(style.id, { name })}
           placeholder="(unnamed)"
-          className="text-xs text-text-primary truncate cursor-text hover:bg-secondary block px-2 py-1 rounded"
+          className="text-xs text-text-primary truncate cursor-text hover:bg-secondary block px-2 py-1 rounded-control"
         />
       </div>
       <span className="text-[11px] text-text-muted font-mono truncate w-28 text-right">
@@ -83,7 +83,7 @@ function FillStyleRow({ style }: { style: FillStyle }) {
           render={
             <button
               className={
-                "p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors " +
+                "p-1 rounded-control-sm hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors " +
                 (hovered ? "opacity-100" : "opacity-0")
               }
               onClick={() => deleteFillStyle(style.id)}
@@ -138,7 +138,7 @@ function EffectStyleRow({ style }: { style: EffectStyle }) {
           value={style.name}
           onCommit={(name) => updateEffectStyle(style.id, { name })}
           placeholder="(unnamed)"
-          className="text-xs text-text-primary truncate cursor-text hover:bg-secondary block px-2 py-1 rounded"
+          className="text-xs text-text-primary truncate cursor-text hover:bg-secondary block px-2 py-1 rounded-control"
         />
       </div>
       <span className="text-[11px] text-text-muted truncate w-28 text-right">{summary || "Empty"}</span>
@@ -147,7 +147,7 @@ function EffectStyleRow({ style }: { style: EffectStyle }) {
           render={
             <button
               className={
-                "p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors " +
+                "p-1 rounded-control-sm hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors " +
                 (hovered ? "opacity-100" : "opacity-0")
               }
               onClick={() => deleteEffectStyle(style.id)}
@@ -197,7 +197,7 @@ export function StylesPanelContent() {
         </span>
         <DropdownMenu>
           <DropdownMenuTrigger
-            className="p-1 rounded hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
+            className="p-1 rounded-control-sm hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
             title="Add style"
           >
             <PlusIcon className="size-4" />

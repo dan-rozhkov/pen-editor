@@ -348,7 +348,7 @@ export function ColorInput({
       {availableVariables.length > 0 && onVariableChange && (
         <DropdownMenu>
           <DropdownMenuTrigger
-            className="h-6 w-6 flex items-center justify-center rounded bg-secondary text-text-muted hover:text-text-primary transition-colors"
+            className="h-6 w-6 flex items-center justify-center rounded-control-sm bg-secondary text-text-muted hover:text-text-primary transition-colors"
             title="Bind to variable"
           >
             <HashIcon size={14} />

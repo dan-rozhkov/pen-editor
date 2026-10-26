@@ -6,7 +6,7 @@ import { IconButton } from "./ui/IconButton";
 import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 
 const navButtonClass =
-  "group relative size-9 p-0 rounded-lg transition-none outline-none text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary disabled:opacity-30";
+  "group relative size-9 p-0 rounded-control-xl transition-none outline-none text-text-primary hover:text-text-primary hover:bg-secondary dark:hover:bg-secondary disabled:opacity-30";
 
 // Idle timeout before the pill fades — long enough to read the counter/click
 // a nav button without the controls disappearing underfoot, short enough to

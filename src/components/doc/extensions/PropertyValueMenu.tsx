@@ -169,7 +169,7 @@ function OptionPicker({ editor, getRowPos, keyText, currentTag, onDone }: Props)
                 aria-label={cap(name)}
                 aria-pressed={color === name}
                 onClick={() => setColor(name)}
-                className={cn("flex size-5 items-center justify-center rounded-md", color === name && "ring-accent-primary ring-2")}
+                className={cn("flex size-5 items-center justify-center rounded-control-xs", color === name && "ring-accent-primary ring-2")}
               >
                 <span data-bg={name} className="size-4 !p-0 ring-1 ring-menu-foreground/25" />
               </button>

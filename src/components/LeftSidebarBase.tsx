@@ -104,8 +104,8 @@ export function LeftSidebarBase({ hiddenSections, renderHeader, renderAgents, to
           <EditableText
             value={displayName}
             onCommit={(name) => setFileName(name + extension)}
-            className="flex-1 min-w-0 h-7 px-1 rounded truncate text-sm font-medium text-text-default cursor-text hover:bg-secondary flex items-center"
-            inputClassName="w-full h-7 px-1 py-0.5 rounded text-sm font-medium text-text-default bg-secondary outline-none"
+            className="flex-1 min-w-0 h-7 px-1 rounded-control truncate text-sm font-medium text-text-default cursor-text hover:bg-secondary flex items-center"
+            inputClassName="w-full h-7 px-1 py-0.5 rounded-control text-sm font-medium text-text-default bg-secondary outline-none"
           />
           {!isOnline && (
             <span
@@ -133,7 +133,7 @@ export function LeftSidebarBase({ hiddenSections, renderHeader, renderAgents, to
                     <button
                       onClick={collapseAllFrames}
                       aria-label="Collapse all"
-                      className="p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary transition-colors"
+                      className="p-0.5 rounded-control-xs text-text-muted hover:text-text-default hover:bg-secondary transition-colors"
                     >
                       <ArrowsInLineVerticalIcon size={14} />
                     </button>

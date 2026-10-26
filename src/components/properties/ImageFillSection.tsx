@@ -50,7 +50,7 @@ function ImageAdjustmentSlider({
           getAriaLabel={() => label}
           onValueChange={(next) => onChange(Array.isArray(next) ? next[0] ?? 0 : next)}
         />
-        <span className="flex h-6 w-9 shrink-0 items-center justify-end rounded-md bg-secondary px-2 text-xs leading-none tabular-nums text-secondary-foreground">
+        <span className="flex h-6 w-9 shrink-0 items-center justify-end rounded-control-sm bg-secondary px-2 text-xs leading-none tabular-nums text-secondary-foreground">
           {value}
         </span>
       </div>

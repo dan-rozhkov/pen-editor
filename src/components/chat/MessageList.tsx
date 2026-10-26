@@ -177,7 +177,7 @@ function MessageCopyButton({ msg }: { msg: UIMessage }) {
         render={
           <button
             onClick={handleCopy}
-            className="opacity-0 group-hover:opacity-100 shrink-0 p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
+            className="opacity-0 group-hover:opacity-100 shrink-0 p-1 rounded-control-sm hover:bg-secondary text-text-muted transition-colors"
             aria-label={copied ? "Copied" : "Copy message"}
           >
             <IconSwap
@@ -346,7 +346,7 @@ export function MessageList({
                     render={
                       <button
                         onClick={() => onRollback(msg.id)}
-                        className="opacity-0 group-hover:opacity-100 shrink-0 p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
+                        className="opacity-0 group-hover:opacity-100 shrink-0 p-1 rounded-control-sm hover:bg-secondary text-text-muted transition-colors"
                         aria-label="Roll back to this message"
                       >
                         <ArrowCounterClockwiseIcon size={14} />

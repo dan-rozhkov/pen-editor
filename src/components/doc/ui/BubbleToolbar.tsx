@@ -82,7 +82,7 @@ export function BubbleToolbar({ editor }: { editor: Editor }) {
     >
       <div role="toolbar" aria-label="Text formatting" className={cn(MENU_SURFACE, "flex items-center gap-1 p-1.5")}>
         <DropdownMenu onOpenChange={changeTurn}>
-          <DropdownMenuTrigger render={<Button variant="ghost" aria-label="Turn into" className={cn(BUBBLE_HOVER, "h-9 rounded-lg px-3 text-sm text-menu-foreground [&_svg]:size-4")} />}>
+          <DropdownMenuTrigger render={<Button variant="ghost" aria-label="Turn into" className={cn(BUBBLE_HOVER, "h-9 rounded-control-xl px-3 text-sm text-menu-foreground [&_svg]:size-4")} />}>
             {state.block} <CaretDownIcon weight={CHEVRON_WEIGHT} />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" finalFocus={false} className="w-auto min-w-44">

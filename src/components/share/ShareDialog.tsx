@@ -84,7 +84,7 @@ export function ShareDialog() {
                 readOnly
                 value={shareUrl}
                 onFocus={(e) => e.currentTarget.select()}
-                className="flex-1 min-w-0 h-7 px-2 rounded-md border border-border-default bg-secondary text-xs text-text-default outline-none"
+                className="flex-1 min-w-0 h-7 px-2 rounded-control border border-border-default bg-secondary text-xs text-text-default outline-none"
                 aria-label="Share link"
               />
               <Button size="sm" variant="secondary" onClick={() => void handleCopy()}>

@@ -125,7 +125,7 @@ export default function WorkflowPage() {
                 onKeyDown={(event) => {
                   if (event.key === "Enter") event.currentTarget.blur();
                 }}
-                className="min-w-0 flex-1 rounded-md border-0 bg-transparent px-1 py-1 text-sm font-medium text-text-primary outline-none placeholder:text-text-muted/60 focus-visible:ring-1 focus-visible:ring-accent-light"
+                className="min-w-0 flex-1 rounded-control border-0 bg-transparent px-1 py-1 text-sm font-medium text-text-primary outline-none placeholder:text-text-muted/60 focus-visible:ring-1 focus-visible:ring-accent-light"
               />
               {SCHEDULING_AVAILABLE &&
                 (schedule?.enabled ? (

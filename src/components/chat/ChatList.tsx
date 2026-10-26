@@ -74,7 +74,7 @@ function ChatListRow({ chat }: { chat: ChatSummary }) {
           e.stopPropagation();
           closeChat(chat.id);
         }}
-        className="mr-2 flex size-6 shrink-0 items-center justify-center rounded text-text-muted opacity-0 hover:bg-secondary group-hover:opacity-100 focus-visible:opacity-100"
+        className="mr-2 flex size-6 shrink-0 items-center justify-center rounded-control-sm text-text-muted opacity-0 hover:bg-secondary group-hover:opacity-100 focus-visible:opacity-100"
       >
         <XIcon size={12} />
       </button>

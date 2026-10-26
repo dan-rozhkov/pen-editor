@@ -294,7 +294,7 @@ export function EmbedPromptHost({
             ref={cardRef}
             data-agent-composer
             style={{ pointerEvents: "auto", width: "100%", maxWidth: 420 }}
-            className="relative overflow-hidden rounded-xl border border-border-default bg-surface-panel shadow-[0_1px_3px_rgba(0,0,0,0.08)] focus-within:border-accent-light"
+            className="relative overflow-hidden rounded-2xl border border-border-default bg-surface-panel shadow-[0_1px_3px_rgba(0,0,0,0.08)] focus-within:border-accent-light"
             onPointerDown={handlePointerDown}
             onKeyDown={handleKeyDown}
             onKeyUp={handleKeyUp}
@@ -321,7 +321,7 @@ export function EmbedPromptHost({
                     type="submit"
                     disabled={!text.trim() || sending}
                     aria-label="Send"
-                    className="shrink-0 p-1.5 rounded-lg hover:bg-secondary text-text-muted disabled:text-text-disabled transition-colors"
+                    className="shrink-0 p-1.5 rounded-control hover:bg-secondary text-text-muted disabled:text-text-disabled transition-colors"
                   >
                     <PaperPlaneRightIcon size={18} />
                   </button>

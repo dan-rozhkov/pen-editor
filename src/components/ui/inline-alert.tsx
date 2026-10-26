@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const inlineAlertVariants = cva(
-  "flex items-center gap-3 rounded-md border border-border-default bg-surface-panel px-3 py-2 text-sm text-text-primary shadow-[0_1px_3px_rgba(0,0,0,0.08)]",
+  "flex items-center gap-3 rounded-control-lg border border-border-default bg-surface-panel px-3 py-2 text-sm text-text-primary shadow-[0_1px_3px_rgba(0,0,0,0.08)]",
   {
     variants: {
       variant: {
@@ -75,7 +75,7 @@ function InlineAlert({
         <button
           type="button"
           onClick={onDismiss}
-          className="shrink-0 rounded p-0.5 text-text-muted hover:bg-secondary hover:text-text-primary"
+          className="shrink-0 rounded-control-xs p-0.5 text-text-muted hover:bg-secondary hover:text-text-primary"
           aria-label={dismissLabel}
           title={dismissLabel}
         >

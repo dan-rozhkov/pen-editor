@@ -138,7 +138,7 @@ const PluginPanelWindow = memo(function PluginPanelWindow({ panel }: { panel: Pl
           tooltip="Close"
           size="icon-sm"
           variant="ghost"
-          className="ml-auto size-5 rounded-sm text-text-muted hover:text-text-primary [&_svg:not([class*='size-'])]:size-3.5"
+          className="ml-auto size-5 rounded-control-xs text-text-muted hover:text-text-primary [&_svg:not([class*='size-'])]:size-3.5"
           // Stop the pointerdown here so it never bubbles to the titlebar's
           // own handler above: `setPointerCapture` there would otherwise
           // hijack this button's click (pointer capture redirects the

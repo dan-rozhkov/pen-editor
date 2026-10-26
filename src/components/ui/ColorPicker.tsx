@@ -46,11 +46,11 @@ const CHANNEL_CONFIG = {
 } as const;
 
 const INPUT_CLASS_BASE =
-  "bg-secondary text-secondary-foreground focus-visible:ring-1 focus-visible:ring-accent-light aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 h-6 rounded-md py-0.5 text-sm transition-colors aria-invalid:ring-[2px] md:text-xs/relaxed placeholder:text-muted-foreground w-full min-w-0 outline-none";
+  "bg-secondary text-secondary-foreground focus-visible:ring-1 focus-visible:ring-accent-light aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 h-6 rounded-control-sm py-0.5 text-sm transition-colors aria-invalid:ring-[2px] md:text-xs/relaxed placeholder:text-muted-foreground w-full min-w-0 outline-none";
 const HEX_INPUT_CLASS = `${INPUT_CLASS_BASE} px-2`;
 const CHANNEL_INPUT_CLASS = `${INPUT_CLASS_BASE} px-1 text-center`;
 const FORMAT_TOGGLE_GROUP_CLASS =
-  "h-6 rounded-md bg-secondary gap-px [&>[data-slot]]:rounded-[5px]! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
+  "h-6 rounded-control-sm bg-secondary gap-px [&>[data-slot]]:rounded-control-sm! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
 const FORMAT_TOGGLE_BUTTON_CLASS =
   "flex-1 h-full border-transparent bg-transparent text-text-muted hover:bg-surface-elevated hover:text-text-primary";
 const ACTIVE_FORMAT_TOGGLE_BUTTON_CLASS =
@@ -192,7 +192,7 @@ export function CustomColorPicker({
               {supportsEyeDropper && (
                 <button
                   type="button"
-                  className="h-6 w-6 flex items-center justify-center rounded-md text-text-secondary hover:bg-secondary hover:text-text-primary cursor-pointer shrink-0"
+                  className="h-6 w-6 flex items-center justify-center rounded-control-sm text-text-secondary hover:bg-secondary hover:text-text-primary cursor-pointer shrink-0"
                   aria-label="Pick color from screen"
                   onClick={async () => {
                     try {

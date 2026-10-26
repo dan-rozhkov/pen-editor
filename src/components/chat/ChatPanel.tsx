@@ -454,7 +454,7 @@ function ChatSession({
 
       {/* Composer */}
       <div
-        className="relative z-10 m-3 mt-2 shrink-0 overflow-hidden rounded-xl border border-border-default bg-surface-panel shadow-[0_1px_3px_rgba(0,0,0,0.08)] focus-within:border-accent-light"
+        className="relative z-10 m-3 mt-2 shrink-0 overflow-hidden rounded-2xl border border-border-default bg-surface-panel shadow-[0_1px_3px_rgba(0,0,0,0.08)] focus-within:border-accent-light"
       >
         <ChatInput
           sessionId={sessionId}
@@ -610,7 +610,7 @@ export function ChatPanelContent({
               type="button"
               variant="ghost"
               size="default"
-              className="inline-flex h-[30px] shrink-0 items-center gap-1 rounded-lg px-1.5 text-xs leading-none hover:bg-secondary"
+              className="inline-flex h-[30px] shrink-0 items-center gap-1 rounded-control-lg px-1.5 text-xs leading-none hover:bg-secondary"
               aria-label={`Parallel agents: x${parallelCount}`}
             >
               <LightningIcon size={16} weight="light" />
@@ -639,7 +639,7 @@ export function ChatPanelContent({
               <button
                 type="button"
                 onClick={stop}
-                className="inline-flex size-[30px] shrink-0 items-center justify-center rounded-lg hover:bg-secondary transition-colors"
+                className="inline-flex size-[30px] shrink-0 items-center justify-center rounded-control-lg hover:bg-secondary transition-colors"
                 aria-label="Stop"
               >
                 <StopIcon size={16} weight="light" />
@@ -663,8 +663,8 @@ export function ChatPanelContent({
                 disabled={!canSubmit}
                 className={
                   canSubmit
-                    ? "inline-flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-accent-primary text-white hover:bg-accent-primary/90 transition-colors"
-                    : "inline-flex size-[30px] shrink-0 items-center justify-center rounded-lg border border-border-default bg-transparent text-text-muted hover:bg-transparent disabled:opacity-100"
+                    ? "inline-flex size-[30px] shrink-0 items-center justify-center rounded-control-lg bg-accent-primary text-white hover:bg-accent-primary/90 transition-colors"
+                    : "inline-flex size-[30px] shrink-0 items-center justify-center rounded-control-lg border border-border-default bg-transparent text-text-muted hover:bg-transparent disabled:opacity-100"
                 }
                 aria-label={isLoading ? "Send now" : "Send"}
               >
@@ -710,7 +710,7 @@ export function ChatPanelContent({
               render={
                 <button
                   onClick={toggleExpanded}
-                  className="-my-0.5 p-1 rounded-lg hover:bg-secondary text-text-muted transition-colors"
+                  className="-my-0.5 p-1 rounded-control-sm hover:bg-secondary text-text-muted transition-colors"
                   aria-label={isExpanded ? "Collapse panel" : "Expand panel"}
                 >
                   <ArrowLineLeftIcon

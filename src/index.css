@@ -158,6 +158,16 @@
      <Shimmer>); 2s matches the AI Elements default. */
   --animate-shimmer: shimmer var(--shimmer-duration, 2s) linear infinite;
 
+  /* Control radii (buttons, inputs, select triggers, segmented controls):
+     ≈ 0.32 × height, so controls read as rounded rectangles in the same
+     family as the 14px popup card (menu-surface), never as pills. */
+  --radius-control-xs: 6px; /* h-5 */
+  --radius-control-sm: 8px; /* h-6 */
+  --radius-control: 9px; /* h-7 */
+  --radius-control-lg: 10px; /* h-8 */
+  --radius-control-xl: 12px; /* h-9, h-10 */
+  --radius-control-inset: 7px; /* inner pill inside a 10px track with 3px padding */
+
   /* Surface colors - light theme */
   --color-surface-base: #f5f5f5;
   --color-surface-panel: #ffffff;
@@ -469,6 +479,40 @@ html.route-showcase body {
 html.route-showcase::-webkit-scrollbar,
 html.route-showcase body::-webkit-scrollbar {
   display: none;
+}
+
+/* Elevation helpers. They set `--tw-shadow` and re-emit Tailwind v4's own
+   box-shadow stack (the same var() chain `shadow-*` and `ring-*` use), so a
+   `focus-visible:ring-*` or `shadow-*` on the same element still draws. The
+   fallbacks keep the stack valid when no ring/shadow utility registered the
+   --tw-* properties on the page. There is deliberately no outer 1px ring:
+   controls carry a real 1px border (transparent in the base state), and the
+   border colour does the hairline, so `bg-clip-padding` never leaves a
+   see-through strip. Elements using these need `border` in their base. */
+@utility control-shadow-stack {
+  box-shadow:
+    var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000),
+    var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000),
+    var(--tw-shadow);
+}
+
+@utility control-elevation {
+  @apply control-shadow-stack;
+  border-color: var(--menu-border);
+  --tw-shadow: 0 1px 2px oklch(0 0 0 / 0.06);
+}
+
+/* A raised control (outline button, segmented thumb, active tab): panel fill
+   plus control-elevation. */
+@utility control-raised {
+  @apply control-elevation;
+  background-color: var(--color-surface-panel);
+}
+
+/* Soft accent-coloured glow under the blue primary action. */
+@utility control-glow {
+  @apply control-shadow-stack;
+  --tw-shadow: 0 1px 2px oklch(0 0 0 / 0.12), 0 4px 12px -4px color-mix(in oklab, var(--color-accent-primary) 55%, transparent);
 }
 
 /* The popup card shared by every floating menu/popover. Radius 14px with

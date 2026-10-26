@@ -107,7 +107,7 @@ export function AgentComposerButton({
           variant="default"
           size="icon-sm"
           className={cn(
-            "size-6 rounded-lg border-transparent text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)]",
+            "size-6 rounded-control-sm border-transparent text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)]",
             "bg-accent-primary hover:bg-accent-primary/90",
           )}
           onClick={() => setOpen(true)}
@@ -132,7 +132,7 @@ export function AgentComposerButton({
               variant="default"
               size="icon-sm"
               className={cn(
-                "size-6 shrink-0 rounded-lg",
+                "size-6 shrink-0 rounded-control-sm",
                 canSend
                   ? "bg-accent-primary text-white hover:bg-accent-primary/90"
                   : "bg-transparent text-text-secondary hover:bg-transparent disabled:opacity-100",
@@ -155,7 +155,7 @@ export function AgentComposerButton({
                       <button
                         type="button"
                         onClick={() => runQuickAction(action)}
-                        className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-[13px] text-text-primary hover:bg-secondary"
+                        className="flex w-full items-center gap-2 rounded-control-lg px-1.5 py-1.5 text-left text-[13px] text-text-primary hover:bg-secondary"
                       >
                         <Icon
                           className="size-3.5 shrink-0 text-text-muted"

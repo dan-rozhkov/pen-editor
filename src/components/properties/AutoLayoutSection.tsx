@@ -17,10 +17,10 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 
 const alignmentGridClass =
-  "grid grid-cols-3 rounded-md bg-secondary gap-px justify-center items-center";
+  "grid grid-cols-3 rounded-control-sm bg-secondary gap-px justify-center items-center";
 
 const alignmentButtonClass =
-  "h-6 rounded-[5px] border border-transparent flex items-center justify-center text-text-muted hover:bg-surface-elevated hover:text-text-primary";
+  "h-6 rounded-control-sm border border-transparent flex items-center justify-center text-text-muted hover:bg-surface-elevated hover:text-text-primary";
 
 const activeAlignmentButtonClass =
   "border-border-default bg-surface-panel text-text-primary hover:bg-surface-panel";

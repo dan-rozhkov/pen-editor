@@ -138,7 +138,7 @@ export function AskUserForm({
         {rows.map((row, i) => (
           <div key={i} className="space-y-1">
             <div className="font-normal text-text-muted">{row.label}</div>
-            <span className="inline-flex min-h-6 max-w-full items-center rounded-md border border-transparent bg-secondary px-2 py-0.5 text-xs leading-tight font-normal !text-secondary-foreground whitespace-normal break-words">
+            <span className="inline-flex min-h-6 max-w-full items-center rounded-control-sm border border-transparent bg-secondary px-2 py-0.5 text-xs leading-tight font-normal !text-secondary-foreground whitespace-normal break-words">
               {row.display || "—"}
             </span>
           </div>

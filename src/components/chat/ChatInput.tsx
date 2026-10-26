@@ -494,7 +494,7 @@ export function ChatInput({
                   : `${embedElementContext.label} in ${embedElementContext.embedName}`
               }
               aria-label={`Selected embed element: ${embedElementContext.label}`}
-              className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent-selection)] px-2 py-1 text-xs text-[var(--color-accent-primary)]"
+              className="inline-flex items-center gap-1 rounded-control-sm bg-[var(--color-accent-selection)] px-2 py-1 text-xs text-[var(--color-accent-primary)]"
             >
               <CodeIcon size={14} />
               <span className="max-w-24 truncate">{embedElementContext.label}</span>
@@ -512,7 +512,7 @@ export function ChatInput({
                   key={sel.nodeId}
                   title={sel.name}
                   aria-label={sel.name}
-                  className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent-selection)] px-2 py-1 text-xs text-[var(--color-accent-primary)] [&_svg]:!text-[var(--color-accent-primary)]"
+                  className="inline-flex items-center gap-1 rounded-control-sm bg-[var(--color-accent-selection)] px-2 py-1 text-xs text-[var(--color-accent-primary)] [&_svg]:!text-[var(--color-accent-primary)]"
                 >
                   <NodeIcon type={sel.type} />
                   <span className="max-w-24 truncate">{sel.name}</span>
@@ -521,7 +521,7 @@ export function ChatInput({
               {selectionContext.length > MAX_SELECTION_CHIPS && (
                 <div
                   aria-label={`${selectionContext.length - MAX_SELECTION_CHIPS} more selected nodes`}
-                  className="inline-flex items-center rounded-md bg-[var(--color-accent-selection)] px-2 py-1 text-xs text-[var(--color-accent-primary)]"
+                  className="inline-flex items-center rounded-control-sm bg-[var(--color-accent-selection)] px-2 py-1 text-xs text-[var(--color-accent-primary)]"
                 >
                   +{selectionContext.length - MAX_SELECTION_CHIPS} more
                 </div>
@@ -615,7 +615,7 @@ export function ChatInput({
                 <button
                   type="button"
                   onClick={stop}
-                  className="shrink-0 p-1.5 rounded-lg hover:bg-secondary transition-colors"
+                  className="shrink-0 p-1.5 rounded-control hover:bg-secondary transition-colors"
                   aria-label="Stop"
                 >
                   <StopIcon size={16} weight="light" />
@@ -635,7 +635,7 @@ export function ChatInput({
                 <button
                   type="submit"
                   disabled={!canSubmit}
-                  className="shrink-0 p-1.5 rounded-lg hover:bg-secondary disabled:text-text-disabled transition-colors"
+                  className="shrink-0 p-1.5 rounded-control hover:bg-secondary disabled:text-text-disabled transition-colors"
                   aria-label={
                     isLoading ? "Send now" : isOnline ? "Send" : OFFLINE_SEND_TITLE
                   }

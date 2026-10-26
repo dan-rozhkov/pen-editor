@@ -1,5 +1,15 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
+
+// `rounded-control*` radii (src/index.css @theme) must merge like any other
+// `rounded-*` utility, so a className override replaces the primitive's default.
+const twMerge = extendTailwindMerge({
+  extend: {
+    theme: {
+      radius: ["control", "control-xs", "control-sm", "control-lg", "control-xl", "control-inset"],
+    },
+  },
+});
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

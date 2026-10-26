@@ -27,8 +27,8 @@ export function OutcomeBadge({
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-surface-panel px-2 text-xs font-medium whitespace-nowrap text-text-primary dark:bg-secondary/30",
-        size === "sm" ? "h-6" : "h-7",
+        "inline-flex shrink-0 items-center gap-1.5 border border-border bg-surface-panel px-2 text-xs font-medium whitespace-nowrap text-text-primary dark:bg-secondary/30",
+        size === "sm" ? "h-6 rounded-control-sm" : "h-7 rounded-control",
         className,
       )}
       {...rest}
@@ -118,7 +118,7 @@ export function Segmented<T extends string>({
           onClick={() => onChange(option.value)}
           className={cn(
             // Same look as the TabsList pills in ui/tabs.tsx.
-            "inline-flex h-6 items-center justify-center rounded-md border border-transparent px-2 text-xs/relaxed font-medium whitespace-nowrap text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring enabled:hover:text-foreground disabled:opacity-50",
+            "inline-flex h-6 items-center justify-center rounded-control-inset border border-transparent px-2 text-xs/relaxed font-medium whitespace-nowrap text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring enabled:hover:text-foreground disabled:opacity-50",
             value === option.value && TABS_TRIGGER_ACTIVE_CLASS,
           )}
         >

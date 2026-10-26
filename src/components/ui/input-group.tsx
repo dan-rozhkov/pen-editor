@@ -12,7 +12,7 @@ function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="input-group"
       role="group"
       className={cn(
-        "bg-secondary text-secondary-foreground has-[[data-slot=input-group-control]:focus-visible]:ring-1 has-[[data-slot=input-group-control]:focus-visible]:ring-accent-light has-[[data-slot][aria-invalid=true]]:ring-destructive/20 dark:has-[[data-slot][aria-invalid=true]]:ring-destructive/40 h-6 rounded-md transition-colors has-data-[align=block-end]:rounded-md has-data-[align=block-start]:rounded-md has-[[data-slot][aria-invalid=true]]:ring-[2px] has-[textarea]:rounded-md has-[>[data-align=block-end]]:h-auto has-[>[data-align=block-end]]:flex-col has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col has-[>[data-align=block-end]]:[&>input]:pt-3 has-[>[data-align=block-start]]:[&>input]:pb-3 has-[>[data-align=inline-end]]:[&>input]:pr-1.5 has-[>[data-align=inline-start]]:[&>input]:pl-1.5 [[data-slot=combobox-content]_&]:focus-within:ring-0 group/input-group relative flex w-full min-w-0 items-center outline-none has-[>textarea]:h-auto",
+        "bg-secondary text-secondary-foreground has-[[data-slot=input-group-control]:focus-visible]:ring-1 has-[[data-slot=input-group-control]:focus-visible]:ring-accent-light has-[[data-slot][aria-invalid=true]]:ring-destructive/20 dark:has-[[data-slot][aria-invalid=true]]:ring-destructive/40 h-6 rounded-control-sm transition-colors has-data-[align=block-end]:rounded-control-lg has-data-[align=block-start]:rounded-control-lg has-[[data-slot][aria-invalid=true]]:ring-[2px] has-[textarea]:rounded-control-lg has-[>[data-align=block-end]]:h-auto has-[>[data-align=block-end]]:flex-col has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col has-[>[data-align=block-end]]:[&>input]:pt-3 has-[>[data-align=block-start]]:[&>input]:pb-3 has-[>[data-align=inline-end]]:[&>input]:pr-1.5 has-[>[data-align=inline-start]]:[&>input]:pl-1.5 [[data-slot=combobox-content]_&]:focus-within:ring-0 group/input-group relative flex w-full min-w-0 items-center outline-none has-[>textarea]:h-auto",
         className,
       )}
       {...props}
@@ -64,14 +64,14 @@ function InputGroupAddon({
 }
 
 const inputGroupButtonVariants = cva(
-  "gap-2 rounded-md text-xs/relaxed shadow-none flex items-center",
+  "gap-2 rounded-control-sm text-xs/relaxed shadow-none flex items-center",
   {
     variants: {
       size: {
-        xs: "h-5 gap-1 rounded-[calc(var(--radius-sm)-2px)] px-1 [&>svg:not([class*='size-'])]:size-3",
+        xs: "h-5 gap-1 rounded-control-xs px-1 [&>svg:not([class*='size-'])]:size-3",
         sm: "",
-        "icon-xs": "size-6 p-0 has-[>svg]:p-0",
-        "icon-sm": "size-8 p-0 has-[>svg]:p-0",
+        "icon-xs": "size-6 rounded-control-sm p-0 has-[>svg]:p-0",
+        "icon-sm": "size-8 rounded-control-lg p-0 has-[>svg]:p-0",
       },
     },
     defaultVariants: {

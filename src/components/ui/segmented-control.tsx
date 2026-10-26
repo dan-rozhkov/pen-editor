@@ -37,14 +37,14 @@ function SegmentedControl<T extends string>({
       value={value}
       onValueChange={(next) => onValueChange(next as T)}
       disabled={disabled}
-      className={cn("inline-flex w-fit items-center gap-0.5 rounded-lg bg-secondary p-[3px]", className)}
+      className={cn("inline-flex w-fit items-center gap-0.5 rounded-control-lg bg-secondary p-[3px]", className)}
     >
       {options.map((option) => (
         <Radio.Root
           key={option.value}
           value={option.value}
           data-slot="segmented-control-item"
-          className="inline-flex h-6 cursor-default items-center justify-center rounded-md px-2.5 text-xs/relaxed font-medium whitespace-nowrap text-text-muted outline-none transition-colors select-none hover:text-text-primary focus-visible:ring-[2px] focus-visible:ring-ring data-checked:bg-surface-panel dark:data-checked:bg-surface-hover data-checked:text-text-primary data-checked:shadow-sm data-disabled:cursor-not-allowed data-disabled:opacity-50"
+          className="inline-flex h-6 cursor-default items-center justify-center rounded-control-inset border border-transparent px-2.5 text-xs/relaxed font-medium whitespace-nowrap text-text-muted outline-none transition-colors select-none hover:text-text-primary focus-visible:ring-[2px] focus-visible:ring-ring data-checked:control-raised dark:data-checked:bg-surface-hover data-checked:text-text-primary data-disabled:cursor-not-allowed data-disabled:opacity-50"
         >
           {option.label}
         </Radio.Root>

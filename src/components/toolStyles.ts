@@ -27,7 +27,7 @@ const INACTIVE = "text-text-primary hover:text-text-primary hover:bg-secondary d
 
 export const TOOL_STYLES: Record<PrimitivesVariant, ToolStyle> = {
   floating: {
-    buttonBase: "group relative size-9 p-0 rounded-lg! transition-none outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+    buttonBase: "group relative size-9 p-0 rounded-control-xl! transition-none outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
     active: ACTIVE,
     inactive: INACTIVE,
     icon: "size-6",
@@ -38,7 +38,7 @@ export const TOOL_STYLES: Record<PrimitivesVariant, ToolStyle> = {
     menuSideOffset: 8,
   },
   header: {
-    buttonBase: "group relative size-7 p-0 rounded-md transition-none outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+    buttonBase: "group relative size-7 p-0 rounded-control transition-none outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
     active: ACTIVE,
     inactive: INACTIVE,
     icon: "size-4",

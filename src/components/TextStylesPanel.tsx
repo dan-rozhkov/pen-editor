@@ -97,7 +97,7 @@ function TextStyleRow({ style }: { style: TextStyle }) {
             <TooltipTrigger
               render={
                 <button
-                  className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors"
+                  className="p-1 rounded-control-sm hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors"
                   onClick={() => deleteTextStyle(style.id)}
                   aria-label="Delete text style"
                 >
@@ -148,7 +148,7 @@ export function TextStylesPanelContent() {
           <TooltipTrigger
             render={
               <button
-                className="p-1 rounded hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
+                className="p-1 rounded-control-sm hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
                 aria-label="Add text style"
                 onClick={handleAdd}
               >

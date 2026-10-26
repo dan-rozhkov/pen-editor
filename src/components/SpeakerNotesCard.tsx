@@ -96,7 +96,7 @@ export function SpeakerNotesCard({ toolStyle = TOOL_STYLES.floating }: { toolSty
           disabled={readOnly}
           placeholder="Speaker notes…"
           rows={2}
-          className="min-h-24 w-full resize-y rounded-md bg-secondary/50 px-2.5 py-2 text-sm text-text-primary placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent-primary disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-24 w-full resize-y rounded-control-lg bg-secondary/50 px-2.5 py-2 text-sm text-text-primary placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent-primary disabled:cursor-not-allowed disabled:opacity-60"
         />
       </PopoverContent>
     </Popover>

@@ -450,7 +450,7 @@ export const LayerItem = memo(function LayerItem({
               <TooltipTrigger
                 render={
                   <button
-                    className="bg-transparent border-none cursor-pointer p-0.5 flex items-center justify-center rounded opacity-0 group-hover/layers:opacity-100 hover:bg-white/10"
+                    className="bg-transparent border-none cursor-pointer p-0.5 flex items-center justify-center rounded-control-xs opacity-0 group-hover/layers:opacity-100 hover:bg-white/10"
                     onClick={handleChevronClick}
                     aria-label={isExpanded ? "Collapse layer" : "Expand layer"}
                   >
@@ -486,7 +486,7 @@ export const LayerItem = memo(function LayerItem({
               onBlur={handleNameBlur}
               onClick={(e) => e.stopPropagation()}
               className={clsx(
-                "text-xs bg-transparent border border-accent-bright rounded px-1 py-0.5 outline-none min-w-0 flex-1",
+                "text-xs bg-transparent border border-accent-bright rounded-control-xs px-1 py-0.5 outline-none min-w-0 flex-1",
                 "text-text-secondary",
               )}
             />
@@ -519,7 +519,7 @@ export const LayerItem = memo(function LayerItem({
               render={
                 <button
                   className={clsx(
-                    "relative bg-transparent border-none cursor-pointer p-1 flex items-center justify-center rounded group-hover:opacity-100 opacity-0",
+                    "relative bg-transparent border-none cursor-pointer p-1 flex items-center justify-center rounded-control-sm group-hover:opacity-100 opacity-0",
                   )}
                   onClick={handleVisibilityClick}
                   aria-label={isElementHidden ? "Show layer" : "Hide layer"}

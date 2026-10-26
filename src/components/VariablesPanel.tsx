@@ -116,7 +116,7 @@ function VariableRow({ variable }: { variable: Variable }) {
         <div className="flex items-center gap-2 min-w-0">
           <span
             className={clsx(
-              "w-5 h-5 rounded text-[9px] font-bold flex items-center justify-center shrink-0",
+              "w-5 h-5 rounded-control-xs text-[9px] font-bold flex items-center justify-center shrink-0",
               badge.className,
             )}
           >
@@ -146,7 +146,7 @@ function VariableRow({ variable }: { variable: Variable }) {
             <TooltipTrigger
               render={
                 <button
-                  className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors"
+                  className="p-1 rounded-control-sm hover:bg-white/10 text-text-muted hover:text-red-400 transition-colors"
                   onClick={() => deleteVariable(variable.id)}
                   aria-label="Delete variable"
                 >
@@ -250,7 +250,7 @@ export function VariablesPanelContent() {
             <TooltipTrigger
               render={
                 <button
-                  className="p-1 rounded hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
+                  className="p-1 rounded-control-sm hover:bg-secondary transition-colors text-text-muted hover:text-text-primary"
                   aria-label="Add variable"
                 >
                   <PlusIcon className="size-4" />

@@ -63,7 +63,7 @@ export function PagesPanel() {
             render={
               <button
                 onClick={() => addPage()}
-                className="p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary"
+                className="p-0.5 rounded-control-xs text-text-muted hover:text-text-default hover:bg-secondary"
                 aria-label="Add page"
               >
                 <PlusIcon size={14} />
@@ -88,7 +88,7 @@ export function PagesPanel() {
               }
             }}
             className={clsx(
-              "group/page flex items-center h-7 rounded-md pl-2 pr-1 text-xs cursor-default select-none",
+              "group/page flex items-center h-7 rounded-control pl-2 pr-1 text-xs cursor-default select-none",
               page.id === activePageId
                 ? "bg-secondary text-text-default font-medium"
                 : "text-text-secondary hover:bg-secondary",

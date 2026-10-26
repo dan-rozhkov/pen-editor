@@ -83,12 +83,20 @@ describe.runIf(desktopExists)("desktop token contract", () => {
     expect(norm(pair.dark)).toBe(norm(blockValue(frontend, ".dark", "--color-surface-hover") ?? "missing"));
   });
 
-  it("--btn-radius equals rounded-md (--radius minus 2px)", () => {
-    const radius = blockValue(frontend, ":root", "--radius") ?? "missing";
-    const pair = desktopPair(desktop, "--btn-radius");
-    const expected = norm(`calc(${radius} - 2px)`);
-    expect(norm(pair.light)).toBe(expected);
-    expect(norm(pair.dark)).toBe(expected);
+  // Control radii: desktop copies of the frontend's rounded-control* scale
+  // (tokens.css for the tab bar / empty page / history; passwords.css keeps its own copy).
+  const RADIUS_TOKENS = ["--radius-control-xs", "--radius-control-sm", "--radius-control", "--radius-control-lg", "--radius-control-xl"];
+  const DESKTOP_PASSWORDS = resolve(process.cwd(), "../pen-editor-desktop/src/passwords/passwords.css");
+
+  it.each(RADIUS_TOKENS)("%s equals the frontend @theme radius", (name) => {
+    const expected = norm(blockValue(frontend, "@theme", name) ?? "missing in @theme");
+    expect(norm(blockValue(desktop, ":root", name) ?? "missing in tokens.css")).toBe(expected);
+  });
+
+  it.each(RADIUS_TOKENS)("%s in passwords.css equals the frontend @theme radius", (name) => {
+    const passwords = readFileSync(DESKTOP_PASSWORDS, "utf8");
+    const expected = norm(blockValue(frontend, "@theme", name) ?? "missing in @theme");
+    expect(norm(blockValue(passwords, ":root", name) ?? "missing in passwords.css")).toBe(expected);
   });
 
   it("--focus-ring equals --ring in both themes", () => {

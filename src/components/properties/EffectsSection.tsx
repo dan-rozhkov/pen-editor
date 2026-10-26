@@ -288,7 +288,7 @@ export function EffectsSection({ node, onUpdate, mixedKeys, allowedEffectTypes, 
                   // a hardcoded subset of FILL_ROW_TRIGGER_CLASS (no hover/
                   // open-state background), so it's kept as its own class
                   // rather than switched to the shared constant.
-                  triggerClassName="flex min-w-0 flex-1 items-center gap-2 rounded bg-secondary px-1.5 py-1 text-left"
+                  triggerClassName="flex min-w-0 flex-1 items-center gap-2 rounded-control-sm bg-secondary px-1.5 py-1 text-left"
                   triggerContent={
                     <>
                       <div
@@ -593,7 +593,7 @@ export function EffectsSection({ node, onUpdate, mixedKeys, allowedEffectTypes, 
                           render={
                             <button
                               type="button"
-                              className="flex items-center justify-between rounded bg-secondary px-2 py-1 text-xs text-text-primary hover:bg-secondary/80"
+                              className="flex items-center justify-between rounded-control-sm bg-secondary px-2 py-1 text-xs text-text-primary hover:bg-secondary/80"
                             />
                           }
                         >

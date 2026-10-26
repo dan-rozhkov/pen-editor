@@ -308,7 +308,7 @@ export function LayoutGridSection({ node, onUpdate }: LayoutGridSectionProps) {
           className="flex items-center gap-1.5 h-7 group"
         >
           <button
-            className="flex items-center gap-1.5 flex-1 min-w-0 rounded px-1 py-0.5 hover:bg-secondary text-left"
+            className="flex items-center gap-1.5 flex-1 min-w-0 rounded-control-xs px-1 py-0.5 hover:bg-secondary text-left"
             onClick={(e) => {
               if (popoverState?.id === grid.id) {
                 setPopoverState(null);

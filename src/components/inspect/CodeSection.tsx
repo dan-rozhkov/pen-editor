@@ -131,7 +131,7 @@ const REACT_STYLE_OPTIONS: { value: CodegenReactStyle; label: string }[] = [
 ];
 
 const reactStyleToggleGroupClass =
-  "h-6 rounded-md bg-secondary gap-px [&>[data-slot]]:rounded-[5px]! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
+  "h-6 rounded-control-sm bg-secondary gap-px [&>[data-slot]]:rounded-control-sm! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
 const activeReactStyleToggleClass =
   "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel";
 

@@ -123,7 +123,7 @@ export function PaintSwatch({ paint }: { paint: Paint }) {
 }
 
 export const FILL_ROW_TRIGGER_CLASS =
-  "flex min-w-0 flex-1 items-center gap-2 rounded bg-secondary px-1.5 py-1 text-left text-secondary-foreground hover:bg-secondary data-popup-open:bg-secondary";
+  "flex min-w-0 flex-1 items-center gap-2 rounded-control-sm bg-secondary px-1.5 py-1 text-left text-secondary-foreground hover:bg-secondary data-popup-open:bg-secondary";
 
 // --- Drag-to-reorder hook (array-index space) ---
 

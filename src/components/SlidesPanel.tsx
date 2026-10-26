@@ -277,7 +277,7 @@ export function SlidesPanel() {
               render={
                 <button
                   onClick={addSlide}
-                  className="p-0.5 rounded text-text-muted hover:text-text-default hover:bg-secondary"
+                  className="p-0.5 rounded-control-xs text-text-muted hover:text-text-default hover:bg-secondary"
                   aria-label="Add slide"
                 >
                   <PlusIcon size={14} />

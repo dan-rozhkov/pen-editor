@@ -173,7 +173,7 @@ function SizePresetsPanel({ kind }: { kind: "frame" | "embed" }) {
           <div key={group.category} className="mb-2">
             <button
               onClick={() => toggleCategory(group.category)}
-              className="w-full flex items-center gap-1 px-1 py-1 rounded hover:bg-secondary text-left"
+              className="w-full flex items-center gap-1 px-1 py-1 rounded-control-sm hover:bg-secondary text-left"
             >
               <ChevronIcon expanded={isExpanded} />
               <div className="text-[11px]">{group.category}</div>
@@ -184,7 +184,7 @@ function SizePresetsPanel({ kind }: { kind: "frame" | "embed" }) {
                   <button
                     key={`${preset.name}-${preset.width}x${preset.height}`}
                     onClick={() => handlePresetClick(preset)}
-                    className="w-full flex items-center justify-between px-2 py-1.5 rounded text-[11px] hover:bg-secondary text-left"
+                    className="w-full flex items-center justify-between px-2 py-1.5 rounded-control-sm text-[11px] hover:bg-secondary text-left"
                   >
                     <span className="text-text-primary truncate mr-2">
                       {preset.name}

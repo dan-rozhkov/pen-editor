@@ -25,7 +25,7 @@ export function TypeSection({ node, onUpdate }: TypeSectionProps) {
           <button
             type="button"
             className={cn(
-              "shrink-0 flex items-center justify-center w-6 h-6 rounded border border-transparent",
+              "shrink-0 flex items-center justify-center w-6 h-6 rounded-control-sm border border-transparent",
               node.isMask
                 ? "border-border-default bg-surface-panel text-text-primary hover:bg-surface-panel"
                 : "text-text-primary hover:bg-secondary"

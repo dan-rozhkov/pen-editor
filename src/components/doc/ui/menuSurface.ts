@@ -19,7 +19,7 @@ export const BUBBLE_HOVER = cn(
 );
 
 /** Bubble-menu button scale, matching the canvas tool bar (PrimitivesPanel): 36px buttons, 20px icons. */
-export const BUBBLE_ICON_BUTTON = "size-9 rounded-lg [&_svg]:size-5";
+export const BUBBLE_ICON_BUTTON = "size-9 rounded-control-xl [&_svg]:size-5";
 
 /** A bubble-menu toggle (mark, link): blue when active. */
 export function bubbleToggleClass(active: boolean): string {
