@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { redact } from "@tanstack/redact/vite";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import { homedir } from "node:os";
@@ -12,6 +13,11 @@ import { embedLoader, embedRenderBuiltUrl } from "./vite/embedLoader";
 // VITE_BASE=/pen-editor/; everything base-dependent below derives from it
 // instead of hardcoding "/".
 const base = process.env.VITE_BASE ?? "/";
+
+// Experiment: REDACT=1 swaps React/ReactDOM for the TanStack Redact runtime
+// (https://tanstack.com/redact). Off by default. REDACT_PRESET=nano selects
+// the trimmed preset.
+const useRedact = process.env.REDACT === "1";
 
 // https://vite.dev/config/
 export default defineConfig(({ command, mode }) => {
@@ -65,7 +71,15 @@ export default defineConfig(({ command, mode }) => {
       // yields the exact URL Vite would have emitted anyway (`base + file`).
       renderBuiltUrl: embedRenderBuiltUrl(base),
     },
-    plugins: [tailwindcss(), react(), webmcpManifest(), embedLoader()],
+    plugins: [
+      tailwindcss(),
+      react(),
+      ...(useRedact
+        ? [redact({ preset: process.env.REDACT_PRESET === "nano" ? "nano" : "full" })]
+        : []),
+      webmcpManifest(),
+      embedLoader(),
+    ],
     build: {
       modulePreload: {
         // The showcase route ("/") never touches the editor, but Rolldown's
@@ -98,7 +112,11 @@ export default defineConfig(({ command, mode }) => {
             if (id.includes("node_modules/pixi.js")) {
               return "pixi-vendor";
             }
-            if (id.includes("node_modules/react") || id.includes("node_modules/react-dom")) {
+            if (
+              id.includes("node_modules/react") ||
+              id.includes("node_modules/react-dom") ||
+              id.includes("node_modules/@tanstack/redact")
+            ) {
               return "react-vendor";
             }
           },
@@ -106,14 +124,25 @@ export default defineConfig(({ command, mode }) => {
       },
     },
     resolve: {
+      // Redact aliases react/react-dom itself. A hard path alias here would
+      // win over its resolveId hook and keep upstream React in the bundle.
       alias: {
-        react: path.resolve(__dirname, "node_modules/react"),
-        "react-dom": path.resolve(__dirname, "node_modules/react-dom"),
+        ...(useRedact
+          ? {
+              // react-aria imports the shim by its file path. Redact's alias
+              // table only lists "use-sync-external-store/shim", so in dev the
+              // raw CJS file loads and the root render crashes.
+              "use-sync-external-store/shim/index.js": "@tanstack/redact",
+            }
+          : {
+              react: path.resolve(__dirname, "node_modules/react"),
+              "react-dom": path.resolve(__dirname, "node_modules/react-dom"),
+            }),
         "@": path.resolve(__dirname, "./src"),
       },
     },
     optimizeDeps: {
-      include: ["react", "react-dom"],
+      include: useRedact ? [] : ["react", "react-dom"],
     },
   };
 });
