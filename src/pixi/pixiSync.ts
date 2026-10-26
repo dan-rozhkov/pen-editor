@@ -27,6 +27,7 @@ import { createAutoLayoutManager } from "./syncAutoLayout";
 import { createCullingIndex } from "./cullingIndex";
 import { perfStats } from "./perfStats";
 import { computeSceneDiffFull, computeSceneDiffDirty, type SceneDiff } from "./syncDiff";
+import { rasterCacheFlag } from "@/lib/rasterCachePref";
 import { createRasterCacheManager, type RasterCacheManager } from "./rasterCacheManager";
 import { setAsyncContainerMutationHandler, resolveOwningNodeId } from "./renderers/asyncContainerMutation";
 
@@ -74,7 +75,7 @@ const diffCheckEnabled = import.meta.env.DEV && localStorage.getItem("pen.diffCh
  * When off, `createRasterCacheManager` is never called — see `rasterCacheManager`
  * below, instantiated only if this is true.
  */
-const rasterCacheEnabled = localStorage.getItem("pen.rasterCache") !== "off";
+const rasterCacheEnabled = rasterCacheFlag.get();
 
 /**
  * A node is "variable-dependent" if its rendering can change when a design

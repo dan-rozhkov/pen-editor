@@ -1,3 +1,4 @@
+import { createStorageFlag } from "@/lib/storageSync";
 import type { UIGenerationLiveRun } from "@/vendor/uiGeneration/ui-generation.js";
 
 /**
@@ -30,12 +31,11 @@ const marks = new Map<string, number>();
 const parked = new Map<string, { run: UIGenerationLiveRun; timer: ReturnType<typeof setTimeout> }>();
 const claims = new Map<string, (run: UIGenerationLiveRun) => void>();
 
+/** Absent = on, "off" = off (the kill switch's stored value is unchanged). */
+export const generationRevealFlag = createStorageFlag("pen.generationReveal", { offValue: "off" });
+
 export function isGenerationRevealEnabled(): boolean {
-  try {
-    return localStorage.getItem("pen.generationReveal") !== "off";
-  } catch {
-    return true;
-  }
+  return generationRevealFlag.get();
 }
 
 export function markEmbedForGenerationReveal(nodeId: string, now = Date.now()): void {

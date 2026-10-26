@@ -24,8 +24,10 @@
 // showcasePublish.ts / pluginStore.ts. `userSkillStore.ts` is the only
 // intended caller; it branches on `.ok` and surfaces `.error` in state.
 
-import { apiFetch } from "@/lib/apiBase";
+import { JSON_HEADERS, requestJson, withQuery, type ApiResult } from "@/lib/apiJson";
 import { getRequestUserId, requestUserIdParam } from "@/lib/auth/authState";
+
+export type { ApiResult };
 
 export type UserSkillSource = "manual" | "upload" | "generated";
 
@@ -73,42 +75,6 @@ export interface UserSkillDraft {
   name: string;
   description: string;
   body: string;
-}
-
-export type ApiResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: string; status?: number };
-
-async function requestJson<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
-  let res: Response;
-  try {
-    res = await apiFetch(path, init);
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Network error" };
-  }
-
-  let body: unknown;
-  try {
-    body = await res.json();
-  } catch {
-    body = undefined;
-  }
-
-  if (!res.ok) {
-    const message =
-      body && typeof body === "object" && typeof (body as { error?: unknown }).error === "string"
-        ? (body as { error: string }).error
-        : `Request failed (${res.status})`;
-    return { ok: false, error: message, status: res.status };
-  }
-
-  return { ok: true, data: body as T };
-}
-
-const JSON_HEADERS = { "Content-Type": "application/json" };
-
-function withQuery(path: string, query: string): string {
-  return query ? `${path}?${query}` : path;
 }
 
 /** GET /api/user-skills — this user's own skills. `available: false` means

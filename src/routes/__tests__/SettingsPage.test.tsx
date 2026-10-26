@@ -52,13 +52,24 @@ describe("<SettingsPage />", () => {
     expect(document.documentElement.classList.contains("route-settings")).toBe(true);
   });
 
-  it("lists Browser in the nav between AI agent and Integrations", () => {
+  it("lists the sections in nav order", () => {
     renderSettings();
     const names = within(screen.getByRole("navigation", { name: "Settings sections" }))
       .getAllByRole("button")
       .map((b) => b.textContent);
-    expect(names.indexOf("Browser")).toBe(names.indexOf("AI agent") + 1);
-    expect(names.indexOf("Integrations")).toBe(names.indexOf("Browser") + 1);
+    expect(names).toEqual([
+      "Account",
+      "Appearance",
+      "Canvas",
+      "AI agent",
+      "Agent memory",
+      "Skills",
+      "Browser",
+      "Integrations",
+      "Data & privacy",
+      "Advanced",
+      "Keyboard shortcuts",
+    ]);
   });
 
   it("falls back to Appearance for an unknown section", () => {

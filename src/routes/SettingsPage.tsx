@@ -4,12 +4,16 @@ import { useSearchParams } from "react-router";
 import { EditorProviders } from "@/components/EditorProviders";
 import { SettingsNav } from "@/components/settings/SettingsNav";
 import { AccountSection } from "@/components/settings/sections/AccountSection";
+import { AdvancedSection } from "@/components/settings/sections/AdvancedSection";
 import { AgentSection } from "@/components/settings/sections/AgentSection";
 import { AppearanceSection } from "@/components/settings/sections/AppearanceSection";
 import { BrowserSection } from "@/components/settings/sections/BrowserSection";
 import { CanvasSection } from "@/components/settings/sections/CanvasSection";
 import { IntegrationsSection } from "@/components/settings/sections/IntegrationsSection";
+import { MemorySection } from "@/components/settings/sections/MemorySection";
+import { PrivacySection } from "@/components/settings/sections/PrivacySection";
 import { ShortcutsSection } from "@/components/settings/sections/ShortcutsSection";
+import { SkillsSection } from "@/components/settings/sections/SkillsSection";
 import { useHtmlRouteClass } from "@/hooks/useHtmlRouteClass";
 import { parseSettingsSection, SETTINGS_SECTION_EVENT, type SettingsSection } from "@/lib/openSettings";
 
@@ -18,8 +22,12 @@ const SECTION_VIEWS: Record<SettingsSection, () => React.JSX.Element> = {
   appearance: AppearanceSection,
   canvas: CanvasSection,
   agent: AgentSection,
+  memory: MemorySection,
+  skills: SkillsSection,
   browser: BrowserSection,
   integrations: IntegrationsSection,
+  privacy: PrivacySection,
+  advanced: AdvancedSection,
   shortcuts: ShortcutsSection,
 };
 

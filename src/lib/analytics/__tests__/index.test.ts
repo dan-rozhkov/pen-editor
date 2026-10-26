@@ -2,11 +2,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const initMock = vi.fn();
 const captureMock = vi.fn();
+const optOutMock = vi.fn();
+const optInMock = vi.fn();
 
 vi.mock("posthog-js", () => ({
   default: {
     init: initMock,
     capture: captureMock,
+    opt_out_capturing: optOutMock,
+    opt_in_capturing: optInMock,
   },
 }));
 
@@ -32,6 +36,9 @@ async function flushMicrotasks() {
 beforeEach(() => {
   initMock.mockReset();
   captureMock.mockReset();
+  optOutMock.mockReset();
+  optInMock.mockReset();
+  localStorage.clear();
 });
 
 afterEach(async () => {
@@ -163,6 +170,75 @@ describe("analytics — enabled (key present)", () => {
       "editor_command_run",
       expect.objectContaining({ command_id: "c" }),
     );
+  });
+});
+
+describe("analytics — user opt-out", () => {
+  it("does not load posthog or send events while opted out", async () => {
+    vi.stubEnv("VITE_POSTHOG_KEY", "phc_test_key");
+    localStorage.setItem("pen.analytics", "off");
+    const { initAnalytics, track, isAnalyticsEnabled, __resetAnalyticsForTests } = await import("../index");
+    __resetAnalyticsForTests();
+    initAnalytics();
+    track("editor_command_run", { command_id: "a" });
+    await flushMicrotasks();
+    expect(isAnalyticsEnabled()).toBe(false);
+    expect(initMock).not.toHaveBeenCalled();
+    expect(captureMock).not.toHaveBeenCalled();
+  });
+
+  it("opts out and back in on a loaded client, dropping events in between", async () => {
+    vi.stubEnv("VITE_POSTHOG_KEY", "phc_test_key");
+    const { initAnalytics, track, analyticsFlag, __resetAnalyticsForTests } = await import("../index");
+    __resetAnalyticsForTests();
+    initAnalytics();
+    await flushMicrotasks();
+    optInMock.mockClear(); // a client that cannot report its state is opted in once on init
+
+    analyticsFlag.set(false);
+    expect(optOutMock).toHaveBeenCalledTimes(1);
+    track("editor_command_run", { command_id: "dropped" });
+    expect(captureMock).not.toHaveBeenCalled();
+
+    analyticsFlag.set(true);
+    expect(optInMock).toHaveBeenCalledTimes(1);
+    expect(optInMock).toHaveBeenCalledWith({ captureEventName: false });
+    track("editor_command_run", { command_id: "kept" });
+    expect(captureMock).toHaveBeenCalledWith("editor_command_run", { command_id: "kept" });
+  });
+
+  it("opts a freshly loaded client back in when it persisted an earlier opt-out", async () => {
+    vi.stubEnv("VITE_POSTHOG_KEY", "phc_test_key");
+    const posthog = (await import("posthog-js")).default as unknown as { has_opted_out_capturing?: () => boolean };
+    posthog.has_opted_out_capturing = () => true;
+    try {
+      const { initAnalytics, __resetAnalyticsForTests } = await import("../index");
+      __resetAnalyticsForTests();
+      initAnalytics();
+      await flushMicrotasks();
+      expect(optInMock).toHaveBeenCalledTimes(1);
+
+      optInMock.mockClear();
+      posthog.has_opted_out_capturing = () => false;
+      const again = await import("../index");
+      again.__resetAnalyticsForTests();
+      again.initAnalytics();
+      await flushMicrotasks();
+      expect(optInMock).not.toHaveBeenCalled();
+    } finally {
+      delete posthog.has_opted_out_capturing;
+    }
+  });
+
+  it("loads posthog when turned on after starting opted out", async () => {
+    vi.stubEnv("VITE_POSTHOG_KEY", "phc_test_key");
+    localStorage.setItem("pen.analytics", "off");
+    const { initAnalytics, analyticsFlag, __resetAnalyticsForTests } = await import("../index");
+    __resetAnalyticsForTests();
+    initAnalytics();
+    analyticsFlag.set(true);
+    await flushMicrotasks();
+    expect(initMock).toHaveBeenCalledTimes(1);
   });
 });
 

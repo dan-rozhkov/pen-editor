@@ -44,6 +44,10 @@ interface UserSkillStoreState {
   /** Unconditionally reload both lists from the backend, regardless of
    * current status. */
   refresh: () => Promise<void>;
+  /** Quiet re-sync after a write in another document: leaves `status` alone
+   * while in flight, keeps the current state on failure, coalesces bursts, and
+   * drops its result if a local write started or finished after it began. */
+  refreshFromRemote: () => Promise<void>;
   /** Create a skill and add it to `skills` on success. Returns the created
    * skill, or null on failure (see `error`). */
   create: (input: CreateUserSkillInput) => Promise<UserSkill | null>;
@@ -69,6 +73,18 @@ interface UserSkillStoreState {
  * a thrown exception — `src/lib/userSkills.ts`'s client already never
  * throws, so nothing here needs a try/catch to keep that guarantee.
  */
+const CHANNEL_NAME = "pen.userSkills";
+
+/** Cross-document sync: the Settings document edits skills too, and the
+ * editor / agent panel documents hold their own copy of this store. */
+function openChannel(): BroadcastChannel | null {
+  try {
+    return typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(CHANNEL_NAME);
+  } catch {
+    return null;
+  }
+}
+
 export const useUserSkillStore = create<UserSkillStoreState>((set, get) => {
   // In-flight hydration promise, shared by concurrent callers — same
   // rationale as pluginStore's initPromise: a mutation that races
@@ -106,6 +122,63 @@ export const useUserSkillStore = create<UserSkillStoreState>((set, get) => {
     });
   };
 
+  // Bumped when a local write starts and when it finishes; a silent refresh
+  // whose GET began before either must not overwrite the write's result.
+  let writeGen = 0;
+  let remoteInFlight: Promise<void> | null = null;
+  let remoteQueued = false;
+
+  const refreshOnce = async (): Promise<void> => {
+    const startGen = writeGen;
+    const [listResult, builtInResult] = await Promise.all([listUserSkills(), listBuiltInSkills()]);
+    if (!listResult.ok) {
+      console.warn("[userSkills] background refresh failed", listResult.error);
+      return;
+    }
+    if (writeGen !== startGen) return; // a local write raced this GET: its result is newer
+    set((s) => ({
+      skills: listResult.data.skills,
+      available: listResult.data.available,
+      builtIn: builtInResult.ok ? builtInResult.data : s.builtIn,
+    }));
+  };
+
+  const refreshFromRemote = (): Promise<void> => {
+    if (remoteInFlight) {
+      remoteQueued = true;
+      return remoteInFlight;
+    }
+    remoteInFlight = (async () => {
+      try {
+        do {
+          remoteQueued = false;
+          await refreshOnce();
+        } while (remoteQueued);
+      } finally {
+        remoteInFlight = null;
+      }
+    })();
+    return remoteInFlight;
+  };
+
+  const channel = openChannel();
+  // Posted only after a successful WRITE, never after a re-fetch: otherwise two
+  // documents would answer each other forever.
+  const announceWrite = () => {
+    try {
+      channel?.postMessage({ type: "changed" });
+    } catch {
+      // ignore
+    }
+  };
+  if (channel) {
+    channel.onmessage = () => {
+      // "idle" = never opened here: it will hydrate lazily.
+      if (get().status === "idle") return;
+      void refreshFromRemote();
+    };
+  }
+
   const ensureHydrated = (): Promise<void> => {
     const { status } = get();
     if (status === "ready") return Promise.resolve();
@@ -127,9 +200,12 @@ export const useUserSkillStore = create<UserSkillStoreState>((set, get) => {
 
     ensureHydrated,
     refresh: load,
+    refreshFromRemote,
 
     create: async (input) => {
+      writeGen++;
       const result = await createUserSkill(input);
+      writeGen++;
       if (!result.ok) {
         set({ error: result.error });
         return null;
@@ -138,12 +214,15 @@ export const useUserSkillStore = create<UserSkillStoreState>((set, get) => {
         skills: [result.data, ...s.skills.filter((sk) => sk.name !== result.data.name)],
         error: null,
       }));
+      announceWrite();
       return result.data;
     },
 
     update: async (name, patch) => {
+      writeGen++;
       set((s) => ({ pendingUpdates: { ...s.pendingUpdates, [name]: true } }));
       const result = await updateUserSkill(name, patch);
+      writeGen++;
       const clearPending = (s: UserSkillStoreState): Pick<UserSkillStoreState, "pendingUpdates"> => {
         const pendingUpdates = { ...s.pendingUpdates };
         delete pendingUpdates[name];
@@ -159,16 +238,20 @@ export const useUserSkillStore = create<UserSkillStoreState>((set, get) => {
         skills: s.skills.map((sk) => (sk.name === name ? result.data : sk)),
         error: null,
       }));
+      announceWrite();
       return result.data;
     },
 
     remove: async (name) => {
+      writeGen++;
       const result = await deleteUserSkill(name);
+      writeGen++;
       if (!result.ok) {
         set({ error: result.error });
         return false;
       }
       set((s) => ({ skills: s.skills.filter((sk) => sk.name !== name), error: null }));
+      announceWrite();
       return true;
     },
 

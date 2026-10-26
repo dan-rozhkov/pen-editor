@@ -1,6 +1,6 @@
 import { appHref, stripBase } from "@/lib/auth/paths";
 
-export const SETTINGS_SECTIONS = ["account", "appearance", "canvas", "agent", "browser", "integrations", "shortcuts"] as const;
+export const SETTINGS_SECTIONS = ["account", "appearance", "canvas", "agent", "memory", "skills", "browser", "integrations", "privacy", "advanced", "shortcuts"] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 export const DEFAULT_SETTINGS_SECTION: SettingsSection = "appearance";
 

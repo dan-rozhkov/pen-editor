@@ -1,5 +1,6 @@
 import { loadAuthConfig } from "@/lib/auth/authConfig";
 import { peekActorId } from "@/lib/auth/authState";
+import { createStorageFlag } from "@/lib/storageSync";
 import type { AnalyticsEventMap } from "./events";
 
 export type { AnalyticsEventMap } from "./events";
@@ -22,10 +23,37 @@ export { bucketLength } from "./buckets";
 
 const MAX_BUFFER = 50;
 
+/**
+ * User opt-out, persisted: absent = analytics on, "off" = off. A write in the
+ * Settings document reaches editor documents through the `storage` event.
+ */
+export const ANALYTICS_KEY = "pen.analytics";
+export const analyticsFlag = createStorageFlag(ANALYTICS_KEY, { offValue: "off" });
+
 type PostHogLike = {
   init: (key: string, options: Record<string, unknown>) => void;
   capture: (event: string, props?: Record<string, unknown>) => void;
+  opt_out_capturing?: () => void;
+  opt_in_capturing?: (options?: { captureEventName?: string | null | false }) => void;
+  has_opted_out_capturing?: () => boolean;
 };
+
+/**
+ * posthog-js persists opt_out_capturing() in its own storage, so a document
+ * that loads it fresh after an off -> on flip would stay opted out. Our flag
+ * is the source of truth: while it is on, undo any opt-out the client reports
+ * (or unconditionally when the client cannot say).
+ */
+function syncOptIn(client: PostHogLike): void {
+  try {
+    const optedOut = client.has_opted_out_capturing ? client.has_opted_out_capturing() : true;
+    // captureEventName: false suppresses the default `$opt_in` event: this is a
+    // restore of the user's standing choice, not a new consent action.
+    if (optedOut) client.opt_in_capturing?.({ captureEventName: false });
+  } catch {
+    // ignore
+  }
+}
 
 type ModuleState = {
   /** Set once initAnalytics() has been called with a key present. */
@@ -38,6 +66,8 @@ type ModuleState = {
   buffer: Array<{ event: string; props: Record<string, unknown> }>;
   /** Guards against initAnalytics() re-running its import on repeat calls. */
   initPromise: Promise<void> | null;
+  /** True once initAnalytics() ran (even if the user opt-out stopped it). */
+  initRequested: boolean;
 };
 
 function freshState(): ModuleState {
@@ -47,6 +77,7 @@ function freshState(): ModuleState {
     loadFailed: false,
     buffer: [],
     initPromise: null,
+    initRequested: false,
   };
 }
 
@@ -76,6 +107,9 @@ function readHost(): string {
 export function initAnalytics(): void {
   const key = readKey();
   if (!key) return;
+
+  state.initRequested = true;
+  if (!analyticsFlag.get()) return;
 
   state.enabled = true;
   if (state.initPromise) return;
@@ -112,6 +146,17 @@ export function initAnalytics(): void {
         bootstrap: { distinctID: peekActorId() },
       });
       state.client = client;
+      // The user opted out while posthog-js was still loading.
+      if (!analyticsFlag.get()) {
+        state.buffer = [];
+        try {
+          client.opt_out_capturing?.();
+        } catch {
+          // ignore
+        }
+        return;
+      }
+      syncOptIn(client);
       const buffered = state.buffer;
       state.buffer = [];
       for (const { event, props } of buffered) {
@@ -165,6 +210,34 @@ export function track<E extends keyof AnalyticsEventMap>(
     // Never let analytics break the caller.
   }
 }
+
+/** True when this build carries a PostHog key (the Settings switch is shown only then). */
+export function isAnalyticsConfigured(): boolean {
+  return readKey() !== undefined;
+}
+
+// Applies a flip of the opt-out flag, from this document or another one.
+function applyOptOut(): void {
+  try {
+    if (!analyticsFlag.get()) {
+      state.enabled = false;
+      state.buffer = [];
+      state.client?.opt_out_capturing?.();
+      return;
+    }
+    if (state.client) {
+      state.enabled = true;
+      syncOptIn(state.client);
+    } else if (state.initPromise) {
+      state.enabled = true;
+    } else if (state.initRequested) {
+      initAnalytics();
+    }
+  } catch {
+    // Never let analytics break the caller.
+  }
+}
+analyticsFlag.subscribe(applyOptOut);
 
 /** True once `initAnalytics()` has been called with a key present. */
 export function isAnalyticsEnabled(): boolean {

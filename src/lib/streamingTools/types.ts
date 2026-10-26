@@ -11,6 +11,8 @@
  * Design: docs/superpowers/specs/2026-09-13-streaming-tool-mutations-design.md
  */
 
+import { createStorageFlag } from "@/lib/storageSync";
+
 export interface StreamingToolFrame {
   sessionId: string;
   toolCallId: string;
@@ -45,11 +47,9 @@ export interface StreamingToolAdapter {
  *
  * `localStorage.pen.streamingMutations = "off"` disables them.
  */
+export const streamingMutationsFlag = createStorageFlag("pen.streamingMutations", { offValue: "off" });
+
 export function isStreamingMutationsEnabled(): boolean {
-  try {
-    return globalThis.localStorage?.getItem("pen.streamingMutations") !== "off";
-  } catch {
-    // Private mode / blocked storage: the feature stays on.
-    return true;
-  }
+  // Private mode / blocked storage reads as on.
+  return streamingMutationsFlag.get();
 }

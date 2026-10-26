@@ -623,9 +623,14 @@ draft — Postgres rows behind `/api/user-skills`, scoped to the same anonymous
   lying about state.
 - **`available: false`** (the backend has no user-skills store configured) is
   not an error — it renders as "the feature is off here", distinct from a
-  request that failed, which offers a Retry. Both live in `SkillsPage.tsx`,
-  which is a page inside the chat panel (it replaces the chat list /
-  open-chat header while shown), not a modal.
+  request that failed, which offers a Retry. Both live in `SkillsManager.tsx`,
+  rendered by `SkillsPage.tsx` (a page inside the chat panel: it replaces the
+  chat list / open-chat header while shown, not a modal) and by Settings →
+  Skills (`mode="embedded"`, mounted only once `useIdentityKey()` resolved).
+  Because Settings is another document, every successful write posts on
+  `BroadcastChannel("pen.userSkills")` and hydrated stores elsewhere run a
+  silent `refreshFromRemote()` (keeps state on failure, drops a result that a
+  local write overtook).
 - **`SlashCommandMenu.tsx`** merges the user's *enabled* skills under "Your
   skills" alongside the hardcoded built-ins, so `/my-skill` is discoverable
   where every other skill already was. Only user skills are slash-invocable;
