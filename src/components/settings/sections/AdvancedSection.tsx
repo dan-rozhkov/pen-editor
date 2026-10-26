@@ -19,10 +19,10 @@ function FlagRow({ flag, title, description }: { flag: StorageFlag; title: strin
 
 export function AdvancedSection() {
   return (
-    <SettingsSection title="Advanced">
-      <p className="pb-4 text-xs text-text-muted">
-        Switches for troubleshooting. Leave them on unless something looks wrong.
-      </p>
+    <SettingsSection
+      title="Advanced"
+      description="Switches for troubleshooting. Leave them on unless something looks wrong."
+    >
       <FlagRow
         flag={generationRevealFlag}
         title="Show screens while they generate"

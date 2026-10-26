@@ -54,7 +54,10 @@ describe("SkillsSection", () => {
     expect(screen.getByRole("heading", { name: "Skills" })).toBeTruthy();
     expect(screen.getByTestId("builtin-skill-prototype")).toBeTruthy();
     expect(screen.getByTestId("user-skill-my-skill")).toBeTruthy();
-    expect(screen.getByTestId("skills-page-add")).toBeTruthy();
+    // Add is a labelled button in the section's title row, not a row of its own.
+    const add = screen.getByTestId("skills-page-add");
+    expect(add.textContent).toContain("Add");
+    expect(screen.getByRole("heading", { name: "Skills" }).parentElement?.contains(add)).toBe(true);
     expect(screen.queryByTestId("skills-page-back")).toBeNull();
   });
 

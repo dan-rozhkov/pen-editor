@@ -33,13 +33,10 @@ function EntryList({
   if (entries.length === 0) return null;
   return (
     <SettingsGroup title={title}>
-      <ul className="flex flex-col gap-1.5">
+      <ul className="divide-y divide-border-default overflow-hidden rounded-control border border-border-default">
         {entries.map((text, index) => (
           // Duplicates are legal, so the index is part of the key.
-          <li
-            key={`${index}:${text}`}
-            className="flex items-start justify-between gap-3 rounded-control border border-border-default px-3 py-2"
-          >
+          <li key={`${index}:${text}`} className="flex items-start justify-between gap-3 px-3 py-2">
             <span className="min-w-0 text-sm break-words whitespace-pre-wrap text-text-primary">{text}</span>
             <Button
               variant="ghost"
@@ -223,8 +220,10 @@ function MemoryBody() {
 export function MemorySection() {
   const identity = useIdentityKey();
   return (
-    <SettingsSection title="Agent memory">
-      <p className="pb-4 text-sm text-text-muted">The agent remembers facts about you and your work across chats.</p>
+    <SettingsSection
+      title="Agent memory"
+      description="The agent remembers facts about you and your work across chats."
+    >
       {identity === null ? (
         <p role="status" className="py-5 text-sm text-text-muted">
           Loading…

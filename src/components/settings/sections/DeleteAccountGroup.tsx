@@ -1,5 +1,15 @@
 import { useState } from "react";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { JSON_HEADERS, requestJson } from "@/lib/apiJson";
@@ -55,51 +65,64 @@ function DeleteAccount({ email, onDeleted }: { email: string; onDeleted: () => v
     setBusy(false);
   }
 
-  if (!open) {
-    return (
+  function onOpenChange(next: boolean) {
+    // A request in flight must finish: closing would hide its result.
+    if (busy) return;
+    setOpen(next);
+    if (!next) {
+      setTyped("");
+      setError(null);
+    }
+  }
+
+  const canDelete = !busy && emailsMatch(typed, email);
+  return (
+    <>
       <Button variant="destructive" onClick={() => setOpen(true)}>
         Delete account
       </Button>
-    );
-  }
-  return (
-    <div className="flex w-72 flex-col gap-2">
-      <p className="text-xs text-text-muted">
-        This permanently deletes your account and its data on our servers. Docs and workflows in this browser are not
-        removed. Export them first.
-      </p>
-      <label className="text-xs text-text-primary" htmlFor="delete-account-email">
-        Type {email} to confirm
-      </label>
-      <Input
-        id="delete-account-email"
-        type="email"
-        autoComplete="off"
-        value={typed}
-        onChange={(e) => setTyped(e.target.value)}
-      />
-      {error && (
-        <p role="alert" className="text-xs text-destructive">
-          {error}
-        </p>
-      )}
-      <div className="flex justify-end gap-2">
-        <Button
-          variant="outline"
-          disabled={busy}
-          onClick={() => {
-            setOpen(false);
-            setTyped("");
-            setError(null);
-          }}
-        >
-          Cancel
-        </Button>
-        <Button variant="destructive" disabled={busy || !emailsMatch(typed, email)} onClick={() => void submit()}>
-          Delete account
-        </Button>
-      </div>
-    </div>
+      <AlertDialog open={open} onOpenChange={onOpenChange}>
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes your account and its data on our servers. Docs and workflows in this browser
+              are not removed. Export them first.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <form
+            className="flex flex-col gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (canDelete) void submit();
+            }}
+          >
+            <label className="text-xs text-text-primary" htmlFor="delete-account-email">
+              Type {email} to confirm
+            </label>
+            <Input
+              id="delete-account-email"
+              type="email"
+              autoComplete="off"
+              autoFocus
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+            />
+            {error && (
+              <p role="alert" className="text-xs text-destructive">
+                {error}
+              </p>
+            )}
+          </form>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" disabled={!canDelete} onClick={() => void submit()}>
+              Delete account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 

@@ -37,6 +37,8 @@ describe("PrivacySection delete account", () => {
     );
     render(<PrivacySection />);
     fireEvent.click(await screen.findByRole("button", { name: "Delete account" }));
+    // The confirmation is a modal, not an inline form.
+    expect(await screen.findByRole("alertdialog", { name: "Delete your account?" })).toBeTruthy();
     const confirm = screen.getAllByRole("button", { name: "Delete account" }).at(-1)!;
     expect(confirm.hasAttribute("disabled") || confirm.getAttribute("aria-disabled") === "true" || (confirm as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText(/Type ada@example.com/), { target: { value: "other@example.com" } });

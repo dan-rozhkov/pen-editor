@@ -2,13 +2,32 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
-/** The right column for one section: large title, hairline, then its groups. */
-export function SettingsSection({ title, children }: { title: string; children: ReactNode }) {
+/**
+ * The right column for one section: large title (+ intro line, + an action at
+ * the right of the title), hairline, then its groups.
+ */
+export function SettingsSection({
+  title,
+  description,
+  action,
+  children,
+}: {
+  title: string;
+  description?: ReactNode;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <section aria-labelledby="settings-section-title">
-      <h2 id="settings-section-title" className="pb-4 text-xl font-semibold tracking-tight text-text-primary">
-        {title}
-      </h2>
+      <div className="pb-4">
+        <div className="flex items-center justify-between gap-4">
+          <h2 id="settings-section-title" className="text-xl font-semibold tracking-tight text-text-primary">
+            {title}
+          </h2>
+          {action}
+        </div>
+        {description && <p className="mt-1 text-sm text-text-muted">{description}</p>}
+      </div>
       <div className="border-t border-border-default">{children}</div>
     </section>
   );

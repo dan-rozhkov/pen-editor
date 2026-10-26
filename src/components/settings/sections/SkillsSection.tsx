@@ -1,4 +1,6 @@
-import { SkillsManager } from "@/components/chat/SkillsManager";
+import { useState } from "react";
+
+import { SKILLS_INTRO, SkillsManager } from "@/components/chat/SkillsManager";
 import { useIdentityKey } from "@/lib/auth/useIdentityKey";
 
 import { SettingsSection } from "../SettingsSection";
@@ -11,15 +13,21 @@ import { SettingsSection } from "../SettingsSection";
  */
 export function SkillsSection() {
   const identity = useIdentityKey();
+  // The manager portals its Add menu here, at the right of the section title.
+  const [actionSlot, setActionSlot] = useState<HTMLDivElement | null>(null);
   return (
-    <SettingsSection title="Skills">
-      <div className="flex min-h-96 flex-col pt-3">
+    <SettingsSection
+      title="Skills"
+      description={SKILLS_INTRO}
+      action={<div ref={setActionSlot} className="flex shrink-0 items-center" />}
+    >
+      <div className="flex min-h-96 flex-col">
         {identity === null ? (
           <p role="status" className="py-5 text-sm text-text-muted">
             Loading…
           </p>
         ) : (
-          <SkillsManager key={identity} mode="embedded" />
+          <SkillsManager key={identity} mode="embedded" actionSlot={actionSlot} />
         )}
       </div>
     </SettingsSection>

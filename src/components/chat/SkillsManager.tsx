@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowLeftIcon,
   BookOpenIcon,
@@ -23,6 +24,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,6 +48,8 @@ interface SkillsManagerProps {
    * title; the list view gets no Back button, sub-views keep one.
    */
   mode?: "panel" | "embedded";
+  /** Embedded only: where the list view's Add menu goes (the host's title row). */
+  actionSlot?: HTMLElement | null;
 }
 
 type View = "list" | "form" | "generate";
@@ -88,6 +92,14 @@ function validateForm(form: FormState): string | null {
   return null;
 }
 
+const PANEL_HEADING = "mb-1.5 px-1 text-[11px] font-medium tracking-wide text-text-muted uppercase";
+// Settings: the same grouped card as the Agent memory lists.
+const GROUP_HEADING = "mb-3 text-sm font-medium text-text-primary";
+const GROUP_LIST = "divide-y divide-border-default overflow-hidden rounded-control border border-border-default";
+
+export const SKILLS_INTRO =
+  "Skills teach Sideform Agent your workflows. Built-in skills are shared and read-only; your own skills are private to you.";
+
 /**
  * The skills list/editor body shared by the chat panel's SkillsPage and the
  * Settings → Skills section. It hydrates `userSkillStore` itself, so it needs
@@ -98,7 +110,7 @@ function validateForm(form: FormState): string | null {
  * create/edit form, generate); the sub-views share the list's header layout
  * with a back button. Only the delete confirmation is a dialog.
  */
-export function SkillsManager({ onClose, mode = "panel" }: SkillsManagerProps) {
+export function SkillsManager({ onClose, mode = "panel", actionSlot }: SkillsManagerProps) {
   const embedded = mode === "embedded";
   const builtIn = useUserSkillStore((s) => s.builtIn);
   const skills = useUserSkillStore((s) => s.skills);
@@ -334,6 +346,56 @@ export function SkillsManager({ onClose, mode = "panel" }: SkillsManagerProps) {
     </span>
   );
 
+  const addMenu = (
+    <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".md,text/markdown"
+        className="hidden"
+        onChange={handleFileInputChange}
+        aria-label="Upload skill file"
+      />
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            embedded ? (
+              <Button ref={addButtonRef} data-testid="skills-page-add" aria-label="Add skill" variant="outline">
+                <PlusIcon weight="light" />
+                Add
+              </Button>
+            ) : (
+              <IconButton
+                ref={addButtonRef}
+                data-testid="skills-page-add"
+                tooltip="Add skill"
+                aria-label="Add skill"
+                variant="ghost"
+                size="icon"
+              >
+                <PlusIcon className="size-4" weight="light" />
+              </IconButton>
+            )
+          }
+        />
+        <DropdownMenuContent align="end" className="min-w-52">
+          <DropdownMenuItem onClick={openCreateForm}>
+            <PlusIcon />
+            New skill
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setView("generate")}>
+            <MagicWandIcon />
+            Generate with the agent
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+            <UploadSimpleIcon />
+            Upload .md
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  );
+
   return (
     <div
       ref={pageRef}
@@ -342,74 +404,47 @@ export function SkillsManager({ onClose, mode = "panel" }: SkillsManagerProps) {
       onKeyDown={handleKeyDown}
       className="flex min-h-0 flex-1 flex-col overflow-hidden outline-none"
     >
-      <div className="flex shrink-0 items-center gap-1 border-b border-border-default px-2 py-1.5">
-        {bare ? <span className="flex-1" /> : backButton}
-        {bare ? null : titleEl}
-        {view === "list" && (
-          <>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".md,text/markdown"
-              className="hidden"
-              onChange={handleFileInputChange}
-              aria-label="Upload skill file"
-            />
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <IconButton
-                    ref={addButtonRef}
-                    data-testid="skills-page-add"
-                    tooltip="Add skill"
-                    aria-label="Add skill"
-                    variant="ghost"
-                    size="icon"
-                  >
-                    <PlusIcon className="size-4" weight="light" />
-                  </IconButton>
-                }
-              />
-              <DropdownMenuContent align="end" className="min-w-52">
-                <DropdownMenuItem onClick={openCreateForm}>
-                  <PlusIcon />
-                  New skill
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setView("generate")}>
-                  <MagicWandIcon />
-                  Generate with the agent
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                  <UploadSimpleIcon />
-                  Upload .md
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </>
-        )}
-      </div>
+      {/* Embedded list view: no title row of its own (the host has the title),
+          so no second hairline either; Add sits in the host's title row. */}
+      {bare ? (
+        actionSlot && createPortal(addMenu, actionSlot)
+      ) : (
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-1 px-2 py-1.5",
+            !embedded && "border-b border-border-default",
+          )}
+        >
+          {backButton}
+          {titleEl}
+          {view === "list" && addMenu}
+        </div>
+      )}
 
       {view === "list" && (
-        <div className="layers-scrollbar flex flex-1 flex-col gap-4 overflow-y-auto px-2 pb-2">
-          <p className="px-1 pt-2 text-xs text-text-muted">
-            Skills teach Sideform Agent your workflows. Built-in skills are shared
-            and read-only; your own skills are private to you.
-          </p>
+        <div
+          className={cn(
+            "layers-scrollbar flex flex-1 flex-col overflow-y-auto pb-2",
+            embedded ? "gap-6 pt-5" : "gap-4 px-2",
+          )}
+        >
+          {/* Settings shows this as the section's own intro, under its title. */}
+          {!embedded && <p className="px-1 pt-2 text-xs text-text-muted">{SKILLS_INTRO}</p>}
 
           {storeError && status !== "error" && <InlineAlert variant="error">{storeError}</InlineAlert>}
 
           <section>
-            <h3 className="mb-1.5 px-1 text-[11px] font-medium tracking-wide text-text-muted uppercase">
+            <h3 className={embedded ? GROUP_HEADING : PANEL_HEADING}>
               Built-in
             </h3>
             {builtIn.length === 0 ? (
               <p className="px-1 text-xs text-text-muted">No built-in skills available.</p>
             ) : (
-              <ul className="flex flex-col gap-1">
+              <ul className={embedded ? GROUP_LIST : "flex flex-col gap-1"}>
                 {builtIn.map((skill) => (
                   <li
                     key={skill.name}
-                    className="rounded-lg px-2 py-1.5"
+                    className={embedded ? "px-3 py-2" : "rounded-lg px-2 py-1.5"}
                     data-testid={`builtin-skill-${skill.name}`}
                   >
                     <div className="text-xs font-medium text-text-primary">/{skill.name}</div>
@@ -421,7 +456,7 @@ export function SkillsManager({ onClose, mode = "panel" }: SkillsManagerProps) {
           </section>
 
           <section>
-            <h3 className="mb-1.5 px-1 text-[11px] font-medium tracking-wide text-text-muted uppercase">
+            <h3 className={embedded ? GROUP_HEADING : PANEL_HEADING}>
               Your skills
             </h3>
 
@@ -472,9 +507,10 @@ export function SkillsManager({ onClose, mode = "panel" }: SkillsManagerProps) {
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
-                className={`flex flex-col gap-1 rounded-lg ${
-                  isDragOver ? "bg-secondary/60 ring-1 ring-accent-light" : ""
-                }`}
+                className={cn(
+                  embedded ? GROUP_LIST : "flex flex-col gap-1 rounded-lg",
+                  isDragOver && "bg-secondary/60 ring-1 ring-accent-light",
+                )}
               >
                 {skills.map((skill) => {
                   const isPending = pendingUpdates[skill.name] ?? false;
@@ -486,7 +522,10 @@ export function SkillsManager({ onClose, mode = "panel" }: SkillsManagerProps) {
                     <li
                       key={skill.name}
                       data-testid={`user-skill-${skill.name}`}
-                      className="group flex items-center gap-2 rounded-lg hover:bg-secondary"
+                      className={cn(
+                        "group flex items-center gap-2 hover:bg-secondary",
+                        embedded ? "pl-1" : "rounded-lg",
+                      )}
                     >
                       <button
                         type="button"
