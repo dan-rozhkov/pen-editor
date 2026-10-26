@@ -152,7 +152,12 @@ export const SparkleIcon = /*#__PURE__*/ createIcon(
   { scale: 1.07 },
 );
 
-export const LightningIcon = /*#__PURE__*/ createIcon("Lightning", <path d="M9 2L3.75 9H8l-1 5 5.25-7H8Z" />);
+export const LightningIcon = /*#__PURE__*/ createIcon(
+  "Lightning",
+  // One open zigzag: the outlined bolt pinched to ~2 units at its waist and
+  // read as noise at 14-16px (STYLE.md, "Gaps").
+  <path d="M9.75 1.75 5 8.25h6l-4.75 6" />,
+);
 
 const BULB = "M5.5 11.25V10.6C4.4 9.8 3.75 8.5 3.75 7.1a4.25 4.25 0 0 1 8.5 0c0 1.4-.65 2.7-1.75 3.5v.65Z";
 
