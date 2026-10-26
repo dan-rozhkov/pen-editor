@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { UIMessage } from "ai";
 import { onStorageKey } from "@/lib/storageSync";
 import { deriveChatTitle } from "@/lib/chatTitle";
 import { canUseModel, getDefaultModel } from "@/lib/chatModels";
@@ -111,6 +112,8 @@ export type ParallelCount = 1 | 2 | 3;
 export interface ChatSessionActions {
   hasMessages: boolean;
   exportChat: () => void;
+  /** The chat's current transcript, read on demand (not subscribed to). */
+  getMessages: () => UIMessage[];
   clearChat: () => void;
 }
 

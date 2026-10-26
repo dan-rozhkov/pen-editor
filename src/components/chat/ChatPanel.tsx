@@ -55,6 +55,7 @@ import { MessageList } from "./MessageList";
 import { ChatSessionIdContext } from "./ChatSessionContext";
 import { ChatInput } from "./ChatInput";
 import { ChatList } from "./ChatList";
+import { ConversationFilesPopover } from "./ConversationFilesPopover";
 import { CloudBrowserPanel } from "./CloudBrowserPanel";
 import { SkillsPage } from "./SkillsPage";
 import { ContextMeter } from "./ContextMeter";
@@ -129,6 +130,7 @@ function OpenChatHeader({
         <PlusIcon className="size-4" weight="light" />
       </IconButton>
       {trailingAction}
+      <ConversationFilesPopover getMessages={() => activeActions?.getMessages() ?? []} />
       {activeActions?.hasMessages && (
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -335,6 +337,7 @@ function ChatSession({
         const { messages, chatTitle } = sessionDataRef.current;
         downloadMarkdown(chatToMarkdown(messages, chatTitle), chatFilename(chatTitle));
       },
+      getMessages: () => sessionDataRef.current.messages,
       clearChat: () => {
         sessionDataRef.current.setMessages([]);
         // An empty transcript has no context usage yet — leaving the old
