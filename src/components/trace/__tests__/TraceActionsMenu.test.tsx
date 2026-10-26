@@ -194,17 +194,11 @@ describe("TraceActionsMenu", () => {
       expect(await saved.blob!.text()).toContain("https://acme.test/");
     });
 
-    it("has no secondary text when the spec is complete", () => {
-      renderMenu(withRepro);
-      openMenu();
-      expect(item("Download Playwright test")!.textContent!.trim()).toBe("Download Playwright test");
-    });
-
-    it("shows the gap count as secondary text", () => {
+    it("has no secondary text, even when the spec has gaps", () => {
       const gapped = { ...withRepro, steps: withRepro.steps.map((s) => (s.index === 1 ? { ...s, repro: [{ op: "unknown-op" }] } : s)) } as unknown as BrowseTrace;
       renderMenu(gapped);
       openMenu();
-      expect(item("Download Playwright test")!.textContent).toContain("1 gap");
+      expect(item("Download Playwright test")!.textContent!.trim()).toBe("Download Playwright test");
     });
   });
 });

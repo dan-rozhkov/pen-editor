@@ -30,8 +30,7 @@ export const TraceActionsMenu = memo(function TraceActionsMenu({ trace, cloudTra
           </DropdownMenuItem>
           {playwright.available && (
             <DropdownMenuItem onClick={playwright.download}>
-              <FileCodeIcon weight="light" /> Download Playwright test{" "}
-              {playwright.notes && <span className="ml-auto pl-3 text-xs text-text-muted">{playwright.notes}</span>}
+              <FileCodeIcon weight="light" /> Download Playwright test
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>

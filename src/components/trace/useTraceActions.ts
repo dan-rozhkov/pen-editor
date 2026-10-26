@@ -93,13 +93,8 @@ export function useDownloadTrace(trace: BrowseTrace, cloudTraceId?: string) {
 export function usePlaywrightSpec(trace: BrowseTrace) {
   const spec = useMemo(() => browseTraceToPlaywrightSpec(trace), [trace]);
   if (!spec.ok) return { available: false as const };
-  const notes = [
-    spec.gaps > 0 ? `${spec.gaps} ${spec.gaps === 1 ? "gap" : "gaps"}` : "",
-    spec.failingChecks > 0 ? `${spec.failingChecks} failing ${spec.failingChecks === 1 ? "check" : "checks"}` : "",
-  ].filter(Boolean);
   return {
     available: true as const,
-    notes: notes.join(", "),
     download: () => saveBlob(new Blob([spec.code], { type: "text/plain" }), spec.fileName),
   };
 }
