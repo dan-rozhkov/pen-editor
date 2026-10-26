@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/PropertyInputs";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
-import { ButtonGroup } from "@/components/ui/button-group";
+import { SegmentedGroup, segmentedActionClass, segmentedItemClass } from "@/components/ui/segmented-control";
 import { FontCombobox } from "@/components/ui/FontCombobox";
 import { FontUploadButton } from "@/components/ui/FontUploadButton";
 import { Input } from "@/components/ui/input";
@@ -482,9 +482,6 @@ function LinkPopover({ node, onUpdate }: { node: TextNode; onUpdate: (updates: P
   );
 }
 
-const segmentedButtonGroupClass =
-  "h-6 rounded-md bg-secondary gap-px [&_svg]:size-[18px]! [&>[data-slot]]:rounded-[5px]! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
-
 function TruncateTextIcon() {
   return (
     <svg
@@ -631,21 +628,17 @@ function OpenTypePopover({
             ))}
           </div>
         )}
-        <div className="flex w-full gap-1">
+        <SegmentedGroup className="w-full" aria-label="OpenType features">
           {OPEN_TYPE_TOGGLE_FEATURES.map((feature) => (
             <IconButton
               key={feature.tag}
-              variant={node.fontFeatures?.[feature.tag] === 1 ? "default" : "secondary"}
+              variant="ghost"
               size="icon-sm"
               tooltip={feature.label}
               aria-label={feature.label}
               aria-pressed={node.fontFeatures?.[feature.tag] === 1}
               disabled={readOnly}
-              className={
-                node.fontFeatures?.[feature.tag] === 1
-                  ? "flex-1 border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                  : "flex-1"
-              }
+              className={segmentedItemClass(node.fontFeatures?.[feature.tag] === 1, { icon: true, className: "flex-1" })}
               onClick={() =>
                 onUpdate({
                   fontFeatures: withToggleFeature(
@@ -659,7 +652,7 @@ function OpenTypePopover({
               <OpenTypeToggleIcon tag={feature.tag} />
             </IconButton>
           ))}
-        </div>
+        </SegmentedGroup>
         <div className="flex flex-col gap-3">
           {OPEN_TYPE_SELECT_GROUPS.map((group) => (
             <OpenTypeGroupSelect
@@ -825,38 +818,29 @@ export function TypographySection({
       </PropertyRow>
       <PropertyRow>
         <div className="flex items-center gap-1 flex-1">
-          <IconButton
-            variant={
-              node.fontStyle === "italic" ? "default" : "secondary"
-            }
-            size="sm"
-            tooltip="Italic"
-            className={`flex-1 ${
-              node.fontStyle === "italic"
-                ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                : ""
-            }`}
-            onClick={() =>
-              onUpdate({
-                fontStyle:
-                  node.fontStyle === "italic" ? "normal" : "italic",
-              } as Partial<SceneNode>)
-            }
-          >
-            <TextItalicIcon className="size-[18px]!" />
-          </IconButton>
-        </div>
-        <div className="flex items-center gap-1 flex-1">
-          <ButtonGroup orientation="horizontal" className={`flex-1 ${segmentedButtonGroupClass}`}>
+          <SegmentedGroup className="flex-1" aria-label="Text style">
             <IconButton
-              variant={node.underline ? "default" : "secondary"}
+              variant="ghost"
+              size="sm"
+              tooltip="Italic"
+              aria-label="Italic"
+              aria-pressed={node.fontStyle === "italic"}
+              className={segmentedItemClass(node.fontStyle === "italic", { icon: true, className: "flex-1" })}
+              onClick={() =>
+                onUpdate({
+                  fontStyle:
+                    node.fontStyle === "italic" ? "normal" : "italic",
+                } as Partial<SceneNode>)
+              }
+            >
+              <TextItalicIcon size={14} />
+            </IconButton>
+            <IconButton
+              variant="ghost"
               size="sm"
               tooltip="Underline"
-              className={`flex-1 ${
-                node.underline
-                  ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                  : ""
-              }`}
+              aria-pressed={!!node.underline}
+              className={segmentedItemClass(node.underline, { icon: true, className: "flex-1" })}
               onClick={() =>
                 onUpdate({
                   underline: !node.underline,
@@ -866,14 +850,11 @@ export function TypographySection({
               <TextUnderlineIcon size={14} />
             </IconButton>
             <IconButton
-              variant={node.strikethrough ? "default" : "secondary"}
+              variant="ghost"
               size="sm"
               tooltip="Strikethrough"
-              className={`flex-1 ${
-                node.strikethrough
-                  ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                  : ""
-              }`}
+              aria-pressed={!!node.strikethrough}
+              className={segmentedItemClass(node.strikethrough, { icon: true, className: "flex-1" })}
               onClick={() =>
                 onUpdate({
                   strikethrough: !node.strikethrough,
@@ -882,7 +863,7 @@ export function TypographySection({
             >
               <TextStrikethroughIcon size={14} />
             </IconButton>
-          </ButtonGroup>
+          </SegmentedGroup>
           <LinkPopover node={node} onUpdate={onUpdate} />
           <OpenTypePopover node={node} onUpdate={updateTypography} />
         </div>
@@ -910,18 +891,13 @@ export function TypographySection({
         </div>
         <PropertyRow>
           <div className="flex items-center gap-1 flex-1">
-            <ButtonGroup orientation="horizontal" className={`flex-1 ${segmentedButtonGroupClass}`}>
+            <SegmentedGroup className="flex-1" aria-label="Text alignment">
               <IconButton
-                variant={
-                  node.textAlign === "left" ? "default" : "secondary"
-                }
+                variant="ghost"
                 size="sm"
                 tooltip="Align left"
-                className={`flex-1 ${
-                  node.textAlign === "left"
-                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                    : ""
-                }`}
+                aria-pressed={node.textAlign === "left"}
+                className={segmentedItemClass(node.textAlign === "left", { icon: true, className: "flex-1" })}
                 onClick={() =>
                   onUpdate({ textAlign: "left" } as Partial<SceneNode>)
                 }
@@ -929,16 +905,11 @@ export function TypographySection({
                 <TextAlignLeftIcon size={14} />
               </IconButton>
               <IconButton
-                variant={
-                  node.textAlign === "center" ? "default" : "secondary"
-                }
+                variant="ghost"
                 size="sm"
                 tooltip="Align center"
-                className={`flex-1 ${
-                  node.textAlign === "center"
-                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                    : ""
-                }`}
+                aria-pressed={node.textAlign === "center"}
+                className={segmentedItemClass(node.textAlign === "center", { icon: true, className: "flex-1" })}
                 onClick={() =>
                   onUpdate({ textAlign: "center" } as Partial<SceneNode>)
                 }
@@ -946,39 +917,27 @@ export function TypographySection({
                 <TextAlignCenterIcon size={14} />
               </IconButton>
               <IconButton
-                variant={
-                  node.textAlign === "right" ? "default" : "secondary"
-                }
+                variant="ghost"
                 size="sm"
                 tooltip="Align right"
-                className={`flex-1 ${
-                  node.textAlign === "right"
-                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                    : ""
-                }`}
+                aria-pressed={node.textAlign === "right"}
+                className={segmentedItemClass(node.textAlign === "right", { icon: true, className: "flex-1" })}
                 onClick={() =>
                   onUpdate({ textAlign: "right" } as Partial<SceneNode>)
                 }
               >
                 <TextAlignRightIcon size={14} />
               </IconButton>
-            </ButtonGroup>
+            </SegmentedGroup>
           </div>
           <div className="flex items-center gap-1 flex-1">
-            <ButtonGroup orientation="horizontal" className={`flex-1 ${segmentedButtonGroupClass}`}>
+            <SegmentedGroup className="flex-1" aria-label="Vertical alignment">
               <IconButton
-                variant={
-                  node.textAlignVertical === "top"
-                    ? "default"
-                    : "secondary"
-                }
+                variant="ghost"
                 size="sm"
                 tooltip="Align top"
-                className={`flex-1 ${
-                  node.textAlignVertical === "top"
-                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                    : ""
-                }`}
+                aria-pressed={node.textAlignVertical === "top"}
+                className={segmentedItemClass(node.textAlignVertical === "top", { icon: true, className: "flex-1" })}
                 onClick={() =>
                   onUpdate({
                     textAlignVertical: "top",
@@ -988,18 +947,11 @@ export function TypographySection({
                 <AlignTopIcon size={14} />
               </IconButton>
               <IconButton
-                variant={
-                  node.textAlignVertical === "middle"
-                    ? "default"
-                    : "secondary"
-                }
+                variant="ghost"
                 size="sm"
                 tooltip="Align middle"
-                className={`flex-1 ${
-                  node.textAlignVertical === "middle"
-                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                    : ""
-                }`}
+                aria-pressed={node.textAlignVertical === "middle"}
+                className={segmentedItemClass(node.textAlignVertical === "middle", { icon: true, className: "flex-1" })}
                 onClick={() =>
                   onUpdate({
                     textAlignVertical: "middle",
@@ -1009,18 +961,11 @@ export function TypographySection({
                 <AlignCenterVerticalIcon size={14} />
               </IconButton>
               <IconButton
-                variant={
-                  node.textAlignVertical === "bottom"
-                    ? "default"
-                    : "secondary"
-                }
+                variant="ghost"
                 size="sm"
                 tooltip="Align bottom"
-                className={`flex-1 ${
-                  node.textAlignVertical === "bottom"
-                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                    : ""
-                }`}
+                aria-pressed={node.textAlignVertical === "bottom"}
+                className={segmentedItemClass(node.textAlignVertical === "bottom", { icon: true, className: "flex-1" })}
                 onClick={() =>
                   onUpdate({
                     textAlignVertical: "bottom",
@@ -1029,7 +974,7 @@ export function TypographySection({
               >
                 <AlignBottomIcon size={14} />
               </IconButton>
-            </ButtonGroup>
+            </SegmentedGroup>
           </div>
         </PropertyRow>
       </div>
@@ -1040,62 +985,54 @@ export function TypographySection({
         </div>
         <PropertyRow>
           <div className="flex items-center gap-1 flex-1">
-            <ButtonGroup orientation="horizontal" className={`flex-1 ${segmentedButtonGroupClass}`}>
+            <SegmentedGroup className="flex-1" aria-label="List type">
               <IconButton
-                variant={firstParagraphAttrs.listType === "bullet" ? "default" : "secondary"}
+                variant="ghost"
                 size="sm"
                 tooltip="Bulleted list (⌘⇧8)"
                 aria-label="Bulleted list"
                 aria-pressed={firstParagraphAttrs.listType === "bullet"}
-                className={`flex-1 ${
-                  firstParagraphAttrs.listType === "bullet"
-                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                    : ""
-                }`}
+                className={segmentedItemClass(firstParagraphAttrs.listType === "bullet", { icon: true, className: "flex-1" })}
                 onClick={() => applyListType("bullet")}
               >
                 <ListBulletsIcon size={14} />
               </IconButton>
               <IconButton
-                variant={firstParagraphAttrs.listType === "number" ? "default" : "secondary"}
+                variant="ghost"
                 size="sm"
                 tooltip="Numbered list (⌘⇧7)"
                 aria-label="Numbered list"
                 aria-pressed={firstParagraphAttrs.listType === "number"}
-                className={`flex-1 ${
-                  firstParagraphAttrs.listType === "number"
-                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                    : ""
-                }`}
+                className={segmentedItemClass(firstParagraphAttrs.listType === "number", { icon: true, className: "flex-1" })}
                 onClick={() => applyListType("number")}
               >
                 <ListNumbersIcon size={14} />
               </IconButton>
-            </ButtonGroup>
+            </SegmentedGroup>
           </div>
           <div className="flex items-center gap-1 flex-1">
-            <ButtonGroup orientation="horizontal" className={`flex-1 ${segmentedButtonGroupClass}`}>
+            <SegmentedGroup className="flex-1" aria-label="List indent">
               <IconButton
-                variant="secondary"
+                variant="ghost"
                 size="sm"
                 tooltip="Outdent (Shift+Tab)"
                 aria-label="Outdent"
-                className="flex-1"
+                className={segmentedActionClass({ icon: true, className: "flex-1" })}
                 onClick={() => applyIndent(-1)}
               >
                 <TextOutdentIcon size={14} />
               </IconButton>
               <IconButton
-                variant="secondary"
+                variant="ghost"
                 size="sm"
                 tooltip="Indent (Tab)"
                 aria-label="Indent"
-                className="flex-1"
+                className={segmentedActionClass({ icon: true, className: "flex-1" })}
                 onClick={() => applyIndent(1)}
               >
                 <TextIndentIcon size={14} />
               </IconButton>
-            </ButtonGroup>
+            </SegmentedGroup>
           </div>
         </PropertyRow>
       </div>
@@ -1104,58 +1041,41 @@ export function TypographySection({
         <div className="text-[10px] font-normal text-text-muted">
           Resizing
         </div>
-        <ButtonGroup orientation="horizontal" className={`w-full ${segmentedButtonGroupClass}`}>
+        <SegmentedGroup className="w-full" aria-label="Resizing">
           <IconButton
-            variant={
-              node.textWidthMode === "auto" ? "default" : "secondary"
-            }
+            variant="ghost"
             size="sm"
             tooltip="Auto width"
             aria-label="Auto width"
-            className={`flex-1 ${
-              node.textWidthMode === "auto"
-                ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                : ""
-            }`}
+            aria-pressed={node.textWidthMode === "auto"}
+            className={segmentedItemClass(node.textWidthMode === "auto", { icon: true, className: "flex-1" })}
             onClick={() => setTextWidthMode("auto")}
           >
             <ArrowsOutIcon size={14} />
           </IconButton>
           <IconButton
-            variant={
-              node.textWidthMode === "fixed" ? "default" : "secondary"
-            }
+            variant="ghost"
             size="sm"
             tooltip="Fixed width"
             aria-label="Fixed width"
-            className={`flex-1 ${
-              node.textWidthMode === "fixed"
-                ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                : ""
-            }`}
+            aria-pressed={node.textWidthMode === "fixed"}
+            className={segmentedItemClass(node.textWidthMode === "fixed", { icon: true, className: "flex-1" })}
             onClick={() => setTextWidthMode("fixed")}
           >
             <ArrowLineRightIcon size={14} />
           </IconButton>
           <IconButton
-            variant={
-              node.textWidthMode === "fixed-height"
-                ? "default"
-                : "secondary"
-            }
+            variant="ghost"
             size="sm"
             tooltip="Fixed size"
             aria-label="Fixed size"
-            className={`flex-1 ${
-              node.textWidthMode === "fixed-height"
-                ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                : ""
-            }`}
+            aria-pressed={node.textWidthMode === "fixed-height"}
+            className={segmentedItemClass(node.textWidthMode === "fixed-height", { icon: true, className: "flex-1" })}
             onClick={() => setTextWidthMode("fixed-height")}
           >
             <ArticleIcon size={14} />
           </IconButton>
-        </ButtonGroup>
+        </SegmentedGroup>
       </div>
       {isWrapped && (
         <PropertyRow>
@@ -1163,18 +1083,14 @@ export function TypographySection({
             <div className="text-[10px] font-normal text-text-muted">
               Truncate text
             </div>
-            <ButtonGroup orientation="horizontal" className={`w-full ${segmentedButtonGroupClass}`}>
+            <SegmentedGroup className="w-full" aria-label="Truncate text">
               <IconButton
-                variant={!node.truncateText ? "default" : "secondary"}
+                variant="ghost"
                 size="sm"
                 tooltip="No truncation"
                 aria-label="No truncation"
                 aria-pressed={!node.truncateText}
-                className={`flex-1 ${
-                  !node.truncateText
-                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                    : ""
-                }`}
+                className={segmentedItemClass(!node.truncateText, { icon: true, className: "flex-1" })}
                 onClick={() =>
                   onUpdate({
                     truncateText: false,
@@ -1184,16 +1100,12 @@ export function TypographySection({
                 <MinusIcon size={14} />
               </IconButton>
               <IconButton
-                variant={node.truncateText ? "default" : "secondary"}
+                variant="ghost"
                 size="sm"
                 tooltip="Truncate with ellipsis"
                 aria-label="Truncate with ellipsis"
                 aria-pressed={!!node.truncateText}
-                className={`flex-1 ${
-                  node.truncateText
-                    ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                    : ""
-                }`}
+                className={segmentedItemClass(node.truncateText, { icon: true, className: "flex-1" })}
                 onClick={() =>
                   onUpdate({
                     truncateText: true,
@@ -1202,7 +1114,7 @@ export function TypographySection({
               >
                 <TruncateTextIcon />
               </IconButton>
-            </ButtonGroup>
+            </SegmentedGroup>
           </div>
           <NumberInput
             label="Max Lines"
@@ -1289,18 +1201,14 @@ export function TypographySection({
               step={1}
             />
             <div className="flex items-center gap-1 flex-1">
-              <ButtonGroup orientation="horizontal" className={`flex-1 ${segmentedButtonGroupClass}`}>
+              <SegmentedGroup className="flex-1" aria-label="Path direction">
                 <IconButton
-                  variant={!node.textPath.flip ? "default" : "secondary"}
+                  variant="ghost"
                   size="sm"
                   tooltip="Flip text orientation"
                   aria-label="Flip text orientation off"
                   aria-pressed={!node.textPath.flip}
-                  className={`flex-1 ${
-                    !node.textPath.flip
-                      ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                      : ""
-                  }`}
+                  className={segmentedItemClass(!node.textPath.flip, { icon: true, className: "flex-1" })}
                   onClick={() =>
                     onUpdate({
                       textPath: { ...node.textPath!, flip: false },
@@ -1310,16 +1218,12 @@ export function TypographySection({
                   <ArrowLineRightIcon size={14} />
                 </IconButton>
                 <IconButton
-                  variant={node.textPath.flip ? "default" : "secondary"}
+                  variant="ghost"
                   size="sm"
                   tooltip="Flip text to the other side of the path"
                   aria-label="Flip text orientation on"
                   aria-pressed={!!node.textPath.flip}
-                  className={`flex-1 ${
-                    node.textPath.flip
-                      ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                      : ""
-                  }`}
+                  className={segmentedItemClass(node.textPath.flip, { icon: true, className: "flex-1" })}
                   onClick={() =>
                     onUpdate({
                       textPath: { ...node.textPath!, flip: true },
@@ -1328,7 +1232,7 @@ export function TypographySection({
                 >
                   <ArrowLineRightIcon size={14} className="-scale-x-100" />
                 </IconButton>
-              </ButtonGroup>
+              </SegmentedGroup>
             </div>
           </PropertyRow>
           <PropertyRow>
@@ -1336,18 +1240,14 @@ export function TypographySection({
               <div className="text-[10px] font-normal text-text-muted">
                 Side
               </div>
-              <ButtonGroup orientation="horizontal" className={`w-full ${segmentedButtonGroupClass}`}>
+              <SegmentedGroup className="w-full" aria-label="Path side">
                 <IconButton
-                  variant={node.textPath.side === "left" ? "default" : "secondary"}
+                  variant="ghost"
                   size="sm"
                   tooltip="Text above the path"
                   aria-label="Text above the path"
                   aria-pressed={node.textPath.side === "left"}
-                  className={`flex-1 ${
-                    node.textPath.side === "left"
-                      ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                      : ""
-                  }`}
+                  className={segmentedItemClass(node.textPath.side === "left", { icon: true, className: "flex-1" })}
                   onClick={() =>
                     onUpdate({
                       textPath: { ...node.textPath!, side: "left" },
@@ -1357,16 +1257,12 @@ export function TypographySection({
                   <AlignTopIcon size={14} />
                 </IconButton>
                 <IconButton
-                  variant={node.textPath.side === "right" ? "default" : "secondary"}
+                  variant="ghost"
                   size="sm"
                   tooltip="Text below the path"
                   aria-label="Text below the path"
                   aria-pressed={node.textPath.side === "right"}
-                  className={`flex-1 ${
-                    node.textPath.side === "right"
-                      ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                      : ""
-                  }`}
+                  className={segmentedItemClass(node.textPath.side === "right", { icon: true, className: "flex-1" })}
                   onClick={() =>
                     onUpdate({
                       textPath: { ...node.textPath!, side: "right" },
@@ -1375,7 +1271,7 @@ export function TypographySection({
                 >
                   <AlignBottomIcon size={14} />
                 </IconButton>
-              </ButtonGroup>
+              </SegmentedGroup>
             </div>
           </PropertyRow>
           {textPathOverflows(node) && (

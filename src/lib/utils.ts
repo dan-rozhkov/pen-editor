@@ -3,10 +3,16 @@ import { extendTailwindMerge } from "tailwind-merge";
 
 // `rounded-control*` radii (src/index.css @theme) must merge like any other
 // `rounded-*` utility, so a className override replaces the primitive's default.
-const twMerge = extendTailwindMerge({
+const twMerge = extendTailwindMerge<"control-surface">({
   extend: {
     theme: {
       radius: ["control", "control-xs", "control-sm", "control-lg", "control-xl", "control-inset"],
+    },
+    // `control-raised` / `control-elevation` (src/index.css @utility) replace
+    // each other (later wins) and conflict with nothing else, so a variant's
+    // fill (`bg-*`) or `shadow-*` override cannot drop them.
+    classGroups: {
+      "control-surface": ["control-raised", "control-elevation"],
     },
   },
 });

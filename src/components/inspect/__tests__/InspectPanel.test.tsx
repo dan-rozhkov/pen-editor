@@ -99,8 +99,11 @@ describe("<InspectPanel />", () => {
     useDevModeStore.getState().setCodegenFormat("react");
     render(<InspectPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Code" }));
-    expect(screen.getByRole("button", { name: "Inline" }).className).toContain("bg-surface-panel");
-    expect(screen.getByRole("button", { name: "Tailwind" }).className).toContain("bg-secondary");
+    const tokens = (name: string) => screen.getByRole("button", { name }).className.split(/\s+/);
+    expect(tokens("Inline")).toContain("control-raised");
+    expect(tokens("Tailwind")).not.toContain("control-raised");
+    expect(screen.getByRole("button", { name: "Inline" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Tailwind" }).getAttribute("aria-pressed")).toBe("false");
   });
 
   it("defaults to List mode without the Code section", () => {

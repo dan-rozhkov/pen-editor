@@ -19,7 +19,7 @@ describe("CustomColorPicker format selector", () => {
     expect(hexBtn).toBeTruthy();
     expect(rgbBtn).toBeTruthy();
     expect(hslBtn).toBeTruthy();
-    // The shared properties-panel ButtonGroup marks its active option.
+    // The segmented group marks its active option with aria-pressed.
     expect(hexBtn.getAttribute("aria-pressed")).toBe("true");
     expect(rgbBtn.getAttribute("aria-pressed")).toBe("false");
 

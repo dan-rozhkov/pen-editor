@@ -5,7 +5,7 @@ import { Input } from "./input";
 import { Label } from "./label";
 import { SelectWithOptions } from "./select";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "./input-group";
-import { ButtonGroup } from "./button-group";
+import { SegmentedGroup, segmentedActionClass } from "./segmented-control";
 import { IconButton } from "./IconButton";
 import {
   DropdownMenu,
@@ -526,30 +526,30 @@ export function FlipControls({
   const readOnly = useReadOnly();
   return (
     <IconContext.Provider value={{ weight: "light" }}>
-      <ButtonGroup orientation="horizontal" className="w-full">
+      <SegmentedGroup className="w-full" aria-label="Flip">
         <IconButton
-          variant="secondary"
+          variant="ghost"
           size="sm"
-          className="flex-1"
+          className={segmentedActionClass({ icon: true, className: "flex-1" })}
           onClick={() => onFlipXChange(!flipX)}
           disabled={readOnly}
           tooltip="Flip horizontal"
           title="Flip horizontal"
         >
-          <FlipHorizontalIcon className="size-[18px]!" />
+          <FlipHorizontalIcon />
         </IconButton>
         <IconButton
-          variant="secondary"
+          variant="ghost"
           size="sm"
-          className="flex-1"
+          className={segmentedActionClass({ icon: true, className: "flex-1" })}
           onClick={() => onFlipYChange(!flipY)}
           disabled={readOnly}
           tooltip="Flip vertical"
           title="Flip vertical"
         >
-          <FlipVerticalIcon className="size-[18px]!" />
+          <FlipVerticalIcon />
         </IconButton>
-      </ButtonGroup>
+      </SegmentedGroup>
     </IconContext.Provider>
   );
 }

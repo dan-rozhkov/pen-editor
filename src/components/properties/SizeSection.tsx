@@ -38,7 +38,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ButtonGroup } from "@/components/ui/button-group";
+import { SegmentedGroup, segmentedItemClass } from "@/components/ui/segmented-control";
 import { generatePolygonPoints } from "@/utils/polygonUtils";
 import { mountHtmlWithBodyStyles } from "@/utils/embedHtmlUtils";
 import { normalizeHtmlForEmbedRender } from "@/pixi/renderers/htmlTexture/foreignObject";
@@ -49,14 +49,7 @@ const sizingOptions = [
   { value: "fit_content", label: "Fit" },
 ];
 
-const sizingModeGroupClass =
-  "flex-1 h-6 rounded-md bg-secondary gap-px [&>[data-slot]]:rounded-[5px]! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
-
-const sizingModeButtonClass =
-  "flex-1 h-full border-transparent bg-transparent text-text-muted hover:bg-surface-elevated hover:text-text-primary";
-
-const activeSizingModeButtonClass =
-  "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel";
+const sizingModeGroupClass = "flex-1";
 
 function scaleLinePoints(node: SceneNode, scaleX: number, scaleY: number): number[] {
   const ln = node as unknown as { points: number[] };
@@ -523,17 +516,20 @@ export function SizeSection({
             <span className="text-[11px] text-text-muted w-4 shrink-0">
               W
             </span>
-            <ButtonGroup orientation="horizontal" className={sizingModeGroupClass}>
+            <SegmentedGroup className={sizingModeGroupClass} aria-label="Width sizing">
               {sizingOptions.map((option) => (
                 <Button
                   key={option.value}
                   variant="ghost"
                   size="sm"
-                  className={cn(
-                    sizingModeButtonClass,
+                  aria-pressed={
                     !mixedKeys?.has("sizing") &&
-                      (node.sizing?.widthMode ?? "fixed") === option.value &&
-                      activeSizingModeButtonClass,
+                    (node.sizing?.widthMode ?? "fixed") === option.value
+                  }
+                  className={segmentedItemClass(
+                    !mixedKeys?.has("sizing") &&
+                      (node.sizing?.widthMode ?? "fixed") === option.value,
+                    { className: "flex-1" },
                   )}
                   onClick={() => {
                     const newMode = option.value as SizingMode;
@@ -584,23 +580,26 @@ export function SizeSection({
                   {option.label}
                 </Button>
               ))}
-            </ButtonGroup>
+            </SegmentedGroup>
           </div>
           <div className="flex items-center gap-1">
             <span className="text-[11px] text-text-muted w-4 shrink-0">
               H
             </span>
-            <ButtonGroup orientation="horizontal" className={sizingModeGroupClass}>
+            <SegmentedGroup className={sizingModeGroupClass} aria-label="Height sizing">
               {sizingOptions.map((option) => (
                 <Button
                   key={option.value}
                   variant="ghost"
                   size="sm"
-                  className={cn(
-                    sizingModeButtonClass,
+                  aria-pressed={
                     !mixedKeys?.has("sizing") &&
-                      (node.sizing?.heightMode ?? "fixed") === option.value &&
-                      activeSizingModeButtonClass,
+                    (node.sizing?.heightMode ?? "fixed") === option.value
+                  }
+                  className={segmentedItemClass(
+                    !mixedKeys?.has("sizing") &&
+                      (node.sizing?.heightMode ?? "fixed") === option.value,
+                    { className: "flex-1" },
                   )}
                   onClick={() => {
                     const newMode = option.value as SizingMode;
@@ -651,7 +650,7 @@ export function SizeSection({
                   {option.label}
                 </Button>
               ))}
-            </ButtonGroup>
+            </SegmentedGroup>
           </div>
         </>
       )}

@@ -20,3 +20,21 @@ describe("cn radius merging", () => {
     expect(cn("rounded-control", "rounded-r-none")).toBe("rounded-control rounded-r-none");
   });
 });
+
+describe("cn control surface merging", () => {
+  it("lets control-raised and control-elevation replace each other (later wins)", () => {
+    expect(cn("control-elevation", "control-raised")).toBe("control-raised");
+    expect(cn("control-raised", "control-elevation")).toBe("control-elevation");
+  });
+  it("keeps a control surface next to bg and shadow overrides", () => {
+    expect(cn("control-elevation border-menu-border bg-primary text-primary-foreground")).toBe(
+      "control-elevation border-menu-border bg-primary text-primary-foreground",
+    );
+    expect(cn("control-raised", "shadow-none")).toBe("control-raised shadow-none");
+    expect(cn("control-raised", "bg-transparent")).toBe("control-raised bg-transparent");
+    expect(cn("control-raised", "control-elevation")).toBe("control-elevation");
+  });
+  it("keeps a control surface next to state-prefixed overrides", () => {
+    expect(cn("control-raised", "hover:bg-transparent")).toBe("control-raised hover:bg-transparent");
+  });
+});

@@ -16,7 +16,7 @@ import {
 } from "react-aria-components";
 import { EyedropperIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
+import { SegmentedGroup, segmentedItemClass } from "@/components/ui/segmented-control";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const supportsEyeDropper = typeof window !== "undefined" && "EyeDropper" in window;
@@ -49,12 +49,6 @@ const INPUT_CLASS_BASE =
   "bg-secondary text-secondary-foreground focus-visible:ring-1 focus-visible:ring-accent-light aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 h-6 rounded-control-sm py-0.5 text-sm transition-colors aria-invalid:ring-[2px] md:text-xs/relaxed placeholder:text-muted-foreground w-full min-w-0 outline-none";
 const HEX_INPUT_CLASS = `${INPUT_CLASS_BASE} px-2`;
 const CHANNEL_INPUT_CLASS = `${INPUT_CLASS_BASE} px-1 text-center`;
-const FORMAT_TOGGLE_GROUP_CLASS =
-  "h-6 rounded-control-sm bg-secondary gap-px [&>[data-slot]]:rounded-control-sm! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
-const FORMAT_TOGGLE_BUTTON_CLASS =
-  "flex-1 h-full border-transparent bg-transparent text-text-muted hover:bg-surface-elevated hover:text-text-primary";
-const ACTIVE_FORMAT_TOGGLE_BUTTON_CLASS =
-  "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel";
 
 function retainChannelInputFocus(event: FocusEvent<HTMLInputElement>) {
   const input = event.currentTarget;
@@ -138,9 +132,9 @@ export function CustomColorPicker({
               </SliderTrack>
             </ColorSlider>
 
-            {/* Keep the picker format controls in the same ButtonGroup used by
+            {/* Keep the picker format controls in the same segmented track used by
                 the properties panel; a dropdown would escape this popover. */}
-            <ButtonGroup orientation="horizontal" className={`w-full ${FORMAT_TOGGLE_GROUP_CLASS}`}>
+            <SegmentedGroup className="w-full" aria-label="Colour format">
               {FORMAT_OPTIONS.map((option) => {
                 const isActive = format === option.value;
                 return (
@@ -148,9 +142,7 @@ export function CustomColorPicker({
                     key={option.value}
                     variant="ghost"
                     size="sm"
-                    className={`${FORMAT_TOGGLE_BUTTON_CLASS} ${
-                      isActive ? ACTIVE_FORMAT_TOGGLE_BUTTON_CLASS : ""
-                    }`}
+                    className={segmentedItemClass(isActive, { className: "flex-1" })}
                     aria-pressed={isActive}
                     onMouseDown={(event) => event.stopPropagation()}
                     onPointerDown={(event) => event.stopPropagation()}
@@ -160,7 +152,7 @@ export function CustomColorPicker({
                   </Button>
                 );
               })}
-            </ButtonGroup>
+            </SegmentedGroup>
 
             {/* Input row + eyedropper */}
             <div className="flex items-center gap-1">

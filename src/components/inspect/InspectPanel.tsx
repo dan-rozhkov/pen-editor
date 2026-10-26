@@ -13,7 +13,7 @@ import { buildInspectData } from "@/lib/inspect/buildInspectData";
 import { getEffectiveThemeForNode } from "@/utils/nodeThemeUtils";
 import { formatShortcut } from "@/lib/commands/shortcutFormat";
 import type { FlatSceneNode } from "@/types/scene";
-import { ButtonGroup } from "@/components/ui/button-group";
+import { SegmentedGroup, segmentedItemClass } from "@/components/ui/segmented-control";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import { SelectWithOptions } from "@/components/ui/select";
@@ -55,11 +55,6 @@ const UNIT_OPTIONS = [
   { value: "px", label: "px" },
   { value: "rem", label: "rem" },
 ];
-
-const modeToggleGroupClass =
-  "h-6 rounded-control-sm bg-secondary gap-px [&>[data-slot]]:rounded-control-sm! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
-const activeModeToggleClass =
-  "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel";
 
 function Section({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
   const [expanded, setExpanded] = useState(true);
@@ -121,26 +116,28 @@ export function InspectPanel() {
   return (
     <div className="w-[300px] h-full flex flex-col bg-surface-panel border-l border-border-default overflow-hidden">
       <div className="flex h-[58.5px] items-center justify-between gap-2 px-3 py-3 border-b border-border-default">
-        <ButtonGroup orientation="horizontal" className={modeToggleGroupClass}>
+        <SegmentedGroup aria-label="Inspect mode">
           <Button
             type="button"
-            variant={mode === "code" ? "default" : "secondary"}
+            variant="ghost"
             size="sm"
-            className={mode === "code" ? activeModeToggleClass : undefined}
+            aria-pressed={mode === "code"}
+            className={segmentedItemClass(mode === "code")}
             onClick={() => setMode("code")}
           >
             Code
           </Button>
           <Button
             type="button"
-            variant={mode === "list" ? "default" : "secondary"}
+            variant="ghost"
             size="sm"
-            className={mode === "list" ? activeModeToggleClass : undefined}
+            aria-pressed={mode === "list"}
+            className={segmentedItemClass(mode === "list")}
             onClick={() => setMode("list")}
           >
             List
           </Button>
-        </ButtonGroup>
+        </SegmentedGroup>
         <div className="flex items-center gap-1.5">
           <SelectWithOptions
             size="sm"

@@ -15,15 +15,10 @@ import {
 import { IconButton } from "@/components/ui/IconButton";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { segmentedItemClass, segmentedToggleClass } from "@/components/ui/segmented-control";
 
 const alignmentGridClass =
-  "grid grid-cols-3 rounded-control-sm bg-secondary gap-px justify-center items-center";
-
-const alignmentButtonClass =
-  "h-6 rounded-control-sm border border-transparent flex items-center justify-center text-text-muted hover:bg-surface-elevated hover:text-text-primary";
-
-const activeAlignmentButtonClass =
-  "border-border-default bg-surface-panel text-text-primary hover:bg-surface-panel";
+  "grid grid-cols-3 gap-0.5 rounded-control-lg bg-secondary p-[3px]";
 
 interface AutoLayoutSectionProps {
   node: FrameNode;
@@ -157,12 +152,7 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys, onEnableAutoLayou
               aria-label="Wrap"
               aria-pressed={flexWrap}
               onClick={() => setFlexWrap(!flexWrap)}
-              className={cn(
-                "self-end",
-                flexWrap
-                  ? "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel"
-                  : "text-text-primary hover:bg-secondary hover:text-text-primary",
-              )}
+              className={segmentedToggleClass(flexWrap, "self-end")}
             >
               <ArrowUDownLeftIcon />
             </IconButton>
@@ -258,11 +248,14 @@ export function AutoLayoutSection({ node, onUpdate, mixedKeys, onEnableAutoLayou
                       <TooltipTrigger
                         render={
                           <button
-                            className={cn(
-                              alignmentButtonClass,
-                              isActive && activeAlignmentButtonClass,
-                              showSpaceBetweenIcon && "ring-1 ring-border-hover",
-                            )}
+                            type="button"
+                            aria-pressed={isActive}
+                            className={segmentedItemClass(isActive, {
+                              className: cn(
+                                "w-full px-0",
+                                showSpaceBetweenIcon && "outline outline-1 -outline-offset-1 outline-border-hover",
+                              ),
+                            })}
                             onClick={handleClick}
                             onDoubleClick={handleDoubleClick}
                             aria-label={buttonTitle}

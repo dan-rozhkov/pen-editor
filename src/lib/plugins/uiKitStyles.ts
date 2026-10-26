@@ -3,7 +3,7 @@
  * app's own primitives (`src/components/ui/button.tsx`, `input.tsx`,
  * `select.tsx`, `textarea.tsx`, `checkbox.tsx`, `label.tsx`, plus badge,
  * card, separator, slider, tabs, inline-alert, table, field, IconButton,
- * button-group and input-group) so a plugin's markup can use `.pen-*`
+ * the former button-group and input-group) so a plugin's markup can use `.pen-*`
  * classes instead of hand-rolled CSS and still match the editor's look in
  * both themes. Only primitives a static sandboxed iframe (no framework, no
  * Radix portals) can faithfully reproduce are covered — see
@@ -340,7 +340,7 @@ body {
   padding: 0;
 }
 
-/* Joins adjacent \`.pen-button\`s into one row (\`button-group.tsx\`): flatten
+/* Joins adjacent \`.pen-button\`s into one row (the former \`button-group.tsx\`): flatten
    the shared edge, pull the border into a 1px overlap so adjacent buttons
    don't double it up, and keep only the group's outer corners rounded. */
 .pen-button-group {

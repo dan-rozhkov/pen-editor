@@ -22,7 +22,7 @@ import type { FlatFrameNode, FlatGroupNode, FrameNode, GroupNode, SceneNode } fr
 import { useSceneStore } from "@/store/sceneStore";
 import { PropertySection } from "@/components/ui/PropertyInputs";
 import { Input } from "@/components/ui/input";
-import { ButtonGroup } from "@/components/ui/button-group";
+import { SegmentedGroup, segmentedActionClass } from "@/components/ui/segmented-control";
 import { IconButton } from "@/components/ui/IconButton";
 
 interface AlignmentControlsProps {
@@ -73,34 +73,38 @@ export function AlignmentControls({
       <div className="flex flex-col gap-1">
         {showLabel && <div className="text-[10px] text-text-primary">Alignment</div>}
         <div className="flex w-full gap-2">
-          <ButtonGroup orientation="horizontal" className="min-w-0 flex-1">
-            <IconButton variant="secondary" size="sm" className="flex-1" onClick={() => handleAlign("left")} tooltip="Align left">
-              <AlignLeftIcon className="size-[18px]!" />
+          <SegmentedGroup className="min-w-0 flex-1" aria-label="Align horizontally">
+            <IconButton variant="ghost" size="sm" className={segmentedActionClass({ icon: true, className: "flex-1" })} onClick={() => handleAlign("left")} tooltip="Align left">
+              <AlignLeftIcon />
             </IconButton>
-            <IconButton variant="secondary" size="sm" className="flex-1" onClick={() => handleAlign("centerH")} tooltip="Align center horizontally">
-              <AlignCenterHorizontalIcon className="size-[18px]!" />
+            <IconButton variant="ghost" size="sm" className={segmentedActionClass({ icon: true, className: "flex-1" })} onClick={() => handleAlign("centerH")} tooltip="Align center horizontally">
+              <AlignCenterHorizontalIcon />
             </IconButton>
-            <IconButton variant="secondary" size="sm" className="flex-1" onClick={() => handleAlign("right")} tooltip="Align right">
-              <AlignRightIcon className="size-[18px]!" />
+            <IconButton variant="ghost" size="sm" className={segmentedActionClass({ icon: true, className: "flex-1" })} onClick={() => handleAlign("right")} tooltip="Align right">
+              <AlignRightIcon />
             </IconButton>
-          </ButtonGroup>
-          <ButtonGroup orientation="horizontal" className="min-w-0 flex-1">
-            <IconButton variant="secondary" size="sm" className="flex-1" onClick={() => handleAlign("top")} tooltip="Align top">
-              <AlignTopIcon className="size-[18px]!" />
+          </SegmentedGroup>
+          <SegmentedGroup className="min-w-0 flex-1" aria-label="Align vertically">
+            <IconButton variant="ghost" size="sm" className={segmentedActionClass({ icon: true, className: "flex-1" })} onClick={() => handleAlign("top")} tooltip="Align top">
+              <AlignTopIcon />
             </IconButton>
-            <IconButton variant="secondary" size="sm" className="flex-1" onClick={() => handleAlign("centerV")} tooltip="Align center vertically">
-              <AlignCenterVerticalIcon className="size-[18px]!" />
+            <IconButton variant="ghost" size="sm" className={segmentedActionClass({ icon: true, className: "flex-1" })} onClick={() => handleAlign("centerV")} tooltip="Align center vertically">
+              <AlignCenterVerticalIcon />
             </IconButton>
-            <IconButton variant="secondary" size="sm" className="flex-1" onClick={() => handleAlign("bottom")} tooltip="Align bottom">
-              <AlignBottomIcon className="size-[18px]!" />
+            <IconButton variant="ghost" size="sm" className={segmentedActionClass({ icon: true, className: "flex-1" })} onClick={() => handleAlign("bottom")} tooltip="Align bottom">
+              <AlignBottomIcon />
             </IconButton>
-          </ButtonGroup>
+          </SegmentedGroup>
           {!isSingleNodeInFrame && (
-            <ButtonGroup orientation="horizontal" className="shrink-0">
-              <IconButton variant="secondary" size="sm" onClick={handleTidyUp} tooltip="Tidy up (Ctrl+Alt+T)">
-                <GridNineIcon className="size-[18px]!" />
-              </IconButton>
-            </ButtonGroup>
+            <IconButton
+              variant="ghost"
+              size="icon-sm"
+              className="shrink-0 self-center text-text-muted [&_svg]:size-4"
+              onClick={handleTidyUp}
+              tooltip="Tidy up (Ctrl+Alt+T)"
+            >
+              <GridNineIcon />
+            </IconButton>
           )}
         </div>
       </div>

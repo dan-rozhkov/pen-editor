@@ -8,7 +8,7 @@ import { buildTailwindCode } from "@/lib/codegen/tailwind";
 import { buildReactCode } from "@/lib/codegen/react";
 import { highlightCode, type Token } from "@/lib/codegen/highlight";
 import { writeTextToClipboard } from "@/utils/clipboard";
-import { ButtonGroup } from "@/components/ui/button-group";
+import { SegmentedGroup, segmentedItemClass } from "@/components/ui/segmented-control";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import { IconSwap } from "@/components/ui/IconSwap";
@@ -130,11 +130,6 @@ const REACT_STYLE_OPTIONS: { value: CodegenReactStyle; label: string }[] = [
   { value: "tailwind", label: "Tailwind" },
 ];
 
-const reactStyleToggleGroupClass =
-  "h-6 rounded-control-sm bg-secondary gap-px [&>[data-slot]]:rounded-control-sm! [&>[data-slot]]:border [&>[data-slot]~[data-slot]]:border-l";
-const activeReactStyleToggleClass =
-  "border-border-default bg-surface-panel text-text-primary shadow-none hover:bg-surface-panel";
-
 export function CodeSection({ selectedIds }: { selectedIds: string[] }) {
   const nodesById = useSceneStore((s) => s.nodesById);
   const childrenById = useSceneStore((s) => s.childrenById);
@@ -179,20 +174,21 @@ export function CodeSection({ selectedIds }: { selectedIds: string[] }) {
           className="w-fit"
         />
         {format === "react" && (
-          <ButtonGroup orientation="horizontal" className={reactStyleToggleGroupClass}>
+          <SegmentedGroup aria-label="React style">
             {REACT_STYLE_OPTIONS.map((opt) => (
               <Button
                 key={opt.value}
                 type="button"
-                variant={reactStyle === opt.value ? "default" : "secondary"}
+                variant="ghost"
                 size="sm"
-                className={reactStyle === opt.value ? activeReactStyleToggleClass : undefined}
+                aria-pressed={reactStyle === opt.value}
+                className={segmentedItemClass(reactStyle === opt.value)}
                 onClick={() => setReactStyle(opt.value)}
               >
                 {opt.label}
               </Button>
             ))}
-          </ButtonGroup>
+          </SegmentedGroup>
         )}
       </div>
 
