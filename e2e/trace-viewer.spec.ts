@@ -237,7 +237,8 @@ test("saves the state captures when asked", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
 
   await openTrace(page);
-  const [doc] = await Promise.all([page.waitForEvent("popup"), page.getByRole("button", { name: "Open result" }).click()]);
+  await page.getByRole("button", { name: "Trace options" }).click();
+  const [doc] = await Promise.all([page.waitForEvent("popup"), page.getByRole("menuitem", { name: "Open result" }).click()]);
   await doc.waitForLoadState("load");
   await expect(doc.getByText("Result", { exact: false }).first()).toBeVisible();
   await shot("14-open-result-doc", doc);

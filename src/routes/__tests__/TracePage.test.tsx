@@ -29,7 +29,8 @@ describe("TracePage", () => {
     // The result is a document, not page text.
     expect(screen.queryByText(/Result:/)).toBeNull();
     expect(screen.queryByText("The trial button is missing on the pricing page.")).toBeNull();
-    expect(screen.getByRole("button", { name: "Open result" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Trace options" }));
+    expect(screen.getByRole("menuitem", { name: "Open result" })).toBeTruthy();
   });
 
   it("keeps the header to one row and puts the run facts in a popover", async () => {

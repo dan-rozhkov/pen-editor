@@ -2,10 +2,8 @@ import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
 import { SquareHalfBottomIcon } from "@/components/icons";
 import { memo, type ReactNode } from "react";
 import { IconButton } from "@/components/ui/IconButton";
-import { DownloadButton } from "./DownloadButton";
-import { PlaywrightButton } from "./PlaywrightButton";
-import { ResultButton } from "./ResultButton";
 import { RunDetails } from "./RunDetails";
+import { TraceActionsMenu } from "./TraceActionsMenu";
 import { BAR_ROW, OutcomeBadge } from "./parts";
 import { describeOutcome, goalFirstLine } from "./traceModel";
 
@@ -31,9 +29,7 @@ export const TraceHeader = memo(function TraceHeader({ trace, cloudTraceId, deta
         </h1>
         <OutcomeBadge tone={outcome.tone} label={outcome.label} data-testid="trace-outcome" />
         <RunDetails trace={trace} />
-        <ResultButton trace={trace} />
-        <DownloadButton trace={trace} cloudTraceId={cloudTraceId} />
-        <PlaywrightButton trace={trace} />
+        <TraceActionsMenu trace={trace} cloudTraceId={cloudTraceId} />
         <IconButton
           tooltip={detailsOpen ? "Hide details" : "Show details"}
           aria-label="Details panel"
