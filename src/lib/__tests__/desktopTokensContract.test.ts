@@ -76,6 +76,26 @@ describe.runIf(desktopExists)("desktop token contract", () => {
     expect(norm(pair.dark)).toBe(norm(blockValue(frontend, ".dark", name) ?? "missing in .dark"));
   });
 
+  // Icon gray: the [data-pen-icon] rule lifts near-black icons to --icon-ink-floor, which must be
+  // the menu icon gray's L; the desktop's --icon is that gray in light and the old text color in dark.
+  it("--icon-ink-floor is the L of --menu-muted-foreground", () => {
+    const floor = blockValue(frontend, ":root", "--icon-ink-floor") ?? "missing";
+    expect(norm(blockValue(frontend, ":root", "--menu-muted-foreground") ?? "missing")).toBe(norm(`oklch(${floor} 0 0)`));
+  });
+
+  it("desktop --icon is the menu icon gray (light) and the primary text color (dark)", () => {
+    const pair = desktopPair(desktop, "--icon");
+    expect(norm(pair.light)).toBe(norm(blockValue(frontend, ":root", "--menu-muted-foreground") ?? "missing"));
+    expect(norm(pair.dark)).toBe(norm(blockValue(frontend, ".dark", "--color-text-primary") ?? "missing"));
+  });
+
+  it("desktop --icon-subtle is the same gray at alpha 0.8 (light) and --glass-text (dark)", () => {
+    const pair = desktopPair(desktop, "--icon-subtle");
+    const floor = blockValue(frontend, ":root", "--icon-ink-floor") ?? "missing";
+    expect(norm(pair.light)).toBe(norm(`oklch(${floor} 0 0 / 0.8)`));
+    expect(norm(pair.dark)).toBe(norm(desktopPair(desktop, "--glass-text").dark));
+  });
+
   // Button tokens: the desktop's own buttons mirror the frontend ghost button.
   it("--btn-hover equals ghost hover (--secondary light, surface-hover dark)", () => {
     const pair = desktopPair(desktop, "--btn-hover");

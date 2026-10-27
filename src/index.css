@@ -56,9 +56,11 @@
   --menu: oklch(0.992 0 0);
   --menu-foreground: oklch(0.21 0 0);
   /* Light-theme icon gray: menu icons use it directly, and the
-     [data-pen-icon] rule below lifts near-black icons to it. */
+     [data-pen-icon] rule below lifts near-black icons to it. Kept as
+     literals (desktopTokensContract compares the text with the desktop
+     copy); the same test pins --icon-ink-floor to this L. */
   --icon-ink-floor: 0.52;
-  --menu-muted-foreground: oklch(var(--icon-ink-floor) 0 0);
+  --menu-muted-foreground: oklch(0.52 0 0);
   --menu-highlight: oklch(0.955 0 0);
   --menu-border: oklch(0 0 0 / 0.08);
   --menu-separator: oklch(0 0 0 / 0.07);
