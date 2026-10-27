@@ -1,6 +1,6 @@
 const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif|svg)(\?|$)/i;
 
-function extFromMediaType(mediaType: string | null | undefined): string {
+export function extFromMediaType(mediaType: string | null | undefined): string {
   if (!mediaType) return "png";
   const type = mediaType.split(";")[0].trim().toLowerCase();
   switch (type) {

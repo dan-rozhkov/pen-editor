@@ -2,6 +2,7 @@ import Image, { inputRegex } from "@tiptap/extension-image";
 import { ResizableNodeView, getRenderedAttributes, mergeAttributes, nodeInputRule } from "@tiptap/core";
 import type { MarkdownToken } from "@tiptap/core";
 import { buildImageMarkdown } from "@/lib/docs/insertImage";
+import { decideDocImageOpen, openDocImage } from "@/lib/docs/openDocImage";
 import "./docImage.css";
 
 // Images are resizable by width only. The document is stored as markdown, so the width rides in
@@ -12,6 +13,44 @@ import "./docImage.css";
 //
 // On load a trailing `#width=N` / `&width=N` (N a positive integer) moves into the `width` attr,
 // so `src` never contains it. Height is never stored: the image keeps its aspect ratio.
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+// ArrowSquareOutIcon / DownloadSimpleIcon (components/icons/set/arrows.tsx) as plain DOM; the node
+// view is not React.
+const OPEN_ICON_PATH = "M5.5 2.75h-1a1.75 1.75 0 0 0-1.75 1.75v7a1.75 1.75 0 0 0 1.75 1.75h7a1.75 1.75 0 0 0 1.75-1.75v-1M8.5 7.5l4.75-4.75M8.75 2.75h4.5v4.5";
+const DOWNLOAD_ICON_PATH = "M8 2.75v7.5M3.5 5.75 8 10.25l4.5-4.5M2.75 13.25h10.5";
+
+function createOpenButton(): { button: HTMLButtonElement; sync: (src: string) => void } {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.contentEditable = "false";
+  button.className = "doc-image-open";
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("width", "14");
+  svg.setAttribute("height", "14");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.25");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(SVG_NS, "path");
+  svg.appendChild(path);
+  button.appendChild(svg);
+  // Label and icon follow what a click on this src will do.
+  const sync = (src: string) => {
+    const kind = decideDocImageOpen(src).kind;
+    button.hidden = kind === "none";
+    const download = kind === "download";
+    const label = download ? "Download image" : "Open image in new tab";
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    svg.setAttribute("data-pen-icon", download ? "DownloadSimple" : "ArrowSquareOut");
+    path.setAttribute("d", download ? DOWNLOAD_ICON_PATH : OPEN_ICON_PATH);
+  };
+  return { button, sync };
+}
 
 const WIDTH_SUFFIX = /([#&])width=(\d+)$/;
 
@@ -158,13 +197,21 @@ export const DocImage = Image.extend({
       });
       if (merged.src != null) el.src = merged.src;
       let previous = { ...HTMLAttributes };
-      const syncSource = (src: unknown) => {
+      const applySource = (src: unknown) => {
         if (typeof src === "string" && src !== "") {
           if (el.getAttribute("src") !== src) el.src = src;
           return;
         }
         if (el.hasAttribute("src")) el.removeAttribute("src");
         if (el.src !== "") el.src = "";
+      };
+      // The button reads the live src at click time; `syncSource` keeps it current.
+      let currentSrc = "";
+      const { button: openButton, sync: syncOpenButton } = createOpenButton();
+      const syncSource = (src: unknown) => {
+        currentSrc = typeof src === "string" ? src : "";
+        syncOpenButton(currentSrc);
+        applySource(src);
       };
       syncSource(HTMLAttributes.src);
       const onUpdate = (updated: typeof node) => {
@@ -209,6 +256,30 @@ export const DocImage = Image.extend({
           preserveAspectRatio: alwaysPreserveAspectRatio === true,
         },
       });
+      // Not content. stopPropagation keeps the mouse events from ProseMirror (no node selection, no
+      // drag); `stopEvent` below covers the rest, such as Enter or Space on the focused button.
+      openButton.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+      openButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void openDocImage(currentSrc);
+      });
+      view.wrapper.appendChild(openButton);
+      // ProseMirror reads both hooks off the returned view. Any hook tiptap defines still runs.
+      // Without one, ProseMirror ignores every non-selection mutation in a leaf view; keep that.
+      const hooks = view as unknown as {
+        stopEvent?: (event: Event) => boolean;
+        ignoreMutation?: (mutation: MutationRecord | { type: "selection"; target: Node }) => boolean;
+      };
+      const stopEvent = hooks.stopEvent?.bind(view);
+      const ignoreMutation = hooks.ignoreMutation?.bind(view);
+      hooks.stopEvent = (event) =>
+        (event.target instanceof Node && openButton.contains(event.target)) || (stopEvent?.(event) ?? false);
+      hooks.ignoreMutation = (mutation) =>
+        openButton.contains(mutation.target) || (ignoreMutation ? ignoreMutation(mutation) : mutation.type !== "selection");
       const dom = view.dom;
       const show = () => {
         dom.style.visibility = "";

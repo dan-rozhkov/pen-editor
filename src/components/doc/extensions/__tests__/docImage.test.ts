@@ -1,6 +1,6 @@
 import { Editor } from "@tiptap/core";
 import { NodeSelection } from "@tiptap/pm/state";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DOC_EXTENSIONS } from "@/components/doc/docExtensions";
 import { joinImageWidth, splitImageWidth } from "../docImage";
 
@@ -199,5 +199,61 @@ describe("doc image markdown", () => {
     const again = e.view.dom.querySelector("img")!.closest("div") as HTMLElement;
     expect(again.style.visibility).not.toBe("hidden");
     expect(again.style.pointerEvents).not.toBe("none");
+  });
+
+  describe("open button", () => {
+    const button = (e: Editor) => e.view.dom.querySelector<HTMLButtonElement>("button.doc-image-open");
+
+    it("renders a labelled button inside the resize wrapper", () => {
+      const e = load("![a](https://x.test/y.png)");
+      const b = button(e)!;
+      expect(b).not.toBeNull();
+      expect(b.getAttribute("aria-label")).toBe("Open image in new tab");
+      expect(b.parentElement!.hasAttribute("data-resize-wrapper")).toBe(true);
+      expect(b.hidden).toBe(false);
+    });
+
+    it("labels a data: image as a download", () => {
+      const b = button(load("![a](data:image/png;base64,AAAA)"))!;
+      expect(b.getAttribute("aria-label")).toBe("Download image");
+      expect(b.hidden).toBe(false);
+    });
+
+    it("leaves image mutations outside the button to ProseMirror's leaf default", () => {
+      const e = load("![a](https://x.test/y.png)");
+      const desc = (e.view as unknown as { docView: { children: { ignoreMutation(m: unknown): boolean }[] } }).docView
+        .children[0];
+      const img = e.view.dom.querySelector("img")!;
+      expect(desc.ignoreMutation({ type: "attributes", target: img })).toBe(true);
+      expect(desc.ignoreMutation({ type: "selection", target: img })).toBe(false);
+      expect(desc.ignoreMutation({ type: "attributes", target: button(e)! })).toBe(true);
+    });
+
+    it("hides the button when the image has no src", () => {
+      const e = load("![a]()");
+      expect(button(e)!.hidden).toBe(true);
+    });
+
+    it("opens the current src in a new tab on click", () => {
+      const open = vi.spyOn(window, "open").mockReturnValue(null);
+      const e = load("![a](https://x.test/y.png)");
+      const b = button(e);
+      e.chain().setNodeSelection(0).updateAttributes("image", { src: "https://x.test/z.png" }).run();
+      // The same node view took the update (not a rebuilt one), so it read the new src.
+      expect(button(e)).toBe(b);
+      button(e)!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      expect(open).toHaveBeenCalledWith("https://x.test/z.png", "_blank", "noopener,noreferrer");
+      open.mockRestore();
+    });
+
+    it("does not select the node on mousedown", () => {
+      const e = load("![a](https://x.test/y.png)\n\ntext");
+      e.commands.setTextSelection(e.state.doc.content.size - 1);
+      expect(e.state.selection instanceof NodeSelection).toBe(false);
+      const before = e.state.selection;
+      button(e)!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+      expect(e.state.selection instanceof NodeSelection).toBe(false);
+      expect(e.state.selection.eq(before)).toBe(true);
+    });
   });
 });

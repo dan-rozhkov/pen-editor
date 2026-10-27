@@ -38,3 +38,35 @@
 /* Read-only documents get no handles (tiptap only removes them after the first editor update). */
 .doc-prose[contenteditable="false"] [data-resize-handle] { display: none; }
 @media print { .doc-prose [data-resize-handle] { display: none; } }
+
+/* Open / download button, top-right of the image (docImage.ts). Shown in read-only docs too. Hidden
+   it takes no clicks; touch screens have no hover, so there it is always shown. */
+.doc-prose [data-resize-container][data-node="image"] .doc-image-open {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid var(--color-border-hover);
+  background: color-mix(in srgb, var(--color-surface-panel) 88%, transparent);
+  color: var(--color-text-primary, currentColor);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.doc-prose [data-resize-container][data-node="image"] .doc-image-open[hidden] { display: none; }
+.doc-prose [data-resize-container][data-node="image"]:hover .doc-image-open,
+.doc-prose [data-resize-container][data-node="image"].ProseMirror-selectednode .doc-image-open,
+.doc-prose [data-resize-container][data-node="image"] .doc-image-open:focus-visible { opacity: 1; pointer-events: auto; }
+@media (hover: none) {
+  .doc-prose [data-resize-container][data-node="image"] .doc-image-open { opacity: 1; pointer-events: auto; }
+}
+.dark .doc-prose [data-resize-container][data-node="image"] .doc-image-open { box-shadow: 0 1px 3px rgb(0 0 0 / 0.6); }
+@media print { .doc-prose .doc-image-open { display: none !important; } }
