@@ -482,4 +482,26 @@ describe("browse_agent QA judge, transport and limits", () => {
     expect(body.qa.checks[1].check).toEqual({ type: "text", text: "ok" });
     expect([body.qa.checks[0].actual.length, body.qa.checks[0].error.length]).toEqual([500, 500]);
   });
+
+  it("sends pageAtCheck cut to 4096/1024 and keeps check target cut to 80; bodies without them are unchanged", () => {
+    const record = { source: "agent", check: { type: "text", text: "ok" }, passed: true };
+    const withBoth = JSON.parse(
+      judgeRequestJson(
+        "s",
+        qaOf({
+          checks: [{ ...record, target: "t".repeat(300) }, { ...record, target: 'button "Buy"' }],
+          pageAtCheck: { url: "u".repeat(5000), title: "T".repeat(2000) },
+        }),
+        PAGE,
+      ),
+    ) as { qa: { checks: Array<{ target?: string }>; pageAtCheck: { url: string; title: string } } };
+    expect(withBoth.qa.pageAtCheck.url).toHaveLength(4096);
+    expect(withBoth.qa.pageAtCheck.title).toHaveLength(1024);
+    expect(withBoth.qa.checks[0].target).toHaveLength(80);
+    expect(withBoth.qa.checks[1].target).toBe('button "Buy"');
+
+    const plain = JSON.parse(judgeRequestJson("s", qaOf({ checks: [record] }), PAGE)) as { qa: Record<string, unknown> };
+    expect("pageAtCheck" in plain.qa).toBe(false);
+    expect("target" in (plain.qa.checks as object[])[0]).toBe(false);
+  });
 });

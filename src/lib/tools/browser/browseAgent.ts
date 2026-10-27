@@ -233,6 +233,9 @@ async function withTimeout<T>(call: () => Promise<T>, ms: number, onTimeout: T, 
   }
 }
 
+/** The package caps a check `target` at 80 chars, and the backend cuts it to 80. */
+const JUDGE_TARGET_MAX_CHARS = 80;
+
 const cutChars = (text: string, max: number): string => (text.length > max ? text.slice(0, max) : text);
 
 /** `value` when its JSON fits `max`; else the JSON as a string cut so that its own JSON fits, ending in an ellipsis. */
@@ -260,6 +263,7 @@ function capCheck(check: JudgeCheck): JudgeCheck {
       : {}),
     ...(typeof check.actual === "string" ? { actual: cutChars(check.actual, JUDGE_DIAGNOSTIC_MAX_CHARS) } : {}),
     ...(typeof check.error === "string" ? { error: cutChars(check.error, JUDGE_DIAGNOSTIC_MAX_CHARS) } : {}),
+    ...(typeof check.target === "string" ? { target: cutChars(check.target, JUDGE_TARGET_MAX_CHARS) } : {}),
   } as JudgeCheck;
 }
 
@@ -290,6 +294,14 @@ function judgeQaBody(qa: JudgeQa) {
     steps,
     ...(qa.stepsDropped !== undefined ? { stepsDropped: qa.stepsDropped } : {}),
     ...(qa.checks !== undefined ? { checks: limitChecks(qa.checks, JUDGE_MAX_CHECKS).map(capCheck) } : {}),
+    ...(typeof qa.pageAtCheck?.url === "string" && typeof qa.pageAtCheck.title === "string"
+      ? {
+          pageAtCheck: {
+            url: cutChars(qa.pageAtCheck.url, QA_JUDGE_URL_MAX_CHARS),
+            title: cutChars(qa.pageAtCheck.title, QA_JUDGE_TITLE_MAX_CHARS),
+          },
+        }
+      : {}),
     ...(qa.consoleErrors !== undefined ? { consoleErrors: diagnostics(qa.consoleErrors) } : {}),
     ...(qa.consoleErrorsDropped !== undefined ? { consoleErrorsDropped: qa.consoleErrorsDropped } : {}),
     ...(qa.failedRequests !== undefined ? { failedRequests: diagnostics(qa.failedRequests) } : {}),
