@@ -55,7 +55,10 @@
      the always-dark tooltip surface. */
   --menu: oklch(0.992 0 0);
   --menu-foreground: oklch(0.21 0 0);
-  --menu-muted-foreground: oklch(0.52 0 0);
+  /* Light-theme icon gray: menu icons use it directly, and the
+     [data-pen-icon] rule below lifts near-black icons to it. */
+  --icon-ink-floor: 0.52;
+  --menu-muted-foreground: oklch(var(--icon-ink-floor) 0 0);
   --menu-highlight: oklch(0.955 0 0);
   --menu-border: oklch(0 0 0 / 0.08);
   --menu-separator: oklch(0 0 0 / 0.07);
@@ -310,6 +313,25 @@ html.disable-theme-transitions *::after {
      (src/components/icons/createIcon.tsx). */
   [data-pen-icon] * {
     vector-effect: non-scaling-stroke;
+  }
+  /* Light theme: an icon that inherits near-black text color reads as heavy
+     ink next to its label. Remap the lightness of NEUTRAL colors so black
+     lands on the menu icon gray (--icon-ink-floor, the L of
+     --menu-muted-foreground) and lighter grays stay lighter than it:
+     L' = max(L, floor + 0.15·L), so primary < secondary < muted keeps its
+     order and a muted→primary hover still darkens. The lift fades out by
+     chroma 0.04, so accent blue, destructive red and dark brand colors keep
+     their color; white stays white. Alpha is scaled by 1.15 so the default
+     rgba(0,0,0,.87) text color lands opaque on the gray instead of fainter.
+     An explicit `color` prop (the svg's presentation attribute) is left
+     alone, and a `text-*` utility on the svg itself wins over this
+     base-layer rule. */
+  :root:not(.dark) [data-pen-icon]:not([color]) {
+    color: oklch(
+      from currentColor
+        calc(l + max(0, var(--icon-ink-floor) + 0.15 * l - l) * max(0, 1 - c / 0.04)) c h /
+        min(1, alpha * 1.15)
+    );
   }
   /* Dot glyphs have no stroke for `bold` to thicken; grow the dots instead. */
   [data-pen-icon^="Dots"][data-weight="bold"] circle {
