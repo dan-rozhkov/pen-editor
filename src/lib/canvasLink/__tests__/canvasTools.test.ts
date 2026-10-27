@@ -8,7 +8,7 @@ const PANEL = [
   "open_canvas_tab",
   "doc_list", "doc_create", "doc_read", "doc_edit", "doc_insert_image", "doc_open",
   "workflow_list", "workflow_create", "workflow_read", "workflow_edit", "workflow_open",
-  "trace_list", "trace_read", "trace_frame",
+  "trace_list", "trace_read", "trace_open", "trace_frame",
   "get_guidelines",
   "get_style_guide",
   "get_style_guide_tags",

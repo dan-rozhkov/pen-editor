@@ -25,7 +25,7 @@ import { booleanOperation } from "./tools/booleanOperation";
 import { getGuidelines, getStyleGuide, getStyleGuideTags } from "./tools/staticTools";
 import { analyzeImage } from "./tools/analyzeImage";
 import { openCanvasTab } from "./tools/openCanvasTab";
-import { traceFrame, traceList, traceRead } from "./tools/traceTools";
+import { traceFrame, traceList, traceOpen, traceRead } from "./tools/traceTools";
 import { docList, docCreate, docRead, docEdit, docOpen, docInsertImage } from "./tools/docTools";
 import { workflowList, workflowCreate, workflowRead, workflowEdit, workflowOpen } from "./tools/workflowTools";
 import { generateImage, generateFrameImage } from "./tools/generateImage";
@@ -180,6 +180,8 @@ export const toolHandlers: Record<string, ToolHandler> = {
   // only with clientCapabilities.traceTabs. NOT in mcpToolNames.ts / WebMCP / plugins.
   trace_list: traceList,
   trace_read: traceRead,
+  // Panel-local, no scene: opens/activates the trace tab in the desktop shell without keyboard focus.
+  trace_open: traceOpen,
   // Writes one rect to the scene only with placeOnCanvas (through runSerialized, like browse_screenshot).
   trace_frame: traceFrame,
   publish_to_showcase: publishToShowcase,

@@ -68,6 +68,7 @@ const EXPECTED_CLIENT_TOOLS = [
   "workflow_open",
   "trace_list",
   "trace_read",
+  "trace_open",
   "trace_frame",
   "publish_to_showcase",
   "remove_background",

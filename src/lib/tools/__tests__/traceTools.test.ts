@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { summarizeTrace, traceFrame, traceList, traceRead } from "../traceTools";
+import { summarizeTrace, traceFrame, traceList, traceOpen, traceRead } from "../traceTools";
 import { getAgentPanelTraceTabsBridge } from "@/lib/agentPanel";
 import { useSceneStore } from "@/store/sceneStore";
 import { resetStores } from "@/test/fixtures";
@@ -48,6 +48,49 @@ describe("trace_list", () => {
     expect(await run(traceList)).toEqual({ error: "no shell" });
     setTraces({ listTabs: async () => { throw new Error("boom"); }, read: async () => ({ error: "x" }) });
     expect(await run(traceList)).toEqual({ error: "boom" });
+  });
+});
+
+describe("trace_open", () => {
+  const stored = { trace: { id: "t1" } } as never;
+  const setup = (read: Traces["read"], open: Traces["open"]) => {
+    setTraces({ listTabs: async () => ({ tabs: [] }), read, open });
+  };
+
+  it("errors without a bridge and on a blank id", async () => {
+    expect((await run(traceOpen, { traceId: "t1" })).error).toMatch(/not available/);
+    const open = vi.fn(async () => ({ ok: true }));
+    setup(async () => stored, open);
+    expect((await run(traceOpen, { traceId: "  " })).error).toMatch(/traceId is required/);
+    expect((await run(traceOpen, {})).error).toMatch(/traceId is required/);
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("does not open when the trace is not stored", async () => {
+    const open = vi.fn(async () => ({ ok: true }));
+    setup(async () => ({ error: "trace file is corrupt" }), open);
+    expect(await run(traceOpen, { traceId: "t1" })).toEqual({ error: "trace file is corrupt" });
+    setup((async () => ({})) as unknown as Traces["read"], open);
+    expect((await run(traceOpen, { traceId: "t1" })).error).toMatch(/No trace with this id is stored/);
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("opens a stored trace", async () => {
+    const read = vi.fn(async () => stored);
+    const open = vi.fn(async () => ({ ok: true }));
+    setup(read, open);
+    expect(await run(traceOpen, { traceId: " t1 " })).toEqual({ traceId: "t1", opened: true });
+    expect(read).toHaveBeenCalledWith("t1", { frames: false });
+    expect(open).toHaveBeenCalledWith("t1");
+  });
+
+  it("returns the open error, a fixed text, and a thrown message", async () => {
+    setup(async () => stored, async () => ({ ok: false, error: "no window" }));
+    expect(await run(traceOpen, { traceId: "t1" })).toEqual({ error: "no window" });
+    setup(async () => stored, async () => ({ ok: false }));
+    expect((await run(traceOpen, { traceId: "t1" })).error).toMatch(/could not be opened/);
+    setup(async () => stored, async () => { throw new Error("boom"); });
+    expect(await run(traceOpen, { traceId: "t1" })).toEqual({ error: "boom" });
   });
 });
 

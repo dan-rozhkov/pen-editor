@@ -280,6 +280,24 @@ export const traceList: ToolHandler = async () => {
   }
 };
 
+export const traceOpen: ToolHandler = async (args) => {
+  const traceId = typeof args?.traceId === "string" ? args.traceId.trim() : "";
+  if (!traceId) return err("traceId is required. Use `trace.id` from the browse_agent result, or call trace_list to see the open trace tabs.");
+  const bridge = getAgentPanelTraceTabsBridge();
+  if (!bridge || typeof bridge.open !== "function") return err("Trace tabs are not available here (desktop app only).");
+  try {
+    // Check first, so the agent does not open a tab for a trace that is not stored.
+    const found: unknown = await bridge.read(traceId, { frames: false });
+    if (isObj(found) && typeof found.error === "string" && found.error) return err(clip(found.error));
+    if (!isObj(found) || !found.trace) return err(`No trace with this id is stored: ${clip(traceId, 100)}`);
+    const result: unknown = await bridge.open(traceId);
+    if (isObj(result) && result.ok === true) return JSON.stringify({ traceId, opened: true });
+    return err(isObj(result) && typeof result.error === "string" && result.error ? clip(result.error) : "The trace tab could not be opened.");
+  } catch (e) {
+    return err(clip(e instanceof Error ? e.message : "The trace tab could not be opened.", 500));
+  }
+};
+
 export const traceRead: ToolHandler = async (args) => {
   const traceId = typeof args?.traceId === "string" ? args.traceId.trim() : "";
   if (!traceId) return err("traceId is required. Use `trace.id` from the browse_agent result, or call trace_list to see the open trace tabs.");

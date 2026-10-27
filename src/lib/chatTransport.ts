@@ -50,7 +50,7 @@ export const CLIENT_CAPABILITIES = {
   docTabs: getAgentPanelDocsBridge() !== undefined,
   // The desktop panel can open workflow tabs: the backend then offers workflow_*.
   workflowTabs: getAgentPanelWorkflowsBridge() !== undefined,
-  // The desktop panel can list and read open browse-run trace tabs: the backend then offers trace_list / trace_read.
+  // The desktop panel can list and read open browse-run trace tabs: the backend then offers trace_list / trace_read / trace_open.
   traceTabs: getAgentPanelTraceTabsBridge() !== undefined,
 } as const;
 

@@ -142,7 +142,7 @@ function collectPart(part: Rec, deps: CollectDeps, docs: Collector, canvases: Co
     return;
   }
 
-  if (toolName === "trace_read" || toolName === "trace_frame") {
+  if (toolName === "trace_read" || toolName === "trace_frame" || toolName === "trace_open") {
     if (!done || out?.error !== undefined) return;
     const id = nonEmpty(input?.traceId);
     if (!id) return;

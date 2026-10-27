@@ -111,9 +111,12 @@ describe("collectChatArtifacts", () => {
         tool("browse_agent", { output: { trace: { id: "bad", source: "x" } } }),
         tool("trace_read", { input: { traceId: "t1" }, output: {} }),
         tool("trace_frame", { input: { traceId: "t2" }, output: { goal: "Other" } }),
+        tool("trace_open", { input: { traceId: "t3" }, output: { traceId: "t3", opened: true } }),
+        tool("trace_open", { input: { traceId: "t4" }, output: { error: "no window" } }),
       ),
     ]);
     expect(out).toEqual([
+      { kind: "trace", id: "t3", source: "local", title: "Trace" },
       { kind: "trace", id: "t2", source: "local", title: "Other" },
       { kind: "trace", id: "t1", source: "cloud", title: "Check the cart" },
     ]);

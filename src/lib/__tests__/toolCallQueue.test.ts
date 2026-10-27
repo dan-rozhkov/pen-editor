@@ -27,7 +27,7 @@ describe("isSerializedTool", () => {
   });
 
   it("does not serialize the panel-local doc_* tools", () => {
-    for (const n of ["doc_list", "doc_create", "doc_read", "doc_edit", "doc_open", "workflow_list", "workflow_create", "workflow_read", "workflow_edit", "workflow_open", "trace_list", "trace_read", "trace_frame"]) expect(isSerializedTool(n), n).toBe(false);
+    for (const n of ["doc_list", "doc_create", "doc_read", "doc_edit", "doc_open", "workflow_list", "workflow_create", "workflow_read", "workflow_edit", "workflow_open", "trace_list", "trace_read", "trace_open", "trace_frame"]) expect(isSerializedTool(n), n).toBe(false);
   });
 
   it("does not serialize open_canvas_tab (it touches no scene; a cold tab load is slow)", () => {
