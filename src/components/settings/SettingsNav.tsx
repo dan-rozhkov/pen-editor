@@ -27,10 +27,10 @@ export function SettingsNav({
                 "flex h-8 shrink-0 items-center gap-2 rounded-control-lg px-2.5 text-sm whitespace-nowrap outline-none transition-colors focus-visible:ring-[2px] focus-visible:ring-ring",
                 isActive
                   ? "bg-secondary font-medium text-text-primary"
-                  : "text-text-secondary hover:bg-surface-elevated hover:text-text-primary",
+                  : "text-text-secondary hover:bg-secondary hover:text-text-primary",
               )}
             >
-              <Icon className="size-4 shrink-0" weight={isActive ? "fill" : "regular"} aria-hidden />
+              <Icon className="size-4 shrink-0" aria-hidden />
               {label}
             </button>
           );
