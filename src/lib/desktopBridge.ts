@@ -73,10 +73,13 @@ export type StoredDoc = Doc;
 
 /** The shell's on-disk document store. Every method is optional: older shells lack them. */
 export interface DesktopDocsDiskApi {
-  list?(): Promise<{ docs: StoredDoc[] } | { error: string }>;
+  /** `deleted` = disk-side tombstones: documents removed on disk at that rev (a save at or below it is refused as stale). */
+  list?(): Promise<{ docs: StoredDoc[]; deleted?: { id: string; rev: number }[] } | { error: string }>;
   /** Disk keeps the higher rev; `stale` = disk already has rev >= this one and nothing was written. */
   save?(doc: StoredDoc): Promise<{ ok: true; rev: number } | { ok: true; stale: true; rev: number } | { error: string }>;
   remove?(id: string): Promise<{ ok: true } | { error: string }>;
+  /** The shell deleted these documents on disk (start-page bulk delete). Agent panel only; returns the unsubscribe. */
+  onRemoved?(cb: (ids: string[]) => void): () => void;
 }
 
 /** One canvas as the shell lists it (`<userData>/canvases/<id>.meta.json`). */

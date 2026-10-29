@@ -295,7 +295,11 @@ export function pruneTombstones(maxAgeMs: number = TOMBSTONE_MAX_AGE_MS): number
   return dropped;
 }
 
-export function deleteDoc(id: string, source: DocChangeSource): void {
+/**
+ * `persist: false` is for a delete the disk already knows about (the shell removed the file
+ * itself): the tombstone, body, index entry and listeners behave the same, only the sink's remove is skipped.
+ */
+export function deleteDoc(id: string, source: DocChangeSource, options: { persist?: boolean } = {}): void {
   // Only where a persistence sink exists: a web page has no second copy to guard against.
   const before = persistence ? readDoc(id) : null;
   if (before?.kind === "ok") {
@@ -310,7 +314,7 @@ export function deleteDoc(id: string, source: DocChangeSource): void {
   }
   writeJson(INDEX_KEY, readIndex().filter((meta) => meta.id !== id));
   notify({ id, deleted: true, source });
-  persist((sink) => sink.remove(id));
+  if (options.persist !== false) persist((sink) => sink.remove(id));
 }
 
 /**

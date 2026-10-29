@@ -4,7 +4,7 @@
 // On the web there is no bridge and every function here is a no-op.
 
 import type { DesktopDocsDiskApi, StoredDoc } from "@/lib/desktopBridge";
-import { getDoc, importDoc, listDocs, parseDoc, pruneTombstones, readTombstones, setDocPersistence, upgradeLegacyRev, type Doc } from "@/lib/docs/docStore";
+import { deleteDoc, getDoc, importDoc, listDocs, parseDoc, pruneTombstones, readTombstones, setDocPersistence, upgradeLegacyRev, type Doc } from "@/lib/docs/docStore";
 
 type DiskBridge = Required<DesktopDocsDiskApi>;
 
@@ -58,7 +58,12 @@ function parseDisk(value: unknown): Doc | null {
   return parseDoc(value);
 }
 
-async function listDisk(bridge: DiskBridge): Promise<Doc[] | null> {
+interface DiskListing {
+  docs: Doc[];
+  deleted: Map<string, number>;
+}
+
+async function listDisk(bridge: DiskBridge): Promise<DiskListing | null> {
   let listed: Awaited<ReturnType<DiskBridge["list"]>>;
   try {
     listed = await bridge.list();
@@ -76,7 +81,16 @@ async function listDisk(bridge: DiskBridge): Promise<Doc[] | null> {
     if (doc) docs.push(doc);
     else warn("skipped an invalid disk document", raw);
   }
-  return docs;
+  // Disk-side tombstones; a malformed entry is ignored, not trusted.
+  const deleted = new Map<string, number>();
+  if (Array.isArray(listed.deleted)) {
+    for (const entry of listed.deleted as unknown[]) {
+      const { id, rev } = (entry && typeof entry === "object" ? entry : {}) as { id?: unknown; rev?: unknown };
+      if (typeof id === "string" && typeof rev === "number" && Number.isFinite(rev)) deleted.set(id, Math.max(deleted.get(id) ?? 0, rev));
+      else warn("skipped an invalid disk tombstone", entry);
+    }
+  }
+  return { docs, deleted };
 }
 
 async function reconcile(bridge: DiskBridge): Promise<void> {
@@ -84,9 +98,18 @@ async function reconcile(bridge: DiskBridge): Promise<void> {
   // upload, so local and disk agree and the next edit (rev 2) is not stale on disk.
   for (const meta of listDocs()) upgradeLegacyRev(meta.id);
   pruneTombstones();
+  const listing = await listDisk(bridge);
+  if (!listing) return;
+  const { docs: disk, deleted } = listing;
+  // Deleted on disk (possibly while this panel was offline): drop the local copy unless it is a newer edit.
+  // Not persisted (disk has no file) and not uploaded: it is gone from the index before the upload loop.
+  for (const [id, rev] of deleted) {
+    const local = getDoc(id);
+    if (local && local.rev <= rev) deleteDoc(id, "editor", { persist: false });
+  }
+  // Read AFTER the list resolved and the loop above: a delete that landed while the list was
+  // in flight (onRemoved) or in that loop leaves a tombstone a stale snapshot would miss.
   const tombstones = readTombstones();
-  const disk = await listDisk(bridge);
-  if (!disk) return;
   const diskRev = new Map<string, number>();
   const resurrected: string[] = [];
   for (const doc of disk) {
@@ -95,6 +118,9 @@ async function reconcile(bridge: DiskBridge): Promise<void> {
       resurrected.push(doc.id);
       continue;
     }
+    // The same id in `docs` and `deleted` (a remove between the store's reads): the delete wins.
+    const diskDeleted = deleted.get(doc.id);
+    if (diskDeleted !== undefined && doc.rev <= diskDeleted) continue;
     diskRev.set(doc.id, doc.rev);
     importDoc(doc);
   }
@@ -119,6 +145,20 @@ async function reconcile(bridge: DiskBridge): Promise<void> {
 
 let started: Promise<void> | null = null;
 let settled = false;
+let unsubscribeRemoved: (() => void) | null = null;
+
+// The shell deleted these files itself: drop the local copies (tombstone included), or the
+// reconcile would upload them again. Not persisted: the file is already gone on disk.
+function applyRemoved(ids: unknown): void {
+  if (!Array.isArray(ids)) return;
+  for (const id of ids) {
+    try {
+      if (typeof id === "string" && getDoc(id)) deleteDoc(id, "editor", { persist: false });
+    } catch (e) {
+      warn("removed-by-shell delete threw", e);
+    }
+  }
+}
 
 /** True when the startup reconcile is over or the mirror was never started on this page. */
 export function isDesktopDocsReady(): boolean {
@@ -139,6 +179,12 @@ export function startDesktopDocMirror(): Promise<void> {
     save: (doc) => saveToDisk(bridge, doc),
     remove: (id) => track("remove", () => bridge.remove(id)),
   });
+  try {
+    const off = bridge.onRemoved?.(applyRemoved);
+    if (typeof off === "function") unsubscribeRemoved = off;
+  } catch (e) {
+    warn("onRemoved threw", e);
+  }
   started = reconcile(bridge)
     .catch((e: unknown) => warn("reconcile failed", e))
     .finally(() => {
@@ -151,5 +197,11 @@ export function startDesktopDocMirror(): Promise<void> {
 export function resetDesktopDocMirrorForTests(): void {
   started = null;
   settled = false;
+  try {
+    unsubscribeRemoved?.();
+  } catch {
+    // Test seam: a failing unsubscribe changes nothing.
+  }
+  unsubscribeRemoved = null;
   setDocPersistence(null);
 }

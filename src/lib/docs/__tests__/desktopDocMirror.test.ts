@@ -5,9 +5,9 @@ import { createDoc, deleteDoc, getDoc, importDoc, readTombstones, setDocPersiste
 
 const stored = (id: string, rev: number, markdown = `m${rev}`): StoredDoc => ({ id, title: id, markdown, updatedAt: 100 + rev, rev });
 
-function makeBridge(disk: unknown[] = []) {
+function makeBridge(disk: unknown[] = [], deleted?: unknown) {
   return {
-    list: vi.fn(async () => ({ docs: disk as StoredDoc[] })),
+    list: vi.fn(async () => ({ docs: disk as StoredDoc[], ...(deleted === undefined ? {} : { deleted: deleted as { id: string; rev: number }[] }) })),
     save: vi.fn(async (d: StoredDoc) => ({ ok: true as const, rev: d.rev })),
     remove: vi.fn(async (_id: string) => ({ ok: true as const })),
   };
@@ -225,5 +225,100 @@ describe("desktopDocMirror", () => {
     const doc = createDoc({ title: "T" }, "editor");
     deleteDoc(doc.id, "editor");
     expect(readTombstones()).toEqual({});
+  });
+
+  it("onRemoved deletes the local doc, leaves a tombstone and ignores unknown ids", async () => {
+    importDoc(stored("gone", 2));
+    importDoc(stored("kept", 1));
+    let emit: (ids: string[]) => void = () => {};
+    const off = vi.fn();
+    const bridge = { ...makeBridge([stored("gone", 2), stored("kept", 1)]), onRemoved: vi.fn((cb: (ids: string[]) => void) => ((emit = cb), off)) };
+    setPanel(bridge);
+    await startDesktopDocMirror();
+
+    emit(["gone", "unknown", 7 as unknown as string]);
+    expect(getDoc("gone")).toBeNull();
+    expect(getDoc("kept")).not.toBeNull();
+    expect(readTombstones().gone?.rev).toBe(2);
+    expect(readTombstones().unknown).toBeUndefined();
+    expect(bridge.remove).not.toHaveBeenCalled();
+
+    resetDesktopDocMirrorForTests();
+    expect(off).toHaveBeenCalledTimes(1);
+  });
+
+  it("works with a bridge that has no onRemoved", async () => {
+    importDoc(stored("a", 1));
+    setPanel(makeBridge([stored("a", 1)]));
+    await startDesktopDocMirror();
+    expect(getDoc("a")).not.toBeNull();
+  });
+
+  it("reconcile drops a local doc tombstoned on disk without saving or removing it", async () => {
+    importDoc(stored("gone", 2));
+    importDoc(stored("kept", 1));
+    const bridge = makeBridge([stored("kept", 1)], [{ id: "gone", rev: 3 }]);
+    setPanel(bridge);
+    await startDesktopDocMirror();
+
+    expect(getDoc("gone")).toBeNull();
+    expect(readTombstones().gone?.rev).toBe(2);
+    expect(bridge.save).not.toHaveBeenCalled();
+    expect(bridge.remove).not.toHaveBeenCalled();
+    expect(getDoc("kept")).not.toBeNull();
+  });
+
+  it("reconcile keeps and uploads a local doc newer than the disk tombstone", async () => {
+    importDoc(stored("edited", 5));
+    const bridge = makeBridge([], [{ id: "edited", rev: 3 }]);
+    setPanel(bridge);
+    await startDesktopDocMirror();
+
+    expect(getDoc("edited")?.rev).toBe(5);
+    expect(bridge.save.mock.calls.map(([d]) => d.id)).toEqual(["edited"]);
+    expect(bridge.remove).not.toHaveBeenCalled();
+  });
+
+  it("reconcile does not import a disk doc that is also tombstoned on disk at the same rev", async () => {
+    const bridge = makeBridge([stored("both", 2)], [{ id: "both", rev: 2 }]);
+    setPanel(bridge);
+    await startDesktopDocMirror();
+
+    expect(getDoc("both")).toBeNull();
+    expect(bridge.save).not.toHaveBeenCalled();
+    expect(bridge.remove).not.toHaveBeenCalled();
+  });
+
+  it("reconcile does not re-import a doc that onRemoved deleted while the list was pending", async () => {
+    importDoc(stored("gone", 2));
+    let emit: (ids: string[]) => void = () => {};
+    let release: (v: { docs: StoredDoc[] }) => void = () => {};
+    const bridge = { ...makeBridge(), onRemoved: vi.fn((cb: (ids: string[]) => void) => ((emit = cb), () => {})) };
+    bridge.list.mockReturnValue(new Promise((r) => (release = r)));
+    setPanel(bridge);
+    const start = startDesktopDocMirror();
+
+    emit(["gone"]);
+    expect(getDoc("gone")).toBeNull();
+    release({ docs: [stored("gone", 2)] });
+    await start;
+
+    expect(getDoc("gone")).toBeNull();
+    expect(bridge.save).not.toHaveBeenCalled();
+  });
+
+  it("reconcile ignores malformed disk tombstones", async () => {
+    importDoc(stored("a", 1));
+    const bridge = makeBridge([stored("a", 1)], [null, 5, { id: "a" }, { id: 7, rev: 9 }, { id: "a", rev: "9" }, { id: "a", rev: Number.NaN }]);
+    setPanel(bridge);
+    await startDesktopDocMirror();
+    expect(getDoc("a")).not.toBeNull();
+    expect(readTombstones()).toEqual({});
+
+    resetDesktopDocMirrorForTests();
+    const notArray = makeBridge([stored("a", 1)], "nope");
+    setPanel(notArray);
+    await startDesktopDocMirror();
+    expect(getDoc("a")).not.toBeNull();
   });
 });

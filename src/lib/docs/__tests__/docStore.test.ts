@@ -282,6 +282,21 @@ describe("delete tombstones", () => {
     expect(JSON.parse(localStorage.getItem("pen.docs.deleted") ?? "{}")).toEqual({ [doc.id]: tomb(2) });
   });
 
+  it("deleteDoc with persist: false still tombstones, removes and notifies, but skips the sink", () => {
+    const remove = vi.fn();
+    setDocPersistence({ save: vi.fn(), remove });
+    const doc = createDoc({ title: "T" }, "editor");
+    const seen: DocChange[] = [];
+    const off = subscribeDocs((c) => seen.push(c));
+    deleteDoc(doc.id, "editor", { persist: false });
+    off();
+    expect(remove).not.toHaveBeenCalled();
+    expect(readTombstones()).toEqual({ [doc.id]: tomb(1) });
+    expect(getDoc(doc.id)).toBeNull();
+    expect(listDocs().some((m) => m.id === doc.id)).toBe(false);
+    expect(seen).toEqual([{ id: doc.id, deleted: true, source: "editor" }]);
+  });
+
   it("records nothing without a persistence sink (web pages)", () => {
     setDocPersistence(null);
     const doc = createDoc({ title: "T" }, "editor");
