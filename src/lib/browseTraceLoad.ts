@@ -6,10 +6,7 @@ export type TraceLoadResult =
   | { ok: true; trace: BrowseTrace }
   | { ok: false; reason: "not-found" | "invalid" | "no-bridge" | "error"; message: string };
 
-/** `?src=` -> a source. Anything but "local" is the cloud. */
-export function traceSourceFromParam(value: string | null): TraceSource {
-  return value === "local" ? "local" : "cloud";
-}
+export { traceSourceFromParam } from "@/lib/traceSource";
 
 /** Checks a parsed JSON value against the trace format. */
 export function validate(value: unknown): TraceLoadResult {

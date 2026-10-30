@@ -174,6 +174,8 @@ export interface PenDesktopApi {
     read(id: string): Promise<{ trace: BrowseTrace } | { error: string }>;
     /** Saved local traces, newest first. Optional: absent on an older shell. There is no cloud list. */
     list?(): Promise<{ traces: StoredTraceSummary[] } | { error: string }>;
+    /** Opens a local trace in a trace tab. Exposed on the doc page only; absent on an older shell. */
+    open?(id: string): Promise<{ ok: boolean; error?: string }>;
   };
   /**
    * Opens a Markdown document (by its docStore id) in a Document tab. Exposed on the

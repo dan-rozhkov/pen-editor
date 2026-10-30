@@ -745,7 +745,7 @@ describe("browse_agent run trace", () => {
     traceUploadStatus = 200;
     openThenDone();
     const out = JSON.parse(await browseAgent({ goal: "Look at the cart", url: "https://shop.test", qa: true }, ctx));
-    expect(out.trace).toEqual({ id: "cloud-trace-1", source: "cloud" });
+    expect(out.trace).toEqual({ id: "cloud-trace-1", source: "cloud", href: "/trace/cloud-trace-1?src=cloud" });
     expect(tracePosts).toHaveLength(1);
     const { manifest, assets } = tracePosts[0] as { manifest: Record<string, unknown>; assets: unknown[] };
     expect(manifest).toMatchObject({ goal: "Look at the cart", status: "done", labels: { browser: "cloud", mode: "qa" } });
@@ -764,7 +764,7 @@ describe("browse_agent run trace", () => {
     try {
       openThenDone();
       const on = JSON.parse(await browseAgent({ goal: "Look", url: "https://shop.test" }, ctx));
-      expect(on.trace).toEqual({ id: "cloud-trace-1", source: "cloud" });
+      expect(on.trace).toEqual({ id: "cloud-trace-1", source: "cloud", href: "/trace/cloud-trace-1?src=cloud" });
       expect(on).not.toHaveProperty("qa");
       const { manifest } = tracePosts[0] as { manifest: Record<string, unknown> };
       expect(manifest).toMatchObject({ goal: "Look", status: "done", labels: { browser: "cloud", mode: "browse" } });
@@ -792,7 +792,7 @@ describe("browse_agent run trace", () => {
     openThenDone();
     try {
       const out = JSON.parse(await browseAgent({ goal: "x", url: "https://shop.test", qa: true }, ctx));
-      expect(out.trace).toEqual({ id: "local-1", source: "local" });
+      expect(out.trace).toEqual({ id: "local-1", source: "local", href: "/trace/local-1?src=local" });
       expect(tracePosts).toHaveLength(0);
       const payload = save.mock.calls[0] as unknown as [{ manifest: { labels: unknown; frames: unknown[] }; assets: Array<{ path: string }> }];
       expect(payload[0].manifest.labels).toEqual({ browser: "desktop", mode: "qa" });

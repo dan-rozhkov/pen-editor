@@ -1,6 +1,12 @@
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
-import { handleLinkClick, openExternalLink, type LinkActions } from "@/lib/docs/docLinkActions";
+import {
+  canvasTabInDocLink,
+  handleLinkClick,
+  openExternalLink,
+  openTraceLink,
+  type LinkActions,
+} from "@/lib/docs/docLinkActions";
 
 export interface DocLinkClickOptions {
   /** Read at click time, so a re-render can swap the handlers without rebuilding the editor. */
@@ -9,7 +15,7 @@ export interface DocLinkClickOptions {
 
 /**
  * A plain click on a link: `/doc?id=` switches the document, `/app?node=` shows the frame on
- * the canvas, anything else opens in a new tab (what Link's own openOnClick did).
+ * the canvas, `/app?tab=` only a hint (chat-only format), `/trace/<id>` a browse-run trace, anything else opens in a new tab (what Link's own openOnClick did).
  */
 export const DocLinkClick = Extension.create<DocLinkClickOptions>({
   name: "docLinkClick",
@@ -32,6 +38,8 @@ export const DocLinkClick = Extension.create<DocLinkClickOptions>({
             handleLinkClick(href, {
               openDoc: (id) => actions?.openDoc(id),
               focusNode: (id) => actions?.focusNode(id),
+              activateCanvasTab: canvasTabInDocLink,
+              openTrace: openTraceLink,
               openExternal: openExternalLink,
             });
             return true;

@@ -56,6 +56,7 @@ import { APP_LAUNCH_ALLOWANCE_MS, appArgOf, desktopAppsAvailable, isIsolatedQaCa
 import { acquireBrowseSlot } from "@/lib/browseRunLimiter";
 import { tracesForAllRuns } from "@/lib/browseTracePref";
 import { canSaveBrowseTrace, saveBrowseTrace } from "@/lib/browseTraces";
+import { traceLinkHref } from "@/lib/docs/docLinks";
 import { useBrowseAgentPhaseStore } from "@/store/browseAgentPhaseStore";
 import { checkpointForModel, useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
 
@@ -949,7 +950,7 @@ const runBrowseAgentBody = async (
 
   /**
    * The run's result: a function the handler awaits after ALL cleanup. It waits for the judge (if one is pending), then
-   * closes the trace with the final qa (judge included), stores it and adds `trace: { id, source }` when that worked.
+   * closes the trace with the final qa (judge included), stores it and adds `trace: { id, source, href }` when that worked.
    */
   const finishJson = (
     result: BrowseAgentResult,
@@ -970,7 +971,7 @@ const runBrowseAgentBody = async (
         desktopRun,
         { outerEnd, signal },
       );
-      return toJson(result, saved ? { ...extra, trace: saved } : extra, checkpoint, finalQa);
+      return toJson(result, saved ? { ...extra, trace: { ...saved, href: traceLinkHref(saved.id, saved.source) } } : extra, checkpoint, finalQa);
     };
 
   if (!hasSetup && !hasResume) {

@@ -1,6 +1,10 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { toast } from "sonner";
+import { createDoc } from "@/lib/docs/docStore";
 import { SimpleMarkdown } from "../SimpleMarkdown";
+
+vi.mock("sonner", () => ({ toast: vi.fn() }));
 
 afterEach(() => cleanup());
 
@@ -248,13 +252,13 @@ describe("<SimpleMarkdown />", () => {
   });
 
   describe("malformed / unsupported markdown", () => {
-    it("leaves markdown links as literal text (links are not supported)", () => {
+    it("leaves an incomplete markdown link as literal text", () => {
       const { container } = render(
-        <SimpleMarkdown content="see [docs](https://example.com)" />
+        <SimpleMarkdown content="see [docs](https://example.com" />
       );
       expect(container.querySelector("a")).toBeNull();
       expect(container.querySelector("p")?.textContent).toBe(
-        "see [docs](https://example.com)"
+        "see [docs](https://example.com"
       );
     });
 
@@ -275,6 +279,103 @@ describe("<SimpleMarkdown />", () => {
       // React escapes it: no real <b> element, the angle-bracket text is shown.
       expect(container.querySelector("b")).toBeNull();
       expect(screen.getByText("<b>not bold</b>")).toBeTruthy();
+    });
+  });
+
+  describe("links", () => {
+    afterEach(() => {
+      delete window.penAgentPanel;
+      vi.restoreAllMocks();
+    });
+
+    it.each([
+      ["/doc?id=d1"],
+      ["/app?node=n1"],
+      ["/app?tab=3"],
+      ["/trace/t1?src=local"],
+    ])("renders %s as an anchor", (href) => {
+      const { container } = render(<SimpleMarkdown content={`see [the **thing**](${href}) now`} />);
+      const a = container.querySelector("a");
+      expect(a?.getAttribute("href")).toBe(href);
+      expect(a?.textContent).toBe("the thing");
+      expect(a?.querySelector("strong")).toBeTruthy();
+      expect(a?.getAttribute("target")).toBeNull();
+    });
+
+    it("opens external links in a new tab", () => {
+      const { container } = render(<SimpleMarkdown content="[x](https://example.com/a)" />);
+      const a = container.querySelector("a");
+      expect(a?.getAttribute("target")).toBe("_blank");
+      expect(a?.getAttribute("rel")).toBe("noopener noreferrer");
+    });
+
+    it.each([["javascript:alert(1)"], ["data:text/html,hi"], ["ftp://x.test"], ["/other"]])(
+      "keeps %s as plain text",
+      (href) => {
+        const { container } = render(<SimpleMarkdown content={`[x](${href})`} />);
+        expect(container.querySelector("a")).toBeNull();
+        expect(container.textContent).toBe(`[x](${href})`);
+      },
+    );
+
+    it("keeps bold and code next to links", () => {
+      const { container } = render(<SimpleMarkdown content="**b** `c` [l](/doc?id=d)" />);
+      expect(container.querySelector("strong")?.textContent).toBe("b");
+      expect(container.querySelector("code")?.textContent).toBe("c");
+      expect(container.querySelector("a")?.textContent).toBe("l");
+    });
+
+    it("a doc link click opens a new window without the docs bridge and prevents navigation", async () => {
+      const doc = createDoc({ title: "T", markdown: "x" }, "agent");
+      const win = vi.spyOn(window, "open").mockReturnValue(null);
+      const { container } = render(<SimpleMarkdown content={`[Doc](/doc?id=${doc.id})`} />);
+      const notPrevented = fireEvent.click(container.querySelector("a") as Element);
+      expect(notPrevented).toBe(false);
+      await vi.waitFor(() =>
+        expect(win).toHaveBeenCalledWith(`${import.meta.env.BASE_URL}doc?id=${doc.id}`, "_blank", "noopener"),
+      );
+    });
+
+    it("a doc link click goes through the docs bridge when present", async () => {
+      const doc = createDoc({ title: "T", markdown: "x" }, "agent");
+      const open = vi.fn(async () => undefined);
+      window.penAgentPanel = { version: 1, docs: { open } } as never;
+      const { container } = render(<SimpleMarkdown content={`[Doc](/doc?id=${doc.id})`} />);
+      fireEvent.click(container.querySelector("a") as Element);
+      await vi.waitFor(() => expect(open).toHaveBeenCalledWith(doc.id));
+    });
+
+    it("a doc link to a missing document or a placeholder toasts instead of opening", async () => {
+      const win = vi.spyOn(window, "open").mockReturnValue(null);
+      const { container } = render(<SimpleMarkdown content="[A](/doc?id=gone) [B](/doc?id=DOC_ID)" />);
+      const anchors = container.querySelectorAll("a");
+      fireEvent.click(anchors[0]);
+      fireEvent.click(anchors[1]);
+      await vi.waitFor(() => expect(toast).toHaveBeenCalledTimes(2));
+      expect(win).not.toHaveBeenCalled();
+    });
+
+    it("a middle click on an internal link is prevented; an external link is left alone", () => {
+      const { container } = render(<SimpleMarkdown content="[A](/doc?id=d1) [B](https://example.com)" />);
+      const anchors = container.querySelectorAll("a");
+      expect(fireEvent(anchors[0], new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 }))).toBe(false);
+      expect(fireEvent(anchors[1], new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 }))).toBe(true);
+    });
+
+    it("keeps one level of parentheses inside a link href", () => {
+      const href = "https://en.wikipedia.org/wiki/Rust_(programming_language)";
+      const { container } = render(<SimpleMarkdown content={`see [Rust](${href}) now (really)`} />);
+      const a = container.querySelector("a");
+      expect(a?.getAttribute("href")).toBe(href);
+      expect(container.querySelector("p")?.textContent).toBe("see Rust now (really)");
+    });
+
+    it("a canvas tab link click activates the tab", () => {
+      const activateTab = vi.fn();
+      window.penAgentPanel = { version: 1, canvas: { activateTab } } as never;
+      const { container } = render(<SimpleMarkdown content="[Tab](/app?tab=5)" />);
+      fireEvent.click(container.querySelector("a") as Element);
+      expect(activateTab).toHaveBeenCalledWith(5);
     });
   });
 });

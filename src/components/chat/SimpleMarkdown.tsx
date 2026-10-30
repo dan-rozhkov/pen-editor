@@ -1,4 +1,14 @@
 import { useMemo } from "react";
+import { openChatArtifact } from "@/lib/chatArtifacts";
+import { classifyHref } from "@/lib/docs/docLinks";
+import {
+  activateCanvasTabLink,
+  focusNodeLink,
+  handleLinkClick,
+  openDocLink,
+  openTraceLink,
+} from "@/lib/docs/docLinkActions";
+import { whenDesktopDocsReady } from "@/lib/docs/desktopDocMirror";
 
 interface SimpleMarkdownProps {
   content: string;
@@ -38,9 +48,54 @@ function parseBlocks(src: string): Block[] {
   return blocks;
 }
 
+const LINK_CLASS = "text-accent-primary underline underline-offset-2 cursor-pointer";
+const SAFE_EXTERNAL = /^(?:https?:|mailto:)/i;
+
+/** What a click on an internal link in a chat message opens. Never throws (handleLinkClick guards it). */
+function openChatLink(href: string, label: string): void {
+  handleLinkClick(href, {
+    // The desktop mirror fills the docs store asynchronously; wait for it so a real document is not reported missing.
+    openDoc: (id) =>
+      void whenDesktopDocsReady().then(() =>
+        openDocLink(id, (docId) => openChatArtifact({ kind: "doc", id: docId, title: label })),
+      ),
+    focusNode: focusNodeLink,
+    activateCanvasTab: activateCanvasTabLink,
+    openTrace: openTraceLink,
+    openExternal: (url) => void window.open(url, "_blank", "noopener,noreferrer"),
+  });
+}
+
+function renderLink(label: string, href: string, raw: string, key: number): React.ReactNode {
+  const target = classifyHref(href);
+  if (target.kind === "external") {
+    // Only web and mail links are clickable; javascript:, data: and the like stay inert text.
+    if (!SAFE_EXTERNAL.test(href.trim())) return raw;
+    return (
+      <a key={key} href={href.trim()} target="_blank" rel="noopener noreferrer" className={LINK_CLASS}>
+        {renderInline(label)}
+      </a>
+    );
+  }
+  return (
+    <a
+      key={key}
+      href={href.trim()}
+      className={LINK_CLASS}
+      onClick={(e) => {
+        e.preventDefault();
+        openChatLink(href, label);
+      }}
+      onAuxClick={(e) => e.preventDefault()}
+    >
+      {renderInline(label)}
+    </a>
+  );
+}
+
 function renderInline(text: string): React.ReactNode[] {
   const parts: React.ReactNode[] = [];
-  const regex = /(\*\*(.+?)\*\*|`([^`]+)`)/g;
+  const regex = /(\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)|\*\*(.+?)\*\*|`([^`]+)`)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let key = 0;
@@ -49,19 +104,21 @@ function renderInline(text: string): React.ReactNode[] {
     if (match.index > lastIndex) {
       parts.push(text.slice(lastIndex, match.index));
     }
-    if (match[2]) {
+    if (match[2] !== undefined) {
+      parts.push(renderLink(match[2], match[3], match[0], key++));
+    } else if (match[4]) {
       parts.push(
         <strong key={key++} className="font-semibold">
-          {match[2]}
+          {renderInline(match[4])}
         </strong>
       );
-    } else if (match[3]) {
+    } else if (match[5]) {
       parts.push(
         <code
           key={key++}
           className="px-1 py-0.5 rounded bg-secondary text-[0.85em] font-mono"
         >
-          {match[3]}
+          {match[5]}
         </code>
       );
     }
