@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { ListNumbersIcon, PlusIcon } from "@/components/icons";
+import { PlusIcon, TreeStructureIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { IconButton } from "@/components/ui/IconButton";
@@ -121,7 +121,7 @@ export function WorkflowCanvas({ steps, setSteps }: WorkflowCanvasProps) {
     return (
       <div className="mx-auto flex w-full max-w-[460px] flex-col items-center rounded-xl border border-dashed border-border-light bg-surface-panel px-6 py-10">
         <EmptyState
-          icon={<ListNumbersIcon size={32} weight="light" />}
+          icon={<TreeStructureIcon size={32} weight="light" />}
           title="No steps yet"
           description="A workflow is a list of steps the agent completes in order."
           action={

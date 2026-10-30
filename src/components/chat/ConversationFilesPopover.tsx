@@ -1,13 +1,12 @@
 import { useState } from "react";
 import type { UIMessage } from "ai";
-import { FilmStripIcon, ListBulletsIcon, type Icon } from "@/components/icons";
+import { FilmStripIcon, FileTextIcon, ListBulletsIcon, PaintBrushIcon, type Icon } from "@/components/icons";
 import { IconButton } from "@/components/ui/IconButton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { getAgentPanelCanvasBridge } from "@/lib/agentPanel";
 import { getPanelClient } from "@/lib/canvasLink/panelRuntime";
 import { collectChatArtifacts, openChatArtifact, type ChatArtifact, type ChatArtifactKind } from "@/lib/chatArtifacts";
 import { getDoc } from "@/lib/docs/docStore";
-import { getToolIcon } from "@/lib/toolIcons";
 import { traceOpener } from "@/lib/traceOpener";
 
 const SECTION_LIMIT = 5;
@@ -19,8 +18,8 @@ const SECTIONS: { kind: ChatArtifactKind; label: string }[] = [
 ];
 
 function iconFor(kind: ChatArtifactKind): Icon {
-  if (kind === "doc") return getToolIcon("doc_create");
-  if (kind === "canvas") return getToolIcon("open_canvas_tab");
+  if (kind === "doc") return FileTextIcon;
+  if (kind === "canvas") return PaintBrushIcon;
   return FilmStripIcon;
 }
 

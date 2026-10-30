@@ -81,7 +81,8 @@ function renderLink(label: string, href: string, raw: string, key: number): Reac
     <a
       key={key}
       href={href.trim()}
-      className={LINK_CLASS}
+      className="internal-link"
+      data-link-kind={target.kind}
       onClick={(e) => {
         e.preventDefault();
         openChatLink(href, label);

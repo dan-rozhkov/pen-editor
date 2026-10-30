@@ -289,17 +289,19 @@ describe("<SimpleMarkdown />", () => {
     });
 
     it.each([
-      ["/doc?id=d1"],
-      ["/app?node=n1"],
-      ["/app?tab=3"],
-      ["/trace/t1?src=local"],
-    ])("renders %s as an anchor", (href) => {
+      ["/doc?id=d1", "doc"],
+      ["/app?node=n1", "node"],
+      ["/app?tab=3", "canvasTab"],
+      ["/trace/t1?src=local", "trace"],
+    ])("renders %s as an anchor", (href, kind) => {
       const { container } = render(<SimpleMarkdown content={`see [the **thing**](${href}) now`} />);
       const a = container.querySelector("a");
       expect(a?.getAttribute("href")).toBe(href);
       expect(a?.textContent).toBe("the thing");
       expect(a?.querySelector("strong")).toBeTruthy();
       expect(a?.getAttribute("target")).toBeNull();
+      expect(a?.className).toBe("internal-link");
+      expect(a?.getAttribute("data-link-kind")).toBe(kind);
     });
 
     it("opens external links in a new tab", () => {
@@ -307,6 +309,8 @@ describe("<SimpleMarkdown />", () => {
       const a = container.querySelector("a");
       expect(a?.getAttribute("target")).toBe("_blank");
       expect(a?.getAttribute("rel")).toBe("noopener noreferrer");
+      expect(a?.getAttribute("data-link-kind")).toBeNull();
+      expect(a?.classList.contains("internal-link")).toBe(false);
     });
 
     it.each([["javascript:alert(1)"], ["data:text/html,hi"], ["ftp://x.test"], ["/other"]])(

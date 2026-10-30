@@ -25,6 +25,45 @@ describe("doc and frame links", () => {
   });
 });
 
+describe("internal link chips", () => {
+  const anchors = (markdown: string) => Array.from(load(markdown).view.dom.querySelectorAll("a"));
+
+  it.each([
+    ["/doc?id=doc_abc", "doc"],
+    ["/app?node=n_42", "node"],
+    ["/app?tab=3", "canvasTab"],
+    ["/trace/1b4e28ba?src=local", "trace"],
+  ])("renders %s with class and kind %s", (href, kind) => {
+    const [a] = anchors(`[x](${href})`);
+    expect(a.classList.contains("internal-link")).toBe(true);
+    expect(a.getAttribute("data-link-kind")).toBe(kind);
+  });
+
+  it("marks neither class nor kind on an external link", () => {
+    const [a] = anchors("[x](https://example.com)");
+    expect(a.classList.contains("internal-link")).toBe(false);
+    expect(a.hasAttribute("data-link-kind")).toBe(false);
+  });
+
+  it("marks links inside a property value", () => {
+    const md = "|  |  |\n| --- | --- |\n| Trace | [run](/trace/abc?src=local) |\n| Link | [site](https://example.com) |";
+    // Property rows render through node views, so read the schema's own HTML output.
+    const host = document.createElement("div");
+    host.innerHTML = load(md).getHTML();
+    const [trace, site] = Array.from(host.querySelectorAll("a"));
+    expect(trace.getAttribute("data-link-kind")).toBe("trace");
+    expect(site.hasAttribute("data-link-kind")).toBe(false);
+  });
+
+  it("keeps the markup out of the markdown", () => {
+    const md = "[Spec](/doc?id=doc_abc) and [site](https://example.com)";
+    const out = load(md).getMarkdown();
+    expect(out).toBe(md);
+    expect(out).not.toContain("internal-link");
+    expect(out).not.toContain("data-link-kind");
+  });
+});
+
 describe("insertDocLink", () => {
   it("leaves the caret outside the link so typed text stays plain", () => {
     const editor = load("Hi");

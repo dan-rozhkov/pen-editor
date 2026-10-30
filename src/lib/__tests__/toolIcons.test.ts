@@ -2,7 +2,15 @@ import { describe, it, expect } from "vitest";
 import { toolDisplayNames, mobbinToolDisplayNames } from "../toolDisplayNames";
 import { getToolIcon } from "../toolIcons";
 import { toolHandlers } from "../toolRegistry";
-import { BinocularsIcon, MobbinIcon, NotePencilIcon } from "@/components/icons";
+import {
+  BinocularsIcon,
+  FileTextIcon,
+  FilmStripIcon,
+  MobbinIcon,
+  NotePencilIcon,
+  PaintBrushIcon,
+  TreeStructureIcon,
+} from "@/components/icons";
 
 describe("toolIcons", () => {
   it("has a dedicated icon for every named tool", () => {
@@ -42,6 +50,18 @@ describe("toolIcons", () => {
     for (const name of optionalTools) {
       expect(toolDisplayNames[name]).toBeTruthy();
       expect(getToolIcon(name)).not.toBe(generic);
+    }
+  });
+
+  it("shows one icon per entity: tools that read or open one entity wear its icon", () => {
+    const entityIcons = {
+      FileText: [FileTextIcon, ["doc_read", "doc_open"]],
+      PaintBrush: [PaintBrushIcon, ["open_canvas_tab"]],
+      FilmStrip: [FilmStripIcon, ["trace_read", "trace_open"]],
+      TreeStructure: [TreeStructureIcon, ["workflow_create", "workflow_read", "workflow_open"]],
+    } as const;
+    for (const [entity, [icon, tools]] of Object.entries(entityIcons)) {
+      for (const tool of tools) expect(getToolIcon(tool), `${tool} -> ${entity}`).toBe(icon);
     }
   });
 

@@ -62,6 +62,7 @@
   text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
   text-underline-offset: 2px;
 }
+.doc-prose a.internal-link { text-decoration: none; }
 .doc-prose .is-empty::before {
   content: attr(data-placeholder);
   color: var(--color-text-muted);
@@ -291,8 +292,9 @@
   pointer-events: none;
 }
 .doc-prose [data-type="property-value"] span[data-bg] { padding: 1px 6px; margin-right: 6px; border-radius: 4px; font-weight: inherit; }
-.doc-prose [data-type="property-value"] a { margin-right: 6px; }
-.doc-prose [data-type="property-value"] a::before {
+/* Property values: an external link gets the page icon; an internal chip (.internal-link) brings its own icon and spacing. */
+.doc-prose [data-type="property-value"] a:not(.internal-link) { margin-right: 6px; }
+.doc-prose [data-type="property-value"] a:not(.internal-link)::before {
   content: "";
   display: inline-block;
   width: 14px;
@@ -331,27 +333,7 @@
   .doc-prose [data-type="property-key"] { flex-basis: 120px; }
 }
 
-/* Links to another document or to a canvas frame: a small icon before the text. */
-.doc-prose a[href^="/doc?id="]::before,
-.doc-prose a[href^="/app?node="]::before,
-.doc-prose a[href^="/trace/"]::before {
-  content: "";
-  display: inline-block;
-  width: 1em;
-  height: 1em;
-  margin-right: 0.25em;
-  vertical-align: -0.125em;
-  background-color: currentColor;
-  -webkit-mask: var(--doc-link-icon) center / contain no-repeat;
-  mask: var(--doc-link-icon) center / contain no-repeat;
-}
-.doc-prose a[href^="/doc?id="] {
-  --doc-link-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M213.66 82.34l-56-56A8 8 0 0 0 152 24H56a16 16 0 0 0-16 16v176a16 16 0 0 0 16 16h144a16 16 0 0 0 16-16V88a8 8 0 0 0-2.34-5.66ZM160 51.31 188.69 80H160ZM200 216H56V40h88v48a8 8 0 0 0 8 8h48v120Zm-32-80a8 8 0 0 1-8 8H96a8 8 0 0 1 0-16h64a8 8 0 0 1 8 8Zm0 32a8 8 0 0 1-8 8H96a8 8 0 0 1 0-16h64a8 8 0 0 1 8 8Z'/%3E%3C/svg%3E");
-}
-.doc-prose a[href^="/app?node="],
-.doc-prose a[href^="/trace/"] {
-  --doc-link-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M88 24a8 8 0 0 1 8 8v24h64V32a8 8 0 0 1 16 0v24h24a8 8 0 0 1 0 16h-24v64h24a8 8 0 0 1 0 16h-24v24a8 8 0 0 1-16 0v-24H96v24a8 8 0 0 1-16 0v-24H56a8 8 0 0 1 0-16h24V72H56a8 8 0 0 1 0-16h24V32a8 8 0 0 1 8-8Zm8 48v64h64V72Z' transform='translate(0 16)'/%3E%3C/svg%3E");
-}
+/* Links to another document, canvas frame or trace: the icon + pill live in src/index.css (.internal-link). */
 
 /* Saved-login chip (@ mention): a quiet pill in the text flow. */
 .doc-prose .doc-login {
@@ -450,7 +432,10 @@
   html.route-doc .doc-prose .ProseMirror-selectednode { outline: none !important; box-shadow: none !important; }
 
   html.route-doc .doc-prose { color: #111; font-size: 11pt; }
-  html.route-doc .doc-prose a { color: inherit; text-decoration: underline; text-decoration-color: currentColor; }
+  html.route-doc .doc-prose a:not(.internal-link) { color: inherit; text-decoration: underline; text-decoration-color: currentColor; }
+  /* A chip prints as on screen: the pill is a faint tint of the text colour (kept by print-color-adjust below)
+     and the icon is a currentColor mask, so if a printer drops the tint the icon and text still read. */
+  html.route-doc .doc-prose a.internal-link { color: inherit; text-decoration: none; }
   html.route-doc .doc-prose img { max-width: 100%; height: auto; }
   html.route-doc .doc-prose pre { white-space: pre-wrap; overflow: visible; border: 1px solid var(--color-border-default); }
   html.route-doc .doc-prose code { border: 0; }
