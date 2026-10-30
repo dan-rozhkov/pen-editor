@@ -79,7 +79,7 @@ export default function WorkflowPage() {
   return (
     <EditorProviders>
       <div className="flex h-dvh flex-col overflow-hidden bg-surface-panel text-text-primary">
-        {sync.id === null ? (
+        {sync.loading ? null : sync.id === null ? (
           <main className="flex flex-1 flex-col items-center justify-center px-4">
             <EmptyState
               icon={<TreeStructureIcon size={32} weight="light" />}

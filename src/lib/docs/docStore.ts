@@ -7,8 +7,11 @@
 // and feeds disk documents back in through `importDoc` at startup. Without a sink
 // (the web) nothing leaves this browser.
 //
-// Every localStorage access is wrapped: a private window or blocked site data
-// makes getItem/setItem throw (see opencodeKey.ts for the same rule).
+// Every localStorage access is wrapped (localStoreKit.ts; see opencodeKey.ts for the same rule).
+
+import { TOMBSTONE_MAX_AGE_MS, createPersistenceSlot, createTombstoneStore, readJson, writeJson, type Tombstone } from "@/lib/localStoreKit";
+
+export { TOMBSTONE_MAX_AGE_MS, type Tombstone };
 
 export interface DocMeta {
   id: string;
@@ -50,24 +53,6 @@ type Listener = (change: DocChange) => void;
 const listeners = new Set<Listener>();
 let channel: BroadcastChannel | null = null;
 
-function readJson<T>(key: string): T | null {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeJson(key: string, value: unknown): boolean {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function readIndex(): DocMeta[] {
   const index = readJson<DocMeta[]>(INDEX_KEY);
   return Array.isArray(index) ? index : [];
@@ -82,21 +67,11 @@ export interface DocPersistence {
   remove(id: string): void;
 }
 
-let persistence: DocPersistence | null = null;
+const persistence = createPersistenceSlot<Doc>("docStore");
 
 /** Installs (or with null removes) the sink that mirrors local writes elsewhere, e.g. to disk. */
 export function setDocPersistence(sink: DocPersistence | null): void {
-  persistence = sink;
-}
-
-// A sink failure must never turn a finished local write into a failed one.
-function persist(call: (sink: DocPersistence) => void): void {
-  if (!persistence) return;
-  try {
-    call(persistence);
-  } catch (e) {
-    console.error("docStore persistence failed", e);
-  }
+  persistence.set(sink);
 }
 
 function newDocId(): string {
@@ -237,63 +212,15 @@ export function updateDoc(
   return next;
 }
 
-const TOMBSTONE_KEY = "pen.docs.deleted";
-/** A tombstone older than this is dropped by the startup reconcile. */
-export const TOMBSTONE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
-
-export interface Tombstone {
-  /** The rev the document had when it was deleted. */
-  rev: number;
-  /** Date.now() at deletion. */
-  at: number;
-}
+const tombstones = createTombstoneStore("pen.docs.deleted");
 
 /** Deleted ids as `{ [id]: { rev, at } }`. Keeps a stale disk copy from bringing a deleted document back. The old numeric format is ignored. */
-export function readTombstones(): Record<string, Tombstone> {
-  const raw = readJson<Record<string, unknown>>(TOMBSTONE_KEY);
-  const out: Record<string, Tombstone> = {};
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    for (const [id, value] of Object.entries(raw)) {
-      const t = value as Partial<Tombstone> | null;
-      if (t && typeof t === "object" && typeof t.rev === "number" && typeof t.at === "number") out[id] = { rev: t.rev, at: t.at };
-    }
-  }
-  return out;
-}
+export const readTombstones = tombstones.read;
 
-function writeTombstones(map: Record<string, Tombstone>): void {
-  if (Object.keys(map).length === 0) {
-    try {
-      localStorage.removeItem(TOMBSTONE_KEY);
-    } catch {
-      // Storage blocked: nothing was stored either.
-    }
-    return;
-  }
-  writeJson(TOMBSTONE_KEY, map);
-}
-
-export function clearTombstone(id: string): void {
-  const map = readTombstones();
-  if (!(id in map)) return;
-  delete map[id];
-  writeTombstones(map);
-}
+export const clearTombstone = tombstones.clear;
 
 /** Drops tombstones older than `maxAgeMs`; returns how many went. */
-export function pruneTombstones(maxAgeMs: number = TOMBSTONE_MAX_AGE_MS): number {
-  const map = readTombstones();
-  const now = Date.now();
-  let dropped = 0;
-  for (const [id, t] of Object.entries(map)) {
-    if (now - t.at > maxAgeMs) {
-      delete map[id];
-      dropped++;
-    }
-  }
-  if (dropped > 0) writeTombstones(map);
-  return dropped;
-}
+export const pruneTombstones = tombstones.prune;
 
 /**
  * `persist: false` is for a delete the disk already knows about (the shell removed the file
@@ -301,12 +228,8 @@ export function pruneTombstones(maxAgeMs: number = TOMBSTONE_MAX_AGE_MS): number
  */
 export function deleteDoc(id: string, source: DocChangeSource, options: { persist?: boolean } = {}): void {
   // Only where a persistence sink exists: a web page has no second copy to guard against.
-  const before = persistence ? readDoc(id) : null;
-  if (before?.kind === "ok") {
-    const map = readTombstones();
-    map[id] = { rev: Math.max(map[id]?.rev ?? 0, before.doc.rev), at: Date.now() };
-    writeTombstones(map);
-  }
+  const before = persistence.active() ? readDoc(id) : null;
+  if (before?.kind === "ok") tombstones.record(id, before.doc.rev);
   try {
     localStorage.removeItem(DOC_KEY_PREFIX + id);
   } catch {
@@ -314,7 +237,7 @@ export function deleteDoc(id: string, source: DocChangeSource, options: { persis
   }
   writeJson(INDEX_KEY, readIndex().filter((meta) => meta.id !== id));
   notify({ id, deleted: true, source });
-  if (options.persist !== false) persist((sink) => sink.remove(id));
+  if (options.persist !== false) persistence.run((sink) => sink.remove(id));
 }
 
 /**
@@ -354,7 +277,7 @@ function commitDoc(doc: Doc, source: DocChangeSource): void {
     throw new Error(DOC_STORAGE_ERROR);
   }
   notify({ id: doc.id, source, doc });
-  persist((sink) => sink.save(doc));
+  persistence.run((sink) => sink.save(doc));
 }
 
 /**
@@ -364,11 +287,11 @@ function commitDoc(doc: Doc, source: DocChangeSource): void {
  * document already lives there). Listeners hear it with no `source`.
  */
 export function importDoc(doc: Doc): boolean {
-  const tombstone = readTombstones()[doc.id];
+  const tombstone = tombstones.read()[doc.id];
   if (tombstone !== undefined) {
     // A copy at or below the deleted rev is the deleted document coming back; a newer one was written later elsewhere and wins.
     if (doc.rev <= tombstone.rev) return false;
-    clearTombstone(doc.id);
+    tombstones.clear(doc.id);
   }
   const key = DOC_KEY_PREFIX + doc.id;
   const local = readDoc(doc.id);

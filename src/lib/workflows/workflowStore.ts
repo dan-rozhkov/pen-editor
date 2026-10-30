@@ -3,14 +3,18 @@
 // ordered list of text steps (no branching yet); as a prompt it is a markdown
 // numbered list (workflowMarkdown.ts).
 //
-// Same storage model as docs/docStore.ts, without the desktop disk mirror:
-// localStorage is the only copy. The agent panel (/agent) and a desktop workflow
+// Same storage model as docs/docStore.ts: localStorage is the synchronous working
+// copy. In the desktop shell, desktopWorkflowMirror.ts installs a persistence sink
+// (`setWorkflowPersistence`) that mirrors every local write to disk and feeds disk
+// workflows back in through `importWorkflow` at startup; without a sink (the web)
+// nothing leaves this browser. The agent panel (/agent) and a desktop workflow
 // tab (/workflow) share one origin and one storage partition, so the panel's
 // tools write here and the tab hears the change through BroadcastChannel (and
 // the `storage` event as a backup). Every sync decision compares `rev`.
 //
-// Every localStorage access is wrapped: a private window or blocked site data
-// makes getItem/setItem throw.
+// Every localStorage access is wrapped (localStoreKit.ts).
+
+import { createPersistenceSlot, createTombstoneStore, readJson, writeJson } from "@/lib/localStoreKit";
 
 export interface WorkflowStep {
   /** Stable id: React keys and focus survive edits and reorders. */
@@ -58,24 +62,6 @@ type Listener = (change: WorkflowChange) => void;
 const listeners = new Set<Listener>();
 let channel: BroadcastChannel | null = null;
 
-function readJson<T>(key: string): T | null {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeJson(key: string, value: unknown): boolean {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function readIndex(): WorkflowMeta[] {
   const index = readJson<WorkflowMeta[]>(INDEX_KEY);
   return Array.isArray(index) ? index : [];
@@ -120,6 +106,19 @@ function parseWorkflowJson(raw: string): Workflow | null {
   } catch {
     return null;
   }
+}
+
+/** Receives every successful write made by THIS page (never changes from other pages or from `importWorkflow`). */
+export interface WorkflowPersistence {
+  save(workflow: Workflow): void;
+  remove(id: string): void;
+}
+
+const persistence = createPersistenceSlot<Workflow>("workflowStore");
+
+/** Installs (or with null removes) the sink that mirrors local writes elsewhere, e.g. to disk. */
+export function setWorkflowPersistence(sink: WorkflowPersistence | null): void {
+  persistence.set(sink);
 }
 
 function getChannel(): BroadcastChannel | null {
@@ -240,7 +239,24 @@ export function updateWorkflow(
   return next;
 }
 
-export function deleteWorkflow(id: string, source: WorkflowChangeSource): void {
+const tombstones = createTombstoneStore("pen.workflows.deleted");
+
+/** Deleted ids as `{ [id]: { rev, at } }`. Keeps a stale disk copy from bringing a deleted workflow back. */
+export const readTombstones = tombstones.read;
+
+export const clearTombstone = tombstones.clear;
+
+/** Drops tombstones older than `maxAgeMs`; returns how many went. */
+export const pruneTombstones = tombstones.prune;
+
+/**
+ * `persist: false` is for a delete the disk already knows about (the shell removed the file
+ * itself): tombstone, body, index entry and listeners behave the same, only the sink's remove is skipped.
+ */
+export function deleteWorkflow(id: string, source: WorkflowChangeSource, options: { persist?: boolean } = {}): void {
+  // Only where a persistence sink exists: a web page has no second copy to guard against.
+  const before = persistence.active() ? getWorkflow(id) : null;
+  if (before) tombstones.record(id, before.rev);
   try {
     localStorage.removeItem(WORKFLOW_KEY_PREFIX + id);
   } catch {
@@ -248,6 +264,7 @@ export function deleteWorkflow(id: string, source: WorkflowChangeSource): void {
   }
   writeJson(INDEX_KEY, readIndex().filter((meta) => meta.id !== id));
   notify({ id, deleted: true, source });
+  if (options.persist !== false) persistence.run((sink) => sink.remove(id));
 }
 
 /**
@@ -274,6 +291,56 @@ function commitWorkflow(workflow: Workflow, source: WorkflowChangeSource): void 
     throw new Error(WORKFLOW_STORAGE_ERROR);
   }
   notify({ id: workflow.id, source, workflow });
+  persistence.run((sink) => sink.save(workflow));
+}
+
+/**
+ * Writes a workflow that came from outside (the desktop disk store), keeping its `rev` and
+ * `updatedAt`. Only when the local body is missing, unreadable or has a lower rev, and the id
+ * carries no delete tombstone of the same or a higher rev; returns whether it wrote. Never calls
+ * the persistence sink. Listeners hear it with no `source`.
+ */
+export function importWorkflow(workflow: Workflow): boolean {
+  const tombstone = tombstones.read()[workflow.id];
+  if (tombstone !== undefined) {
+    if (workflow.rev <= tombstone.rev) return false;
+    tombstones.clear(workflow.id);
+  }
+  const key = WORKFLOW_KEY_PREFIX + workflow.id;
+  const local = getWorkflow(workflow.id);
+  if (local && local.rev >= workflow.rev) return false;
+  let previous: string | null;
+  try {
+    previous = localStorage.getItem(key);
+  } catch {
+    return false;
+  }
+  if (!writeJson(key, workflow)) return false;
+  const meta: WorkflowMeta = { id: workflow.id, title: workflow.title, updatedAt: workflow.updatedAt, stepCount: countFilledSteps(workflow.steps) };
+  if (!writeJson(INDEX_KEY, [meta, ...readIndex().filter((m) => m.id !== workflow.id)])) {
+    try {
+      if (previous === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, previous);
+    } catch {
+      // Storage is blocked: the body write above could not have stuck either.
+    }
+    return false;
+  }
+  notify({ id: workflow.id, workflow });
+  return true;
+}
+
+/**
+ * Raises a local body stored without a `rev` (reads as 0) to rev 1, keeping everything else.
+ * Never calls the persistence sink. Listeners hear it with no `source`. Returns whether it wrote.
+ */
+export function upgradeLegacyRev(id: string): boolean {
+  const current = getWorkflow(id);
+  if (!current || current.rev >= 1) return false;
+  const next: Workflow = { ...current, rev: 1 };
+  if (!writeJson(WORKFLOW_KEY_PREFIX + id, next)) return false;
+  notify({ id, workflow: next });
+  return true;
 }
 
 /** Subscribes to changes from this page and from other same-origin pages. Returns the unsubscribe function. */

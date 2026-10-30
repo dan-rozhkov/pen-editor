@@ -6,8 +6,9 @@ import { initAnalytics } from '@/lib/analytics'
 import { startBridges } from '@/lib/bridgeBootstrap'
 import { installModelContextForEditorRoute } from '@/lib/webmcp/earlyInstall'
 import { loadModels } from '@/lib/chatModels'
-import { isAgentRoutePath, isDocRoutePath, isTraceRoutePath } from '@/lib/agentPanel'
+import { isAgentRoutePath, isDocRoutePath, isTraceRoutePath, isWorkflowRoutePath } from '@/lib/agentPanel'
 import { startDesktopDocMirror } from '@/lib/docs/desktopDocMirror'
+import { startDesktopWorkflowMirror } from '@/lib/workflows/desktopWorkflowMirror'
 import { applyStoredUITheme, installUIThemeBroadcastSync, installUIThemeStorageSync } from '@/lib/uiTheme'
 import { MOBBIN_OAUTH_CALLBACK_PATH } from '@/lib/mobbinAuth'
 
@@ -62,6 +63,8 @@ startBridges()
 {
   const path = window.location.pathname
   if (isAgentRoutePath(path) || isDocRoutePath(path) || isTraceRoutePath(path)) void startDesktopDocMirror()
+  // Same for workflows: /agent (tools) and /workflow (the tab).
+  if (isAgentRoutePath(path) || isWorkflowRoutePath(path)) void startDesktopWorkflowMirror()
 }
 
 // Start fetching the chat model list here, before the first render, rather

@@ -1,4 +1,5 @@
 import type { ToolHandler } from "../toolRegistry";
+import { whenDesktopWorkflowsReady } from "../workflows/desktopWorkflowMirror";
 import { countFilledSteps, createWorkflow, getWorkflow, isWorkflowBodyMissing, listWorkflows, stepsFromTexts, updateWorkflow, type Workflow, type WorkflowStep } from "../workflows/workflowStore";
 import { stepsToMarkdown } from "../workflows/workflowMarkdown";
 import { getAgentPanelWorkflowsBridge } from "../agentPanel";
@@ -51,15 +52,18 @@ function view(wf: Workflow) {
   };
 }
 
-export const workflowList: ToolHandler = async () =>
-  JSON.stringify({
+export const workflowList: ToolHandler = async () => {
+  await whenDesktopWorkflowsReady();
+  return JSON.stringify({
     workflows: listWorkflows()
       // An index entry whose body is gone is not a workflow the agent can read or edit.
       .filter(({ id }) => !isWorkflowBodyMissing(id))
       .map(({ id, title, stepCount, updatedAt }) => ({ workflowId: id, title, stepCount, updatedAt })),
   });
+};
 
 export const workflowCreate: ToolHandler = async (args) => {
+  await whenDesktopWorkflowsReady();
   const title = str(args?.title);
   if (title === undefined) return err("title is a required string.");
   const texts = parseSteps(args?.steps);
@@ -81,6 +85,7 @@ export const workflowCreate: ToolHandler = async (args) => {
 };
 
 export const workflowRead: ToolHandler = async (args) => {
+  await whenDesktopWorkflowsReady();
   const id = str(args?.workflowId);
   if (!id) return err("workflowId is required.");
   const wf = getWorkflow(id);
@@ -88,6 +93,7 @@ export const workflowRead: ToolHandler = async (args) => {
 };
 
 export const workflowEdit: ToolHandler = async (args) => {
+  await whenDesktopWorkflowsReady();
   const id = str(args?.workflowId);
   if (!id) return err("workflowId is required.");
   const title = str(args?.title);
@@ -121,6 +127,7 @@ export const workflowEdit: ToolHandler = async (args) => {
 };
 
 export const workflowOpen: ToolHandler = async (args) => {
+  await whenDesktopWorkflowsReady();
   const id = str(args?.workflowId);
   if (!id) return err("workflowId is required.");
   if (!getWorkflow(id)) return unknownId(id);

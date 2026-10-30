@@ -1,4 +1,4 @@
-import type { BrowseTraceSavePayload, BrowseTraceSaveResult, DesktopAuthApi, DesktopDocsDiskApi, DesktopSettingsApi, PenDesktopApi } from "@/lib/desktopBridge";
+import type { BrowseTraceSavePayload, BrowseTraceSaveResult, DesktopAuthApi, DesktopDocsDiskApi, DesktopSettingsApi, DesktopWorkflowsDiskApi, PenDesktopApi } from "@/lib/desktopBridge";
 import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
 import type { UIMessage } from "ai";
 import type { AgentPanelCanvasBridge } from "@/lib/canvasLink/protocol";
@@ -78,7 +78,7 @@ export interface AgentPanelDocsBridge extends DesktopDocsDiskApi {
 }
 
 /** Opens or activates the workflow tab that shows `workflowId`. Resolves after the tab exists. */
-export interface AgentPanelWorkflowsBridge {
+export interface AgentPanelWorkflowsBridge extends DesktopWorkflowsDiskApi {
   open(workflowId: string): Promise<{ ok: boolean; error?: string }>;
 }
 

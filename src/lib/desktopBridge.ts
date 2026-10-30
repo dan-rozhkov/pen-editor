@@ -3,6 +3,7 @@ import type { BrowserBridge } from "@sideform/browser-agent/loop";
 import { getCommands, runCommand } from "@/lib/commands/registry";
 import { useDocumentStore } from "@/store/documentStore";
 import type { Doc } from "@/lib/docs/docStore";
+import type { Workflow } from "@/lib/workflows/workflowStore";
 import type { CanvasHostBridge } from "@/lib/canvasLink/protocol";
 
 /** What `traces.save` takes: `splitTraceAssets` output (frames moved out of the manifest). */
@@ -79,6 +80,20 @@ export interface DesktopDocsDiskApi {
   save?(doc: StoredDoc): Promise<{ ok: true; rev: number } | { ok: true; stale: true; rev: number } | { error: string }>;
   remove?(id: string): Promise<{ ok: true } | { error: string }>;
   /** The shell deleted these documents on disk (start-page bulk delete). Agent panel only; returns the unsubscribe. */
+  onRemoved?(cb: (ids: string[]) => void): () => void;
+}
+
+/** A workflow as the shell stores it on disk: workflowStore's `Workflow` (`rev >= 1` on disk). */
+export type StoredWorkflow = Workflow;
+
+/** The shell's on-disk workflow store. Every method is optional: older shells lack them. */
+export interface DesktopWorkflowsDiskApi {
+  /** `deleted` = disk-side tombstones: workflows removed on disk at that rev (a save at or below it is refused as stale). */
+  list?(): Promise<{ workflows: StoredWorkflow[]; deleted?: { id: string; rev: number }[] } | { error: string }>;
+  /** Disk keeps the higher rev; `stale` = disk already has rev >= this one and nothing was written. */
+  save?(workflow: StoredWorkflow): Promise<{ ok: true; rev: number } | { ok: true; stale: true; rev: number } | { error: string }>;
+  remove?(id: string): Promise<{ ok: true } | { error: string }>;
+  /** The shell deleted these workflows on disk (start-page delete). Agent panel only; returns the unsubscribe. */
   onRemoved?(cb: (ids: string[]) => void): () => void;
 }
 
@@ -169,6 +184,8 @@ export interface PenDesktopApi {
     /** Prints the current Document tab to a PDF (save dialog in the shell). Absent on an older shell. */
     exportPdf?(fileName: string): Promise<{ ok: true; path: string } | { canceled: true } | { error: string }>;
   };
+  /** Workflow disk store (list/save/remove). Absent on an older shell. */
+  workflows?: DesktopWorkflowsDiskApi;
   /** Canvas disk store; see src/lib/canvases/desktopCanvasPersistence.ts. Absent on the web and on an older shell. */
   canvases?: DesktopCanvasesApi;
   setDocumentTitle?(title: string): void;

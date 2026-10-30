@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WorkflowPage from "@/routes/WorkflowPage";
 import { LocationProbe } from "@/test/LocationProbe";
+import { resetDesktopWorkflowMirrorForTests, startDesktopWorkflowMirror } from "@/lib/workflows/desktopWorkflowMirror";
 import {
   createWorkflow,
   deleteWorkflow,
@@ -51,6 +52,31 @@ describe("WorkflowPage", () => {
     await waitFor(() => expect(screen.getByTestId("location").textContent).toContain(`id=${meta.id}`));
     expect(screen.getByTestId("location").textContent).toContain("chat=off");
     expect(stepField(1).value).toBe("");
+  });
+
+  it("shows neither the empty state nor a create button until the desktop mirror is ready", async () => {
+    let release: (v: { workflows: never[] }) => void = () => {};
+    (window as unknown as { penDesktop?: unknown }).penDesktop = {
+      workflows: {
+        list: () => new Promise((r) => (release = r)),
+        save: async (d: { rev: number }) => ({ ok: true as const, rev: d.rev }),
+        remove: async () => ({ ok: true as const }),
+      },
+    };
+    try {
+      const started = startDesktopWorkflowMirror();
+      renderWorkflow("/workflow?new=1");
+      expect(screen.queryByText("No workflows yet")).toBeNull();
+      expect(screen.queryByRole("button", { name: /New workflow/ })).toBeNull();
+      expect(listWorkflows()).toEqual([]);
+      release({ workflows: [] });
+      await started;
+      await waitFor(() => expect(listWorkflows()).toHaveLength(1));
+      await waitFor(() => expect(stepField(1)).toBeTruthy());
+    } finally {
+      resetDesktopWorkflowMirrorForTests();
+      delete (window as unknown as { penDesktop?: unknown }).penDesktop;
+    }
   });
 
   it("renders the steps of ?id= and sets the page title", () => {

@@ -15,6 +15,7 @@ import {
   type WorkflowMeta,
   type WorkflowStep,
 } from "@/lib/workflows/workflowStore";
+import { isDesktopWorkflowsReady, whenDesktopWorkflowsReady } from "@/lib/workflows/desktopWorkflowMirror";
 
 const SAVE_DELAY_MS = 300;
 /** Longest an edit may stay unsaved while the user keeps typing. */
@@ -47,6 +48,8 @@ function localOf(workflow: Workflow | null, id: string | null): Local {
 
 export interface WorkflowSync {
   workflows: WorkflowMeta[];
+  /** True until the desktop disk mirror's startup reconcile ends (never on the web): no selection yet, creating is off. */
+  loading: boolean;
   /** Selected workflow id, or null when none exist. */
   id: string | null;
   title: string;
@@ -69,9 +72,26 @@ export function useWorkflowSync(): WorkflowSync {
   const [params, setParams] = useSearchParams();
   const [workflows, setWorkflows] = useState<WorkflowMeta[]>(() => listWorkflows());
   const paramId = params.get("id");
+  // Desktop: disk workflows may still be on their way in. Until the startup reconcile ends,
+  // re-read the list when it does so a workflow that only exists on disk shows up.
+  const [mirrorReady, setMirrorReady] = useState(isDesktopWorkflowsReady);
+  useEffect(() => {
+    if (mirrorReady) return;
+    let live = true;
+    void whenDesktopWorkflowsReady().then(() => {
+      if (!live) return;
+      setMirrorReady(true);
+      setWorkflows(listWorkflows());
+    });
+    return () => {
+      live = false;
+    };
+  }, [mirrorReady]);
   const wantsNew = params.get("new") === "1";
   // First candidate (the URL's, then newest first) with a readable body; the others are reported in `bad`.
   const { id, bad } = useMemo(() => {
+    // Nothing is picked (and no index entry judged) until the startup reconcile ends.
+    if (!mirrorReady) return { id: null, bad: [] as string[] };
     const candidates = [...(paramId ? [paramId] : []), ...workflows.map((w) => w.id)];
     const unreadable: string[] = [];
     for (const candidate of new Set(candidates)) {
@@ -80,7 +100,7 @@ export function useWorkflowSync(): WorkflowSync {
       if (candidate !== paramId || workflows.some((w) => w.id === candidate)) unreadable.push(candidate);
     }
     return { id: null, bad: unreadable };
-  }, [paramId, workflows]);
+  }, [paramId, workflows, mirrorReady]);
 
   // Index entries without a body are dropped; a body that exists but cannot be parsed is left
   // alone (never written) and reported once.
@@ -189,6 +209,8 @@ export function useWorkflowSync(): WorkflowSync {
   }, [id, save, show]);
 
   const createAndSelect = useCallback(() => {
+    // A workflow made before the reconcile ends would race the disk copy of the same list.
+    if (!mirrorReady) return;
     save();
     let workflow: Workflow;
     try {
@@ -207,18 +229,18 @@ export function useWorkflowSync(): WorkflowSync {
       },
       { replace: true },
     );
-  }, [save, setParams]);
+  }, [mirrorReady, save, setParams]);
 
   // "/workflow?new=1": create exactly one workflow (StrictMode runs effects twice).
   const newHandled = useRef(false);
   useEffect(() => {
-    if (wantsNew && !newHandled.current) {
+    if (wantsNew && mirrorReady && !newHandled.current) {
       newHandled.current = true;
       createAndSelect();
     } else if (!wantsNew) {
       newHandled.current = false;
     }
-  }, [wantsNew, createAndSelect]);
+  }, [wantsNew, mirrorReady, createAndSelect]);
 
   // Keep the URL pointing at the resolved workflow (no id, or a stale one).
   useEffect(() => {
@@ -318,5 +340,5 @@ export function useWorkflowSync(): WorkflowSync {
     window.penDesktop?.setDocumentTitle?.(title);
   }, [local.title]);
 
-  return { workflows, id, title: local.title, steps: local.steps, select, create: createAndSelect, remove, setTitle, setSteps };
+  return { workflows, loading: !mirrorReady, id, title: local.title, steps: local.steps, select, create: createAndSelect, remove, setTitle, setSteps };
 }
