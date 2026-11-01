@@ -29,8 +29,11 @@ export interface AnalyticsEventMap {
     // "lightbox" currently has no live call site — ShowcaseLightbox.tsx is
     // unmounted/unused — but is kept in the union for whenever it returns,
     // rather than removed and re-added later.
-    source: "card" | "carousel" | "lightbox" | "header";
+    source: "card" | "carousel" | "lightbox" | "header" | "hero" | "try_section";
   };
+  // Landing page ("/"): the desktop download links and the hero demo.
+  landing_download_clicked: { source: "header" | "hero" | "download_section" };
+  landing_demo_scenario_selected: { scenario: "designer" | "product" | "qa" };
 
   // --- Editor ---
   editor_opened: { is_first_session: boolean; via_showcase_handoff: boolean };

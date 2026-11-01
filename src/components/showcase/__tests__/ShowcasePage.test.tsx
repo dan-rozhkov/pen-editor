@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { ShowcasePage } from "@/components/showcase/ShowcasePage";
 import { ShowcaseLightbox } from "@/components/showcase/ShowcaseLightbox";
 import { peekShowcaseAgentPrompt } from "@/lib/showcaseAgentHandoff";
+import { assertDefined } from "@/test/assertions";
 import type { ShowcaseCategory, ShowcaseScreen } from "@/lib/showcase";
 import {
   app,
@@ -101,10 +102,10 @@ describe("<ShowcasePage />", () => {
     renderPage();
 
     const heading = screen.getByRole("heading", {
-      name: "Explore ideas. Find your direction.",
+      name: "One agent. Browser, canvas and docs.",
     });
     const editorLink = screen.getByRole("link", {
-      name: "Open the editor →",
+      name: "Try in browser →",
     });
 
     expect(heading).toBeTruthy();
@@ -133,15 +134,26 @@ describe("<ShowcasePage />", () => {
 
     renderPage();
 
-    const downloadLink = screen.getByRole("link", { name: "Download for Mac" });
-    const editorLink = screen.getByRole("link", { name: "Open the editor →" });
+    // The header row, the hero and the closing section all link the build.
+    const downloadLinks = screen.getAllByRole("link", { name: "Download for Mac" });
+    const editorLink = screen.getByRole("link", { name: "Try in browser →" });
+    const downloadLink = downloadLinks.find(
+      (link) => link.parentElement === editorLink.parentElement,
+    );
+
+    expect(downloadLinks).toHaveLength(3);
+    for (const link of downloadLinks) {
+      expect(link.getAttribute("href")).toBe(
+        "https://github.com/dan-rozhkov/pen-editor-desktop/releases/latest",
+      );
+    }
+    assertDefined(downloadLink);
 
     expect(downloadLink.getAttribute("href")).toBe(
       "https://github.com/dan-rozhkov/pen-editor-desktop/releases/latest",
     );
     expect(downloadLink.getAttribute("target")).toBe("_blank");
     expect(downloadLink.getAttribute("rel")).toBe("noreferrer");
-    expect(downloadLink.parentElement).toBe(editorLink.parentElement);
   });
 
   it("stores a trimmed prompt and navigates to the editor", async () => {
@@ -163,7 +175,7 @@ describe("<ShowcasePage />", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
     renderNavigablePage();
 
-    fireEvent.click(screen.getByRole("link", { name: "Open the editor →" }));
+    fireEvent.click(screen.getByRole("link", { name: "Try in browser →" }));
 
     expect(await screen.findByText("Editor route")).toBeTruthy();
   });
@@ -191,7 +203,7 @@ describe("<ShowcasePage />", () => {
     // on the <ol> would strip its `list` role and orphan the <li>s. The
     // scroller is the panel's list child and carries the native scroll-snap
     // classes (no more Embla `data-transition`/slide opacity plumbing).
-    const scroller = screen.getAllByRole("list")[0];
+    const scroller = screen.getAllByRole("list", { name: / screens$/ })[0];
     expect(scroller.tagName).toBe("OL");
     expect(scroller.classList.contains("snap-mandatory")).toBe(true);
     expect(scroller.classList.contains("overflow-y-hidden")).toBe(true);

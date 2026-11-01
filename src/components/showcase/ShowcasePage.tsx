@@ -11,10 +11,10 @@ import { AppleLogoIcon } from "@/components/icons";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { AuthMenu } from "@/components/auth/AuthMenu";
-import { LandingPreview, ShowcaseLanding } from "./ShowcaseLanding";
+import { DESKTOP_DOWNLOAD_URL, LandingClosing, LandingStory } from "./ShowcaseLanding";
+import { HeroDemo } from "./landing/HeroDemo";
 import "./showcaseLanding.css";
 
-import { ShowcaseAgentComposer } from "@/components/showcase/ShowcaseAgentComposer";
 import { ShowcaseFilterBar } from "@/components/showcase/ShowcaseFilterBar";
 import { Button } from "@/components/ui/button";
 import { track } from "@/lib/analytics";
@@ -35,12 +35,6 @@ import {
 import { ShowcaseAppCarousel } from "@/components/showcase/ShowcaseAppCarousel";
 
 type Status = "loading" | "ready" | "error";
-
-// The macOS build of the desktop shell (../pen-editor-desktop) is published as
-// a GitHub release asset. "/releases/latest" always resolves to the newest one,
-// so this URL survives every desktop release untouched.
-const DESKTOP_DOWNLOAD_URL =
-  "https://github.com/dan-rozhkov/pen-editor-desktop/releases/latest";
 
 function parseSort(value: string | null): ShowcaseSort {
   return value === "latest" ? "latest" : "popular";
@@ -438,9 +432,10 @@ export function ShowcasePage() {
       >
         <Link to="/" className="sf-brand" aria-label="Sideform home"><span className="sf-brand-mark" aria-hidden><i /><i /></span>Sideform</Link>
         <div className="relative text-center">
+          <p className="sf-eyebrow">Sideform for Mac</p>
           <h1 className="sf-hero-title font-semibold tracking-tight text-text-primary">
-            <span className="block">Explore ideas.</span>
-            <span className="block">Find your direction.</span>
+            <span className="block">One agent.</span>
+            <span className="block">Browser, canvas and docs.</span>
           </h1>
         </div>
         <div className="sf-header-actions absolute top-[calc(1rem+env(safe-area-inset-top))] right-[calc(1rem+env(safe-area-inset-right))] hidden shrink-0 items-center gap-2 sm:flex">
@@ -454,6 +449,7 @@ export function ShowcasePage() {
             href={DESKTOP_DOWNLOAD_URL}
             target="_blank"
             rel="noreferrer"
+            onClick={() => track("landing_download_clicked", { source: "header" })}
             className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-surface-elevated px-4 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
           >
             <AppleLogoIcon size={16} weight="fill" aria-hidden />
@@ -467,22 +463,33 @@ export function ShowcasePage() {
             onClick={() => track("showcase_editor_cta_clicked", { source: "header" })}
             className="inline-flex shrink-0 items-center rounded-full bg-accent-primary/10 px-4 py-2 text-sm font-medium text-accent-primary transition-colors hover:bg-accent-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
           >
-            Open the editor →
+            Try in browser →
           </Link>
         </div>
         <p className="sf-hero-description">
-          Turn references and project context into working interface concepts,
-          together with your AI agent. Explore them side by side on one canvas.
+          A browser the agent drives, a design canvas and Notion-style docs in
+          one desktop app. The same agent works across all three, so research,
+          design and the write-up happen in one task.
         </p>
-        <div className="mx-auto max-w-2xl">
-          <ShowcaseAgentComposer onSubmit={handleAgentPrompt} />
+        <div className="sf-hero-actions">
+          <a
+            className="sf-primary-link"
+            href={DESKTOP_DOWNLOAD_URL}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => track("landing_download_clicked", { source: "hero" })}
+          >
+            <AppleLogoIcon size={17} weight="fill" aria-hidden /> Download for Mac
+          </a>
+          <Link
+            className="sf-secondary-link"
+            to="/app"
+            onClick={() => track("showcase_editor_cta_clicked", { source: "hero" })}
+          >
+            Try in the browser, no install
+          </Link>
         </div>
-        <nav className="sf-hero-nav" aria-label="Explore Sideform">
-          <a href="#workflow">How it works</a>
-          <a href="#gallery">Explore concepts <span aria-hidden>↓</span></a>
-          <a href="#get-started">Use your own agent</a>
-        </nav>
-        <LandingPreview />
+        <HeroDemo />
       </header>
 
       <main
@@ -496,10 +503,13 @@ export function ShowcasePage() {
           "sm:pl-[calc(4rem+env(safe-area-inset-left))] sm:pr-[calc(4rem+env(safe-area-inset-right))]",
         )}
       >
-        <ShowcaseLanding />
+        <LandingStory />
+        {/* Own box so the sticky filter bar stops at the end of the gallery
+            instead of riding over the closing sections. */}
+        <div className="sf-gallery">
         <section id="gallery" aria-labelledby="gallery-title" className="sf-gallery-intro">
-          <h2 id="gallery-title">See what takes shape.</h2>
-          <p>Real screens generated by Sideform Agent. Browse a concept, explore its screens and open it in the editor to take it further.</p>
+          <h2 id="gallery-title">Designed by the agent. Not by us.</h2>
+          <p>Every app below was designed by Sideform Agent on its own, from a one-line theme. Open any of them in the editor and take it further.</p>
         </section>
         <div className="sticky top-0 z-10 mb-6 bg-surface-panel py-2">
           <ShowcaseFilterBar
@@ -598,9 +608,11 @@ export function ShowcasePage() {
             {loadingMore && <p className="sr-only" role="status">Loading more…</p>}
           </>
         )}
+        </div>
+        <LandingClosing onAgentPrompt={handleAgentPrompt} />
       </main>
       <footer className="sf-footer">
-        <span>Sideform <span className="sf-footer-note">— a space for your next direction.</span></span>
+        <span>Sideform <span className="sf-footer-note">— one agent for the browser, the canvas and docs.</span></span>
         <LegalLinks />
         <a href="https://github.com/dan-rozhkov/pen-editor" target="_blank" rel="noreferrer">Explore the source ↗</a>
       </footer>

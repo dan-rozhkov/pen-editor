@@ -151,7 +151,7 @@ describe("ShowcasePage analytics", () => {
     await screen.findByAltText("Onboarding flow");
     trackMock.mockClear();
 
-    fireEvent.click(screen.getByRole("link", { name: "Open the editor →" }));
+    fireEvent.click(screen.getByRole("link", { name: "Try in browser →" }));
 
     expect(trackMock).toHaveBeenCalledWith("showcase_editor_cta_clicked", {
       source: "header",

@@ -63,7 +63,7 @@ test("/ shows the showcase, not the editor", async ({ page }, testInfo) => {
   await page.route("**/api/models", (route) =>
     route.fulfill({ json: { models: [], default: null } })
   );
-  await page.getByRole("link", { name: /open the editor/i }).click();
+  await page.getByRole("link", { name: "Try in browser →" }).click();
   await expect(page).toHaveURL(/\/app$/);
   await expectEditorMounted(page);
 });
@@ -93,10 +93,10 @@ test("the showcase follows the editor's dark theme across navigation", async ({
     "rgb(42, 42, 42)",
   );
   await expect(
-    page.getByRole("heading", { name: "Explore ideas. Find your direction." }),
+    page.getByRole("heading", { name: "One agent. Browser, canvas and docs." }),
   ).toHaveCSS("color", "rgba(255, 255, 255, 0.87)");
 
-  await page.getByRole("link", { name: /open the editor/i }).click();
+  await page.getByRole("link", { name: "Try in browser →" }).click();
   await expect(page).toHaveURL(/\/app$/);
   await expectEditorMounted(page);
   await expect(page.locator("html")).toHaveClass(/dark/);
@@ -104,7 +104,7 @@ test("the showcase follows the editor's dark theme across navigation", async ({
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
   await expect(
-    page.getByRole("heading", { name: "Explore ideas. Find your direction." }),
+    page.getByRole("heading", { name: "One agent. Browser, canvas and docs." }),
   ).toBeVisible();
   await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(page.locator("body")).toHaveCSS(
@@ -114,7 +114,7 @@ test("the showcase follows the editor's dark theme across navigation", async ({
 
   // The preference must remain stable even though the editor module/store is
   // already cached from the first lap.
-  await page.getByRole("link", { name: /open the editor/i }).click();
+  await page.getByRole("link", { name: "Try in browser →" }).click();
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.locator("html")).toHaveClass(/dark/);
 });
