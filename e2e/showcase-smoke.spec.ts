@@ -41,11 +41,15 @@ test("/ shows the showcase, not the editor", async ({ page }, testInfo) => {
   // Cards are image-only, so the title lives in alt text, not a caption.
   await expect(page.getByAltText("Onboarding flow")).toBeVisible();
   await expect(page.locator("[data-canvas]")).toHaveCount(0);
+  // The landing is dark-only, whatever theme the editor has stored.
   await expect(page.locator("html")).not.toHaveClass(/dark/);
   await expect(page.locator("body")).toHaveCSS(
     "background-color",
-    "rgb(255, 255, 255)",
+    "rgb(2, 2, 2)",
   );
+  await expect(
+    page.getByRole("heading", { level: 1, name: "One agent, three apps, one window." }),
+  ).toBeVisible();
 
   // The `/app` navigation mounts the full WebGL/Pixi editor, which is
   // already covered on chromium. webkit-mobile (iPhone 14) exists only to
@@ -63,12 +67,12 @@ test("/ shows the showcase, not the editor", async ({ page }, testInfo) => {
   await page.route("**/api/models", (route) =>
     route.fulfill({ json: { models: [], default: null } })
   );
-  await page.getByRole("link", { name: "Try in browser →" }).click();
+  await page.getByRole("link", { name: "Try in browser" }).first().click();
   await expect(page).toHaveURL(/\/app$/);
   await expectEditorMounted(page);
 });
 
-test("the showcase follows the editor's dark theme across navigation", async ({
+test("the landing stays dark when the editor theme is light, and the editor keeps its theme", async ({
   page,
 }, testInfo) => {
   test.skip(
@@ -77,7 +81,7 @@ test("the showcase follows the editor's dark theme across navigation", async ({
   );
 
   await page.addInitScript(() => {
-    localStorage.setItem("ui-theme", "dark");
+    localStorage.setItem("ui-theme", "light");
   });
   await page.route("**/api/showcase**", (route) =>
     route.fulfill({ json: { apps: [], nextCursor: null } }),
@@ -87,36 +91,19 @@ test("the showcase follows the editor's dark theme across navigation", async ({
   );
 
   await page.goto("/");
-  await expect(page.locator("html")).toHaveClass(/dark/);
-  await expect(page.locator("body")).toHaveCSS(
-    "background-color",
-    "rgb(42, 42, 42)",
-  );
+  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(2, 2, 2)");
   await expect(
-    page.getByRole("heading", { name: "One agent. Browser, canvas and docs." }),
-  ).toHaveCSS("color", "rgba(255, 255, 255, 0.87)");
+    page.getByRole("heading", { level: 1, name: "One agent, three apps, one window." }),
+  ).toHaveCSS("color", "rgb(255, 255, 255)");
 
-  await page.getByRole("link", { name: "Try in browser →" }).click();
+  await page.getByRole("link", { name: "Try in browser" }).first().click();
   await expect(page).toHaveURL(/\/app$/);
   await expectEditorMounted(page);
-  await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect(page.locator("html")).not.toHaveClass(/dark/);
 
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
-  await expect(
-    page.getByRole("heading", { name: "One agent. Browser, canvas and docs." }),
-  ).toBeVisible();
-  await expect(page.locator("html")).toHaveClass(/dark/);
-  await expect(page.locator("body")).toHaveCSS(
-    "background-color",
-    "rgb(42, 42, 42)",
-  );
-
-  // The preference must remain stable even though the editor module/store is
-  // already cached from the first lap.
-  await page.getByRole("link", { name: "Try in browser →" }).click();
-  await expect(page).toHaveURL(/\/app$/);
-  await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(2, 2, 2)");
 });
 
 test("the model filter sizes itself to its selected option", async ({ page }, testInfo) => {
@@ -269,10 +256,8 @@ test("the grid scrolls the document on a phone-sized viewport", async ({
   await page.goto("/");
   await expect(page.getByAltText("Screen 0")).toBeVisible();
 
-  // The page gutter was deliberately reduced from 48px to 16px on mobile.
-  // Compensating inside the grey app panel (80px instead of 48px per side)
-  // keeps the screenshot itself at its previous 198px width:
-  // 390 - 2×16 - 2×80 = 198.
+  // The landing follows the Signale template's mobile grid: a 20px page
+  // gutter and full-width cards (390 - 2×20 = 350), like its speaker photos.
   const mobileGeometry = await page
     .getByRole("region", { name: "Screen 0 screens" })
     .evaluate((panel) => {
@@ -286,9 +271,9 @@ test("the grid scrolls the document on a phone-sized viewport", async ({
       };
     });
   expect(mobileGeometry).toEqual({
-    panelLeft: 16,
-    scrollerPaddingLeft: 80,
-    cardWidth: 198,
+    panelLeft: 20,
+    scrollerPaddingLeft: 0,
+    cardWidth: 350,
   });
 
   // The document overflows...

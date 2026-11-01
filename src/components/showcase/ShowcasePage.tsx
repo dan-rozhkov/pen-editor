@@ -1,4 +1,3 @@
-import { LegalLinks } from "@/components/legal/LegalLinks";
 import {
   type ReactNode,
   useCallback,
@@ -7,20 +6,24 @@ import {
   useRef,
   useState,
 } from "react";
-import { AppleLogoIcon } from "@/components/icons";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 
-import { AuthMenu } from "@/components/auth/AuthMenu";
-import { DESKTOP_DOWNLOAD_URL, LandingClosing, LandingStory } from "./ShowcaseLanding";
-import { HeroDemo } from "./landing/HeroDemo";
+import {
+  LandingClosing,
+  LandingFooter,
+  LandingHero,
+  LandingNav,
+  LandingSectionHead,
+  LandingStory,
+} from "./ShowcaseLanding";
 import "./showcaseLanding.css";
 
 import { ShowcaseFilterBar } from "@/components/showcase/ShowcaseFilterBar";
 import { Button } from "@/components/ui/button";
 import { track } from "@/lib/analytics";
 import { storeShowcaseAgentPrompt } from "@/lib/showcaseAgentHandoff";
-import { getAppliedUITheme, onUIThemeApplied, type UITheme } from "@/lib/uiTheme";
 import { cn } from "@/lib/utils";
+import { useForcedDarkDocument } from "@/hooks/useForcedDarkDocument";
 import { useHtmlRouteClass } from "@/hooks/useHtmlRouteClass";
 import {
   fetchShowcase,
@@ -33,9 +36,11 @@ import {
   type ShowcaseSort,
 } from "@/lib/showcase";
 import { ShowcaseAppCarousel } from "@/components/showcase/ShowcaseAppCarousel";
-import { SideformLockup } from "@/components/brand/SideformLogo";
 
 type Status = "loading" | "ready" | "error";
+
+// theme-color for the dark-only landing (matches its #020202 page background).
+const LANDING_THEME_COLOR = "#020202";
 
 function parseSort(value: string | null): ShowcaseSort {
   return value === "latest" ? "latest" : "popular";
@@ -395,20 +400,16 @@ export function ShowcasePage() {
   // chrome and content pass under it. `route-showcase` (toggled below) turns
   // off the lock while this page is mounted, without touching it for "/app".
   //
-  // The showcase shares the editor's persisted theme. Its surfaces use theme
-  // tokens below, so `.dark` deliberately stays on <html> during client-side
-  // navigation instead of being treated as editor-only state.
+  // The landing is dark-only. `.dark` on the page root below styles the page;
+  // the hook also darkens <html> so portaled popups match. The stored editor
+  // theme is never written.
   useHtmlRouteClass("route-showcase");
+  useForcedDarkDocument();
   useLayoutEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]');
     const previousThemeColor = meta?.getAttribute("content") ?? null;
-    const paint = (theme: UITheme) =>
-      meta?.setAttribute("content", theme === "dark" ? "#2a2a2a" : "#ffffff");
-    paint(getAppliedUITheme());
-    // Follows a theme switched in another document (storage sync).
-    const unsubscribe = onUIThemeApplied(paint);
+    meta?.setAttribute("content", LANDING_THEME_COLOR);
     return () => {
-      unsubscribe();
       if (previousThemeColor !== null) {
         meta?.setAttribute("content", previousThemeColor);
       }
@@ -416,207 +417,121 @@ export function ShowcasePage() {
   }, []);
 
   return (
-    <div className="sideform-landing min-h-[100dvh] bg-surface-panel">
-      <header
-        className={cn(
-          "sf-header relative mx-auto max-w-6xl pb-8 sm:pb-16 lg:max-w-none",
-          // pl-/pr-/pt- (not the px-/pt- shorthand) so the safe-area addition
-          // below is the only rule touching each side — no shorthand vs.
-          // longhand ordering to worry about. `env(safe-area-inset-*)` is 0
-          // on browsers/orientations without a safe area, so this is just
-          // pt-12/px-4/sm:px-16 plus Safari's status bar and, in landscape,
-          // its side insets.
-          "pt-[calc(3rem+env(safe-area-inset-top))] sm:pt-[calc(4rem+env(safe-area-inset-top))]",
-          "pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))]",
-          "sm:pl-[calc(4rem+env(safe-area-inset-left))] sm:pr-[calc(4rem+env(safe-area-inset-right))]",
-        )}
-      >
-        <Link to="/" className="sf-brand" aria-label="Sideform home"><SideformLockup className="sf-brand-logo" /></Link>
-        <div className="relative text-center">
-          <p className="sf-eyebrow">Sideform for Mac</p>
-          <h1 className="sf-hero-title font-semibold tracking-tight text-text-primary">
-            <span className="block">One agent.</span>
-            <span className="block">Browser, canvas and docs.</span>
-          </h1>
-        </div>
-        <div className="sf-header-actions absolute top-[calc(1rem+env(safe-area-inset-top))] right-[calc(1rem+env(safe-area-inset-right))] hidden shrink-0 items-center gap-2 sm:flex">
-          <AuthMenu variant="showcase" />
-          {/* The desktop shell ships from its own repo (pen-editor-desktop),
-              so its build artifacts live on GitHub Releases, not here. The
-              asset filenames carry the version, which would make a direct
-              asset URL 404 on the next desktop release — link the "latest"
-              release page instead, which never goes stale. */}
-          <a
-            href={DESKTOP_DOWNLOAD_URL}
-            target="_blank"
-            rel="noreferrer"
-            onClick={() => track("landing_download_clicked", { source: "header" })}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-surface-elevated px-4 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
-          >
-            <AppleLogoIcon size={16} weight="fill" aria-hidden />
-            Download for Mac
-          </a>
-          {/* A real <Link>, not a button with navigate(): this is plain
-              navigation, so it must keep link semantics (middle-click / "open
-              in new tab", and the `link` role the e2e smoke test asserts). */}
-          <Link
-            to="/app"
-            onClick={() => track("showcase_editor_cta_clicked", { source: "header" })}
-            className="inline-flex shrink-0 items-center rounded-full bg-accent-primary/10 px-4 py-2 text-sm font-medium text-accent-primary transition-colors hover:bg-accent-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
-          >
-            Try in browser →
-          </Link>
-        </div>
-        <p className="sf-hero-description">
-          A browser the agent drives, a design canvas and Notion-style docs in
-          one desktop app. The same agent works across all three, so research,
-          design and the write-up happen in one task.
-        </p>
-        <div className="sf-hero-actions">
-          <a
-            className="sf-primary-link"
-            href={DESKTOP_DOWNLOAD_URL}
-            target="_blank"
-            rel="noreferrer"
-            onClick={() => track("landing_download_clicked", { source: "hero" })}
-          >
-            <AppleLogoIcon size={17} weight="fill" aria-hidden /> Download for Mac
-          </a>
-          <Link
-            className="sf-secondary-link"
-            to="/app"
-            onClick={() => track("showcase_editor_cta_clicked", { source: "hero" })}
-          >
-            Try in the browser, no install
-          </Link>
-        </div>
-        <HeroDemo />
-      </header>
-
-      <main
-        className={cn(
-          "mx-auto max-w-6xl lg:max-w-none",
-          // Same pl-/pr- reasoning as the header above; pb- adds Safari's
-          // bottom inset so the final row isn't hidden behind the address
-          // bar.
-          "pb-[calc(4rem+env(safe-area-inset-bottom))]",
-          "pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))]",
-          "sm:pl-[calc(4rem+env(safe-area-inset-left))] sm:pr-[calc(4rem+env(safe-area-inset-right))]",
-        )}
-      >
-        <LandingStory />
-        {/* Own box so the sticky filter bar stops at the end of the gallery
-            instead of riding over the closing sections. */}
-        <div className="sf-gallery">
-        <section id="gallery" aria-labelledby="gallery-title" className="sf-gallery-intro">
-          <h2 id="gallery-title">Designed by the agent. Not by us.</h2>
-          <p>Every app below was designed by Sideform Agent on its own, from a one-line theme. Open any of them in the editor and take it further.</p>
-        </section>
-        <div className="sticky top-0 z-10 mb-6 bg-surface-panel py-2">
-          <ShowcaseFilterBar
-            sort={sort}
-            category={category}
-            categories={categories}
-            platform={platform}
-            model={model}
-            models={models}
-            onSortChange={(newSort) => {
-              track("showcase_filter_applied", { filter: "sort", value: newSort });
-              updateFilters({ sort: newSort });
-            }}
-            onCategoryChange={(newCategory) => {
-              track("showcase_filter_applied", {
-                filter: "category",
-                value: newCategory ?? "all",
-              });
-              updateFilters({ category: newCategory });
-            }}
-            onPlatformChange={(newPlatform) => {
-              track("showcase_filter_applied", { filter: "platform", value: newPlatform });
-              handlePlatformChange(newPlatform);
-            }}
-            onModelChange={(newModel) => {
-              track("showcase_filter_applied", { filter: "model", value: newModel ?? "all" });
-              updateFilters({ model: newModel });
-            }}
-          />
-        </div>
-
-        {status === "loading" && <SkeletonGrid platform={platform} />}
-
-        {status === "error" && (
-          <div className="rounded-lg bg-surface-panel px-6 py-10 text-center ring-1 ring-border-default">
-            <p className="text-sm text-text-primary">
-              Couldn't load the showcase.
-            </p>
-            <p className="mt-1 text-xs text-text-muted">{errorMessage}</p>
-          </div>
-        )}
-
-        {isEmpty && category != null && (
-          <div className="rounded-lg bg-surface-panel px-6 py-10 text-center ring-1 ring-border-default">
-            <p className="text-sm text-text-primary">
-              Nothing generated in this category yet.
-            </p>
-            <p className="mt-1 text-xs text-text-muted">
-              Check back soon, or browse everything the agent has designed.
-            </p>
-            <Button
-              variant="outline"
-              className="mt-4"
-              onClick={() => updateFilters({ category: null })}
-            >
-              Show all
-            </Button>
-          </div>
-        )}
-
-        {isEmpty && category == null && (
-          <div className="rounded-lg bg-surface-panel px-6 py-10 text-center ring-1 ring-border-default">
-            <p className="text-sm text-text-primary">
-              Nothing generated yet.
-            </p>
-            <p className="mt-1 text-xs text-text-muted">
-              Check back soon — the showcase fills up as the agent designs new
-              screens on its own.
-            </p>
-          </div>
-        )}
-
-        {status === "ready" && apps.length > 0 && (
-          <>
-            <ShowcaseGrid platform={platform}>
-              {apps.map((app, index) => (
-                <ShowcaseAppCarousel
-                  key={app.runId}
-                  app={app}
-                  isFirstInGrid={index === 0}
-                  feedPosition={index}
-                  activePlatform={platform}
-                  activeCategory={category ?? undefined}
-                />
-              ))}
-            </ShowcaseGrid>
-
-            {nextCursor != null && (
-              <div
-                ref={loadMoreSentinelRef}
-                data-testid="showcase-load-more-sentinel"
-                aria-hidden="true"
-                className="h-px"
+    <div className="sideform-landing sf-landing dark">
+      <LandingNav />
+      <main>
+        <LandingHero />
+        {/* Opaque sections scroll over the sticky hero, as in the template. */}
+        <div className="sf-over">
+          <LandingStory />
+          <section id="gallery" aria-labelledby="gallery-title" className="sf-section">
+            <div className="sf-container sf-stack">
+              <LandingSectionHead
+                id="gallery-title"
+                title="Designed by the agent"
+                text="Every app below was designed by Sideform Agent on its own, from a one-line theme. Open any of them in the editor and take it further."
               />
-            )}
-            {loadingMore && <p className="sr-only" role="status">Loading more…</p>}
-          </>
-        )}
+              <div className="sf-gallery">
+                <div className="sf-subrow">
+                  <h3 className="sf-h6">Showcase apps</h3>
+                  <div className="sf-filters">
+                    <ShowcaseFilterBar
+                      sort={sort}
+                      category={category}
+                      categories={categories}
+                      platform={platform}
+                      model={model}
+                      models={models}
+                      onSortChange={(newSort) => {
+                        track("showcase_filter_applied", { filter: "sort", value: newSort });
+                        updateFilters({ sort: newSort });
+                      }}
+                      onCategoryChange={(newCategory) => {
+                        track("showcase_filter_applied", {
+                          filter: "category",
+                          value: newCategory ?? "all",
+                        });
+                        updateFilters({ category: newCategory });
+                      }}
+                      onPlatformChange={(newPlatform) => {
+                        track("showcase_filter_applied", { filter: "platform", value: newPlatform });
+                        handlePlatformChange(newPlatform);
+                      }}
+                      onModelChange={(newModel) => {
+                        track("showcase_filter_applied", { filter: "model", value: newModel ?? "all" });
+                        updateFilters({ model: newModel });
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {status === "loading" && <SkeletonGrid platform={platform} />}
+
+                {status === "error" && (
+                  <div className="sf-gallery-note">
+                    <p>Couldn't load the showcase.</p>
+                    <p className="sf-gallery-note-detail">{errorMessage}</p>
+                  </div>
+                )}
+
+                {isEmpty && category != null && (
+                  <div className="sf-gallery-note">
+                    <p>Nothing generated in this category yet.</p>
+                    <p className="sf-gallery-note-detail">
+                      Check back soon, or browse everything the agent has designed.
+                    </p>
+                    <Button
+                      variant="outline"
+                      className="mt-4"
+                      onClick={() => updateFilters({ category: null })}
+                    >
+                      Show all
+                    </Button>
+                  </div>
+                )}
+
+                {isEmpty && category == null && (
+                  <div className="sf-gallery-note">
+                    <p>Nothing generated yet.</p>
+                    <p className="sf-gallery-note-detail">
+                      Check back soon — the showcase fills up as the agent designs new screens on its own.
+                    </p>
+                  </div>
+                )}
+
+                {status === "ready" && apps.length > 0 && (
+                  <>
+                    <ShowcaseGrid platform={platform}>
+                      {apps.map((app, index) => (
+                        <ShowcaseAppCarousel
+                          key={app.runId}
+                          app={app}
+                          isFirstInGrid={index === 0}
+                          feedPosition={index}
+                          activePlatform={platform}
+                          activeCategory={category ?? undefined}
+                        />
+                      ))}
+                    </ShowcaseGrid>
+
+                    {nextCursor != null && (
+                      <div
+                        ref={loadMoreSentinelRef}
+                        data-testid="showcase-load-more-sentinel"
+                        aria-hidden="true"
+                        className="h-px"
+                      />
+                    )}
+                    {loadingMore && <p className="sr-only" role="status">Loading more…</p>}
+                  </>
+                )}
+              </div>
+            </div>
+          </section>
+          <LandingClosing onAgentPrompt={handleAgentPrompt} />
         </div>
-        <LandingClosing onAgentPrompt={handleAgentPrompt} />
       </main>
-      <footer className="sf-footer">
-        <span className="sf-footer-brand"><SideformLockup label="Sideform" className="sf-footer-logo" /><span className="sf-footer-note">— one agent for the browser, the canvas and docs.</span></span>
-        <LegalLinks />
-        <a href="https://github.com/dan-rozhkov/pen-editor" target="_blank" rel="noreferrer">Explore the source ↗</a>
-      </footer>
+      <LandingFooter />
     </div>
   );
 }

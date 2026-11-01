@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -6,6 +7,13 @@ import { ShowcaseAgentComposer } from "@/components/showcase/ShowcaseAgentCompos
 afterEach(cleanup);
 
 describe("<ShowcaseAgentComposer />", () => {
+  it("keeps the textarea at 16px on phones and touch screens (iOS Safari zooms below 16px)", () => {
+    const css = readFileSync(`${process.cwd()}/src/components/showcase/showcaseLanding.css`, "utf8");
+    const mobileRule = /@media \(max-width: 809px\), \(pointer: coarse\) \{\s*\.sf-composer textarea \{([^}]*)\}/.exec(css);
+
+    expect(mobileRule?.[1]).toContain("font-size: 16px");
+  });
+
   it("keeps send disabled for an empty or whitespace-only prompt", () => {
     render(<ShowcaseAgentComposer onSubmit={vi.fn()} />);
 
@@ -13,13 +21,6 @@ describe("<ShowcaseAgentComposer />", () => {
     const send = screen.getByRole("button", { name: "Send" });
 
     expect(input.getAttribute("rows")).toBe("1");
-    expect(input.classList.contains("min-h-14")).toBe(true);
-    expect(input.classList.contains("text-base")).toBe(true);
-    expect(input.classList.contains("sm:text-sm")).toBe(true);
-    expect(input.closest("form")?.classList.contains("dark:border-border-hover")).toBe(true);
-    expect(
-      input.closest("form")?.classList.contains("dark:focus-within:border-accent-light"),
-    ).toBe(true);
     expect((send as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(input, { target: { value: "   " } });
     expect((send as HTMLButtonElement).disabled).toBe(true);

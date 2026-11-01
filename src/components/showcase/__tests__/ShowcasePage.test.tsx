@@ -1,4 +1,3 @@
-import { installUIThemeStorageSync } from "@/lib/uiTheme";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
@@ -101,32 +100,53 @@ describe("<ShowcasePage />", () => {
 
     renderPage();
 
-    const heading = screen.getByRole("heading", {
-      name: "One agent. Browser, canvas and docs.",
-    });
-    const editorLink = screen.getByRole("link", {
-      name: "Try in browser →",
-    });
+    const headings = screen.getAllByRole("heading", { level: 1 });
+    const editorLinks = screen.getAllByRole("link", { name: "Try in browser" });
 
-    expect(heading).toBeTruthy();
-    expect(
-      heading.classList.contains("sf-hero-title"),
-    ).toBe(true);
-    expect(heading.classList.contains("tracking-tight")).toBe(true);
+    expect(headings).toHaveLength(1);
+    expect(headings[0].textContent?.replace(/\s+/g, " ").trim()).toBe(
+      "One agent, three apps, one window.",
+    );
+    expect(headings[0].classList.contains("sf-hero-title")).toBe(true);
     expect(
       screen.getByPlaceholderText("Ask Sideform Agent to create…"),
     ).toBeTruthy();
-    expect(editorLink.getAttribute("href")).toBe("/app");
-    expect(editorLink.classList.contains("bg-accent-primary/10")).toBe(true);
-
-    // Both header actions sit in one absolutely positioned row in the top
-    // right corner.
-    const actions = editorLink.parentElement;
-    expect(actions?.parentElement?.tagName).toBe("HEADER");
-    expect(actions?.classList.contains("absolute")).toBe(true);
+    // Header and footer both link the editor (plus the hero's "Try in the browser").
+    expect(editorLinks).toHaveLength(2);
+    for (const link of editorLinks) {
+      expect(link.getAttribute("href")).toBe("/app");
+    }
     expect(
-      actions?.classList.contains("right-[calc(1rem+env(safe-area-inset-right))]"),
-    ).toBe(true);
+      screen.getByRole("link", { name: "Try in the browser" }).getAttribute("href"),
+    ).toBe("/app");
+  });
+
+  it("labels every landing section", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+
+    renderPage();
+
+    for (const name of [
+      "Three apps, one agent",
+      "Three apps at work",
+      "Designed by the agent",
+      "Get Sideform",
+      "Fast because it is connected.",
+      "Questions, answered",
+    ]) {
+      expect(screen.getByRole("region", { name })).toBeTruthy();
+    }
+  });
+
+  it("shows the real editor screenshot with a text alternative", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+
+    renderPage();
+
+    const image = screen.getByRole("img", { name: /The Sideform editor in dark mode/ });
+    expect(image.getAttribute("src")).toBe("/landing/sideform-editor-dark-1440.webp");
+    expect(image.getAttribute("width")).toBe("2880");
+    expect(image.getAttribute("height")).toBe("1800");
   });
 
   it("offers the macOS desktop build next to the editor link", () => {
@@ -134,26 +154,29 @@ describe("<ShowcasePage />", () => {
 
     renderPage();
 
-    // The header row, the hero and the closing section all link the build.
+    // The header, the about row and the get-started card link the build.
     const downloadLinks = screen.getAllByRole("link", { name: "Download for Mac" });
-    const editorLink = screen.getByRole("link", { name: "Try in browser →" });
-    const downloadLink = downloadLinks.find(
-      (link) => link.parentElement === editorLink.parentElement,
-    );
 
     expect(downloadLinks).toHaveLength(3);
     for (const link of downloadLinks) {
       expect(link.getAttribute("href")).toBe(
         "https://github.com/dan-rozhkov/pen-editor-desktop/releases/latest",
       );
+      expect(link.getAttribute("target")).toBe("_blank");
+      expect(link.getAttribute("rel")).toBe("noreferrer");
     }
-    assertDefined(downloadLink);
+  });
 
-    expect(downloadLink.getAttribute("href")).toBe(
-      "https://github.com/dan-rozhkov/pen-editor-desktop/releases/latest",
-    );
-    expect(downloadLink.getAttribute("target")).toBe("_blank");
-    expect(downloadLink.getAttribute("rel")).toBe("noreferrer");
+  it("answers FAQ questions with native disclosure elements", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+
+    renderPage();
+
+    const question = screen.getByText("Does the agent really use a browser?");
+    const details = question.closest("details");
+    assertDefined(details);
+    expect(details.open).toBe(false);
+    expect(question.closest("summary")).not.toBeNull();
   });
 
   it("stores a trimmed prompt and navigates to the editor", async () => {
@@ -175,7 +198,7 @@ describe("<ShowcasePage />", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
     renderNavigablePage();
 
-    fireEvent.click(screen.getByRole("link", { name: "Try in browser →" }));
+    fireEvent.click(screen.getAllByRole("link", { name: "Try in browser" })[0]);
 
     expect(await screen.findByText("Editor route")).toBeTruthy();
   });
@@ -355,8 +378,6 @@ describe("<ShowcasePage />", () => {
 
     const image = await screen.findByAltText("Onboarding flow");
     const page = container.firstElementChild;
-    const header = page?.querySelector("header");
-    const main = page?.querySelector("main");
     // The image's direct parent is now the copy-id <button>, so reach for the
     // card by its slot marker instead of by DOM position.
     const card = image.closest('[data-slot="showcase-card"]');
@@ -364,7 +385,7 @@ describe("<ShowcasePage />", () => {
     const appCarousel = scroller?.closest("[data-slot=showcase-app-carousel]");
     const grid = appCarousel?.parentElement;
 
-    expect(page?.classList.contains("bg-surface-panel")).toBe(true);
+    expect(page?.classList.contains("sf-landing")).toBe(true);
     expect(appCarousel?.classList.contains("bg-surface-base")).toBe(true);
     expect(appCarousel?.classList.contains("py-10")).toBe(true);
     expect(appCarousel?.classList.contains("sm:py-12")).toBe(true);
@@ -378,19 +399,6 @@ describe("<ShowcasePage />", () => {
     expect(grid?.classList.contains("sm:grid-cols-2")).toBe(true);
     expect(grid?.classList.contains("lg:grid-cols-3")).toBe(true);
     expect(grid?.classList.contains("xl:grid-cols-4")).toBe(true);
-    // Horizontal padding is expressed as pl-/pr- (not the px- shorthand) so
-    // it can carry the safe-area-inset addition on each side individually —
-    // see ShowcasePage's comment above the header/main className.
-    expect(header?.classList.contains("pl-[calc(1rem+env(safe-area-inset-left))]")).toBe(true);
-    expect(header?.classList.contains("pr-[calc(1rem+env(safe-area-inset-right))]")).toBe(true);
-    expect(header?.classList.contains("sm:pl-[calc(4rem+env(safe-area-inset-left))]")).toBe(true);
-    expect(header?.classList.contains("sm:pr-[calc(4rem+env(safe-area-inset-right))]")).toBe(true);
-    expect(main?.classList.contains("pl-[calc(1rem+env(safe-area-inset-left))]")).toBe(true);
-    expect(main?.classList.contains("pr-[calc(1rem+env(safe-area-inset-right))]")).toBe(true);
-    expect(main?.classList.contains("sm:pl-[calc(4rem+env(safe-area-inset-left))]")).toBe(true);
-    expect(main?.classList.contains("sm:pr-[calc(4rem+env(safe-area-inset-right))]")).toBe(true);
-    expect(header?.classList.contains("lg:max-w-none")).toBe(true);
-    expect(main?.classList.contains("lg:max-w-none")).toBe(true);
     // screen1() is 390x844 (mobile portrait) — the aspect ratio is an inline
     // style derived from the screen's own width/height, not a static
     // Tailwind class, since a real desktop screen's ratio differs per row.
@@ -415,12 +423,12 @@ describe("<ShowcasePage />", () => {
     ).toBe(true);
   });
 
-  it("preserves the editor theme while marking <html> as the showcase route", async () => {
+  it("stays dark regardless of the editor theme and restores theme-color on unmount", async () => {
     const meta = document.createElement("meta");
     meta.setAttribute("name", "theme-color");
     meta.setAttribute("content", "#111111");
     document.head.appendChild(meta);
-    document.documentElement.classList.add("dark");
+    document.documentElement.classList.remove("dark");
 
     vi.stubGlobal(
       "fetch",
@@ -428,40 +436,24 @@ describe("<ShowcasePage />", () => {
     );
 
     try {
-      expect(document.documentElement.classList.contains("route-showcase")).toBe(
-        false,
-      );
-      expect(document.documentElement.classList.contains("dark")).toBe(true);
+      expect(document.documentElement.classList.contains("route-showcase")).toBe(false);
 
-      const { unmount } = renderPage();
+      const { unmount, container } = renderPage();
       await screen.findByAltText("Onboarding flow");
 
-      expect(document.documentElement.classList.contains("route-showcase")).toBe(
-        true,
-      );
+      expect(document.documentElement.classList.contains("route-showcase")).toBe(true);
+      // The page root is dark, and <html> is too while mounted so portaled
+      // popups match (the stored theme preference is never written).
+      expect(container.querySelector(".sf-landing")?.classList.contains("dark")).toBe(true);
       expect(document.documentElement.classList.contains("dark")).toBe(true);
-      expect(meta.getAttribute("content")).toBe("#2a2a2a");
-
-      // A theme switched in another document updates the meta too.
-      installUIThemeStorageSync();
-      window.dispatchEvent(
-        new StorageEvent("storage", { key: "ui-theme", newValue: "light", storageArea: localStorage }),
-      );
-      expect(meta.getAttribute("content")).toBe("#ffffff");
-      window.dispatchEvent(
-        new StorageEvent("storage", { key: "ui-theme", newValue: "dark", storageArea: localStorage }),
-      );
-      expect(meta.getAttribute("content")).toBe("#2a2a2a");
+      expect(meta.getAttribute("content")).toBe("#020202");
 
       unmount();
 
-      expect(document.documentElement.classList.contains("route-showcase")).toBe(
-        false,
-      );
-      expect(document.documentElement.classList.contains("dark")).toBe(true);
+      expect(document.documentElement.classList.contains("route-showcase")).toBe(false);
+      expect(document.documentElement.classList.contains("dark")).toBe(false);
       expect(meta.getAttribute("content")).toBe("#111111");
     } finally {
-      document.documentElement.classList.remove("dark");
       meta.remove();
     }
   });

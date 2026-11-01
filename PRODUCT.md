@@ -11,7 +11,7 @@ Designers working with coding agents, design engineers, frontend developers and 
 Sideform is the public landing-page name for the existing editor. Help visitors understand three workflows: use their agent and repository context to make HTML concepts on a canvas; research references and develop a direction in their style; keep ideas and saved documents alongside code in Git. The primary outcome is trying the editor; desktop and plugin instructions support external agents.
 
 ## Brand Personality
-Clear, exploratory, practical. Preserve the existing screenshot-led, neutral visual identity, blue accent and typography. English copy, as confirmed by the user.
+Clear, exploratory, practical. English copy, as confirmed by the user. Since 2026-11-01 the landing at `/` is a dark-only 1:1 reproduction of the free Framer template "Signale" (https://try-signall.framer.website/): its Liquid Gradient shader, Space Grotesk type scale, spacing and section structure. Change content, not the template's visual system; any departure from the template is a deliberate, documented exception.
 
 ## Anti-references
 Avoid generic AI promises, invented traction, unsupported speed claims and claims that Figma cannot use agents. Do not turn a landing-page refresh into a complete editor rebrand.
@@ -24,4 +24,4 @@ Avoid generic AI promises, invented traction, unsupported speed claims and claim
 - Treat Git as saved-file version control, with no promise of automatic sync or conflict-free merging.
 
 ## Accessibility & Inclusion
-Maintain keyboard navigation, visible focus, semantic links and headings, readable contrast in both themes, responsive layouts and reduced-motion support.
+Maintain keyboard navigation, visible focus, semantic links and headings, readable contrast on the dark landing, responsive layouts and reduced-motion support.
