@@ -3,19 +3,6 @@ import { cloudBrowserBridge, getCloudBrowserBridge } from "@/lib/cloudBrowser";
 
 export type BrowserBridge = NonNullable<PenDesktopApi["browser"]>;
 
-/**
- * The bridge every browse_* handler talks to: the Electron shell's own
- * `window.penDesktop.browser` when present (byte-identical desktop
- * behavior), otherwise the cloud bridge that forwards to the backend
- * (pen-editor-backend docs/specs/2026-09-29-cloud-browser-steel-design.md).
- * `chatId` binds the cloud bridge to the calling chat's session; without it
- * the chat last set via `setCloudBrowserChat` is used.
- *
- * `browserSession` (a browse_agent QA run's id) selects the run's isolated
- * browser: the shell's `browser.isolated(id)`. Desktop only: the cloud browser
- * has no isolated sessions (a Steel session is scarce, see the isolation spec).
- * Ignored when isolation is unavailable.
- */
 // One isolated bridge per run session, dropped by closeBrowserSession.
 const isolatedBridges = new Map<string, BrowserBridge>();
 // Run sessions already closed (bounded): the shell treats a closed id as dead
@@ -36,6 +23,19 @@ export function desktopBrowserBridge(): BrowserBridge | undefined {
   return window.penDesktop?.browser ?? window.penAgentPanel?.browser;
 }
 
+/**
+ * The bridge every browse_* handler talks to: the Electron shell's own
+ * `window.penDesktop.browser` when present (byte-identical desktop
+ * behavior), otherwise the cloud bridge that forwards to the backend
+ * (pen-editor-backend docs/specs/2026-09-29-cloud-browser-steel-design.md).
+ * `chatId` binds the cloud bridge to the calling chat's session; without it
+ * the chat last set via `setCloudBrowserChat` is used.
+ *
+ * `browserSession` (a browse_agent QA run's id, or a non-QA app run's session id) selects the run's
+ * isolated bridge: the shell's `browser.isolated(id)`. Desktop only: the cloud browser
+ * has no isolated sessions (a Steel session is scarce, see the isolation spec).
+ * Ignored when isolation is unavailable.
+ */
 export function getBrowserBridge(chatId?: string, browserSession?: string): BrowserBridge | undefined {
   const desktop = desktopBrowserBridge();
   if (desktop && browserSession && typeof desktop.isolated === "function") {
@@ -84,4 +84,10 @@ export async function closeBrowserSession(browserSession: string): Promise<void>
  */
 export function isDesktopBrowserAvailable(): boolean {
   return Boolean(desktopBrowserBridge());
+}
+
+/** Test-only: forget cached bridges and closed ids. */
+export function resetBrowserBridgeCacheForTests(): void {
+  isolatedBridges.clear();
+  closedSessions.clear();
 }

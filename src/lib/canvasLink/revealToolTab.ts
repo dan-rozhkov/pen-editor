@@ -40,12 +40,12 @@ async function revealBrowserTab({ toolName, toolCallId, input }: RevealArgs): Pr
   const browser = window.penAgentPanel?.browser;
   if (typeof browser?.revealAgentTab !== "function") return; // shell older than this feature
   let session: string | undefined;
-  if (toolName === "browse_agent" && input !== null && typeof input === "object" && isIsolatedQaCall(input as Record<string, unknown>)) {
+  if (toolName === "browse_agent") {
+    session = runSessionForCall(toolCallId);
     // An isolated QA run never uses the shared browser: no remembered session (still waiting for a
     // slot, or the panel reloaded) means nothing to show. A finished run has no tabs left either:
-    // the shell answers false.
-    session = runSessionForCall(toolCallId);
-    if (session === undefined) return;
+    // the shell answers false. An app run without a remembered session falls back to the shared browser.
+    if (session === undefined && input !== null && typeof input === "object" && isIsolatedQaCall(input as Record<string, unknown>)) return;
   }
   await browser.revealAgentTab(session);
 }

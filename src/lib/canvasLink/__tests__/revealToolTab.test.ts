@@ -109,6 +109,13 @@ describe("revealToolTab: browser tools", () => {
     expect(revealAgentTab).toHaveBeenCalledTimes(1);
   });
 
+  it("reveals the own session of a remembered non-QA app run", async () => {
+    const { revealAgentTab } = installPanel();
+    rememberRunSession("c-app", "app-abc-c-app-1");
+    await revealToolTab({ sessionId: "s", toolCallId: "c-app", toolName: "browse_agent", input: { goal: "g", app: "Notes" } });
+    expect(revealAgentTab).toHaveBeenCalledWith("app-abc-c-app-1");
+  });
+
   it("does nothing more when the shell answers false", async () => {
     const { revealAgentTab, activateTab } = installPanel(undefined, vi.fn(async () => false));
     rememberRunSession("c-done", "qa-abc-c-done-1");

@@ -154,6 +154,8 @@ export interface DesktopLoginsApi {
 export interface DesktopBrowserSettings {
   adBlock: boolean;
   mcpBrowser: boolean;
+  /** Ask before the agent controls a native app. Absent on a shell older than this setting. */
+  askAppAccess?: boolean;
 }
 
 export interface DesktopBrowserSettingsApi {

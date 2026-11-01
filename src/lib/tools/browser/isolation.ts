@@ -72,6 +72,17 @@ export function isIsolatedQaCall(args: Record<string, unknown>): boolean {
   );
 }
 
+/** `<prefix>-<hash of chat>-<tool call id>-<nonce>`, at most 64 chars; an over-long tool call id is cut and ends in its own hash. */
+function sessionIdWithPrefix(prefix: string, chatId: string, toolCallId: string | undefined): string {
+  const head = `${prefix}-${hashString(chatId).slice(0, CHAT_HASH_CHARS)}-`;
+  const suffix = `-${nonce()}`;
+  const room = SESSION_ID_MAX - head.length - suffix.length;
+  const call = idSafe(toolCallId ?? `${Date.now().toString(36)}${(runCounter++).toString(36)}`);
+  if (call.length <= room) return head + call + suffix;
+  const tail = hashString(toolCallId ?? call).slice(0, CHAT_HASH_CHARS);
+  return `${head}${call.slice(0, room - tail.length - 1)}-${tail}${suffix}`;
+}
+
 /**
  * The run's session id: `qa-<hash of chat>-<tool call id>-<nonce>`, at most 64
  * chars, unique per run (the shell treats a closed id as dead for good, so a
@@ -79,13 +90,26 @@ export function isIsolatedQaCall(args: Record<string, unknown>): boolean {
  * cut and ends in its own hash.
  */
 export function runSessionId(chatId: string | undefined, toolCallId: string | undefined): string {
-  const prefix = `qa-${hashString(chatId ?? "no-chat").slice(0, CHAT_HASH_CHARS)}-`;
-  const suffix = `-${nonce()}`;
-  const room = SESSION_ID_MAX - prefix.length - suffix.length;
-  const call = idSafe(toolCallId ?? `${Date.now().toString(36)}${(runCounter++).toString(36)}`);
-  if (call.length <= room) return prefix + call + suffix;
-  const tail = hashString(toolCallId ?? call).slice(0, CHAT_HASH_CHARS);
-  return `${prefix}${call.slice(0, room - tail.length - 1)}-${tail}${suffix}`;
+  return sessionIdWithPrefix("qa", chatId ?? "no-chat", toolCallId);
+}
+
+/**
+ * The session id of a NON-QA native-app run: `app-<hash of chat>-<tool call id>-<nonce>`, at most 64 chars, unique
+ * per run (the shell treats a closed id as dead for good, so a repeated or replayed tool call id must not reuse a
+ * closed one). Two runs of one chat get different ids, so concurrent app runs never share the shell's app binding.
+ * A tool call id too long to fit is cut and ends in its own hash. Closed at the end of the run.
+ */
+export function appSessionId(chatId: string, toolCallId?: string): string {
+  return sessionIdWithPrefix("app", chatId, toolCallId);
+}
+
+/**
+ * The app session of this browse_agent call, or undefined: set only for a non-QA native-app run (it names an
+ * `app`, is not an isolated QA run) with a chat id, on a shell with `browser.isolated`.
+ */
+export function appSessionFor(args: Record<string, unknown>, chatId: string | undefined, toolCallId: string | undefined): string | undefined {
+  if (!chatId || appArgOf(args) === undefined || isIsolatedQaCall(args) || !isolatedBrowseAvailable()) return undefined;
+  return appSessionId(chatId, toolCallId);
 }
 
 const MAX_RUN_SESSIONS = 500;

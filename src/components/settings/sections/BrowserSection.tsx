@@ -59,6 +59,20 @@ function DesktopBrowserRows() {
           onCheckedChange={(v) => toggle("mcpBrowser", v)}
         />
       </SettingsGroup>
+      {/* Only a shell that knows the setting returns the key; an older one gets no broken switch. */}
+      {values && "askAppAccess" in values && (
+        <SettingsGroup
+          inline
+          title="Ask before the agent controls an app"
+          description="Show a confirmation before the agent attaches to or opens a desktop app. Apps with high risk, such as Terminal and password managers, always ask."
+        >
+          <Switch
+            aria-label="Ask before the agent controls an app"
+            checked={values.askAppAccess ?? false}
+            onCheckedChange={(v) => toggle("askAppAccess", v)}
+          />
+        </SettingsGroup>
+      )}
     </>
   );
 }

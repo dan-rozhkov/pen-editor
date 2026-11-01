@@ -52,7 +52,7 @@ import type { ToolHandler } from "../../toolRegistry";
 import { CLOSE_SESSION_TIMEOUT_MS, closeBrowserSession, getBrowserBridge, isDesktopBrowserAvailable, type BrowserBridge } from "./bridge";
 import { APP_NEEDS_DESKTOP_ERROR } from "./browseOpen";
 import { peBase, safeParseObject } from "./shared";
-import { APP_LAUNCH_ALLOWANCE_MS, appArgOf, desktopAppsAvailable, isIsolatedQaCall, rememberRunSession, runSessionId } from "./isolation";
+import { APP_LAUNCH_ALLOWANCE_MS, appArgOf, appSessionFor, desktopAppsAvailable, isIsolatedQaCall, rememberRunSession, runSessionId } from "./isolation";
 import { acquireBrowseSlot } from "@/lib/browseRunLimiter";
 import { tracesForAllRuns } from "@/lib/browseTracePref";
 import { canSaveBrowseTrace, saveBrowseTrace } from "@/lib/browseTraces";
@@ -78,6 +78,9 @@ import { checkpointForModel, useBrowseCheckpointStore } from "@/store/browseChec
  * guard serve both. The browse_* tools are unserialized in the tool queue and
  * so is browse_agent itself (toolCallQueue.ts) — otherwise the nested calls
  * would deadlock behind their own parent.
+ *
+ * A non-QA `app` run on such a shell gets a per-run app session instead (no slot, closed in `finally`); QA-only
+ * behaviour (recording key, `isolated` checkpoints, resume gate, judge reserve) keys off `qaOn`, never `runSession` alone.
  *
  * A `qa: true` run on a desktop shell with `browser.isolated` gets its own
  * browser (the cloud browser has no isolation; its QA runs stay sequential in
@@ -444,7 +447,26 @@ const runWithCleanup = async (
   // Confirm + launch of an app must not eat the agent's step budget: the inner deadline grows by the same allowance as the outer timeout.
   const appAllowance = appArgOf(args) ? APP_LAUNCH_ALLOWANCE_MS : 0;
   if (!isIsolatedQaCall(args)) {
-    return runBrowseAgent(args, context, undefined, appAllowance ? BROWSE_AGENT_DEADLINE_MS + appAllowance : undefined, outerEnd, judgeSignal);
+    // A native-app run gets its own per-run app session (no slot): the shell binds an app per session key, so
+    // concurrent runs (two chats, or two runs of one chat) each drive their own app instead of one panel-wide binding.
+    // The session is closed at the end: that frees the app binding and any browser a stray open{url} created in it.
+    const appSession = appSessionFor(args, context?.sessionId, context?.toolCallId);
+    // Known limit: an app the chat already bound in the shared scope with a direct browse_open {app} is attached again here (own binding).
+    // With a session the run ends with clearActEmulation + releaseApp (inside runBrowseAgent) and closeBrowserSession, each bounded: the tail must fit the outer timeout.
+    const appTailMs = CLEAR_EMULATION_TIMEOUT_MS + RELEASE_APP_TIMEOUT_MS + CLOSE_SESSION_TIMEOUT_MS;
+    const appDeadlineMs = appAllowance ? BROWSE_AGENT_DEADLINE_MS + appAllowance - (appSession ? appTailMs : 0) : undefined;
+    const outcome = () => runBrowseAgent(args, context, appSession, appDeadlineMs, outerEnd, judgeSignal);
+    if (!appSession) return outcome();
+    if (context?.toolCallId) rememberRunSession(context.toolCallId, appSession);
+    try {
+      return await outcome();
+    } finally {
+      try {
+        await closeBrowserSession(appSession);
+      } finally {
+        resetLoopGuard(appSession);
+      }
+    }
   }
   const waitStart = Date.now();
   const slot = await acquireBrowseSlot(context?.signal ?? new AbortController().signal);
@@ -797,7 +819,8 @@ const runBrowseAgentBody = async (
   const checkpointChat = parentSessionId;
   // An isolated run has its own browser and journal: its session id is the key,
   // so parallel isolated runs each record.
-  const recordingKey = runSession ?? (isDesktopBrowserAvailable() ? DESKTOP_RECORDING_KEY : checkpointChat);
+  // A non-QA app run records no checkpoint at all (`openCheckpoint(!app)` below), so its key is never used.
+  const recordingKey = (qaOn ? runSession : undefined) ?? (isDesktopBrowserAvailable() ? DESKTOP_RECORDING_KEY : checkpointChat);
 
   // Checkpoint (spec 2026-10-16-checkpoint-design.md): the package's
   // createRunCheckpoint owns the lifecycle (bounded start, capture conditions,
@@ -843,7 +866,7 @@ const runBrowseAgentBody = async (
       useBrowseCheckpointStore.getState().add(checkpointChat, {
         fixture: taken.fixture,
         // Holds the test account's cookies: resumable only in an isolated run.
-        ...(runSession ? { isolated: true as const } : {}),
+        ...(qaOn && runSession ? { isolated: true as const } : {}),
         ...(network && network.length > 0 ? { network } : {}),
         complete: taken.complete,
         ...(taken.gap !== undefined ? { gap: taken.gap } : {}),
@@ -906,7 +929,7 @@ const runBrowseAgentBody = async (
     if (signal?.aborted) return judgeFailed("aborted");
     const timeLeft = () => outerEnd - Date.now() - QA_JUDGE_TAIL_MARGIN_MS;
     // Both reads, then the cleanup tail the run reserves, must fit before the margin.
-    if (timeLeft() < 2 * QA_JUDGE_READ_MS + CHECKPOINT_CALL_TIMEOUT_MS + (runSession ? CLOSE_SESSION_TIMEOUT_MS : 0) + flushReserve) return judgeFailed(NO_TIME_FOR_JUDGE);
+    if (timeLeft() < 2 * QA_JUDGE_READ_MS + CHECKPOINT_CALL_TIMEOUT_MS + (qaOn && runSession ? CLOSE_SESSION_TIMEOUT_MS : 0) + flushReserve) return judgeFailed(NO_TIME_FOR_JUDGE);
     const nested = (name: string, input: Record<string, unknown>) =>
       withTimeout<string | undefined>(() => executeBrowseTool(bridge, name, input, peBase), QA_JUDGE_READ_MS, undefined, signal);
     const read = await nested("browse_read", { maxChars: QA_JUDGE_PAGE_MAX_CHARS });
@@ -1052,7 +1075,7 @@ const runBrowseAgentBody = async (
           ok: false,
           error: `checkpoint ${resumeId} not found — older checkpoints are dropped when newer ones arrive, and all checkpoints are lost when the editor reloads; start again with url or setup`,
         };
-      } else if (entry.isolated && !runSession) {
+      } else if (entry.isolated && !(qaOn && runSession)) {
         parsed = {
           ok: false,
           error: `checkpoint ${resumeId} was recorded in an isolated QA run and can be resumed only by another QA run (qa: true); for a plain task, start again with url or setup`,

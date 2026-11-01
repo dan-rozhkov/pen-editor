@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BrowserSection } from "../BrowserSection";
 
 const ADS = "Block ads and trackers";
+const ASK = "Ask before the agent controls an app";
 const MCP = "Let MCP clients control the browser";
 
 const setBridge = (browserSettings?: unknown) => {
@@ -52,5 +53,28 @@ describe("BrowserSection desktop switches", () => {
     fireEvent.click(screen.getByRole("switch", { name: ADS }));
     await waitFor(() => expect(set).toHaveBeenCalledWith({ adBlock: false }));
     await waitFor(() => expect(screen.getByRole("switch", { name: ADS }).getAttribute("aria-checked")).toBe("true"));
+  });
+
+  it("shows the app-access switch only when the shell reports the key", async () => {
+    setBridge({ get: vi.fn().mockResolvedValue({ adBlock: true, mcpBrowser: false }), set: vi.fn() });
+    const old = render(<BrowserSection />);
+    await waitFor(() => expect(screen.getByRole("switch", { name: ADS }).getAttribute("aria-checked")).toBe("true"));
+    expect(screen.queryByRole("switch", { name: ASK })).toBeNull();
+    old.unmount();
+
+    setBridge({ get: vi.fn().mockResolvedValue({ adBlock: true, mcpBrowser: false, askAppAccess: false }), set: vi.fn() });
+    render(<BrowserSection />);
+    await waitFor(() => expect(screen.getByRole("switch", { name: ASK })).toBeTruthy());
+    expect(screen.getByRole("switch", { name: ASK }).getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("calls set with askAppAccess on toggle", async () => {
+    const set = vi.fn().mockResolvedValue({ adBlock: true, mcpBrowser: false, askAppAccess: true });
+    setBridge({ get: vi.fn().mockResolvedValue({ adBlock: true, mcpBrowser: false, askAppAccess: false }), set });
+    render(<BrowserSection />);
+    await waitFor(() => expect(screen.getByRole("switch", { name: ASK })).toBeTruthy());
+    fireEvent.click(screen.getByRole("switch", { name: ASK }));
+    expect(set).toHaveBeenCalledWith({ askAppAccess: true });
+    await waitFor(() => expect(screen.getByRole("switch", { name: ASK }).getAttribute("aria-checked")).toBe("true"));
   });
 });
