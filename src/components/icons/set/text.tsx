@@ -154,6 +154,8 @@ export const TextOutdentIcon = /*#__PURE__*/ createIcon(
 
 // Lists.
 export const ListIcon = /*#__PURE__*/ createIcon("List", <path d="M2.75 3.5h10.5M2.75 8h10.5M2.75 12.5h10.5" />);
+/** Two bars: a compact menu button (the landing header). */
+export const EqualsIcon = /*#__PURE__*/ createIcon("Equals", <path d="M2.75 5.75h10.5M2.75 10.25h10.5" />);
 
 export const ListBulletsIcon = /*#__PURE__*/ createIcon(
   "ListBullets",

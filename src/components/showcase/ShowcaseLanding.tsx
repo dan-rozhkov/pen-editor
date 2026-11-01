@@ -1,13 +1,33 @@
-import { useEffect, useState } from "react";
+import { createElement, useEffect, useRef, useState, type CSSProperties } from "react";
 import { Link } from "react-router";
 
 import { AuthMenu } from "@/components/auth/AuthMenu";
-import { SideformLockup } from "@/components/brand/SideformLogo";
+import { SideformLockup, SideformMark } from "@/components/brand/SideformLogo";
+import {
+  ArrowUpIcon,
+  BrainIcon,
+  BrowsersIcon,
+  CaretDownIcon,
+  EqualsIcon,
+  FlowArrowIcon,
+  LightningIcon,
+  PaperclipIcon,
+} from "@/components/icons";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Shimmer } from "@/components/ai-elements/shimmer";
+import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { LegalLinks } from "@/components/legal/LegalLinks";
-import { ShowcaseAgentComposer } from "@/components/showcase/ShowcaseAgentComposer";
 import { LiquidGradient } from "@/components/showcase/landing/LiquidGradient";
-import { RevealBlock, RevealText, Words } from "@/components/showcase/landing/Reveal";
+import { RevealText, Words } from "@/components/showcase/landing/Reveal";
 import { track } from "@/lib/analytics";
+import { getToolIcon } from "@/lib/toolIcons";
 import { cn } from "@/lib/utils";
 
 /*
@@ -25,7 +45,6 @@ export const PLUGIN_URL = "https://github.com/dan-rozhkov/pen-editor-plugin#setu
 export const DESKTOP_DOWNLOAD_URL =
   "https://github.com/dan-rozhkov/pen-editor-desktop/releases/latest";
 
-const EDITOR_SHOT = `${import.meta.env.BASE_URL}landing/sideform-editor-dark`;
 
 const SOURCE_URL = "https://github.com/dan-rozhkov/pen-editor";
 
@@ -35,38 +54,31 @@ const BLUE = "#3c50a5";
 
 const NAV_LINKS = [
   { href: "#apps", label: "Apps" },
-  { href: "#use-cases", label: "Workflows" },
+  { href: "#use-cases", label: "Use cases" },
   { href: "#gallery", label: "Showcase" },
   { href: "#faq", label: "FAQ" },
 ] as const;
 
-const DETAILS = [
-  { label: "Desktop app", value: "macOS" },
-  { label: "In the browser", value: "No install" },
-  { label: "Your own agent", value: "Via MCP" },
-] as const;
-
-const STATS = [
-  { value: "3", label: "Apps" },
-  { value: "1", label: "Agent" },
-  { value: "0", label: "Installs to try" },
-  { value: "MCP", label: "For your own agent" },
-] as const;
-
-const APPS: { name: string; text: string; color: string }[] = [
+const APPS: { name: string; text: string; color: string; shot: "browser" | "canvas" | "doc"; alt: string }[] = [
   {
     name: "Browser",
-    text: "The agent opens real sites, clicks through flows, collects references and checks your staging build. You watch every step in a tab.",
+    shot: "browser",
+    alt: "Sideform Desktop with a browser tab open on linear.app next to the agent chat",
+    text: "The agent opens real sites, clicks through flows and saves references. Point it at staging and it checks the build. You see every step in a tab.",
     color: ORANGE,
   },
   {
     name: "Canvas",
-    text: "Screens appear as editable frames next to each other. Compare directions, change a detail and ask for one more option.",
+    shot: "canvas",
+    alt: "Sideform Desktop with a canvas tab: three landing sections as editable frames",
+    text: "Every screen lands as an editable frame, side by side. Compare directions, fix a detail by hand or ask for another option.",
     color: PALE,
   },
   {
     name: "Docs",
-    text: "Specs, PRDs, design notes and bug reports in a Notion-style editor. The agent links them to the frames they describe.",
+    shot: "doc",
+    alt: "Sideform Desktop with a document tab: the landing redesign brief",
+    text: "Write specs, PRDs, notes and bug reports in a Notion-style editor. The agent links each doc to the frames it describes.",
     color: BLUE,
   },
 ];
@@ -75,42 +87,49 @@ const ROLES: { label: string; heading: string; prompt: string; steps: [string, s
   {
     label: "For designers",
     heading: "Designers",
-    prompt: "“Find onboarding references on Mobbin, design ours in our style and write down the decisions.”",
-    steps: ["Saves references", "Designs 3 screens", "Writes design notes"],
+    prompt: "Collect onboarding references from apps we like, design ours in our style and note the decisions.",
+    steps: ["Collects references", "Designs 3 screens", "Notes the decisions"],
   },
   {
     label: "For product builders",
     heading: "Product builders",
-    prompt: "“Compare competitor pricing pages, mock up ours and draft a one-page PRD.”",
-    steps: ["Compares competitors", "Mocks up the page", "Drafts the PRD"],
+    prompt: "Compare three competitor pricing pages, mock up ours and draft a one-page PRD.",
+    steps: ["Compares pricing pages", "Mocks up ours", "Drafts the PRD"],
   },
   {
     label: "For QA testers",
     heading: "QA testers",
-    prompt: "“Test sign-up on staging, mark what breaks and file a bug report.”",
-    steps: ["Runs the flow", "Marks failures", "Files the bug report"],
+    prompt: "Run sign-up on staging, mark each step that breaks and write the bug report.",
+    steps: ["Runs sign-up", "Marks what breaks", "Writes the bug report"],
   },
 ];
 
-const STEP_APPS = ["Browser", "Canvas", "Docs"] as const;
+/** Each step's app and the agent tool whose chat row (icon) it reuses. */
+const STEP_APPS = [
+  { app: "Browser", tool: "browse_open" },
+  { app: "Canvas", tool: "batch_design" },
+  { app: "Docs", tool: "doc_create" },
+] as const;
+const STEP_RUN_MS = 1400;
+const THINK_MS = 2000;
 
 const FAQ: { question: string; answer: React.ReactNode }[] = [
   {
-    question: "What is the difference between the Mac app and the browser version?",
+    question: "Mac app or browser version: what is the difference?",
     answer:
-      "The browser version gives you the canvas and the agent with no install, which is enough to try a concept. The Mac app adds the browser agent, tabs for docs and traces, and saves your work on your computer.",
+      "The browser version has the canvas and the design agent. No install, no account. The Mac app adds the agent-driven browser, tabs for docs and run traces, and saves your work on your computer.",
   },
   {
     question: "Does the agent really use a browser?",
     answer:
-      "Yes. In the Mac app the agent opens sites in a tab, clicks, types and reads pages, and you see every step. Each run keeps a trace you can replay. Sites that need an account use your own sign-in.",
+      "Yes. In the Mac app it opens sites in a tab, clicks, types and reads the page while you watch. Each run keeps a trace you can open later.",
   },
   {
     question: "Can I use the agent I already work with?",
     answer: (
       <>
-        Yes. The desktop app connects to external agents, such as Claude Code, through MCP. Your agent then works on
-        the same canvas.{" "}
+        Yes. Claude Code, Codex and other MCP clients can connect to the same canvas and work on your frames
+        there.{" "}
         <a href={PLUGIN_URL} target="_blank" rel="noreferrer">
           Read the setup guide.
         </a>
@@ -118,22 +137,16 @@ const FAQ: { question: string; answer: React.ReactNode }[] = [
     ),
   },
   {
-    question: "Where does Sideform fit if I already use Figma and Notion?",
+    question: "I already use Figma and Notion. Where does Sideform fit?",
     answer:
-      "Use Sideform for the early, fast part: research, first concepts and the first write-up, done by one agent. Keep Figma and Notion wherever they fit your team.",
+      "Sideform covers the early part: research, first concepts and the first write-up, in one task. Keep Figma and Notion for the rest of your process.",
   },
   {
-    question: "Are the screens production-ready code?",
+    question: "Is the output production code?",
     answer:
-      "They are HTML prototypes for exploring a direction. Review the result and adapt it to your application before you ship it.",
+      "No. The screens are HTML prototypes for exploring a direction. Review them and adapt them to your app before you ship.",
   },
 ];
-
-const RUNS_ON = [
-  { name: "Mac app", what: "Full workspace", where: "macOS", action: "download" },
-  { name: "Browser", what: "Canvas + agent", where: "No install", action: "open" },
-  { name: "Your agent", what: "Same canvas", where: "MCP", action: "setup" },
-] as const;
 
 type DotKind = "cluster" | "bullet";
 
@@ -153,53 +166,37 @@ function Dots({ kind, color }: { kind: DotKind; color: string }) {
   );
 }
 
-function useNavState() {
-  const [hidden, setHidden] = useState(false);
-  const [solid, setSolid] = useState(false);
-
+/** True once the page has scrolled, so the header's blur shows only over content, never over the bare hero. */
+function useScrolled() {
+  const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
-    let lastY = window.scrollY;
-    function onScroll() {
-      const y = window.scrollY;
-      setHidden(y > lastY && y > 120);
-      setSolid(y > 120);
-      lastY = y;
-    }
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-
-  return { hidden, solid };
+  return scrolled;
 }
 
 export function LandingNav() {
-  const { hidden, solid } = useNavState();
+  const scrolled = useScrolled();
   return (
-    <header className={cn("sf-nav", hidden && "is-hidden", solid && "is-solid")}>
+    <header className={cn("sf-nav", scrolled && "is-scrolled")}>
+      {/* Progressive blur (as in arc-ui's HeaderBackdrop): stacked backdrop blurs, each masked to an
+          overlapping band, strongest at the top; it runs a little past the bar. */}
+      <div className="sf-nav-backdrop" aria-hidden>
+        <div />
+        <div />
+        <div />
+        <div />
+      </div>
       <div className="sf-nav-inner">
         <Link to="/" className="sf-brand" aria-label="Sideform home">
           <SideformLockup className="sf-brand-logo" />
         </Link>
         <div className="sf-nav-right">
-          <nav aria-label="Sections" className="sf-nav-links">
-            {NAV_LINKS.map(({ href, label }) => (
-              <a key={href} href={href}>
-                {label}
-              </a>
-            ))}
-          </nav>
           <div className="sf-nav-actions">
             <AuthMenu variant="showcase" />
-            {/* A real <Link>, not a button with navigate(): this is plain
-                navigation, so it keeps link semantics (middle-click, "open in
-                new tab"). */}
-            <Link
-              to="/app"
-              className="sf-nav-text-link"
-              onClick={() => track("showcase_editor_cta_clicked", { source: "header" })}
-            >
-              Try in browser
-            </Link>
             {/* The desktop shell ships from its own repo (pen-editor-desktop), so
                 its build artifacts live on GitHub Releases, not here. Link the
                 "latest" release page, which never goes stale. */}
@@ -207,11 +204,37 @@ export function LandingNav() {
               href={DESKTOP_DOWNLOAD_URL}
               target="_blank"
               rel="noreferrer"
-              className="sf-btn sf-btn-compact"
+              className={BUTTON_PRIMARY}
+              data-slot="button"
+              aria-label="Download for Mac"
               onClick={() => track("landing_download_clicked", { source: "header" })}
             >
-              Download for Mac
+              Download
             </a>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button variant="ghost" size="icon-lg" aria-label="Menu">
+                    <EqualsIcon />
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="end" className="min-w-44">
+                {NAV_LINKS.map(({ href, label }) => (
+                  <DropdownMenuItem key={href} render={<a href={href} />}>
+                    {label}
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                {/* A real <Link>: plain navigation keeps link semantics (middle-click, "open in new tab"). */}
+                <DropdownMenuItem
+                  render={<Link to="/app" />}
+                  onClick={() => track("showcase_editor_cta_clicked", { source: "header" })}
+                >
+                  Try in browser
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>
@@ -226,28 +249,50 @@ function StackedTitle({ lines }: { lines: readonly [string, string, string] }) {
     <>
       {lines.map((text, index) => (
         <span key={text} className={`sf-line sf-line-${alignments[index]}`}>
-          <Words text={text} start={index * 2} />
+          <Words text={text} start={lines.slice(0, index).join(" ").split(" ").filter(Boolean).length} />
         </span>
       ))}
     </>
   );
 }
 
+/** The hero title fades out with scroll progress: fully transparent after half a viewport. */
+function useScrollFade<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  useEffect(() => {
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const progress = Math.min(1, Math.max(0, window.scrollY / (window.innerHeight * 0.5)));
+      if (ref.current) ref.current.style.opacity = String(1 - progress);
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
+  return ref;
+}
+
 export function LandingHero() {
+  // The eyebrow and the title fade out together with scroll.
+  const copyRef = useScrollFade<HTMLDivElement>();
   return (
     <section className="sf-hero" aria-labelledby="hero-title">
       <LiquidGradient className="sf-gradient" coveredBy=".sf-over" />
-      <h1 id="hero-title" className="sf-hero-title sf-reveal is-in">
-        <StackedTitle lines={["One agent,", "three apps,", "one window."]} />
-      </h1>
-      <dl className="sf-hero-details">
-        {DETAILS.map(({ label, value }) => (
-          <div key={label}>
-            <dt>{label}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
-      </dl>
+      <div ref={copyRef} className="sf-hero-copy">
+        <p className="sf-hero-eyebrow">Open-source · Free</p>
+        <h1 id="hero-title" className="sf-hero-title sf-reveal is-in">
+          <StackedTitle lines={["Research it.", "Design it.", "Write it up."]} />
+        </h1>
+      </div>
     </section>
   );
 }
@@ -279,21 +324,24 @@ export function LandingStory() {
         <div className="sf-container sf-about-grid">
           <div className="sf-about-copy">
             <RevealText
-              text="A browser the agent drives, a design canvas and Notion-style docs in one desktop app. The same agent works across all three, so research, design and the write-up happen in one task."
+              text="Sideform puts a browser the agent drives, a design canvas and Notion-style docs in one Mac app. Ask once. The agent finds references, designs the screens and writes the spec, and you watch every step."
               className="sf-lead"
             />
             <div className="sf-button-row">
               <a
-                className="sf-btn sf-btn-primary"
+                className={BUTTON_PRIMARY}
+                data-slot="button"
                 href={DESKTOP_DOWNLOAD_URL}
+                aria-label="Download for Mac"
                 target="_blank"
                 rel="noreferrer"
                 onClick={() => track("landing_download_clicked", { source: "about" })}
               >
-                Download for Mac
+                Download
               </a>
               <Link
-                className="sf-btn sf-btn-secondary"
+                className={BUTTON_SECONDARY}
+                data-slot="button"
                 to="/app"
                 onClick={() => track("showcase_editor_cta_clicked", { source: "about" })}
               >
@@ -301,14 +349,6 @@ export function LandingStory() {
               </Link>
             </div>
           </div>
-          <ul className="sf-stats">
-            {STATS.map(({ value, label }) => (
-              <RevealBlock as="li" key={label} className="sf-stat">
-                <p className="sf-stat-value">{value}</p>
-                <p className="sf-stat-label">{label}</p>
-              </RevealBlock>
-            ))}
-          </ul>
         </div>
       </section>
 
@@ -316,28 +356,51 @@ export function LandingStory() {
         <div className="sf-container sf-stack">
           <LandingSectionHead
             id="apps-title"
-            title="Three apps, one agent"
-            text="A browser, a design canvas and docs live in one desktop window. The same agent works in each of them."
+            title="One window, three apps"
+            text="The agent moves between a browser, a canvas and docs on its own. You never copy work from one tool to the next."
           />
+          {/* A stack: every card sticks under the header a step below the previous one, so the next
+              card slides over it as the page scrolls. */}
           <div className="sf-cards">
-            {APPS.map(({ name, text, color }) => (
-              <article key={name} className="sf-card">
-                <div className="sf-card-top">
-                  <h3 className="sf-h6">{name}</h3>
-                  <Dots kind="cluster" color={color} />
+            {APPS.map(({ name, text, color, shot, alt }, index) => (
+              <article key={name} className="sf-card" style={{ "--i": index } as CSSProperties}>
+                <img
+                  className="sf-card-shot"
+                  src={`${DESKTOP_SHOT}-${shot}-1440.webp`}
+                  srcSet={`${DESKTOP_SHOT}-${shot}-1440.webp 1440w, ${DESKTOP_SHOT}-${shot}.webp 2880w`}
+                  sizes="(min-width: 1200px) 680px, calc(100vw - 64px)"
+                  width={2880}
+                  height={1800}
+                  loading="lazy"
+                  decoding="async"
+                  alt={alt}
+                />
+                <div className="sf-card-body">
+                  <div className="sf-card-top">
+                    <h3 className="sf-card-title">{name}</h3>
+                    <Dots kind="cluster" color={color} />
+                  </div>
+                  <p className="sf-small">{text}</p>
                 </div>
-                <p className="sf-small">{text}</p>
               </article>
             ))}
-            <article className="sf-card">
-              <div className="sf-card-top">
-                <h3 className="sf-h6">Already use Claude Code?</h3>
-              </div>
-              <div className="sf-card-cta">
-                <p className="sf-small">Connect it to the same canvas through MCP.</p>
-                <a className="sf-link" href={PLUGIN_URL} target="_blank" rel="noreferrer">
-                  Read the setup guide
-                </a>
+            <article className="sf-card" style={{ "--i": APPS.length } as CSSProperties}>
+              <div className="sf-card-body">
+                <div className="sf-card-top">
+                  <h3 className="sf-card-title">Already use Claude Code or Codex?</h3>
+                </div>
+                <div className="sf-card-cta">
+                  <p className="sf-small">Connect it over MCP and it works on the same canvas.</p>
+                  <a
+                    className={cn(BUTTON_PRIMARY, "self-start")}
+                    data-slot="button"
+                    href={PLUGIN_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Read the setup guide
+                  </a>
+                </div>
               </div>
             </article>
           </div>
@@ -348,28 +411,18 @@ export function LandingStory() {
         <div className="sf-container sf-stack">
           <LandingSectionHead
             id="use-cases-title"
-            title="Three apps at work"
-            text="Each task below runs from start to finish in the desktop app. The agent decides which tab to open next."
+            title="One request, start to finish"
+            text="Each request below runs end to end in the Mac app. The agent picks the tab it needs next."
           />
           <div className="sf-days">
             {ROLES.map(({ label, heading, prompt, steps }) => (
               <article key={label} className="sf-day">
                 <div className="sf-day-head">
-                  <p className="sf-meta">{label}</p>
-                  <h3 className="sf-h5">{heading}</h3>
+                  <p className="sf-small">{label}</p>
+                  <h3 className="sf-card-title">{heading}</h3>
                 </div>
-                <ol className="sf-rows">
-                  <li>
-                    <p className="sf-meta">You ask</p>
-                    <p className="sf-small sf-white">{prompt}</p>
-                  </li>
-                  {steps.map((step, index) => (
-                    <li key={step}>
-                      <p className="sf-meta">{`Step ${index + 1} · ${STEP_APPS[index]}`}</p>
-                      <p className="sf-small sf-white">{step}</p>
-                    </li>
-                  ))}
-                </ol>
+                <ReadonlyPrompt text={prompt} />
+                <RoleSteps steps={steps} />
               </article>
             ))}
           </div>
@@ -379,28 +432,148 @@ export function LandingStory() {
   );
 }
 
+/**
+ * The agent's answer as the chat shows it: a "Sideform Agent" label, then a thinking row
+ * (ThinkingIndicator: "Thinking..." with the chat's shimmer, then "Thought 2s"), then one row per step
+ * as a tool call (ToolCallIndicator: tool icon, name, muted hint, status, chevron). Once the answer is
+ * on screen the rows run one by one; rows not reached yet stay hidden. Reduced motion shows it done.
+ */
+function RoleSteps({ steps }: { steps: readonly string[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Rows: the thinking row, then the steps. `started` counts started rows; the last one runs until
+  // the next starts. Reduced motion (or no IntersectionObserver): everything done, no sequence.
+  const rowCount = steps.length + 1;
+  const [instant] = useState(
+    () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true || !("IntersectionObserver" in window),
+  );
+  const [started, setStarted] = useState(instant ? rowCount : 0);
+  const [finished, setFinished] = useState(instant);
+
+  useEffect(() => {
+    const answer = ref.current;
+    if (!answer || instant) return;
+    const timers: number[] = [];
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        observer.disconnect();
+        // The thinking row starts at once and lasts THINK_MS; then each step lasts STEP_RUN_MS.
+        timers.push(window.setTimeout(() => setStarted(1), 0));
+        for (let index = 0; index < steps.length; index += 1) {
+          timers.push(window.setTimeout(() => setStarted(index + 2), THINK_MS + index * STEP_RUN_MS));
+        }
+        timers.push(window.setTimeout(() => setFinished(true), THINK_MS + steps.length * STEP_RUN_MS));
+      },
+      { threshold: 0.4 },
+    );
+    observer.observe(answer);
+    return () => {
+      observer.disconnect();
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [steps, instant]);
+
+  const rowClass = (visible: boolean) =>
+    cn("sf-step flex w-full items-center gap-1.5 py-0.5 text-[13px] leading-relaxed text-text-muted", visible && "is-in");
+  const isRunning = (row: number) => row < started && !finished && row === started - 1;
+  const thinking = isRunning(0);
+
+  return (
+    <div ref={ref} className="sf-answer">
+      <p className="flex items-center gap-2 text-sm font-medium text-text-primary">
+        <SideformMark className="size-4 shrink-0" aria-hidden />
+        Sideform Agent
+      </p>
+      <ol className="sf-steps" aria-label="What the agent does">
+        <li className={rowClass(started > 0)} aria-hidden={started === 0}>
+          {thinking ? (
+            <Shimmer as="span" className="truncate">
+              Thinking...
+            </Shimmer>
+          ) : (
+            <span className="truncate">Thought</span>
+          )}
+          {!thinking && <span className="shrink-0 text-text-disabled">{`${Math.round(THINK_MS / 1000)}s`}</span>}
+          <CaretDownIcon size={10} className="shrink-0 -rotate-90" weight={CHEVRON_WEIGHT} aria-hidden />
+        </li>
+        {steps.map((step, index) => {
+          const { app, tool } = STEP_APPS[index] ?? STEP_APPS[0];
+          const row = index + 1;
+          const visible = row < started;
+          const running = isRunning(row);
+          return (
+            <li key={step} className={rowClass(visible)} aria-hidden={!visible}>
+              {createElement(getToolIcon(tool), { size: 14, className: "shrink-0", "aria-hidden": true })}
+              {running ? (
+                <Shimmer as="span" className="truncate">
+                  {step}
+                </Shimmer>
+              ) : (
+                <span className="truncate">{step}</span>
+              )}
+              <span className="min-w-0 shrink-[999] truncate text-text-disabled">{app}</span>
+              <span className="shrink-0 text-text-disabled">
+                {running ? <Shimmer as="span">Running...</Shimmer> : "Done"}
+              </span>
+              <CaretDownIcon size={10} className="shrink-0 -rotate-90" weight={CHEVRON_WEIGHT} aria-hidden />
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+/**
+ * A read-only copy of the agent chat composer (ChatPanel + ChatInput: same frame, type and controls),
+ * already filled in. Nothing in it is interactive; it only shows what the person types.
+ */
+function ReadonlyPrompt({ text }: { text: string }) {
+  return (
+    <figure className="sf-prompt overflow-hidden rounded-2xl border border-border-default bg-surface-panel shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+      <figcaption className="sr-only">You ask</figcaption>
+      <p className="px-4 pt-3 pb-1 text-sm leading-normal text-text-primary">{text}</p>
+      <div className="flex items-center gap-0.5 px-2 pb-1.5 pt-1 text-text-muted" aria-hidden>
+        <span className="inline-flex size-[30px] items-center justify-center">
+          <PaperclipIcon size={16} weight="light" />
+        </span>
+        <span className="ml-auto inline-flex size-[30px] items-center justify-center">
+          <BrainIcon size={16} weight="light" />
+        </span>
+        <span className="inline-flex h-[30px] items-center gap-1 px-1.5 text-xs leading-none">
+          <LightningIcon size={16} weight="light" />
+          x1
+          <CaretDownIcon className="size-3" weight={CHEVRON_WEIGHT} />
+        </span>
+        <span className="inline-flex size-[30px] items-center justify-center rounded-control-lg bg-accent-primary text-white">
+          <ArrowUpIcon size={16} weight="light" />
+        </span>
+      </div>
+    </figure>
+  );
+}
+
+/** The action button of a get-started card: download, open the editor, or the MCP setup guide. */
 function PlainButton({
   kind,
   className,
   label,
-  placement,
 }: {
   kind: "download" | "open" | "setup";
   className: string;
   label: string;
-  placement: "get_started" | "runs_table";
 }) {
+  const slot = "button";
   if (kind === "download") {
     return (
       <a
         className={className}
+        data-slot={slot}
         href={DESKTOP_DOWNLOAD_URL}
         target="_blank"
         rel="noreferrer"
         onClick={() =>
-          track("landing_download_clicked", {
-            source: placement === "runs_table" ? "runs_table" : "download_section",
-          })
+          track("landing_download_clicked", { source: "download_section" })
         }
       >
         {label}
@@ -411,11 +584,10 @@ function PlainButton({
     return (
       <Link
         className={className}
+        data-slot={slot}
         to="/app"
         onClick={() =>
-          track("showcase_editor_cta_clicked", {
-            source: placement === "runs_table" ? "runs_table" : "try_section",
-          })
+          track("showcase_editor_cta_clicked", { source: "try_section" })
         }
       >
         {label}
@@ -423,75 +595,61 @@ function PlainButton({
     );
   }
   return (
-    <a className={className} href={PLUGIN_URL} target="_blank" rel="noreferrer">
+    <a className={className} data-slot={slot} href={PLUGIN_URL} target="_blank" rel="noreferrer">
       {label}
     </a>
   );
 }
 
 const GET_LABELS = { download: "Download for Mac", open: "Open the editor", setup: "Read the setup guide" } as const;
-const RUNS_LABELS = { download: "Download", open: "Open", setup: "Setup" } as const;
 
 const GET_CARDS = [
   {
     title: "Sideform for Mac",
-    tag: "Recommended",
-    big: "Mac",
     color: ORANGE,
     bullets: [
-      "Agent that drives a real browser",
-      "Canvas, docs and traces in tabs",
-      "Connect Claude Code or another agent through MCP",
+      "An agent that drives a real browser",
+      "Canvas, docs and run traces in tabs",
+      "Works with Claude Code and other MCP agents",
     ],
     action: "download",
   },
   {
-    title: "In the browser",
-    tag: "No install",
-    big: "Web",
+    title: "Web editor",
     color: PALE,
-    bullets: ["Canvas and the design agent", "No account needed", "Browser control needs the Mac app"],
+    bullets: ["Canvas and the design agent", "No install, no account", "Browser control needs the Mac app"],
     action: "open",
   },
   {
     title: "Your own agent",
-    tag: "Via MCP",
-    big: "MCP",
     color: BLUE,
-    bullets: ["Claude Code or another MCP client", "Works on the same canvas", "Setup guide on GitHub"],
+    bullets: ["Claude Code, Codex or any MCP client", "Works on the same canvas", "Setup guide on GitHub"],
     action: "setup",
   },
 ] as const;
 
 const WHY_ROWS = [
-  { key: "No hand-offs", value: "One task, start to finish" },
-  { key: "Shared context", value: "You never explain the task twice" },
-  { key: "Its own tabs", value: "Opens browser, canvas or docs itself" },
+  { key: "No hand-offs", value: "From reference to spec in one task", icon: FlowArrowIcon },
+  { key: "Shared context", value: "Explain the task once", icon: BrainIcon },
+  { key: "Its own tabs", value: "Picks browser, canvas or docs itself", icon: BrowsersIcon },
 ] as const;
 
-/** Download and try-in-browser cards, the "why", the FAQ and the prompt box. After the gallery. */
-export function LandingClosing({ onAgentPrompt }: { onAgentPrompt: (prompt: string) => void }) {
+/** Download and try-in-browser cards, the "why" and the FAQ. After the gallery. */
+export function LandingClosing() {
   return (
     <>
       <section id="get-started" className="sf-section" aria-labelledby="start-title">
         <div className="sf-container sf-stack">
           <LandingSectionHead
             id="start-title"
-            title="Get Sideform"
-            text="The Mac app is the full workspace. The browser version needs no install. Your own agent connects through MCP."
+            title="Pick how to start"
+            text="Get the full workspace on a Mac. Try the canvas in your browser with no install. Or connect the agent you already use."
           />
           <div className="sf-tickets">
-            {GET_CARDS.map(({ title, tag, big, color, bullets, action }) => (
+            {GET_CARDS.map(({ title, color, bullets, action }) => (
               <article key={title} className="sf-ticket">
                 <div className="sf-ticket-content">
-                  <div className="sf-ticket-price">
-                    <div>
-                      <h3 className="sf-h6">{title}</h3>
-                      <p className="sf-h2 sf-big">{big}</p>
-                    </div>
-                    <p className="sf-meta sf-tag">{tag}</p>
-                  </div>
-                  <hr className="sf-divider" />
+                  <h3 className="sf-card-title">{title}</h3>
                   <ul className="sf-bullets">
                     {bullets.map((bullet) => (
                       <li key={bullet}>
@@ -503,9 +661,8 @@ export function LandingClosing({ onAgentPrompt }: { onAgentPrompt: (prompt: stri
                 </div>
                 <PlainButton
                   kind={action}
-                  className="sf-btn sf-btn-primary sf-btn-block"
+                  className={cn(BUTTON_PRIMARY, "w-full")}
                   label={GET_LABELS[action]}
-                  placement="get_started"
                 />
               </article>
             ))}
@@ -515,58 +672,28 @@ export function LandingClosing({ onAgentPrompt }: { onAgentPrompt: (prompt: stri
 
       <section id="why" className="sf-section" aria-labelledby="why-title">
         <div className="sf-container sf-stack">
-          <LandingSectionHead id="why-title" title="Fast because it is connected." wide />
-          <div className="sf-why">
-            <div className="sf-why-details">
-              <p className="sf-small">
-                Nothing to copy from a browser to a design tool to a doc. One task goes from the first reference to the
-                final write-up.
-              </p>
-              <dl className="sf-kv">
-                {WHY_ROWS.map(({ key, value }) => (
-                  <div key={key}>
-                    <dt className="sf-meta">{key}</dt>
-                    <dd className="sf-small sf-white">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-              <div className="sf-runs">
-                <h3 className="sf-meta">Where it runs</h3>
-                <ul>
-                  {RUNS_ON.map(({ name, what, where, action }) => (
-                    <li key={name}>
-                      <span>{name}</span>
-                      <span>{what}</span>
-                      <span>{where}</span>
-                      <PlainButton
-                        kind={action}
-                        className="sf-text-action"
-                        label={RUNS_LABELS[action]}
-                        placement="runs_table"
-                      />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-            <img
-              className="sf-why-image"
-              src={`${EDITOR_SHOT}-1440.webp`}
-              srcSet={`${EDITOR_SHOT}-1440.webp 1440w, ${EDITOR_SHOT}.webp 2880w`}
-              sizes="(min-width: 1200px) 560px, (min-width: 810px) 746px, 350px"
-              width={2880}
-              height={1800}
-              loading="lazy"
-              decoding="async"
-              alt="The Sideform editor in dark mode: layers, canvas with three app screens, and properties panel"
-            />
-          </div>
+          <LandingSectionHead
+            id="why-title"
+            title="No copy-paste between tools."
+            text="References, screens and specs live in one window. The agent keeps the context from the first reference to the final write-up."
+            wide
+          />
+          {/* Two columns of reasons: an icon from the editor's set, the short label, then the claim. */}
+          <ul className="sf-reasons">
+            {WHY_ROWS.map(({ key, value, icon: Icon }) => (
+              <li key={key} className="sf-reason">
+                <Icon size={28} weight="light" aria-hidden className="sf-reason-icon" />
+                <p className="sf-small">{key}</p>
+                <h3 className="sf-card-title">{value}</h3>
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 
       <section id="faq" className="sf-section" aria-labelledby="faq-title">
         <div className="sf-container sf-faq">
-          <RevealText as="h2" id="faq-title" text="Questions, answered" className="sf-h2" />
+          <RevealText as="h2" id="faq-title" text="Common questions" className="sf-h2" />
           <div className="sf-accordion">
             {FAQ.map(({ question, answer }) => (
               <details key={question}>
@@ -582,18 +709,6 @@ export function LandingClosing({ onAgentPrompt }: { onAgentPrompt: (prompt: stri
           </div>
         </div>
       </section>
-
-      <section className="sf-section sf-try" aria-labelledby="try-title">
-        <div className="sf-try-grid">
-          <div>
-            <p className="sf-body sf-upper">Try it now</p>
-            <h2 id="try-title" className="sf-h4">
-              Describe a screen. The agent designs it.
-            </h2>
-          </div>
-          <ShowcaseAgentComposer onSubmit={onAgentPrompt} />
-        </div>
-      </section>
     </>
   );
 }
@@ -605,13 +720,14 @@ export function LandingFooter() {
       <p className="sf-footer-tag">Sideform · macOS and web</p>
       <Link
         to="/app"
-        className="sf-btn sf-btn-compact sf-footer-cta"
+        className={cn(BUTTON_PRIMARY, "sf-footer-cta")}
+        data-slot="button"
         onClick={() => track("showcase_editor_cta_clicked", { source: "footer" })}
       >
         Try in browser
       </Link>
       <p className="sf-footer-title sf-reveal is-in">
-        <StackedTitle lines={["One prompt,", "three apps,", "at work."]} />
+        <StackedTitle lines={["One task,", "one agent,", "one window."]} />
       </p>
       <nav aria-label="Footer" className="sf-footer-nav">
         {NAV_LINKS.map(({ href, label }) => (
@@ -622,11 +738,62 @@ export function LandingFooter() {
       </nav>
       <div className="sf-footer-credits">
         <p>© 2026 Sideform.</p>
+      </div>
+      {/* Right column: the source link, then the legal links (their <nav> is display: contents). */}
+      <div className="sf-footer-legal">
         <a href={SOURCE_URL} target="_blank" rel="noreferrer">
           Source on GitHub
         </a>
+        <LegalLinks className="contents" />
       </div>
-      <LegalLinks className="sf-footer-legal" />
     </footer>
+  );
+}
+
+/** The landing uses the editor's own buttons: same shape, size, type and colours as in /app. */
+const BUTTON_PRIMARY = buttonVariants({ variant: "default", size: "lg" });
+const BUTTON_SECONDARY = buttonVariants({ variant: "outline", size: "lg" });
+
+const DESKTOP_SHOT = `${import.meta.env.BASE_URL}landing/sideform-desktop`;
+/** Sideform Desktop with the agent panel, one frame per tab kind. Captured by scripts/landing-hero/capture-desktop.mjs. */
+const HERO_FRAMES = ["canvas", "browser", "doc"] as const;
+const HERO_FRAME_MS = 4000;
+
+/**
+ * The real app window (dark), overlapping the bottom of the sticky hero. It cross-fades between a
+ * canvas, a browser and a document tab. With reduced motion it stays on the canvas frame.
+ */
+export function LandingHeroWindow() {
+  const [active, setActive] = useState(0);
+  useEffect(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(() => {
+      if (!document.hidden) setActive((i) => (i + 1) % HERO_FRAMES.length);
+    }, HERO_FRAME_MS);
+    return () => window.clearInterval(timer);
+  }, []);
+  return (
+    <div className="sf-hero-window">
+      <div
+        className="sf-hero-slides"
+        role="img"
+        aria-label="Sideform Desktop in dark mode: the agent panel next to a canvas tab, a browser tab and a document tab"
+      >
+        {HERO_FRAMES.map((frame, index) => (
+          <img
+            key={frame}
+            className={cn("sf-hero-slide", index === active && "is-active")}
+            src={`${DESKTOP_SHOT}-${frame}-1440.webp`}
+            srcSet={`${DESKTOP_SHOT}-${frame}-1440.webp 1440w, ${DESKTOP_SHOT}-${frame}.webp 2880w`}
+            sizes="(min-width: 1280px) 1200px, calc(100vw - 32px)"
+            width={2880}
+            height={1800}
+            alt=""
+            fetchPriority={index === 0 ? "high" : "low"}
+            decoding="async"
+          />
+        ))}
+      </div>
+    </div>
   );
 }

@@ -142,15 +142,12 @@ describe("ShowcasePage analytics", () => {
   });
 
   it.each([
-    ["Try in browser", 0, "showcase_editor_cta_clicked", { source: "header" }],
     ["Download for Mac", 0, "landing_download_clicked", { source: "header" }],
     ["Try in the browser", 0, "showcase_editor_cta_clicked", { source: "about" }],
     ["Open the editor", 0, "showcase_editor_cta_clicked", { source: "try_section" }],
-    ["Open", 0, "showcase_editor_cta_clicked", { source: "runs_table" }],
-    ["Try in browser", 1, "showcase_editor_cta_clicked", { source: "footer" }],
+    ["Try in browser", 0, "showcase_editor_cta_clicked", { source: "footer" }],
     ["Download for Mac", 1, "landing_download_clicked", { source: "about" }],
     ["Download for Mac", 2, "landing_download_clicked", { source: "download_section" }],
-    ["Download", 0, "landing_download_clicked", { source: "runs_table" }],
   ] as const)("clicking %s link #%i fires %s with %o", async (name, index, event, props) => {
     const fetchMock = withCategories(async () =>
       jsonResponse({ apps: [app("r1", [screen1()])], nextCursor: null }),
@@ -164,5 +161,18 @@ describe("ShowcasePage analytics", () => {
     fireEvent.click(screen.getAllByRole("link", { name })[index]);
 
     expect(trackMock).toHaveBeenCalledWith(event, props);
+  });
+
+  it("clicking Try in browser in the header menu fires showcase_editor_cta_clicked with { source: 'header' }", async () => {
+    vi.stubGlobal("fetch", withCategories(async () => jsonResponse({ apps: [], nextCursor: null })));
+
+    renderPageAt("/");
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    const item = await screen.findByRole("menuitem", { name: "Try in browser" });
+    trackMock.mockClear();
+    fireEvent.click(item);
+
+    expect(item.getAttribute("href")).toBe("/app");
+    expect(trackMock).toHaveBeenCalledWith("showcase_editor_cta_clicked", { source: "header" });
   });
 });

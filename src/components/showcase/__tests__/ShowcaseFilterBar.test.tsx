@@ -53,9 +53,11 @@ describe("<ShowcaseFilterBar />", () => {
     expect(categoryRow.classList.contains("overflow-x-auto")).toBe(false);
     expect(categoryRow.classList.contains("scrollbar-none")).toBe(true);
     expect(categoryRow.classList.contains("sm:overflow-x-auto")).toBe(true);
-    expect(sortSelect.classList.contains("rounded-full")).toBe(true);
-    expect(sortSelect.classList.contains("border-text-primary")).toBe(true);
-    expect(sortSelect.classList.contains("focus-visible:outline-text-primary")).toBe(true);
+    // The editor's own select trigger, sized like the landing's lg buttons.
+    expect(sortSelect.getAttribute("data-slot")).toBe("select-trigger");
+    expect(sortSelect.classList.contains("rounded-control-lg")).toBe(true);
+    expect(sortSelect.classList.contains("data-[size=default]:h-8")).toBe(true);
+    expect(sortSelect.classList.contains("rounded-full")).toBe(false);
     expect(screen.getByRole("button", { name: "All" }).classList.contains("text-sm")).toBe(
       true,
     );
@@ -273,9 +275,8 @@ describe("<ShowcaseFilterBar />", () => {
     expect(selectedLabel("Model")).toBe("All models");
     expect(select.compareDocumentPosition(sortSelect) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(select.classList.contains("max-w-[200px]")).toBe(true);
-    expect(select.classList.contains("focus-visible:outline-1")).toBe(true);
-    expect(select.classList.contains("focus-visible:outline-text-primary")).toBe(true);
-    expect(select.classList.contains("focus-visible:outline-accent-primary")).toBe(false);
+    expect(select.getAttribute("data-slot")).toBe("select-trigger");
+    expect(select.classList.contains("focus-visible:ring-1")).toBe(true);
     openSelect("Model");
     const options = (await screen.findAllByRole("option")).map((o) => o.textContent);
     expect(options[0]).toBe("All models");

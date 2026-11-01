@@ -8,6 +8,7 @@ import type {
   ShowcasePlatform,
   ShowcaseSort,
 } from "@/lib/showcase";
+import { SegmentedGroup, segmentedItemClass } from "@/components/ui/segmented-control";
 import {
   Select,
   SelectContent,
@@ -36,18 +37,13 @@ const SORT_OPTIONS: { value: ShowcaseSort; label: string }[] = [
 
 const FOCUS_RING =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary";
-const SELECT_FOCUS_RING =
-  "focus-visible:outline-1 focus-visible:outline-offset-0 focus-visible:outline-text-primary";
 
 // base-ui items cannot reliably use "" as a value; map "all models" to a sentinel.
 const ALL_MODELS_VALUE = "__all__";
 
-// Pill look of the old native selects, overriding SelectTrigger's compact
-// defaults (height, radius, text size, panel background, focus ring).
-const PILL_TRIGGER = cn(
-  "h-auto data-[size=default]:h-auto shrink-0 gap-2 rounded-full bg-transparent py-1.5 pr-3 pl-4 text-sm font-medium focus-visible:ring-0",
-  SELECT_FOCUS_RING,
-);
+// The editor's own select (SelectTrigger: panel fill, input border, its focus ring), sized like the
+// `lg` buttons next to it: 32px tall with the matching control radius.
+const UI_TRIGGER = "shrink-0 data-[size=default]:h-8 rounded-control-lg px-2.5";
 
 const CONTENT_PROPS = {
   align: "start" as const,
@@ -81,11 +77,8 @@ export function ShowcaseFilterBar({
     // goes back to visible overflow and the categories own their own scroll.
     <div className="scrollbar-none -my-1 flex items-center gap-4 overflow-x-auto overflow-y-hidden overscroll-x-contain py-1 sm:overflow-visible">
       <div className="flex shrink-0 items-center">
-        <div
-          role="group"
-          aria-label="Platform"
-          className="flex rounded-full bg-surface-base p-1"
-        >
+        {/* The editor's segmented control (SegmentedGroup + segmentedItemClass), 32px tall like the selects. */}
+        <SegmentedGroup aria-label="Platform">
           {(["mobile", "desktop"] as const).map((option) => {
             const active = platform === option;
             return (
@@ -95,13 +88,9 @@ export function ShowcaseFilterBar({
                 aria-label={option === "mobile" ? "Mobile" : "Web"}
                 aria-pressed={active}
                 onClick={() => onPlatformChange(option)}
-                className={cn(
-                  "flex items-center justify-center rounded-full px-3 py-1.5 text-sm font-medium transition-colors sm:px-4",
-                  FOCUS_RING,
-                  active
-                    ? "bg-surface-panel text-text-primary shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
-                    : "text-text-muted hover:text-text-primary",
-                )}
+                className={segmentedItemClass(active, {
+                  className: "h-[26px] px-1.5 sm:px-2.5 [&_svg]:size-4",
+                })}
               >
                 {option === "mobile" ? (
                   <>
@@ -117,7 +106,7 @@ export function ShowcaseFilterBar({
               </button>
             );
           })}
-        </div>
+        </SegmentedGroup>
       </div>
 
       {categories.length > 0 && (
@@ -176,16 +165,7 @@ export function ShowcaseFilterBar({
               onModelChange(value === null || value === ALL_MODELS_VALUE ? null : value)
             }
           >
-            <SelectTrigger
-              aria-label="Model"
-              className={cn(
-                PILL_TRIGGER,
-                "max-w-[200px]",
-                model !== null
-                  ? "border-text-primary text-text-primary"
-                  : "border-border-default text-text-muted hover:text-text-primary",
-              )}
-            >
+            <SelectTrigger aria-label="Model" className={cn(UI_TRIGGER, "max-w-[200px]")}>
               <SelectValue>
                 {model === null ? "All models" : getShowcaseModelLabel(model)}
               </SelectValue>
@@ -217,10 +197,7 @@ export function ShowcaseFilterBar({
             if (value !== null) onSortChange(value as ShowcaseSort);
           }}
         >
-          <SelectTrigger
-            aria-label="Sort"
-            className={cn(PILL_TRIGGER, "border-text-primary text-text-primary")}
-          >
+          <SelectTrigger aria-label="Sort" className={UI_TRIGGER}>
             <SelectValue>
               {SORT_OPTIONS.find((option) => option.value === sort)?.label ?? sort}
             </SelectValue>

@@ -6,12 +6,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 
 import {
   LandingClosing,
   LandingFooter,
   LandingHero,
+  LandingHeroWindow,
   LandingNav,
   LandingSectionHead,
   LandingStory,
@@ -21,7 +22,6 @@ import "./showcaseLanding.css";
 import { ShowcaseFilterBar } from "@/components/showcase/ShowcaseFilterBar";
 import { Button } from "@/components/ui/button";
 import { track } from "@/lib/analytics";
-import { storeShowcaseAgentPrompt } from "@/lib/showcaseAgentHandoff";
 import { cn } from "@/lib/utils";
 import { useForcedDarkDocument } from "@/hooks/useForcedDarkDocument";
 import { useHtmlRouteClass } from "@/hooks/useHtmlRouteClass";
@@ -123,7 +123,6 @@ function SkeletonGrid({ platform }: { platform: ShowcasePlatform }) {
 }
 
 export function ShowcasePage() {
-  const navigate = useNavigate();
   // `useSearchParams` is the single source of truth for filter state — no
   // duplicated `useState`. Defaults (`sort=popular`, no category) are never
   // written to the URL, so the canonical "/" stays clean; the reverse
@@ -383,11 +382,6 @@ export function ShowcasePage() {
     updateFilters({ platform: newPlatform, category: null, model: null });
   }
 
-  function handleAgentPrompt(prompt: string) {
-    storeShowcaseAgentPrompt(prompt);
-    navigate("/app");
-  }
-
   const isEmpty = status === "ready" && apps.length === 0;
 
   // index.css locks html/body/#root to height:100% + overflow:hidden so the
@@ -421,6 +415,7 @@ export function ShowcasePage() {
       <LandingNav />
       <main>
         <LandingHero />
+        <LandingHeroWindow />
         {/* Opaque sections scroll over the sticky hero, as in the template. */}
         <div className="sf-over">
           <LandingStory />
@@ -429,11 +424,11 @@ export function ShowcasePage() {
               <LandingSectionHead
                 id="gallery-title"
                 title="Designed by the agent"
-                text="Every app below was designed by Sideform Agent on its own, from a one-line theme. Open any of them in the editor and take it further."
+                text="Each app below started as a one-line theme. Sideform Agent designed the screens on its own. Open any app in the editor and keep going."
               />
               <div className="sf-gallery">
                 <div className="sf-subrow">
-                  <h3 className="sf-h6">Showcase apps</h3>
+                  <h3 className="sf-card-title">Browse apps</h3>
                   <div className="sf-filters">
                     <ShowcaseFilterBar
                       sort={sort}
@@ -476,9 +471,9 @@ export function ShowcasePage() {
 
                 {isEmpty && category != null && (
                   <div className="sf-gallery-note">
-                    <p>Nothing generated in this category yet.</p>
+                    <p>No apps in this category yet.</p>
                     <p className="sf-gallery-note-detail">
-                      Check back soon, or browse everything the agent has designed.
+                      Check back soon or browse every app the agent has designed.
                     </p>
                     <Button
                       variant="outline"
@@ -494,7 +489,7 @@ export function ShowcasePage() {
                   <div className="sf-gallery-note">
                     <p>Nothing generated yet.</p>
                     <p className="sf-gallery-note-detail">
-                      Check back soon — the showcase fills up as the agent designs new screens on its own.
+                      Check back soon. New apps appear here as the agent designs them.
                     </p>
                   </div>
                 )}
@@ -528,7 +523,7 @@ export function ShowcasePage() {
               </div>
             </div>
           </section>
-          <LandingClosing onAgentPrompt={handleAgentPrompt} />
+          <LandingClosing />
         </div>
       </main>
       <LandingFooter />

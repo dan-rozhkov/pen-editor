@@ -11,8 +11,21 @@ export function getStoredUITheme(): UITheme {
   return parseUITheme(localStorage.getItem(UI_THEME_STORAGE_KEY));
 }
 
+const appliedListeners = new Set<(theme: UITheme) => void>();
+
+/**
+ * Run `fn` after EVERY application of the theme to <html>, from any path (store init, a no-op
+ * store update, a switch). A path that toggled `.dark` silently let it be stripped under a
+ * dark-only page (the landing) whose hook only heard about no-transition switches.
+ */
+export function onUIThemeApplied(fn: (theme: UITheme) => void): () => void {
+  appliedListeners.add(fn);
+  return () => appliedListeners.delete(fn);
+}
+
 export function applyUITheme(theme: UITheme) {
   document.documentElement.classList.toggle("dark", theme === "dark");
+  appliedListeners.forEach((fn) => fn(theme));
 }
 
 export function getAppliedUITheme(): UITheme {
@@ -27,14 +40,6 @@ export function applyStoredUITheme() {
  * Switch the theme with `transition: none` in effect, so every surface flips
  * in the same frame. (Moved from uiThemeStore; see the reflow note below.)
  */
-const appliedListeners = new Set<(theme: UITheme) => void>();
-
-/** Run `fn` after every no-transition theme switch (e.g. the showcase's theme-color meta). */
-export function onUIThemeApplied(fn: (theme: UITheme) => void): () => void {
-  appliedListeners.add(fn);
-  return () => appliedListeners.delete(fn);
-}
-
 export function applyThemeWithoutTransitions(theme: UITheme) {
   const root = document.documentElement;
   root.classList.add("disable-theme-transitions");
@@ -46,7 +51,6 @@ export function applyThemeWithoutTransitions(theme: UITheme) {
   requestAnimationFrame(() => {
     root.classList.remove("disable-theme-transitions");
   });
-  appliedListeners.forEach((fn) => fn(theme));
 }
 
 let mountedEditors = 0;

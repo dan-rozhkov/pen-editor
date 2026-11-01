@@ -3,7 +3,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { ShowcasePage } from "@/components/showcase/ShowcasePage";
 import { ShowcaseLightbox } from "@/components/showcase/ShowcaseLightbox";
-import { peekShowcaseAgentPrompt } from "@/lib/showcaseAgentHandoff";
 import { assertDefined } from "@/test/assertions";
 import type { ShowcaseCategory, ShowcaseScreen } from "@/lib/showcase";
 import {
@@ -105,14 +104,11 @@ describe("<ShowcasePage />", () => {
 
     expect(headings).toHaveLength(1);
     expect(headings[0].textContent?.replace(/\s+/g, " ").trim()).toBe(
-      "One agent, three apps, one window.",
+      "Research it. Design it. Write it up.",
     );
     expect(headings[0].classList.contains("sf-hero-title")).toBe(true);
-    expect(
-      screen.getByPlaceholderText("Ask Sideform Agent to create…"),
-    ).toBeTruthy();
-    // Header and footer both link the editor (plus the hero's "Try in the browser").
-    expect(editorLinks).toHaveLength(2);
+    // The footer links the editor (the header's link lives in its closed menu; the about row has "Try in the browser").
+    expect(editorLinks).toHaveLength(1);
     for (const link of editorLinks) {
       expect(link.getAttribute("href")).toBe("/app");
     }
@@ -127,26 +123,30 @@ describe("<ShowcasePage />", () => {
     renderPage();
 
     for (const name of [
-      "Three apps, one agent",
-      "Three apps at work",
+      "One window, three apps",
+      "One request, start to finish",
       "Designed by the agent",
-      "Get Sideform",
-      "Fast because it is connected.",
-      "Questions, answered",
+      "Pick how to start",
+      "No copy-paste between tools.",
+      "Common questions",
     ]) {
       expect(screen.getByRole("region", { name })).toBeTruthy();
     }
   });
 
-  it("shows the real editor screenshot with a text alternative", () => {
+  it("shows the real app in the hero slider with a text alternative", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
 
     renderPage();
 
-    const image = screen.getByRole("img", { name: /The Sideform editor in dark mode/ });
-    expect(image.getAttribute("src")).toBe("/landing/sideform-editor-dark-1440.webp");
-    expect(image.getAttribute("width")).toBe("2880");
-    expect(image.getAttribute("height")).toBe("1800");
+    // The hero slider: one labelled image, three decorative frames (canvas, browser, document).
+    const slider = screen.getByRole("img", { name: /Sideform Desktop in dark mode/ });
+    const frames = Array.from(slider.querySelectorAll("img")).map((img) => img.getAttribute("src"));
+    expect(frames).toEqual([
+      "/landing/sideform-desktop-canvas-1440.webp",
+      "/landing/sideform-desktop-browser-1440.webp",
+      "/landing/sideform-desktop-doc-1440.webp",
+    ]);
   });
 
   it("offers the macOS desktop build next to the editor link", () => {
@@ -177,21 +177,6 @@ describe("<ShowcasePage />", () => {
     assertDefined(details);
     expect(details.open).toBe(false);
     expect(question.closest("summary")).not.toBeNull();
-  });
-
-  it("stores a trimmed prompt and navigates to the editor", async () => {
-    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
-    sessionStorage.clear();
-    renderNavigablePage();
-
-    const input = screen.getByPlaceholderText("Ask Sideform Agent to create…");
-    fireEvent.change(input, {
-      target: { value: "  Build a calm finance dashboard  " },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
-
-    await screen.findByText("Editor route");
-    expect(peekShowcaseAgentPrompt()).toBe("Build a calm finance dashboard");
   });
 
   it("opens the editor from the header link", async () => {
@@ -571,7 +556,7 @@ describe("<ShowcasePage /> filters", () => {
 
     renderPageAt("/?category=retro+arcade");
 
-    await screen.findByText("Nothing generated in this category yet.");
+    await screen.findByText("No apps in this category yet.");
     expect(
       screen.getByRole("button", { name: "Mobile banking" }).getAttribute("aria-pressed"),
     ).toBe("false");
@@ -595,7 +580,7 @@ describe("<ShowcasePage /> filters", () => {
 
     renderPageAt("/?category=mobile+banking");
 
-    await screen.findByText("Nothing generated in this category yet.");
+    await screen.findByText("No apps in this category yet.");
     fireEvent.click(screen.getByRole("button", { name: "Show all" }));
 
     await screen.findByAltText("Onboarding flow");

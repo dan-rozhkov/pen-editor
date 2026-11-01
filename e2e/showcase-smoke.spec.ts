@@ -1,6 +1,5 @@
 import { test, expect } from "@playwright/test";
 import { expectEditorMounted } from "./support/editor";
-import { SSE_HEADERS, sseBody } from "./support/sse";
 
 // Smoke test for FIR-61 part D: "/" now serves the public showcase of
 // autonomously-designed screens instead of the editor, which moved to
@@ -41,14 +40,15 @@ test("/ shows the showcase, not the editor", async ({ page }, testInfo) => {
   // Cards are image-only, so the title lives in alt text, not a caption.
   await expect(page.getByAltText("Onboarding flow")).toBeVisible();
   await expect(page.locator("[data-canvas]")).toHaveCount(0);
-  // The landing is dark-only, whatever theme the editor has stored.
-  await expect(page.locator("html")).not.toHaveClass(/dark/);
+  // The landing is dark-only, whatever theme the editor has stored: useForcedDarkDocument puts
+  // `.dark` on <html> so portaled popups (the header menu, selects) are dark too.
+  await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(page.locator("body")).toHaveCSS(
     "background-color",
     "rgb(2, 2, 2)",
   );
   await expect(
-    page.getByRole("heading", { level: 1, name: "One agent, three apps, one window." }),
+    page.getByRole("heading", { level: 1, name: "Research it. Design it. Write it up." }),
   ).toBeVisible();
 
   // The `/app` navigation mounts the full WebGL/Pixi editor, which is
@@ -93,7 +93,7 @@ test("the landing stays dark when the editor theme is light, and the editor keep
   await page.goto("/");
   await expect(page.locator("body")).toHaveCSS("background-color", "rgb(2, 2, 2)");
   await expect(
-    page.getByRole("heading", { level: 1, name: "One agent, three apps, one window." }),
+    page.getByRole("heading", { level: 1, name: "Research it. Design it. Write it up." }),
   ).toHaveCSS("color", "rgb(255, 255, 255)");
 
   await page.getByRole("link", { name: "Try in browser" }).first().click();
@@ -152,65 +152,6 @@ test("the model filter sizes itself to its selected option", async ({ page }, te
   await expect
     .poll(() => select.evaluate((element) => element.getBoundingClientRect().width))
     .toBeLessThanOrEqual(200);
-});
-
-test("a showcase prompt opens a new agent chat and sends the message", async ({
-  page,
-}, testInfo) => {
-  test.skip(
-    testInfo.project.name === "webkit-mobile",
-    "The mobile WebKit project only guards the showcase layout.",
-  );
-
-  const prompt = "Build a calm finance dashboard";
-  const chatRequests: unknown[] = [];
-
-  await page.route("**/api/showcase**", (route) =>
-    route.fulfill({ json: { apps: [], nextCursor: null } }),
-  );
-  await page.route("**/api/models", (route) =>
-    route.fulfill({
-      json: {
-        models: [
-          {
-            id: "test/smoke-model",
-            label: "Smoke Model",
-            supportsVision: true,
-          },
-        ],
-        default: "test/smoke-model",
-      },
-    }),
-  );
-  await page.route("**/api/chat", async (route) => {
-    chatRequests.push(route.request().postDataJSON());
-    await route.fulfill({
-      headers: SSE_HEADERS,
-      body: sseBody([
-        { type: "start" },
-        { type: "start-step" },
-        { type: "finish-step" },
-        { type: "finish" },
-      ]),
-    });
-  });
-
-  await page.goto("/");
-  const input = page.getByPlaceholder("Ask Sideform Agent to create…");
-  await input.fill(prompt);
-  await input.press("Enter");
-
-  await expect(page).toHaveURL(/\/app$/);
-  await expectEditorMounted(page);
-  await expect(page.getByText("Sideform Agent", { exact: true })).toBeVisible();
-  // The prompt now surfaces twice: the chat derives its title from the first
-  // user message, and the message itself sits in the transcript. Assert both
-  // rather than a bare getByText, which matches either one ambiguously.
-  await expect(page.getByTestId("chat-header-title")).toHaveText(prompt);
-  await expect(
-    page.locator('[data-testid^="chat-session-"]').getByText(prompt, { exact: true }),
-  ).toBeVisible();
-  await expect.poll(() => chatRequests.length).toBe(1);
 });
 
 // Regression: index.css locks html/body/#root to height:100% + overflow:hidden

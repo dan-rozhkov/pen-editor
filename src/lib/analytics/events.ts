@@ -36,11 +36,10 @@ export interface AnalyticsEventMap {
       | "header"
       | "about"
       | "try_section"
-      | "runs_table"
       | "footer";
   };
   // Landing page ("/"): the desktop download links.
-  landing_download_clicked: { source: "header" | "about" | "download_section" | "runs_table" };
+  landing_download_clicked: { source: "header" | "about" | "download_section" };
 
   // --- Editor ---
   editor_opened: { is_first_session: boolean; via_showcase_handoff: boolean };
