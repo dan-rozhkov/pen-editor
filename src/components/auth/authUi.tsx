@@ -3,6 +3,7 @@ import { useId, type ComponentProps, type ReactNode } from "react";
 import { LegalLinks } from "@/components/legal/LegalLinks";
 import { appHref } from "@/lib/auth/paths";
 import { cn } from "@/lib/utils";
+import { SideformLockup } from "@/components/brand/SideformLogo";
 
 const FOCUS =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary";
@@ -27,9 +28,10 @@ export function AuthShell({
       >
         <a
           href={appHref("/")}
-          className={cn("mb-6 inline-block text-sm font-semibold text-text-primary", FOCUS)}
+          aria-label="Sideform home"
+          className={cn("mb-6 inline-flex text-text-primary", FOCUS)}
         >
-          Sideform
+          <SideformLockup className="h-6 w-auto" />
         </a>
         <h1 className="mb-5 text-xl font-semibold tracking-tight text-text-primary">{title}</h1>
         {children}

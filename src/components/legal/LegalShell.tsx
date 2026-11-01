@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { LegalLinks } from "@/components/legal/LegalLinks";
 import { appHref } from "@/lib/auth/paths";
+import { SideformLockup } from "@/components/brand/SideformLogo";
 
 export const LEGAL_UPDATED = "5 October 2026";
 export const SUPPORT_EMAIL = "support@sideform.pro";
@@ -15,9 +16,10 @@ export function LegalShell({ title, children }: { title: string; children: React
       <article className="mx-auto w-full max-w-[720px]">
         <a
           href={appHref("/")}
-          className="mb-8 inline-block text-sm font-semibold text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
+          aria-label="Sideform home"
+          className="mb-8 inline-flex text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
         >
-          Sideform
+          <SideformLockup className="h-6 w-auto" />
         </a>
         <h1 className="mb-2 text-2xl font-semibold tracking-tight text-text-primary">{title}</h1>
         <p className="mb-8 text-sm text-text-muted">Last updated: {LEGAL_UPDATED}</p>

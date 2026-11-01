@@ -10,6 +10,7 @@ import { ReadOnlyProvider } from "@/components/ReadOnlyProvider";
 import { PixiCanvas } from "@/pixi/PixiCanvas";
 import { useMcpBridgeStore } from "@/store/mcpBridgeStore";
 import { setUIThemeTransient } from "@/store/uiThemeStore";
+import { SideformLockup } from "@/components/brand/SideformLogo";
 import { LeftRail } from "@/components/LeftRail";
 import { LeftSidebarBase } from "@/components/LeftSidebarBase";
 import type { LeftSection } from "@/store/leftSidebarStore";
@@ -86,7 +87,7 @@ export function EmbedApp({ host }: { host: HostBridge | null }) {
     <TooltipProvider delay={400} closeDelay={0}>
       <div className="w-full h-full flex flex-col overflow-hidden" data-testid="embed-root">
         <div className={`h-9 shrink-0 flex items-center gap-1 px-2 border-b text-xs ${chrome}`} data-testid="embed-topbar" data-theme={appliedTheme}>
-          <span className="font-medium pr-1">Sideform</span>
+          <SideformLockup label="Sideform" className="h-3.5 w-auto shrink-0 mr-1.5" />
           <span className="flex items-center gap-1.5 text-[11px] opacity-80" role="status" aria-label={statusLabel}>
             <span className={`size-1.5 rounded-full ${statusDot}`} />
             {statusLabel}

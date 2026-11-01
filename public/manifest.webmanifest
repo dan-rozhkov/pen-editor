@@ -1,7 +1,7 @@
 {
-  "name": "Pen Editor",
-  "short_name": "Pen",
-  "description": "AI-first canvas design editor.",
+  "name": "Sideform",
+  "short_name": "Sideform",
+  "description": "One agent for the browser, canvas and docs.",
   "start_url": "app",
   "scope": "./",
   "display": "standalone",

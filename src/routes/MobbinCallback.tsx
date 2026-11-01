@@ -57,7 +57,7 @@ export default function MobbinCallback() {
       ? null
       : parsed.error
         ? `Mobbin sign-in failed: ${parsed.error}`
-        : "This page finishes connecting Mobbin to Pen Editor. It looks like it wasn't opened from there — you can close this tab.";
+        : "This page finishes connecting Mobbin to Sideform. It looks like it wasn't opened from there — you can close this tab.";
     return { params: parsed, noOpenerMessage };
   });
 

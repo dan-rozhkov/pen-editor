@@ -280,7 +280,7 @@ describe("<SignInPage /> base path", () => {
     try {
       await open("/sign-in", { enabled: false, google: false, emailEnabled: false });
       expect(screen.getByRole("link", { name: "Back to Sideform" }).getAttribute("href")).toBe("/pen/");
-      expect(screen.getByRole("link", { name: "Sideform" }).getAttribute("href")).toBe("/pen/");
+      expect(screen.getByRole("link", { name: "Sideform home" }).getAttribute("href")).toBe("/pen/");
     } finally {
       vi.unstubAllEnvs();
     }

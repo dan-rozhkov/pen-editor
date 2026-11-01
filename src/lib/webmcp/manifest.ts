@@ -68,9 +68,9 @@ export function buildWebMcpManifest(base = "/"): WebMcpManifest {
   const at = (path: string) => `${base}${path}`;
 
   return {
-    name: "Pen Editor",
+    name: "Sideform",
     description:
-      "AI-first canvas design editor. On its editor routes it publishes an agent-facing toolset for reading and mutating the open design document.",
+      "Sideform design canvas. On its editor routes it publishes an agent-facing toolset for reading and mutating the open design document.",
     surface: {
       kind: "in-page",
       description:

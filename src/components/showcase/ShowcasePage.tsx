@@ -33,6 +33,7 @@ import {
   type ShowcaseSort,
 } from "@/lib/showcase";
 import { ShowcaseAppCarousel } from "@/components/showcase/ShowcaseAppCarousel";
+import { SideformLockup } from "@/components/brand/SideformLogo";
 
 type Status = "loading" | "ready" | "error";
 
@@ -430,7 +431,7 @@ export function ShowcasePage() {
           "sm:pl-[calc(4rem+env(safe-area-inset-left))] sm:pr-[calc(4rem+env(safe-area-inset-right))]",
         )}
       >
-        <Link to="/" className="sf-brand" aria-label="Sideform home"><span className="sf-brand-mark" aria-hidden><i /><i /></span>Sideform</Link>
+        <Link to="/" className="sf-brand" aria-label="Sideform home"><SideformLockup className="sf-brand-logo" /></Link>
         <div className="relative text-center">
           <p className="sf-eyebrow">Sideform for Mac</p>
           <h1 className="sf-hero-title font-semibold tracking-tight text-text-primary">
@@ -612,7 +613,7 @@ export function ShowcasePage() {
         <LandingClosing onAgentPrompt={handleAgentPrompt} />
       </main>
       <footer className="sf-footer">
-        <span>Sideform <span className="sf-footer-note">— one agent for the browser, the canvas and docs.</span></span>
+        <span className="sf-footer-brand"><SideformLockup label="Sideform" className="sf-footer-logo" /><span className="sf-footer-note">— one agent for the browser, the canvas and docs.</span></span>
         <LegalLinks />
         <a href="https://github.com/dan-rozhkov/pen-editor" target="_blank" rel="noreferrer">Explore the source ↗</a>
       </footer>

@@ -4,10 +4,8 @@
 .sideform-landing p { text-wrap: pretty; }
 .sideform-landing a:focus-visible, .sideform-landing summary:focus-visible { outline: 2px solid var(--color-accent-primary); outline-offset: 5px; }
 .sideform-landing .sf-header { padding-top: calc(9rem + env(safe-area-inset-top)); padding-bottom: 0; }
-.sf-brand { position: absolute; top: calc(1.1rem + env(safe-area-inset-top)); left: calc(1rem + env(safe-area-inset-left)); display: inline-flex; align-items: center; gap: 10px; min-height: 44px; font-size: 21px; font-weight: 650; letter-spacing: -.035em; }
-.sf-brand-mark { display: flex; gap: 3px; align-items: center; width: 27px; height: 25px; transform: rotate(-12deg); }
-.sf-brand-mark i { width: 11px; height: 20px; border: 2px solid currentColor; border-radius: 3px; }
-.sf-brand-mark i + i { transform: translateY(5px); background: var(--color-accent-primary); border-color: var(--color-accent-primary); }
+.sf-brand { position: absolute; top: calc(1.1rem + env(safe-area-inset-top)); left: calc(1rem + env(safe-area-inset-left)); display: inline-flex; align-items: center; min-height: 44px; color: var(--color-text-primary); }
+.sf-brand-logo { display: block; height: 26px; width: auto; }
 .sf-hero-title { font-size: clamp(2.6rem, 6.3vw, 5.5rem); line-height: 1.04; letter-spacing: -.04em; }
 .sf-hero-description { max-width: 580px; margin: 26px auto 0; font-size: clamp(1rem, 1.5vw, 1.125rem); line-height: 1.65; color: var(--sf-muted); text-align: center; }
 .sideform-landing textarea::placeholder { color: var(--sf-muted); }
@@ -42,6 +40,8 @@
 .sf-gallery-intro { padding-top: 36px; padding-bottom: 28px; border-top: 1px solid var(--color-border-default); scroll-margin-top: 24px; }
 .sf-gallery-intro > p { max-width: 65ch; margin-top: 15px; font-size: 15px; line-height: 1.7; color: var(--sf-muted); }
 .sf-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 20px; padding: 28px max(1rem, env(safe-area-inset-left)) calc(28px + env(safe-area-inset-bottom)); border-top: 1px solid var(--color-border-default); font-size: 13px; }
+.sf-footer-brand { display: inline-flex; align-items: center; gap: 8px; }
+.sf-footer-logo { display: block; height: 16px; width: auto; flex: none; }
 .sf-footer-note { color: var(--sf-muted); }
 /* Keep existing blue identity; use a darker ink for small text on pale blue. */
 .sideform-landing .sf-header-actions a:last-child { color: oklch(.45 .15 250); min-height: 44px; }
@@ -59,7 +59,7 @@
   .sideform-landing .sf-header { padding-top: calc(8rem + env(safe-area-inset-top)); }
   .sideform-landing .sf-header-actions { display: flex; }
   .sideform-landing .sf-header-actions a:first-child { display: none; }
-  .sf-brand { font-size: 19px; }
+  .sf-brand-logo { height: 22px; }
   .sf-header-actions a { font-size: 12px; padding-inline: 12px; }
   .sf-footer-note { display: none; }
 }

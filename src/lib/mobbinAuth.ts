@@ -427,7 +427,7 @@ export async function connect(): Promise<void> {
   // desktopBridge.ts) is only present in that shell, never on the web.
   if (window.penDesktop) {
     throw new Error(
-      "Connecting Mobbin isn't available in the desktop app yet — open Pen Editor in a browser to connect it.",
+      "Connecting Mobbin isn't available in the desktop app yet — open Sideform in a browser to connect it.",
     );
   }
 
