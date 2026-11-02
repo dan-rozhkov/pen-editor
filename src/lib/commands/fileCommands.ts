@@ -5,7 +5,7 @@ import { useVariableStore } from "@/store/variableStore";
 import { useTextStyleStore } from "@/store/textStyleStore";
 import { useStyleStore } from "@/store/styleStore";
 import { useThemeStore } from "@/store/themeStore";
-import { useDocumentStore } from "@/store/documentStore";
+import { stripDocumentExtension, useDocumentStore } from "@/store/documentStore";
 import { useGuidesStore } from "@/store/guidesStore";
 import { useMeasurementsStore } from "@/store/measurementsStore";
 import { useCommentsStore } from "@/store/commentsStore";
@@ -80,10 +80,16 @@ export function collectDocumentData(): DocumentData {
   return buildLiveDocumentData();
 }
 
+/** File name without its document extension, for export file names. */
+function documentBaseName(): string {
+  const fileName = useDocumentStore.getState().fileName;
+  return (fileName ? stripDocumentExtension(fileName) : "") || "document";
+}
+
 export function exportAsJson(): void {
   const { pages, variables, textStyles, fillStyles, effectStyles, activeTheme } =
     collectDocumentData();
-  const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
+  const name = documentBaseName();
   downloadDocument(
     pages,
     variables,
@@ -97,7 +103,7 @@ export function exportAsJson(): void {
 
 export function exportAsPen(): void {
   const currentPageNodes = useSceneStore.getState().getNodes();
-  const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
+  const name = documentBaseName();
   downloadPublicPen(
     currentPageNodes,
     useVariableStore.getState().variables,
@@ -113,7 +119,7 @@ export function exportDesignTokens(): void {
     effectStyles: useStyleStore.getState().effectStyles,
     textStyles: useTextStyleStore.getState().textStyles,
   });
-  const name = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "") || "document";
+  const name = documentBaseName();
   const blob = new Blob([JSON.stringify(tokensDoc, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

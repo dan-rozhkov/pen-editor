@@ -4,7 +4,7 @@ import { usePageStore } from "@/store/pageStore";
 import { useSceneStore } from "@/store/sceneStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 import { useSharedViewStore } from "@/store/sharedViewStore";
-import { useDocumentStore } from "@/store/documentStore";
+import { stripDocumentExtension, useDocumentStore } from "@/store/documentStore";
 import { useThemeStore } from "@/store/themeStore";
 import {
   deriveCanvasTitle,
@@ -170,6 +170,14 @@ describe("buildLiveDocumentData", () => {
   });
 });
 
+describe("stripDocumentExtension", () => {
+  it("strips only .pen / .json", () => {
+    expect(stripDocumentExtension("a.pen")).toBe("a");
+    expect(stripDocumentExtension("a.JSON")).toBe("a");
+    expect(stripDocumentExtension("v1.2 final")).toBe("v1.2 final");
+  });
+});
+
 describe("deriveCanvasTitle", () => {
   beforeEach(() => {
     resetStores();
@@ -191,6 +199,11 @@ describe("deriveCanvasTitle", () => {
     expect(deriveCanvasTitle()).toBe("My design");
     useDocumentStore.setState({ fileName: `${"x".repeat(300)}.pen` });
     expect(deriveCanvasTitle()).toHaveLength(200);
+  });
+
+  it("keeps a dot inside an extensionless file name", () => {
+    useDocumentStore.setState({ fileName: "v1.2 final" });
+    expect(deriveCanvasTitle()).toBe("v1.2 final");
   });
 });
 
@@ -282,17 +295,23 @@ describe("startDesktopCanvasPersistence", () => {
     stop();
   });
 
-  it("applies a stored canvas and continues from its rev", async () => {
+  async function loadStored(title: string) {
     seedScene();
     const document = serializeLiveDocument();
     resetStores();
     resetPages();
-    const stored: StoredCanvas = { id: "cv_test", title: "T", updatedAt: 1, rev: 7, document };
+    const stored: StoredCanvas = { id: "cv_test", title, updatedAt: 1, rev: 7, document };
     const { read, save } = stubBridge();
     read.mockResolvedValue({ canvas: stored });
     const stop = startDesktopCanvasPersistence()!;
     await settled();
+    return { save, stop, document };
+  }
+
+  it("applies a stored canvas, restores its explicit title and continues from its rev", async () => {
+    const { save, stop } = await loadStored("T");
     expect(useSceneStore.getState().nodesById["rect1"]).toBeDefined();
+    expect(useDocumentStore.getState().fileName).toBe("T.pen");
 
     // Loading itself must not cause a save.
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS * 3);
@@ -302,7 +321,51 @@ describe("startDesktopCanvasPersistence", () => {
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS + 10);
     expect(save).toHaveBeenCalledTimes(1);
     expect(save.mock.calls[0][0].rev).toBe(8);
-    expect(save.mock.calls[0][0].title).toBe("Screen");
+    expect(save.mock.calls[0][0].title).toBe("T");
+    stop();
+  });
+
+  async function loadAndEdit(title: string) {
+    const { save, stop } = await loadStored(title);
+    const fileName = useDocumentStore.getState().fileName;
+    const derived = deriveCanvasTitle();
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS * 3);
+    const savedOnLoad = save.mock.calls.length;
+    useSceneStore.getState().updateNode("rect1", { x: 55 } as never);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS + 10);
+    stop();
+    return { fileName, derived, savedOnLoad, savedTitle: save.mock.calls[0][0].title };
+  }
+
+  it.each(["Screen", "v1.2 final"])("restores stored title %j without a save on load", async (title) => {
+    expect(await loadAndEdit(title)).toEqual({
+      fileName: `${title}.pen`,
+      derived: title,
+      savedOnLoad: 0,
+      savedTitle: title,
+    });
+  });
+
+  it("applies a stored canvas with a non-string title and keeps autosave working", async () => {
+    const { save, stop } = await loadStored(undefined as never);
+    expect(useSceneStore.getState().nodesById["rect1"]).toBeDefined();
+    expect(useDocumentStore.getState().fileName).toBeNull();
+    expect(toast.error).not.toHaveBeenCalled();
+    useSceneStore.getState().updateNode("rect1", { x: 55 } as never);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS + 10);
+    expect(save).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it("saves a rename on its own, with the document unchanged", async () => {
+    const { save, stop, document } = await loadStored("Screen");
+    useDocumentStore.getState().setFileName("Renamed.pen");
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS + 10);
+    expect(save).toHaveBeenCalledTimes(1);
+    const sent = save.mock.calls[0][0];
+    expect(sent.rev).toBe(8);
+    expect(sent.title).toBe("Renamed");
+    expect(sent.document).toBe(document);
     stop();
   });
 

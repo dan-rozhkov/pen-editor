@@ -14,7 +14,7 @@ import { ComponentsPanel } from "./ComponentsPanel";
 import { CommentsPanelContent } from "./CommentsPanel";
 import { LeftSidebarResizer } from "./LeftSidebarResizer";
 import { useSceneStore } from "@/store/sceneStore";
-import { useDocumentStore } from "@/store/documentStore";
+import { DOCUMENT_EXTENSION_RE, stripDocumentExtension, useDocumentStore } from "@/store/documentStore";
 import { usePageStore } from "@/store/pageStore";
 import { useLeftSidebarStore } from "@/store/leftSidebarStore";
 import type { ReactNode } from "react";
@@ -58,8 +58,8 @@ export function LeftSidebarBase({ hiddenSections, renderHeader, renderAgents, to
   const setFileName = useDocumentStore((s) => s.setFileName);
   const isOnline = useOnlineStatus();
 
-  const displayName = fileName ? fileName.replace(/\.[^.]+$/, "") : "Untitled";
-  const extension = fileName?.match(/\.[^.]+$/)?.[0] ?? "";
+  const displayName = fileName ? stripDocumentExtension(fileName) : "Untitled";
+  const extension = fileName?.trimEnd().match(DOCUMENT_EXTENSION_RE)?.[0] ?? "";
 
   // On mobile the panel is hidden until the rail opens it, then it covers the
   // full screen width to the right of the rail. On desktop it is a

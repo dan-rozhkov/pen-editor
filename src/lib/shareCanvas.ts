@@ -10,7 +10,7 @@ import { deserializeDocument, serializeDocument } from "@/utils/fileUtils";
 import type { DocumentData } from "@/utils/fileUtils";
 import { isOffline, apiFetch } from "@/lib/apiBase";
 import { getRequestUserId } from "@/lib/auth/authState";
-import { useDocumentStore } from "@/store/documentStore";
+import { stripDocumentExtension, useDocumentStore } from "@/store/documentStore";
 import { useEditorModeStore } from "@/store/editorModeStore";
 
 const DEFAULT_SHARE_CREDENTIALS_KEY = "pen.share.current.v1";
@@ -117,7 +117,7 @@ export function saveShareCredentials(c: ShareCredentials | null): void {
 
 function titleFromFileName(): string {
   const fileName = useDocumentStore.getState().fileName;
-  const stripped = fileName?.replace(/\.[^.]+$/, "").trim();
+  const stripped = (fileName ? stripDocumentExtension(fileName) : "").trim();
   return stripped || "Untitled";
 }
 

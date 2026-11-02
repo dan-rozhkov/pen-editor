@@ -3,7 +3,7 @@
 
 import { usePageStore } from "@/store/pageStore";
 import { useSceneStore } from "@/store/sceneStore";
-import { useDocumentStore } from "@/store/documentStore";
+import { stripDocumentExtension, useDocumentStore } from "@/store/documentStore";
 import { serializeDocument } from "@/utils/fileUtils";
 import { buildLiveDocumentData } from "@/lib/commands/fileCommands";
 
@@ -85,8 +85,8 @@ function clean(title: string): string {
 
 /** File name without extension, else the first top-level frame of the first page, else "Untitled canvas". */
 export function deriveCanvasTitle(): string {
-  const fileName = useDocumentStore.getState().fileName?.replace(/\.[^.]+$/, "");
-  const fromFile = fileName ? clean(fileName) : "";
+  const rawFileName = useDocumentStore.getState().fileName;
+  const fromFile = rawFileName ? clean(stripDocumentExtension(rawFileName)) : "";
   if (fromFile) return fromFile;
 
   const { pages, activePageId } = usePageStore.getState();

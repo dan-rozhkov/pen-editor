@@ -33,6 +33,7 @@ import {
   ensureCanvasIdInUrl,
   hasAnyNode,
   serializeLiveDocument,
+  UNTITLED_CANVAS,
 } from "./canvasIdentity";
 
 export const AUTOSAVE_DEBOUNCE_MS = 1000;
@@ -95,6 +96,11 @@ function notifyOnce(kind: NoticeKind): void {
   } catch (e) {
     warn("notice failed", e);
   }
+}
+
+/** Save key: title and document fingerprinted separately, so the big document string is never concatenated. */
+function saveKey(title: string, document: string): string {
+  return `${fingerprint(title)}|${fingerprint(document)}`;
 }
 
 /** cyrb53 over the string plus its length: a cheap fingerprint, so no second copy of a big document is kept. */
@@ -269,7 +275,9 @@ export function startDesktopCanvasPersistence(): (() => void) | undefined {
       if (retryAfterFailure) schedule(AUTOSAVE_RETRY_MS);
       return Promise.resolve();
     }
-    const key = fingerprint(document);
+    // The title is part of the fingerprint: a rename changes it while the document stays identical.
+    const title = deriveCanvasTitle();
+    const key = saveKey(title, document);
     if (key === s.lastSaved) {
       s.savedRefs = refs;
       return Promise.resolve();
@@ -281,7 +289,7 @@ export function startDesktopCanvasPersistence(): (() => void) | undefined {
       // Only undo our own increment: an overlapping forced save may have bumped it since.
       if (s.rev === sentRev) s.rev -= 1;
     };
-    const payload: StoredCanvas = { id: s.id, title: deriveCanvasTitle(), updatedAt: Date.now(), rev: sentRev, document };
+    const payload: StoredCanvas = { id: s.id, title, updatedAt: Date.now(), rev: sentRev, document };
     dirty = false;
     retryAfterFailure = false;
     const p: Promise<void> = bridge
@@ -457,12 +465,19 @@ function beginSession(id: string, bridge: Bridge): Session {
         disable("stored canvas could not be applied", e);
         return;
       }
+      // Put an explicit (renamed) title back. The ".pen" suffix makes `deriveCanvasTitle()` and the
+      // sidebar (displayName/extension) return exactly the stored title, even with a dot ("v1.2 final").
+      // Outside the try above: a bad title must never disable autosave of an already-applied document.
+      if (typeof canvas.title === "string") {
+        const stored = canvas.title.trim();
+        if (stored && stored !== UNTITLED_CANVAS) useDocumentStore.getState().setFileName(`${stored}.pen`);
+      }
       // Layout / migration passes run after the apply: take the baseline once they settled, so
       // they do not look like edits (and rewrite an untouched file, bumping it in Recent).
       await settle();
       if (session !== s) return;
       try {
-        s.lastSaved = fingerprint(serializeLiveDocument());
+        s.lastSaved = saveKey(deriveCanvasTitle(), serializeLiveDocument());
         s.savedRefs = sliceRefs();
       } catch {
         s.lastSaved = null;

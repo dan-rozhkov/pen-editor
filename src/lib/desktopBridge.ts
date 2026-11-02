@@ -1,7 +1,7 @@
 import type { BrowseTrace } from "@sideform/browser-agent/agent/session";
 import type { BrowserBridge } from "@sideform/browser-agent/loop";
 import { getCommands, runCommand } from "@/lib/commands/registry";
-import { useDocumentStore } from "@/store/documentStore";
+import { stripDocumentExtension, useDocumentStore } from "@/store/documentStore";
 import type { Doc } from "@/lib/docs/docStore";
 import type { Workflow } from "@/lib/workflows/workflowStore";
 import type { CanvasHostBridge } from "@/lib/canvasLink/protocol";
@@ -268,7 +268,7 @@ export function initDesktopBridge(): () => void {
   const api = window.penDesktop;
   if (!api) return () => {};
   const publishDocumentTitle = (fileName: string | null) => {
-    const title = fileName?.replace(/\.[^.]+$/, "").trim() || "Untitled";
+    const title = (fileName ? stripDocumentExtension(fileName) : "").trim() || "Untitled";
     api.setDocumentTitle?.(title);
   };
   publishDocumentTitle(useDocumentStore.getState().fileName);
