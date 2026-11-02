@@ -678,7 +678,7 @@ export function LandingClosing() {
             text="References, screens and specs live in one window. The agent keeps the context from the first reference to the final write-up."
             wide
           />
-          {/* Two columns of reasons: an icon from the editor's set, the short label, then the claim. */}
+          {/* The reasons in a grid (see .sf-reasons): an icon from the editor's set, the short label, then the claim. */}
           <ul className="sf-reasons">
             {WHY_ROWS.map(({ key, value, icon: Icon }) => (
               <li key={key} className="sf-reason">

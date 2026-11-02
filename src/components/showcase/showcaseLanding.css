@@ -446,7 +446,7 @@
 }
 
 .sf-section {
-  padding: 160px 40px;
+  padding: 120px 40px;
   background: var(--sf-bg);
 }
 
@@ -477,6 +477,12 @@
   text-align: right;
 }
 
+/* A one-column head has no title beside the subtitle, so right-aligning it only strands a long line. */
+.sf-head-wide .sf-sub {
+  max-width: 640px;
+  text-align: left;
+}
+
 /* About */
 
 .sf-about-grid {
@@ -489,7 +495,7 @@
 .sf-about-copy {
   display: flex;
   flex-direction: column;
-  gap: 60px;
+  gap: 32px;
 }
 
 .sf-lead {
@@ -572,8 +578,10 @@
 .sf-card-body {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 40px;
+  /* Text right under the title: with space-between a tall card pushed it to the bottom, where the
+     next sticky card cut it off mid-line. */
+  justify-content: flex-start;
+  gap: 20px;
   padding: 16px;
 }
 
@@ -663,7 +671,8 @@
 /* The gallery wrapper bounds the sticky row, so it never rides over later sections. */
 .sf-gallery > .sf-subrow {
   position: sticky;
-  top: 0;
+  /* Below the fixed header (80px on every width), or the row hides under its blur. */
+  top: calc(80px + env(safe-area-inset-top));
   z-index: 10;
   padding-block: 12px 16px;
   background: var(--sf-bg);
@@ -750,7 +759,7 @@
   gap: 8px;
 }
 
-/* Why: reasons in two columns (icon, label, claim), one column on phones. */
+/* Why: three reasons (icon, label, claim) in one row from 1000px, two columns below, one on phones. */
 
 .sf-reasons {
   display: grid;
@@ -854,12 +863,13 @@
 }
 
 .sf-footer-tag {
+  /* Hold the tag's one text line and the 32px button (size lg, h-8) on the same centre line. */
   top: 40px;
   left: 40px;
 }
 
 .sf-footer-cta {
-  top: 31px;
+  top: calc(40px + (var(--sf-text) * var(--sf-text-leading) - 32px) / 2);
   right: 40px;
 }
 
@@ -905,6 +915,48 @@
 
 .sf-landing .sf-footer-legal a {
   text-decoration: none;
+}
+
+/* ---------- Desktop ---------- */
+
+@media (min-width: 1000px) {
+  .sf-reasons {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1200px) {
+  /* Use cases: the three columns share row tracks so head, prompt and answer line up across them. */
+  .sf-day {
+    display: grid;
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+  }
+
+  /* The prompt box stretches to the shared row; its icon footer stays at the bottom. */
+  .sf-prompt {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sf-prompt > :last-child {
+    margin-top: auto;
+  }
+
+  /* Get started: all three cards fit, so the row is a plain grid in the content column, not the
+     full-bleed slider (its 100vw maths shifts the cards by half a classic scrollbar). */
+  .sf-tickets {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-inline: 0;
+    padding-inline: 0;
+    overflow: visible;
+    scroll-snap-type: none;
+  }
+
+  .sf-ticket {
+    min-height: 440px;
+  }
 }
 
 /* ---------- Tablet ---------- */
@@ -1049,10 +1101,6 @@
     gap: 60px;
   }
 
-  .sf-about-copy {
-    gap: 32px;
-  }
-
   .sf-card {
     top: calc(88px + var(--i, 0) * 12px);
     padding: 12px;
@@ -1064,7 +1112,6 @@
   }
 
   .sf-card-body {
-    gap: 24px;
     padding: 12px;
   }
 
