@@ -247,6 +247,14 @@ export interface PenDesktopApi {
        * matches `^[A-Za-z0-9_-]{1,64}$`. Optional: older shells lack it.
        */
       isolated?(sessionId: string): DesktopBrowserBridge;
+      /**
+       * Per-chat view of the shared built-in browser. Same methods as `browser`
+       * and the same browser, but each call carries the chat id, so the shell
+       * keeps one app binding per chat (`launchApp` in one chat does not release
+       * the app of another). `chatId` matches `^[A-Za-z0-9_-]{1,64}$`.
+       * Optional: older shells lack it.
+       */
+      forChat?(chatId: string): DesktopBrowserBridge;
       /** Closes the isolated session (tabs, fixture, storage). Idempotent. */
       closeSession?(sessionId: string): Promise<{ ok: true } | { error: string }>;
     };

@@ -4,6 +4,7 @@ import { onStorageKey } from "@/lib/storageSync";
 import { deriveChatTitle } from "@/lib/chatTitle";
 import { canUseModel, getDefaultModel } from "@/lib/chatModels";
 import { releaseCloudBrowser } from "@/lib/cloudBrowser";
+import { releaseDesktopChatApp } from "@/lib/tools/browser/bridge";
 import { useBrowseCheckpointStore } from "./browseCheckpointStore";
 import { subscribeOpenCodeKey } from "@/lib/opencodeKey";
 import { mergeChangesByEvent, type ChangeDetail } from "@/lib/memoryActivity";
@@ -415,6 +416,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Deleting a chat ends its cloud browser session (fire-and-forget;
     // releaseCloudBrowser never rejects and is a no-op without a handle).
     void releaseCloudBrowser(chatId);
+    // It also ends the desktop app this chat launched (no-op without one).
+    releaseDesktopChatApp(chatId);
     useBrowseCheckpointStore.getState().deleteChat(chatId);
 
     // If only one chat remains, replace it with a new empty chat

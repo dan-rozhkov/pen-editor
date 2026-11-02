@@ -9,6 +9,8 @@ const isolatedBridges = new Map<string, BrowserBridge>();
 // for good, so a straggler call must not revive it through `isolated()`.
 const MAX_CLOSED_SESSIONS = 500;
 const closedSessions = new Set<string>();
+// The shell rejects any other chat id, so such an id never leaves this module.
+const CHAT_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const CLOSED_ERROR = { error: "browser session closed" };
 const closedBridge = new Proxy({} as BrowserBridge, {
   get: (_t, key) => (key === "then" || typeof key === "symbol" ? undefined : async () => CLOSED_ERROR),
@@ -35,6 +37,10 @@ export function desktopBrowserBridge(): BrowserBridge | undefined {
  * isolated bridge: the shell's `browser.isolated(id)`. Desktop only: the cloud browser
  * has no isolated sessions (a Steel session is scarce, see the isolation spec).
  * Ignored when isolation is unavailable.
+ *
+ * Without a run session, a shell that has `browser.forChat` gets the calling chat's own
+ * bridge (a stateless wrapper, built per call), so each chat keeps its own app binding. Falls back to the
+ * shared `browser` when `forChat` is missing or `chatId` is not a valid shell id.
  */
 export function getBrowserBridge(chatId?: string, browserSession?: string): BrowserBridge | undefined {
   const desktop = desktopBrowserBridge();
@@ -47,8 +53,31 @@ export function getBrowserBridge(chatId?: string, browserSession?: string): Brow
     }
     return bridge;
   }
-  if (desktop) return desktop;
+  if (desktop) {
+    const chatBridge = chatId ? desktopChatBridge(desktop, chatId) : undefined;
+    return chatBridge ?? desktop;
+  }
   return chatId ? getCloudBrowserBridge(chatId) : cloudBrowserBridge;
+}
+
+/** The chat's own view of the shared browser, or undefined (old shell, or an id the shell rejects). */
+function desktopChatBridge(desktop: BrowserBridge, chatId: string): BrowserBridge | undefined {
+  if (!CHAT_ID_PATTERN.test(chatId) || typeof desktop.forChat !== "function") return undefined;
+  return desktop.forChat(chatId);
+}
+
+/**
+ * Ends the desktop app that one chat launched (`releaseApp` on its per-chat bridge).
+ * Fire-and-forget; never throws. Does nothing without `forChat` or with an invalid id.
+ */
+export function releaseDesktopChatApp(chatId: string): void {
+  try {
+    const desktop = desktopBrowserBridge();
+    const release = desktop ? desktopChatBridge(desktop, chatId)?.releaseApp?.() : undefined;
+    void Promise.resolve(release).catch(() => {});
+  } catch {
+    // Best effort: the shell also drops a chat's binding when its tab closes.
+  }
 }
 
 /** Longest wait for the shell to confirm a close: a hung shell must not hold the run (and its slot) forever. */

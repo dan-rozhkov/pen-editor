@@ -48,6 +48,7 @@ import type { ChatLaunchPayload } from "@/types/chat";
 import { chatToMarkdown, chatFilename, downloadMarkdown } from "@/lib/chatExport";
 import { CHEVRON_WEIGHT } from "@/components/ui/chevron";
 import { releaseCloudBrowser } from "@/lib/cloudBrowser";
+import { releaseDesktopChatApp } from "@/lib/tools/browser/bridge";
 import { useBrowseCheckpointStore } from "@/store/browseCheckpointStore";
 import { parseWorkflowAttachment } from "@/lib/workflows/workflowAttachment";
 import { getWorkflow } from "@/lib/workflows/workflowStore";
@@ -347,6 +348,8 @@ function ChatSession({
         useChatStore.getState().clearLikedReferences(sessionId);
         // A cleared chat starts over, so its cloud browser does too.
         void releaseCloudBrowser(sessionId);
+        // Same for the desktop app this chat launched.
+        releaseDesktopChatApp(sessionId);
         // Its browser checkpoints (cookies, storage) go with the transcript.
         useBrowseCheckpointStore.getState().clearChat(sessionId);
       },
