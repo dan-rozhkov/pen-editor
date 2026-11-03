@@ -565,6 +565,56 @@
   outline-offset: -1px;
 }
 
+/* Promo clip: the wrapper carries .sf-card-shot (look + the one-column rule); the button sits in its corner. */
+.sf-video {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #1a1a1a;
+  overflow: hidden;
+}
+
+.sf-video-el {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #1a1a1a;
+}
+
+.sf-video-toggle {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: oklch(0 0 0 / 0.55);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+.sf-card:hover .sf-video-toggle,
+.sf-video-toggle:focus-visible {
+  opacity: 1;
+}
+
+.sf-video-toggle:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+@media (hover: none) {
+  .sf-video-toggle {
+    opacity: 1;
+  }
+}
+
 /* Card and workflow titles share one size. */
 .sf-card-title {
   font-size: 28px;

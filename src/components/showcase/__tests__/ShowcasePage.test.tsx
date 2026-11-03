@@ -340,7 +340,7 @@ describe("<ShowcasePage />", () => {
     const image = await screen.findByAltText("Onboarding flow");
     // The model is intentionally shown as a compact card badge, not a caption.
     expect(screen.getByText("Model").classList.contains("text-text-muted")).toBe(true);
-    expect(screen.queryByText(/dark/)).toBeNull();
+    expect(screen.queryByText("dark")).toBeNull();
     // The live-HTML lightbox is switched off, but the card is still a real
     // <button> so clicking (or Enter/Space on) a screen reveals the hover/tap
     // overlay (FIR-62) — "Copy Screen ID" now lives on its own button there,

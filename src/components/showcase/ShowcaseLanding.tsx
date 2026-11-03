@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LegalLinks } from "@/components/legal/LegalLinks";
+import { AutoplayVideo } from "@/components/showcase/landing/AutoplayVideo";
 import { LiquidGradient } from "@/components/showcase/landing/LiquidGradient";
 import { RevealText, Words } from "@/components/showcase/landing/Reveal";
 import { track } from "@/lib/analytics";
@@ -63,21 +64,21 @@ const APPS: { name: string; text: string; color: string; shot: "browser" | "canv
   {
     name: "Browser",
     shot: "browser",
-    alt: "Sideform Desktop with a browser tab open on linear.app next to the agent chat",
+    alt: "Screen recording: three agent cursors fill a pre-order form on a store page at the same time",
     text: "The agent opens real sites, clicks through flows and saves references. Point it at staging and it checks the build. You see every step in a tab.",
     color: ORANGE,
   },
   {
     name: "Canvas",
     shot: "canvas",
-    alt: "Sideform Desktop with a canvas tab: three landing sections as editable frames",
+    alt: "Screen recording: the agent designs a dark mobile screen on the canvas, then the screen is selected",
     text: "Every screen lands as an editable frame, side by side. Compare directions, fix a detail by hand or ask for another option.",
     color: PALE,
   },
   {
     name: "Docs",
     shot: "doc",
-    alt: "Sideform Desktop with a document tab: the landing redesign brief",
+    alt: "Screen recording: the agent writes a brief, inserts a canvas frame as an image, then text is selected and the bubble menu appears",
     text: "Write specs, PRDs, notes and bug reports in a Notion-style editor. The agent links each doc to the frames it describes.",
     color: BLUE,
   },
@@ -318,6 +319,8 @@ export function LandingSectionHead({
 
 /** Everything between the hero and the showcase gallery. */
 export function LandingStory() {
+  // The stacked app cards; each clip asks for the next card to know when it is covered.
+  const cardRefs = useRef<(HTMLElement | null)[]>([]);
   return (
     <>
       <section className="sf-section sf-about" aria-label="Overview">
@@ -363,17 +366,20 @@ export function LandingStory() {
               card slides over it as the page scrolls. */}
           <div className="sf-cards">
             {APPS.map(({ name, text, color, shot, alt }, index) => (
-              <article key={name} className="sf-card" style={{ "--i": index } as CSSProperties}>
-                <img
-                  className="sf-card-shot"
-                  src={`${DESKTOP_SHOT}-${shot}-1440.webp`}
-                  srcSet={`${DESKTOP_SHOT}-${shot}-1440.webp 1440w, ${DESKTOP_SHOT}-${shot}.webp 2880w`}
-                  sizes="(min-width: 1200px) 680px, calc(100vw - 64px)"
-                  width={2880}
-                  height={1800}
-                  loading="lazy"
-                  decoding="async"
-                  alt={alt}
+              <article
+                key={name}
+                ref={(node) => {
+                  cardRefs.current[index] = node;
+                }}
+                className="sf-card"
+                style={{ "--i": index } as CSSProperties}
+              >
+                <AutoplayVideo
+                  src={`${LANDING_ASSETS}sideform-video-${shot}.mp4`}
+                  poster={`${LANDING_ASSETS}sideform-video-${shot}-poster.webp`}
+                  label={alt}
+                  name={name}
+                  coveredBy={() => cardRefs.current[index + 1] ?? null}
                 />
                 <div className="sf-card-body">
                   <div className="sf-card-top">
@@ -754,6 +760,7 @@ export function LandingFooter() {
 const BUTTON_PRIMARY = buttonVariants({ variant: "default", size: "lg" });
 const BUTTON_SECONDARY = buttonVariants({ variant: "outline", size: "lg" });
 
+const LANDING_ASSETS = `${import.meta.env.BASE_URL}landing/`;
 const DESKTOP_SHOT = `${import.meta.env.BASE_URL}landing/sideform-desktop`;
 /** Sideform Desktop with the agent panel, one frame per tab kind. Captured by scripts/landing-hero/capture-desktop.mjs. */
 const HERO_FRAMES = ["canvas", "browser", "doc"] as const;
