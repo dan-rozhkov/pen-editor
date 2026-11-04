@@ -62,18 +62,21 @@ export function AppIconGroup() {
         value={state.selected}
         onValueChange={(next) => choose(next as string)}
         disabled={busy}
-        className="grid grid-cols-3 gap-4"
+        className="flex flex-wrap gap-3"
       >
         {state.options.map((o) => (
           <Radio.Root
             key={o.id}
             value={o.id}
             aria-label={o.label}
-            className="group flex w-full cursor-default flex-col items-center gap-2 text-left outline-none"
+            className="group flex w-14 cursor-default flex-col items-start gap-1.5 text-left outline-none"
           >
-            <span className="relative block rounded-2xl group-data-checked:ring-2 group-data-checked:ring-accent-primary group-focus-visible:ring-2 group-focus-visible:ring-accent-primary">
-              <img src={o.preview} alt="" className="block size-24" draggable={false} />
-              <Radio.Indicator className="absolute right-1.5 bottom-1.5 flex size-4 items-center justify-center rounded-full bg-accent-primary text-white">
+            <span className="relative block size-14 rounded-[13px] ring-1 ring-border-default group-data-checked:ring-2 group-data-checked:ring-accent-primary group-focus-visible:ring-2 group-focus-visible:ring-accent-primary">
+              {/* The PNG keeps macOS's transparent margin: the scale crops it, so the tile starts at the left edge. */}
+              <span className="block size-full overflow-hidden rounded-[13px]">
+                <img src={o.preview} alt="" className="block size-full scale-[1.243]" draggable={false} />
+              </span>
+              <Radio.Indicator className="absolute right-1 bottom-1 flex size-4 items-center justify-center rounded-full bg-accent-primary text-white">
                 <CheckIcon className="size-2.5" />
               </Radio.Indicator>
             </span>
