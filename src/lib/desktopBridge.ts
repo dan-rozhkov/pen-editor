@@ -163,6 +163,23 @@ export interface DesktopBrowserSettingsApi {
   set(patch: Partial<DesktopBrowserSettings>): Promise<DesktopBrowserSettings | { error: string }>;
 }
 
+export interface DesktopAppIconOption {
+  id: string;
+  label: string;
+  /** A `data:image/png;base64,...` URL supplied by the shell. */
+  preview: string;
+}
+
+export interface DesktopAppIconState {
+  selected: string;
+  options: DesktopAppIconOption[];
+}
+
+export interface DesktopAppIconApi {
+  get(): Promise<DesktopAppIconState | { error: string }>;
+  set(id: string): Promise<DesktopAppIconState | { error: string }>;
+}
+
 export interface PenDesktopApi {
   auth?: DesktopAuthApi;
   /** Saved logins for `@` mentions in documents. Absent on the web and on an older shell. */
@@ -197,6 +214,8 @@ export interface PenDesktopApi {
   settings?: DesktopSettingsApi;
   /** Ad blocking and MCP control of the built-in browser. Settings tab only. */
   browserSettings?: DesktopBrowserSettingsApi;
+  /** Dock icon choice. Settings > Appearance only. Absent on the web and on an older shell. */
+  appIcon?: DesktopAppIconApi;
   /** true when the desktop agent layout flag is on: the editor tab is chatless. */
   agentLayout?: boolean;
   /** Canvas link host bridge (desktop agent layout only); see docs/canvas-link.md. */

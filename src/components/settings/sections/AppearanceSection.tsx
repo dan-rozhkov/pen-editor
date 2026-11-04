@@ -4,6 +4,7 @@ import { useUIThemeStore } from "@/store/uiThemeStore";
 import type { UITheme } from "@/lib/uiTheme";
 
 import { SettingsGroup, SettingsSection } from "../SettingsSection";
+import { AppIconGroup } from "../AppIconGroup";
 import { ThemePreviewCard } from "../ThemePreviewCard";
 
 export function AppearanceSection() {
@@ -21,6 +22,7 @@ export function AppearanceSection() {
           <ThemePreviewCard theme="dark" label="Dark" />
         </RadioGroup>
       </SettingsGroup>
+      <AppIconGroup />
     </SettingsSection>
   );
 }

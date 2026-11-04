@@ -191,6 +191,12 @@ no-ops.
 `../plans/desktop-mcp-bridge.md` for the full cross-repo design (handshake,
 token, tab routing, security).
 
+`window.penDesktop.appIcon` (`get()`, `set(id)`) lets Settings > Appearance
+pick the Dock icon. Both return `{ selected, options: [{ id, label, preview }] }`
+or `{ error }`. `preview` is a `data:image/png` URL from the shell, so this
+repo ships no icon images and keeps no icon list. `AppIconGroup.tsx` renders
+nothing without the bridge, while loading, or on an error.
+
 ### browse_task loop (`@sideform/browser-agent`)
 
 The browse_task loop (snapshot -> `/api/browse/step` -> perform, sub-goal
