@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 While on `0.x`, minor bumps may include breaking changes.
 
+## [0.83.0] - 2026-11-04
+
+Two weeks of work for the desktop app: the agent panel, documents, workflows,
+browse traces and Settings. The site gets a new landing page. Pairs with
+pen-editor-desktop 0.9.6.
+
+### Added
+- **Agent panel on desktop:** the chat runs in its own panel and drives canvas
+  tabs over the canvas link. Chats and canvases are kept on disk.
+- **Documents (`/doc`):** a Notion-like Markdown editor with tables, property
+  lists, callouts, images, links, templates, mermaid and export to PDF.
+- **Workflows (`/workflow`):** a visual step editor, agent tools, attachment to
+  a prompt, and scheduled runs from the desktop agent panel.
+- **Browse traces (`/trace`):** a viewer for recorded runs with playback,
+  step details, a request log, a run switcher and Playwright test export.
+- **Settings page (`/settings`):** Appearance, Canvas, Agent, Memory, Skills,
+  Browser, Integrations, Data & privacy, Advanced and Shortcuts. On desktop,
+  Appearance also picks the app icon.
+- **Desktop sign-in:** `/auth/desktop` and the token receiver.
+- **Browser agent:** saved logins that the model never sees, a QA judge, and
+  native desktop apps driven from the chat.
+- **Chat:** links to documents, frames, canvas tabs and traces, a files popover,
+  and prompt suggestions in the composer.
+- **Landing:** a new page at `/` with promo videos and the outlined Sideform logo.
+
+### Changed
+- An in-house icon set replaces Phosphor.
+- AI SDK 7.
+- Sending while the agent is busy now interrupts the turn. The message queue is gone.
+- The canvas draws a wireframe while the agent writes a screen.
+
 ## [0.82.0] - 2026-10-18
 
 Three themes: the browse subagent (`browse_agent`) grows into a QA tool, a
