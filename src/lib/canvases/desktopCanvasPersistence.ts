@@ -1,7 +1,10 @@
-// Desktop shell only: persists the editor's canvas to disk through
-// `window.penDesktop.canvases` (read/save), keyed by the `?canvas=<id>` of the tab URL.
+// Persists the editor's canvas through `window.penDesktop.canvases` (read/save) in the desktop
+// shell, keyed by the `?canvas=<id>` of the tab URL. A page framed by the web `/workspace` tab
+// shell has no bridge and falls back to the IndexedDB `webCanvasStore` (same API shape); the
+// desktop bridge always wins.
 // Load first, autosave after: an empty editor must never overwrite a stored canvas.
-// On the web (no bridge), in `?view` mode and in the shared viewer this is a no-op.
+// On a plain top-level web page (no bridge, not workspace-framed), in `?view` mode and in the
+// shared viewer this is a no-op.
 //
 // The load/save state lives at MODULE level (one `Session` per canvas id), not inside the
 // effect: App can remount (router `navigate('/app')`, StrictMode) while the scene stores
@@ -11,6 +14,8 @@
 
 import { toast } from "sonner";
 import type { DesktopCanvasesApi, StoredCanvas } from "@/lib/desktopBridge";
+import { OTHER_WINDOW_MESSAGE, releaseWebCanvasLock, webCanvasStore } from "./webCanvasStore";
+import { isWorkspaceFrame } from "@/lib/workspace/frame";
 import { deserializeDocument } from "@/utils/fileUtils";
 import { applyOpenedDocument } from "@/utils/openDocumentIntoEditor";
 import { getCanvasViewportMetrics } from "@/utils/canvasViewport";
@@ -52,7 +57,10 @@ export const SAVE_FAILED_MESSAGE = "This canvas could not be saved. Export it to
 export const OPEN_FAILED_MESSAGE = "Could not open the saved canvas.";
 
 type Bridge = Required<Pick<DesktopCanvasesApi, "read" | "save">>;
-type NoticeKind = "save" | "open";
+/** Shown (and kept on screen) when a second window opens a canvas another window is editing. */
+export const OTHER_WINDOW_NOTICE = `${OTHER_WINDOW_MESSAGE} Changes in this window are not saved.`;
+
+type NoticeKind = "save" | "open" | "locked";
 
 interface Session {
   id: string;
@@ -80,7 +88,9 @@ const noticed = new Set<NoticeKind>();
 function getBridge(): Bridge | undefined {
   if (typeof window === "undefined") return undefined;
   const api = window.penDesktop?.canvases;
-  return api && typeof api.read === "function" && typeof api.save === "function" ? (api as Bridge) : undefined;
+  if (api && typeof api.read === "function" && typeof api.save === "function") return api as Bridge;
+  // No desktop bridge: only a page framed by the workspace shell persists in the browser.
+  return isWorkspaceFrame() ? webCanvasStore : undefined;
 }
 
 function warn(what: string, detail?: unknown): void {
@@ -92,7 +102,8 @@ function notifyOnce(kind: NoticeKind): void {
   if (noticed.has(kind)) return;
   noticed.add(kind);
   try {
-    toast.error(kind === "save" ? SAVE_FAILED_MESSAGE : OPEN_FAILED_MESSAGE);
+    if (kind === "locked") toast.error(OTHER_WINDOW_NOTICE, { duration: Infinity });
+    else toast.error(kind === "save" ? SAVE_FAILED_MESSAGE : OPEN_FAILED_MESSAGE);
   } catch (e) {
     warn("notice failed", e);
   }
@@ -190,8 +201,14 @@ function newSession(id: string): Session {
   };
 }
 
+/** After a fork the old id is no longer written by this frame: give its Web Lock back (browser store only). */
+function releaseOldId(oldId: string, bridge: Bridge): void {
+  if (bridge === webCanvasStore) releaseWebCanvasLock(oldId);
+}
+
 /** A fresh, ready, unsaved session under a NEW id for the document currently in the stores. */
-function forkSession(): Session {
+function forkSession(oldId: string, bridge: Bridge): Session {
+  releaseOldId(oldId, bridge);
   const s = newSession(assignNewCanvasId());
   s.phase = "ready";
   return s;
@@ -215,7 +232,7 @@ export function startDesktopCanvasPersistence(): (() => void) | undefined {
     // The stores were replaced while App was unmounted (shared viewer -> "Open editor"): what is
     // in them is not this canvas. Never autosave it under the old id.
     warn("the document changed while the editor was unmounted; forking to a new canvas id");
-    session = forkSession();
+    session = forkSession(session.id, bridge);
   }
   const s = session;
   active += 1;
@@ -338,18 +355,22 @@ export function startDesktopCanvasPersistence(): (() => void) | undefined {
   /**
    * `window.penCanvasFlush`: saves whatever is unsaved and resolves after that save's reply
    * (at once when nothing is pending; an in-flight save is awaited too). Never rejects.
+   * Resolves true when nothing is left unsaved; false when a save failed, or when the canvas
+   * never became ready (read pending or failed) while the scene holds content.
    */
-  async function flush(): Promise<void> {
+  async function flush(): Promise<boolean> {
     try {
       await whenCanvasLoadReady();
-      if (s.phase !== "ready") return;
+      if (s.phase !== "ready") return !hasAnyNode();
       if (inFlight) await inFlight.catch(() => {});
       if (dirty || timer !== undefined) {
         clearTimer();
         await save(true);
       }
+      return s.failures === 0 && !dirty && !retryAfterFailure;
     } catch (e) {
       warn("flush failed", e);
+      return false;
     }
   }
 
@@ -418,7 +439,7 @@ function beginSession(id: string, bridge: Bridge): Session {
   const disable = (what: string, detail?: unknown): void => {
     warn(`${what}; autosave disabled for this canvas`, detail);
     s.phase = "disabled";
-    notifyOnce("open");
+    notifyOnce(detail === OTHER_WINDOW_MESSAGE ? "locked" : "open");
   };
   s.ready = (async () => {
     let result: Awaited<ReturnType<Bridge["read"]>>;
@@ -448,6 +469,7 @@ function beginSession(id: string, bridge: Bridge): Session {
         // flight. Neither side may overwrite the other: the stored canvas stays intact under its
         // id, and this tab continues as a NEW unsaved canvas holding the live scene.
         warn("scene changed during the initial read; forking the live scene to a new canvas id");
+        releaseOldId(id, bridge);
         s.id = assignNewCanvasId();
         s.rev = 0;
         s.stored = false;

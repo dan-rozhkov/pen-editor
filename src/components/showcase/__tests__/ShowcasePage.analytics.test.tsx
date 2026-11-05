@@ -172,7 +172,7 @@ describe("ShowcasePage analytics", () => {
     trackMock.mockClear();
     fireEvent.click(item);
 
-    expect(item.getAttribute("href")).toBe("/app");
+    expect(item.getAttribute("href")).toBe("/workspace");
     expect(trackMock).toHaveBeenCalledWith("showcase_editor_cta_clicked", { source: "header" });
   });
 });

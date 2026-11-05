@@ -684,10 +684,33 @@ describe("startDesktopCanvasPersistence", () => {
     const stopB = startDesktopCanvasPersistence()!;
     const flushB = window.penCanvasFlush;
     await typeNode();
-    await expect(window.penCanvasFlush!()).resolves.toBeUndefined();
+    await expect(window.penCanvasFlush!()).resolves.toBe(false);
     stopA();
     expect(window.penCanvasFlush).toBe(flushB);
     stopB();
+  });
+
+  it("window.penCanvasFlush resolves true when saved or clean, false when the save fails", async () => {
+    const { save } = stubBridge();
+    const stop = startDesktopCanvasPersistence()!;
+    await flushMicrotasks();
+    await expect(window.penCanvasFlush!()).resolves.toBe(true);
+    await typeNode();
+    await expect(window.penCanvasFlush!()).resolves.toBe(true);
+    save.mockResolvedValueOnce({ error: "disk full" });
+    await typeNode();
+    await expect(window.penCanvasFlush!()).resolves.toBe(false);
+    stop();
+  });
+
+  it("window.penCanvasFlush resolves false when the canvas was never readable and the scene has content", async () => {
+    stubBridge({ read: vi.fn(async () => ({ error: "boom" })) });
+    const stop = startDesktopCanvasPersistence()!;
+    await flushMicrotasks();
+    await expect(window.penCanvasFlush!()).resolves.toBe(true);
+    await typeNode();
+    await expect(window.penCanvasFlush!()).resolves.toBe(false);
+    stop();
   });
 
   it("flushes on teardown for a change made during an in-flight save", async () => {

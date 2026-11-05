@@ -229,7 +229,7 @@ export function LandingNav() {
                 <DropdownMenuSeparator />
                 {/* A real <Link>: plain navigation keeps link semantics (middle-click, "open in new tab"). */}
                 <DropdownMenuItem
-                  render={<Link to="/app" />}
+                  render={<Link to="/workspace" />}
                   onClick={() => track("showcase_editor_cta_clicked", { source: "header" })}
                 >
                   Try in browser
@@ -345,7 +345,7 @@ export function LandingStory() {
               <Link
                 className={BUTTON_SECONDARY}
                 data-slot="button"
-                to="/app"
+                to="/workspace"
                 onClick={() => track("showcase_editor_cta_clicked", { source: "about" })}
               >
                 Try in the browser
@@ -591,7 +591,7 @@ function PlainButton({
       <Link
         className={className}
         data-slot={slot}
-        to="/app"
+        to="/workspace"
         onClick={() =>
           track("showcase_editor_cta_clicked", { source: "try_section" })
         }
@@ -725,7 +725,7 @@ export function LandingFooter() {
       <LiquidGradient className="sf-gradient" />
       <p className="sf-footer-tag">Sideform · macOS and web</p>
       <Link
-        to="/app"
+        to="/workspace"
         className={cn(BUTTON_PRIMARY, "sf-footer-cta")}
         data-slot="button"
         onClick={() => track("showcase_editor_cta_clicked", { source: "footer" })}

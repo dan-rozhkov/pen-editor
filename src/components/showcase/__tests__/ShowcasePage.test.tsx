@@ -43,7 +43,7 @@ function renderNavigablePage() {
     <MemoryRouter initialEntries={["/"]}>
       <Routes>
         <Route path="/" element={<ShowcasePage />} />
-        <Route path="/app" element={<div>Editor route</div>} />
+        <Route path="/workspace" element={<div>Editor route</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -110,11 +110,11 @@ describe("<ShowcasePage />", () => {
     // The footer links the editor (the header's link lives in its closed menu; the about row has "Try in the browser").
     expect(editorLinks).toHaveLength(1);
     for (const link of editorLinks) {
-      expect(link.getAttribute("href")).toBe("/app");
+      expect(link.getAttribute("href")).toBe("/workspace");
     }
     expect(
       screen.getByRole("link", { name: "Try in the browser" }).getAttribute("href"),
-    ).toBe("/app");
+    ).toBe("/workspace");
   });
 
   it("labels every landing section", () => {

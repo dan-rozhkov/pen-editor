@@ -1,0 +1,225 @@
+/* Start page of /workspace: the miniature card previews (a port of the desktop empty.css).
+   Colours come from the app tokens; the ghost shades are derived from them. */
+.ws-start {
+  --ws-accent: var(--color-accent-primary);
+  --ws-accent-ring: color-mix(in srgb, var(--color-accent-primary) 30%, transparent);
+  --ws-preview-bg: var(--color-surface-base);
+  --ws-ghost: var(--color-surface-active);
+  --ws-ghost-surface: var(--color-surface-panel);
+  --ws-ghost-border: var(--color-border-default);
+  --ws-dot: var(--color-border-default);
+}
+
+.ws-card {
+  transition:
+    border-color 150ms ease-out,
+    box-shadow 150ms ease-out;
+}
+.ws-card:hover {
+  border-color: var(--ws-accent);
+  box-shadow: 0 0 0 3px var(--ws-accent-ring);
+}
+.ws-card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-ring);
+}
+
+.ws-preview {
+  position: relative;
+  display: block;
+  height: 132px;
+  background: var(--ws-preview-bg);
+  border-bottom: 1px solid var(--color-border-default);
+  overflow: hidden;
+  transition: background-color 150ms ease-out;
+}
+.ws-preview::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 36px;
+  background-color: var(--ws-preview-bg);
+  mask-image: linear-gradient(to bottom, transparent, #000);
+  transition: background-color 150ms ease-out;
+}
+.ws-card:hover .ws-preview,
+.ws-card:focus-visible .ws-preview,
+.ws-card:hover .ws-preview::after,
+.ws-card:focus-visible .ws-preview::after {
+  background-color: color-mix(in srgb, var(--ws-preview-bg), var(--ws-accent) 6%);
+}
+.ws-preview span {
+  display: block;
+}
+
+.ws-line {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--ws-ghost);
+}
+.ws-line.short {
+  width: 55%;
+}
+
+.ws-preview-canvas {
+  background-image: radial-gradient(var(--ws-dot) 1px, transparent 1.2px);
+  background-size: 12px 12px;
+  background-position: 6px 6px;
+}
+.ws-frame {
+  position: absolute;
+  box-sizing: border-box;
+  background: var(--ws-ghost-surface);
+  border: 1px solid var(--ws-ghost-border);
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ws-frame .bar {
+  width: 40%;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--ws-ghost);
+}
+.ws-frame-a { left: 14%; top: 22px; width: 30%; height: 92px; }
+.ws-frame-b { left: 50%; top: 34px; width: 36%; height: 64px; }
+.ws-frame-b .block { flex: 1; border-radius: 4px; background: var(--ws-ghost); }
+.ws-frame-c { left: 50%; top: 106px; width: 22%; height: 40px; }
+
+.ws-cursor {
+  position: absolute;
+  left: 78%;
+  top: 80px;
+  width: 18px;
+  height: 18px;
+  filter: drop-shadow(0 0.5px 1px rgba(0, 0, 0, 0.4));
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+.ws-cursor .rim { fill: #ffffff; stroke: #ffffff; }
+.ws-cursor .body { fill: var(--ws-accent); stroke: var(--ws-accent); }
+.ws-card:hover .ws-cursor,
+.ws-card:focus-visible .ws-cursor {
+  opacity: 1;
+}
+
+.ws-sheet {
+  position: absolute;
+  left: 50%;
+  top: 20px;
+  width: 52%;
+  height: 140px;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  background: var(--ws-ghost-surface);
+  border: 1px solid var(--ws-ghost-border);
+  border-radius: 6px;
+  padding: 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ws-sheet-back {
+  top: 28px;
+  transform: translateX(-42%) rotate(4deg);
+  opacity: 0.7;
+}
+.ws-sheet .heading {
+  width: 60%;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--ws-ghost);
+  margin-bottom: 4px;
+}
+.ws-check {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.ws-check .box {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  border: 1px solid var(--ws-ghost-border);
+  background: var(--ws-ghost);
+}
+.ws-check .ws-line { flex: 1; }
+
+/* Workflow: a stack of step rows joined by a thin rail. */
+.ws-steps {
+  position: absolute;
+  left: 50%;
+  top: 18px;
+  width: 56%;
+  transform: translateX(-50%);
+  display: flex !important;
+  flex-direction: column;
+  gap: 8px;
+}
+.ws-step {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 10px;
+  background: var(--ws-ghost-surface);
+  border: 1px solid var(--ws-ghost-border);
+  border-radius: 6px;
+  position: relative;
+}
+.ws-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 15px;
+  top: 100%;
+  width: 1px;
+  height: 8px;
+  background: var(--ws-ghost-border);
+}
+.ws-step .num {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ws-ghost);
+}
+.ws-step .ws-line { flex: 1; }
+.ws-step:first-child .num {
+  background: var(--ws-accent);
+  opacity: 0.7;
+}
+
+.ws-card:hover .ws-cta,
+.ws-card:focus-visible .ws-cta {
+  background: var(--ws-accent);
+  border-color: var(--ws-accent);
+  color: #ffffff;
+}
+.ws-cta {
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    color 150ms ease-out;
+}
+
+/* Phone width or a short window with stored items: drop the previews, keep the Recent list in view. */
+@media (max-width: 560px) {
+  .ws-preview { display: none; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ws-start-inner {
+    animation: ws-start-in 200ms ease-out;
+  }
+}
+@keyframes ws-start-in {
+  from { opacity: 0; transform: translateY(4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws-card, .ws-card *, .ws-card *::after { transition: none !important; }
+}

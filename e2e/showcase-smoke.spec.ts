@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { expectEditorMounted } from "./support/editor";
+import { expectEditorMountedInFrame } from "./support/editor";
 
 // Smoke test for FIR-61 part D: "/" now serves the public showcase of
 // autonomously-designed screens instead of the editor, which moved to
@@ -68,8 +68,9 @@ test("/ shows the showcase, not the editor", async ({ page }, testInfo) => {
     route.fulfill({ json: { models: [], default: null } })
   );
   await page.getByRole("link", { name: "Try in browser" }).first().click();
-  await expect(page).toHaveURL(/\/app$/);
-  await expectEditorMounted(page);
+  await expect(page).toHaveURL(/\/workspace$/);
+  await page.getByRole("button", { name: "New canvas tab" }).click();
+  await expectEditorMountedInFrame(page.frameLocator('iframe[name^="pen-tab-"]'));
 });
 
 test("the landing stays dark when the editor theme is light, and the editor keeps its theme", async ({
@@ -97,8 +98,9 @@ test("the landing stays dark when the editor theme is light, and the editor keep
   ).toHaveCSS("color", "rgb(255, 255, 255)");
 
   await page.getByRole("link", { name: "Try in browser" }).first().click();
-  await expect(page).toHaveURL(/\/app$/);
-  await expectEditorMounted(page);
+  await expect(page).toHaveURL(/\/workspace$/);
+  await page.getByRole("button", { name: "New canvas tab" }).click();
+  await expectEditorMountedInFrame(page.frameLocator('iframe[name^="pen-tab-"]'));
   await expect(page.locator("html")).not.toHaveClass(/dark/);
 
   await page.goBack();

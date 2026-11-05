@@ -28,9 +28,18 @@ export function isValidCanvasId(id: string | null | undefined): id is string {
 
 const SESSION_KEY = "pen.canvasId";
 
+/**
+ * Same-origin iframes share `sessionStorage` with the top page, so a framed tab (workspace)
+ * keeps its id under a per-frame key, derived from `window.name`. No name = the plain key.
+ */
+function sessionKey(): string {
+  const name = typeof window !== "undefined" ? window.name : "";
+  return name ? `${SESSION_KEY}:${name}` : SESSION_KEY;
+}
+
 function readSessionId(): string | null {
   try {
-    const v = window.sessionStorage.getItem(SESSION_KEY);
+    const v = window.sessionStorage.getItem(sessionKey());
     return isValidCanvasId(v) ? v : null;
   } catch {
     return null;
@@ -39,7 +48,7 @@ function readSessionId(): string | null {
 
 function writeSessionId(id: string): void {
   try {
-    window.sessionStorage.setItem(SESSION_KEY, id);
+    window.sessionStorage.setItem(sessionKey(), id);
   } catch {
     /* storage blocked: the URL param alone then carries the id */
   }

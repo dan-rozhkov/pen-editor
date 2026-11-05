@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type FrameLocator, type Page } from "@playwright/test";
 
 // The editor lives behind "/app" as a lazy route chunk (the showcase owns
 // "/"), so the first spec to open it waits for the dev server to transform and
@@ -11,6 +11,13 @@ export const EDITOR_MOUNT_TIMEOUT = 60_000;
 
 export async function expectEditorMounted(page: Page) {
   await expect(page.locator("[data-canvas]")).toBeVisible({
+    timeout: EDITOR_MOUNT_TIMEOUT,
+  });
+}
+
+/** The same wait for an editor inside a workspace tab frame (`/workspace` iframes). */
+export async function expectEditorMountedInFrame(frame: FrameLocator) {
+  await expect(frame.locator("[data-canvas]")).toBeVisible({
     timeout: EDITOR_MOUNT_TIMEOUT,
   });
 }

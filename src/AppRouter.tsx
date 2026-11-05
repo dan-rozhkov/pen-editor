@@ -5,6 +5,7 @@ import { RouteFallback } from "@/components/RouteFallback";
 import { AuthBootstrap } from "@/components/auth/AuthBootstrap";
 import { ShowcasePage } from "@/components/showcase/ShowcasePage";
 import { RouteTracker } from "@/lib/analytics/RouteTracker";
+import { WorkspaceFrameGuard } from "@/lib/workspace/WorkspaceFrameGuard";
 import MobbinCallback from "@/routes/MobbinCallback";
 
 // The editor pulls in PixiJS and the whole canvas/tool stack; the showcase at
@@ -52,6 +53,10 @@ const PrivacyPage = lazy(() => import("@/routes/legal/PrivacyPage"));
 const TermsPage = lazy(() => import("@/routes/legal/TermsPage"));
 const SupportPage = lazy(() => import("@/routes/legal/SupportPage"));
 
+// The in-page tab shell at "/workspace" (the browser counterpart of the desktop tab bar). Lazy, and
+// it must never import App, Pixi, the scene stores or the chat: the editor runs in its iframes.
+const WorkspacePage = lazy(() => import("@/routes/WorkspacePage"));
+
 export function AppRouter() {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
@@ -67,6 +72,14 @@ export function AppRouter() {
           element={
             <Suspense fallback={<RouteFallback />}>
               <EditorApp />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/workspace"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <WorkspacePage />
             </Suspense>
           }
         />
@@ -184,6 +197,8 @@ export function AppRouter() {
       {/* Mirrors the account session into authState once accounts are known
           to be enabled; renders nothing. */}
       <AuthBootstrap />
+      {/* Inside a /workspace tab frame, routes that are not tab surfaces leave the frame. */}
+      <WorkspaceFrameGuard />
     </BrowserRouter>
   );
 }

@@ -285,9 +285,10 @@ declare global {
     /**
      * Defined by desktopCanvasPersistence while canvas persistence is active. Forces a save of
      * unsaved content and resolves after the shell's `canvases:save` reply (at once when nothing
-     * is pending). Never rejects. The shell awaits it before closing a tab and on quit.
+     * is pending). Never rejects. Resolves false when something is left unsaved; the web workspace
+     * shell then keeps the tab open (the desktop shell ignores the value). The shell awaits it before closing a tab and on quit.
      */
-    penCanvasFlush?: () => Promise<void>;
+    penCanvasFlush?: () => Promise<boolean | void>;
   }
 }
 
