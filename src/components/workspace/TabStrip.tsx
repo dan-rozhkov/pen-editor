@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { FileTextIcon, GearIcon, PaintBrushIcon, PlusIcon, TreeStructureIcon } from "@/components/icons";
+import { FileTextIcon, GearIcon, PaintBrushIcon, PlusIcon, SidebarSimpleIcon, TreeStructureIcon } from "@/components/icons";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
   DropdownMenu,
@@ -33,6 +33,8 @@ interface TabStripProps {
   onSettings: () => void;
   /** Drag to reorder: put the tab before `beforeId` (null = at the end). */
   onMove?: (tabId: string, beforeId: string | null) => void;
+  panelCollapsed?: boolean;
+  onTogglePanel?: () => void;
 }
 
 interface Ghost {
@@ -47,7 +49,7 @@ const NOOP_MOVE = () => {};
 const EASE_OUT = "cubic-bezier(0.33, 1, 0.68, 1)";
 const EASE_IN = "cubic-bezier(0.32, 0, 0.67, 0)";
 
-export function TabStrip({ tabs, activeTabId, onSelect, onClose, onHome, onNew, onSettings, onMove = NOOP_MOVE }: TabStripProps) {
+export function TabStrip({ tabs, activeTabId, onSelect, onClose, onHome, onNew, onSettings, onMove = NOOP_MOVE, panelCollapsed = false, onTogglePanel }: TabStripProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const [ghosts, setGhosts] = useState<Ghost[]>([]);
   const prevRef = useRef<{ tabs: WorkspaceTab[]; active: string | null } | null>(null);
@@ -146,8 +148,18 @@ export function TabStrip({ tabs, activeTabId, onSelect, onClose, onHome, onNew, 
   for (const ghost of [...ghosts].sort((a, b) => a.index - b.index)) rows.splice(Math.min(ghost.index, rows.length), 0, { ghost });
 
   return (
-    <div className="ws-row">
+    <div className="ws-row" data-panel-collapsed={panelCollapsed ? "" : undefined}>
       <div className="ws-nav">
+        <button
+          type="button"
+          aria-label={panelCollapsed ? "Show agent panel" : "Hide agent panel"}
+          title={`${panelCollapsed ? "Show" : "Hide"} agent panel (Cmd/Ctrl+Alt+B)`}
+          aria-pressed={!panelCollapsed}
+          onClick={onTogglePanel}
+          className="ws-btn"
+        >
+          <SidebarSimpleIcon aria-hidden />
+        </button>
         <button
           type="button"
           aria-label="Start page"

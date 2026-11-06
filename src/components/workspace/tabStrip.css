@@ -13,7 +13,30 @@
   user-select: none;
 }
 
-/* Home and Settings: inline below 640px, over the empty title area above the chat from 640px up
+/* The agent panel. It keeps its width and slides off to the left while the tab area grows, as on desktop
+   (240ms easeOutCubic). `visibility`, never `display:none`: the chat keeps running while it is collapsed. */
+.ws-panel { position: relative; min-width: 0; }
+.ws-panel[data-collapsed] { visibility: hidden; }
+@media (max-width: 639.98px) {
+  .ws-panel[data-collapsed] { flex: 0 0 0; margin-bottom: 0; }
+}
+@media (min-width: 640px) {
+  .ws-panel[data-collapsed] { flex-basis: 0; margin-left: 0; }
+  .ws-panel iframe { width: min(var(--agent-panel-width), 50vw); }
+  .ws-row[data-panel-collapsed] { padding-left: 102px; } /* the end of .ws-nav (96px) + 6px, the desktop --controls-end */
+}
+@media (min-width: 640px) and (prefers-reduced-motion: no-preference) {
+  .ws-panel {
+    transition:
+      flex-basis 240ms cubic-bezier(0.33, 1, 0.68, 1),
+      margin-left 240ms cubic-bezier(0.33, 1, 0.68, 1),
+      visibility 0s;
+  }
+  .ws-panel[data-collapsed] { transition-delay: 0s, 0s, 240ms; }
+  .ws-row { transition: padding-left 240ms cubic-bezier(0.33, 1, 0.68, 1); }
+}
+
+/* Panel toggle, Home and Settings: inline below 640px, over the empty title area above the chat from 640px up
    (where the desktop sidebar toggle sits). The shell root is the positioned ancestor. */
 .ws-nav { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
 @media (min-width: 640px) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { Navigate } from "react-router";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import { DEFAULT_DOC_TITLE, createDoc, listDocs, subscribeDocs } from "@/lib/doc
 import { DEFAULT_WORKFLOW_TITLE, createWorkflow, listWorkflows, newStepId, subscribeWorkflows } from "@/lib/workflows/workflowStore";
 import { SETTINGS_SECTIONS, SETTINGS_SECTION_EVENT, type SettingsSection } from "@/lib/openSettings";
 import { isWireMessage, wire } from "@/lib/workspace/linkWire";
+import { isPanelToggleShortcut, loadPanelCollapsed, savePanelCollapsed } from "@/lib/workspace/panelState";
 import { ShellRouter, type ItemResult } from "@/lib/workspace/shellRouter";
 import type { RecentItem, RecentKind } from "@/lib/workspace/recent";
 import {
@@ -42,7 +43,7 @@ const AGENT_PANEL_WIDTH = 380;
 
 /**
  * "/workspace": the browser counterpart of the desktop shell. A left island with the agent chat
- * (a same-origin `/agent` iframe, always visible), and right of it a tab strip, one same-origin
+ * (a same-origin `/agent` iframe, collapsible; it keeps running while collapsed), and right of it a tab strip, one same-origin
  * iframe per tab and a start page when no tab is active. Canvas tabs run chatless; this page
  * plays the part of the desktop main process and routes the canvas link between the chat frame
  * and the canvas frames (ShellRouter). Must not import App, Pixi, the scene stores or the chat:
@@ -284,6 +285,51 @@ function WorkspaceShell() {
 
   const moveTab = useCallback((tabId: string, beforeId: string | null) => dispatch({ type: "move", tabId, beforeId }), []);
 
+  const [panelCollapsed, setPanelCollapsed] = useState(loadPanelCollapsed);
+  const panelCollapsedRef = useRef(panelCollapsed);
+  const activeTabIdRef = useRef(state.activeTabId);
+  useEffect(() => {
+    activeTabIdRef.current = state.activeTabId;
+  }, [state.activeTabId]);
+
+  const togglePanel = useCallback(() => {
+    const next = !panelCollapsedRef.current;
+    panelCollapsedRef.current = next;
+    setPanelCollapsed(next);
+    savePanelCollapsed(next);
+    // Focus must not stay in the hidden chat: the active tab takes it, like on desktop.
+    if (next && document.activeElement === panelRef.current) {
+      const id = activeTabIdRef.current;
+      const frame = id ? framesRef.current.get(id)?.contentWindow : null;
+      if (frame) frame.focus();
+      else panelRef.current?.blur();
+    }
+  }, []);
+
+  // A keydown inside a frame never reaches this window, so each same-origin frame reports the shortcut too.
+  const onShortcut = useCallback(
+    (e: KeyboardEvent) => {
+      if (!isPanelToggleShortcut(e)) return;
+      e.preventDefault();
+      togglePanel();
+    },
+    [togglePanel],
+  );
+  const listenInFrame = useCallback(
+    (frame: HTMLIFrameElement) => {
+      try {
+        frame.contentWindow?.addEventListener("keydown", onShortcut);
+      } catch {
+        /* frame not reachable */
+      }
+    },
+    [onShortcut],
+  );
+  useEffect(() => {
+    window.addEventListener("keydown", onShortcut);
+    return () => window.removeEventListener("keydown", onShortcut);
+  }, [onShortcut]);
+
   const onNew = (choice: NewTabChoice) => {
     newItem(choice);
   };
@@ -292,13 +338,19 @@ function WorkspaceShell() {
     <div className="ws-shell fixed inset-0 flex flex-col bg-(--ws-glass) text-[13px] text-text-muted sm:flex-row">
       {/* One element for both layouts (CSS order, not a move): a resize must never reload the chat.
           Below 640px the tab area is on top and the chat below, half the height each. */}
-      <div className="order-2 mr-2 mb-2 ml-2 min-h-0 flex-1 overflow-hidden rounded-xl bg-surface-panel sm:order-1 sm:mt-[38px] sm:mr-0 sm:max-w-[50%] sm:flex-none sm:basis-(--agent-panel-width)" style={{ "--agent-panel-width": `${AGENT_PANEL_WIDTH}px` } as CSSProperties}>
+      <div
+        className="ws-panel order-2 mr-2 mb-2 ml-2 min-h-0 flex-1 overflow-hidden rounded-xl bg-surface-panel sm:order-1 sm:mt-[38px] sm:mr-0 sm:max-w-[50%] sm:flex-none sm:basis-(--agent-panel-width)"
+        style={{ "--agent-panel-width": `${AGENT_PANEL_WIDTH}px` } as CSSProperties}
+        data-collapsed={panelCollapsed ? "" : undefined}
+        inert={panelCollapsed}
+      >
         <iframe
           ref={panelRef}
           title="Sideform Agent"
           src={appHref("/agent")}
           data-agent-panel
-          className="size-full border-0 bg-surface-panel"
+          onLoad={(e) => listenInFrame(e.currentTarget)}
+          className="absolute inset-y-0 right-0 h-full w-full border-0 bg-surface-panel"
         />
       </div>
       <div className="order-1 flex min-h-0 min-w-0 flex-1 flex-col sm:order-2">
@@ -310,10 +362,12 @@ function WorkspaceShell() {
           onHome={() => dispatch({ type: "home" })}
           onNew={onNew}
           onSettings={() => openItem("settings", null, "Settings")}
+          panelCollapsed={panelCollapsed}
+          onTogglePanel={togglePanel}
           onMove={moveTab}
         />
         <div className="relative mr-2 mb-2 ml-2 min-h-0 flex-1 overflow-hidden rounded-xl bg-surface-panel">
-          <TabFrames tabs={state.tabs} activeTabId={state.activeTabId} framesRef={framesRef} mountIds={state.mountIds} focusFrame={state.focusFrame} />
+          <TabFrames tabs={state.tabs} activeTabId={state.activeTabId} framesRef={framesRef} mountIds={state.mountIds} focusFrame={state.focusFrame} onFrameLoad={listenInFrame} />
           {state.activeTabId === null && (
             <StartPage
               onNew={newItem}

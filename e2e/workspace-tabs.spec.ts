@@ -73,7 +73,7 @@ test("a hidden canvas frame keeps its size and returns when the document tab clo
   await expect(canvasIframe).toHaveCSS("visibility", "visible");
 });
 
-test("the chat panel is always visible and drives a canvas tab it opens over the canvas link", async ({ page }) => {
+test("the chat panel drives a canvas tab it opens over the canvas link", async ({ page }) => {
   test.setTimeout(120_000);
   await stubModels(page);
   const requests = await stubChatTurns(page, [
@@ -179,4 +179,32 @@ test("dragging a tab reorders it without reloading its frame, and the order surv
   await page.reload();
   await expect(page.getByRole("tab")).toHaveCount(3);
   expect(await titles()).toEqual([second, third, first]);
+});
+
+test("the chat panel collapses and expands without reloading, and the choice survives a reload", async ({ page }) => {
+  await page.goto("/workspace");
+  const panel = page.locator('iframe[title="Sideform Agent"]');
+  await expect(panel).toBeVisible();
+  const handle = await panel.elementHandle();
+  const win = await handle?.contentFrame();
+  await win?.evaluate(() => {
+    (window as unknown as { __keep: boolean }).__keep = true;
+  });
+
+  await page.getByRole("button", { name: "Hide agent panel" }).click();
+  await expect(panel).toBeHidden();
+  await expect.poll(async () => (await page.locator("main.ws-start").boundingBox())?.x).toBe(8);
+
+  // The shortcut works with the focus inside a frame too.
+  await page.getByRole("button", { name: "Show agent panel" }).click();
+  await expect(panel).toBeVisible();
+  await win?.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyB", metaKey: true, altKey: true, cancelable: true }));
+  });
+  await expect(panel).toBeHidden();
+  expect(await win?.evaluate(() => (window as unknown as { __keep?: boolean }).__keep)).toBe(true);
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Show agent panel" })).toBeVisible();
+  await expect(panel).toBeHidden();
 });

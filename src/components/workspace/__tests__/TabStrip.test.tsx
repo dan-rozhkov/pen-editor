@@ -257,3 +257,17 @@ describe("TabStrip new active tab", () => {
     expect((spy.mock.contexts[0] as HTMLElement).getAttribute("data-ws-tab")).toBe("d");
   });
 });
+
+describe("TabStrip panel toggle", () => {
+  it.each([
+    [false, "Hide agent panel"],
+    [true, "Show agent panel"],
+  ])("with panelCollapsed=%s the button reads %s and calls onTogglePanel", (panelCollapsed, name) => {
+    const onTogglePanel = vi.fn();
+    render(
+      <TabStrip tabs={TABS} activeTabId="a" onSelect={vi.fn()} onClose={vi.fn()} onHome={vi.fn()} onNew={vi.fn()} onSettings={vi.fn()} panelCollapsed={panelCollapsed} onTogglePanel={onTogglePanel} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name }));
+    expect(onTogglePanel).toHaveBeenCalledOnce();
+  });
+});

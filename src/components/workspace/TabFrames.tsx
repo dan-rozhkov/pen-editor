@@ -14,6 +14,8 @@ interface TabFramesProps {
    * keyboard focus (the chat composer keeps it). Default true.
    */
   focusFrame?: boolean;
+  /** Called on every load of a frame. */
+  onFrameLoad?: (frame: HTMLIFrameElement) => void;
 }
 
 /**
@@ -21,7 +23,7 @@ interface TabFramesProps {
  * requested (`mountIds`) and stays mounted until the tab closes. A hidden frame uses `visibility`, never `display:none`: that would give the Pixi
  * canvas a zero size and stop its rAF loop.
  */
-export function TabFrames({ tabs, activeTabId, framesRef, mountIds, focusFrame = true }: TabFramesProps) {
+export function TabFrames({ tabs, activeTabId, framesRef, mountIds, focusFrame = true, onFrameLoad }: TabFramesProps) {
   // Mounted frames and the URL each was first given. A frame changes its own item with history
   // calls; `src` must not follow (that would reload it). A remount after a page reload starts from
   // the tab as it is then.
@@ -70,6 +72,7 @@ export function TabFrames({ tabs, activeTabId, framesRef, mountIds, focusFrame =
               name={`pen-tab-${tab.id}`}
               title={tabTitle(tab)}
               src={mounted.get(tab.id)}
+              onLoad={(e) => onFrameLoad?.(e.currentTarget)}
               className="absolute inset-0 size-full border-0 bg-surface-panel"
               style={{ visibility: active ? "visible" : "hidden", pointerEvents: active ? undefined : "none" }}
             />
