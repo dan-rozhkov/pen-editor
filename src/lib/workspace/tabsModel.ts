@@ -2,6 +2,7 @@
 // tab (null = the start page) and the JSON the shell keeps in localStorage.
 
 import { appHref } from "@/lib/auth/paths";
+import { SETTINGS_SECTIONS, type SettingsSection } from "@/lib/openSettings";
 
 export type TabKind = "canvas" | "doc" | "workflow" | "settings";
 
@@ -11,12 +12,21 @@ export interface WorkspaceTab {
   /** The canvas, document or workflow id. null for the settings singleton. */
   itemId: string | null;
   title: string;
+  /** Settings only: the section its frame opens on. Read once, when the frame mounts; never persisted. */
+  section?: SettingsSection;
 }
 
 export interface TabsState {
   tabs: WorkspaceTab[];
   /** null shows the start page. The start page is not a tab. */
   activeTabId: string | null;
+  /**
+   * Runtime only (never saved or restored). false while the active tab was changed on the agent's
+   * behalf: its frame must not take keyboard focus from the chat. Absent counts as true.
+   */
+  focusFrame?: boolean;
+  /** Runtime only. Tabs whose frame must mount although they are not active (the agent opened or woke them). */
+  mountIds?: readonly string[];
 }
 
 /** localStorage: the last state any window wrote. Only the seed for a window that has no own state. */
@@ -30,12 +40,18 @@ export const EMPTY_TABS: TabsState = { tabs: [], activeTabId: null };
 
 const KINDS: readonly TabKind[] = ["canvas", "doc", "workflow", "settings"];
 const ITEM_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+
+/** true for an id a tab may carry (the same check `parseTabsState` applies). */
+export function isValidItemId(id: string): boolean {
+  return ITEM_ID_RE.test(id);
+}
 const TAB_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX_TITLE = 200;
 
 export type TabsAction =
-  | { type: "open"; tabId: string; kind: TabKind; itemId: string | null; title: string }
-  | { type: "focus"; tabId: string }
+  /** `agent: true`: the agent drives it. The tab mounts and comes forward without taking keyboard focus. */
+  | { type: "open"; tabId: string; kind: TabKind; itemId: string | null; title: string; section?: SettingsSection; agent?: true }
+  | { type: "focus"; tabId: string; agent?: true }
   | { type: "home" }
   | { type: "close"; tabId: string }
   | { type: "closeItem"; kind: TabKind; itemId: string }
@@ -53,28 +69,46 @@ export function findTab(state: TabsState, kind: TabKind, itemId: string | null):
   return state.tabs.find((t) => t.kind === kind && (kind === "settings" || t.itemId === itemId));
 }
 
+/** Records who changed the active tab (the user focuses the frame, the agent does not) and mounts the agent's tab. */
+function withIntent(state: TabsState, tabId: string, { agent }: { agent?: true }): TabsState {
+  const mountIds = agent && !state.mountIds?.includes(tabId) ? [...(state.mountIds ?? []), tabId] : state.mountIds;
+  return { ...state, focusFrame: !agent, ...(mountIds ? { mountIds } : {}) };
+}
+
+/** Drops mount requests of tabs that are gone. */
+function pruneMounts(state: TabsState): TabsState {
+  if (!state.mountIds) return state;
+  const mountIds = state.mountIds.filter((id) => state.tabs.some((t) => t.id === id));
+  return mountIds.length === state.mountIds.length ? state : { ...state, mountIds };
+}
+
 export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
   switch (action.type) {
     case "open": {
       const itemId = action.kind === "settings" ? null : action.itemId;
       const existing = findTab(state, action.kind, itemId);
-      if (existing) return state.activeTabId === existing.id ? state : { ...state, activeTabId: existing.id };
-      const tab: WorkspaceTab = { id: action.tabId, kind: action.kind, itemId, title: action.title };
-      return { tabs: [...state.tabs, tab], activeTabId: tab.id };
+      const section = action.kind === "settings" ? action.section : undefined;
+      const intent = { agent: action.agent };
+      if (existing) {
+        const tabs = section && existing.section !== section ? state.tabs.map((t) => (t === existing ? { ...t, section } : t)) : state.tabs;
+        return withIntent({ ...state, tabs, activeTabId: existing.id }, existing.id, intent);
+      }
+      const tab: WorkspaceTab = { id: action.tabId, kind: action.kind, itemId, title: action.title, ...(section ? { section } : {}) };
+      return withIntent({ ...state, tabs: [...state.tabs, tab], activeTabId: tab.id }, tab.id, intent);
     }
     case "focus":
-      if (!state.tabs.some((t) => t.id === action.tabId) || state.activeTabId === action.tabId) return state;
-      return { ...state, activeTabId: action.tabId };
+      if (!state.tabs.some((t) => t.id === action.tabId)) return state;
+      return withIntent({ ...state, activeTabId: action.tabId }, action.tabId, { agent: action.agent });
     case "home":
       return state.activeTabId === null ? state : { ...state, activeTabId: null };
     case "close": {
       const index = state.tabs.findIndex((t) => t.id === action.tabId);
       if (index === -1) return state;
       const tabs = state.tabs.filter((t) => t.id !== action.tabId);
-      if (state.activeTabId !== action.tabId) return { ...state, tabs };
+      if (state.activeTabId !== action.tabId) return pruneMounts({ ...state, tabs });
       // Right neighbour, else left neighbour, else the start page.
       const next = tabs[index] ?? tabs[index - 1] ?? null;
-      return { tabs, activeTabId: next ? next.id : null };
+      return pruneMounts({ ...state, tabs, activeTabId: next ? next.id : null, focusFrame: true });
     }
     case "closeItem": {
       const tab = findTab(state, action.kind, action.itemId);
@@ -88,7 +122,7 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
         .filter((t) => t.id === tab.id || !(t.kind === tab.kind && t.itemId === action.itemId))
         .map((t) => (t.id === tab.id ? { ...t, itemId: action.itemId } : t));
       const activeTabId = tabs.some((t) => t.id === state.activeTabId) ? state.activeTabId : tab.id;
-      return { tabs, activeTabId };
+      return pruneMounts({ ...state, tabs, activeTabId });
     }
     case "rename": {
       const title = action.title;
@@ -156,7 +190,8 @@ export function loadTabsState(): TabsState {
 }
 
 export function saveTabsState(state: TabsState): void {
-  const json = JSON.stringify(state);
+  // Only the tabs and the active one: the runtime fields (focusFrame, mountIds) are not persisted.
+  const json = JSON.stringify({ tabs: state.tabs, activeTabId: state.activeTabId });
   try {
     window.sessionStorage.setItem(TABS_SESSION_KEY, json);
   } catch {
@@ -170,17 +205,19 @@ export function saveTabsState(state: TabsState): void {
 }
 
 /** The iframe URL of a tab (same origin, under the router base). */
-export function tabUrl(tab: Pick<WorkspaceTab, "kind" | "itemId">): string {
+export function tabUrl(tab: Pick<WorkspaceTab, "kind" | "itemId"> & { section?: string }): string {
   const id = encodeURIComponent(tab.itemId ?? "");
   switch (tab.kind) {
     case "canvas":
-      return appHref(`/app?canvas=${id}`);
+      return appHref(`/app?canvas=${id}&chat=off`);
     case "doc":
       return appHref(`/doc?id=${id}&chat=off`);
     case "workflow":
-      return appHref(`/workflow?id=${id}`);
-    case "settings":
-      return appHref("/settings");
+      return appHref(`/workflow?id=${id}&chat=off`);
+    case "settings": {
+      const section = SETTINGS_SECTIONS.find((s) => s === tab.section);
+      return appHref(`/settings?chat=off${section ? `&section=${section}` : ""}`);
+    }
   }
 }
 

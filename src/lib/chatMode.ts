@@ -22,7 +22,9 @@
  * not the mode. A full reload of a URL without the flag re-enables the chat.
  *
  * `window.penDesktop?.agentLayout === true` (desktop agent layout) also
- * disables the chat, so a reload that lost the query stays chatless.
+ * disables the chat, so a reload that lost the query stays chatless. The same holds for a
+ * frame of the browser shell (`/workspace`) on any route except `/agent`: the shell keeps
+ * the chat in its own always-visible `/agent` frame, so every other frame runs chatless.
  *
  * What chatless mode does NOT do: it keeps `loadModels()` (the same response
  * carries image-ops capabilities and vision metadata used by non-chat tooling)
@@ -30,6 +32,8 @@
  * sessionStorage (`pen:showcase-agent-prompt:v1`) for the desktop chat panel
  * to pick up later.
  */
+import { isAgentRoutePath } from "@/lib/agentPanel";
+import { isWorkspaceFrame } from "@/lib/workspace/frame";
 import type { LeftSection } from "@/store/leftSidebarStore";
 
 /** Rail sections the editor must not offer in chatless mode. */
@@ -50,6 +54,11 @@ export function isChatDisabled(): boolean {
   try {
     // The desktop agent layout is chatless even if a reload dropped `?chat=off`.
     if (window.penDesktop?.agentLayout === true) {
+      seenOn = true;
+      return true;
+    }
+    // A browser-shell frame that is not the chat itself is chatless even if a navigation dropped the query.
+    if (isWorkspaceFrame() && !isAgentRoutePath(window.location.pathname)) {
       seenOn = true;
       return true;
     }

@@ -56,6 +56,30 @@ describe("isChatDisabled", () => {
     }
   });
 
+  describe("in a browser-shell frame", () => {
+    const realParent = Object.getOwnPropertyDescriptor(window, "parent");
+    beforeEach(() => {
+      Object.defineProperty(window, "parent", {
+        configurable: true,
+        value: { location: { origin: window.location.origin, pathname: "/workspace" } },
+      });
+    });
+    afterEach(() => {
+      if (realParent) Object.defineProperty(window, "parent", realParent);
+    });
+
+    it("is chatless on a tab route even when the query lost ?chat=off", () => {
+      setSearch("");
+      expect(isChatDisabled()).toBe(true);
+    });
+
+    it("keeps the chat on the /agent route", () => {
+      window.history.replaceState(null, "", "/agent");
+      resetChatModeForTests();
+      expect(isChatDisabled()).toBe(false);
+    });
+  });
+
   it("is sticky once seen ON: an SPA navigate that drops the query keeps it on", () => {
     setSearch("?chat=off");
     expect(isChatDisabled()).toBe(true);

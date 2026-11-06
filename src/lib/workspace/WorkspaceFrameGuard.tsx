@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router";
 import { stripBase } from "@/lib/auth/paths";
+import { isAgentRoutePath } from "@/lib/agentPanel";
 import { WORKSPACE_PATH, isTabPath, isWorkspaceFrame, workspacePathname } from "./frame";
 
 /**
@@ -42,7 +43,7 @@ function takeReturnFlag(): boolean {
 }
 
 /**
- * Inside a workspace frame, any route that is not a tab surface (sign-in, OAuth consent,
+ * Inside a workspace frame, any route that is not a tab surface or the chat panel (sign-in, OAuth consent,
  * account, the showcase) leaves the frame: external OAuth redirects cannot run in an iframe.
  * The top window remembers that it left a workspace; the next tab route it lands on (after
  * sign-in or an account visit) goes back to the workspace.
@@ -52,7 +53,8 @@ export function WorkspaceFrameGuard(): null {
   useEffect(() => {
     const path = stripBase(pathname);
     if (isWorkspaceFrame()) {
-      if (isTabPath(path)) return;
+      // /agent is the shell's chat panel frame. Only the top window treats tab routes as a way back.
+      if (isTabPath(path) || isAgentRoutePath(path, "/")) return;
       if (path !== "/") setReturnFlag();
       try {
         window.top?.location.replace(window.location.href);

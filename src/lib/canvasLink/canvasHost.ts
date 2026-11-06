@@ -8,6 +8,8 @@
  */
 import { isCanvasLoadPending, whenCanvasLoadReady } from "@/lib/canvases/desktopCanvasPersistence";
 import { isChatDisabled } from "@/lib/chatMode";
+import { isWorkspaceFrame } from "@/lib/workspace/frame";
+import { createWorkspaceCanvasHostBridge } from "@/lib/workspace/frameBridges";
 import { executeToolCall } from "@/hooks/useDesignChat";
 import { getStreamingToolAdapter, streamingToolAdapters } from "@/lib/streamingTools";
 import { isSerializedTool } from "@/lib/toolCallQueue";
@@ -433,7 +435,10 @@ export function startCanvasHost(bridge: CanvasHostBridge): () => void {
  * while the canvas is not editable. Returns the stop function, or null.
  */
 export function maybeStartCanvasHost(): (() => void) | null {
-  const bridge = typeof window === "undefined" ? undefined : window.penDesktop?.canvasHost;
+  const bridge =
+    typeof window === "undefined"
+      ? undefined
+      : (window.penDesktop?.canvasHost ?? (isWorkspaceFrame() ? createWorkspaceCanvasHostBridge() : undefined));
   if (!bridge || !isChatDisabled() || useSharedViewStore.getState().isSharedView) return null;
   // The tab's canvas may still be loading from disk (desktopCanvasPersistence): registering now
   // would let the agent's first batch_design land and then be replaced by the loaded scene.

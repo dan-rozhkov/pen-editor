@@ -1,13 +1,28 @@
 /* Start page of /workspace: the miniature card previews (a port of the desktop empty.css).
-   Colours come from the app tokens; the ghost shades are derived from them. */
+   The accent comes from the app tokens. The preview and ghost colours below are fixed copies of the
+   desktop empty.css values, not derived from the tokens: they do not follow a token change. */
 .ws-start {
+  container-type: size;
   --ws-accent: var(--color-accent-primary);
-  --ws-accent-ring: color-mix(in srgb, var(--color-accent-primary) 30%, transparent);
-  --ws-preview-bg: var(--color-surface-base);
-  --ws-ghost: var(--color-surface-active);
-  --ws-ghost-surface: var(--color-surface-panel);
-  --ws-ghost-border: var(--color-border-default);
-  --ws-dot: var(--color-border-default);
+  --ws-accent-ring: rgba(13, 153, 255, 0.28);
+  --ws-preview-bg: #f7f7f8;
+  --ws-ghost: #e9e9eb;
+  --ws-ghost-surface: #ffffff;
+  --ws-ghost-border: #e6e6e8;
+  --ws-dot: #e2e2e5;
+}
+.dark .ws-start {
+  --ws-accent-ring: rgba(13, 153, 255, 0.4);
+  --ws-preview-bg: #262626;
+  --ws-ghost: #3a3a3a;
+  --ws-ghost-surface: #313131;
+  --ws-ghost-border: #3d3d3d;
+  --ws-dot: #353535;
+}
+
+.ws-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }
 
 .ws-card {
@@ -48,7 +63,7 @@
 .ws-card:focus-visible .ws-preview::after {
   background-color: color-mix(in srgb, var(--ws-preview-bg), var(--ws-accent) 6%);
 }
-.ws-preview span {
+:where(.ws-preview span) {
   display: block;
 }
 
@@ -134,7 +149,7 @@
   margin-bottom: 4px;
 }
 .ws-check {
-  display: flex !important;
+  display: flex;
   align-items: center;
   gap: 6px;
   margin-top: 4px;
@@ -156,12 +171,12 @@
   top: 18px;
   width: 56%;
   transform: translateX(-50%);
-  display: flex !important;
+  display: flex;
   flex-direction: column;
   gap: 8px;
 }
 .ws-step {
-  display: flex !important;
+  display: flex;
   align-items: center;
   gap: 8px;
   box-sizing: border-box;
@@ -189,10 +204,6 @@
   background: var(--ws-ghost);
 }
 .ws-step .ws-line { flex: 1; }
-.ws-step:first-child .num {
-  background: var(--ws-accent);
-  opacity: 0.7;
-}
 
 .ws-card:hover .ws-cta,
 .ws-card:focus-visible .ws-cta {
@@ -207,9 +218,20 @@
     color 150ms ease-out;
 }
 
-/* Phone width or a short window with stored items: drop the previews, keep the Recent list in view. */
-@media (max-width: 560px) {
+/* Narrow or short start page (the pane, not the viewport: a chat panel may sit beside it).
+   With stored items drop the previews so the Recent list stays in view; with none, only a
+   very narrow page drops them and stacks the cards. */
+@container (max-width: 760px) {
+  .ws-start.has-recent .ws-preview { display: none; }
+  .ws-start.has-recent .ws-cards { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+}
+@container (max-height: 760px) {
+  .ws-start.has-recent .ws-preview { display: none; }
+  .ws-start.has-recent .ws-cards { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+}
+@container (max-width: 560px) {
   .ws-preview { display: none; }
+  .ws-start:not(.has-recent) .ws-cards { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: no-preference) {

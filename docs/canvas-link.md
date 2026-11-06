@@ -201,3 +201,33 @@ See `protocol.ts`. Rules:
   `window.penDesktop?.agentLayout === true` (exposed by the editor-tab preload
   when the agent layout flag is on), so a reload that dropped `?chat=off` stays
   chatless.
+
+## Browser shell (`/workspace`)
+
+The web shell takes the part of the Electron main process. The chat runs in a same-origin
+iframe of `/agent` (left island, always visible); canvas tabs are `/app?canvas=<id>&chat=off`
+iframes. Code: `src/lib/workspace/` (`linkWire.ts`, `shellRouter.ts`, `frameBridges.ts`),
+`src/routes/WorkspacePage.tsx`.
+
+- Transport: `window.postMessage` with the page's own origin as target. The shell accepts a
+  message only when `event.origin` is its own and `event.source` is the panel iframe's or a tab
+  iframe's `contentWindow` (the role of `e.sender`); a frame accepts only its parent's.
+- `main.tsx` installs `window.penAgentPanel` (`createWorkspacePanelApi`: `canvas`, `settings`,
+  `docs.open`, `workflows.open`; no disk, chats, browser, traces or auth) in a workspace frame on
+  `/agent`. `maybeStartCanvasHost` falls back to `createWorkspaceCanvasHostBridge` in a workspace
+  frame. Panel and tab code is otherwise the desktop code.
+- `ShellRouter` implements the table above: numeric `tabId` per workspace tab, `registrationId`
+  per tab, `open` waits 20 s for the new tab's `register`, `tab-gone` on close, `bye`
+  (`pagehide`), `unregister` or re-register, `panel-gone` to every registered tab on a second
+  panel `hello`. `register` counts only from canvas tabs.
+- `activate` on `open` has a meaning on the web. `activate: true` (`open_canvas_tab`) always makes a
+  new tab. Otherwise (an implicit bind) the shell wakes the most recently active canvas tab that is in
+  the strip but has no registration (restored, or mounted and still loading): it mounts the frame,
+  brings the tab forward and answers when that tab registers. A blank canvas is made only when no
+  such tab exists. Parallel implicit opens share one tab. The `activate` wire field stays.
+- Every tab the agent opens or wakes comes forward (a frame mounts only when requested or active),
+  and takes no keyboard focus: the chat composer keeps the keys. Only a user-driven change focuses the frame.
+- A second panel `hello` (panel reload) also drops pending opens without a reply; request ids carry a
+  per-load prefix. The panel API holds early `from-tab` messages and the last tab list for the first
+  listener.
+- `chatMode`: a workspace frame on any route except `/agent` is chatless even if `?chat=off` was lost.

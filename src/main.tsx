@@ -11,9 +11,18 @@ import { startDesktopDocMirror } from '@/lib/docs/desktopDocMirror'
 import { startDesktopWorkflowMirror } from '@/lib/workflows/desktopWorkflowMirror'
 import { applyStoredUITheme, installUIThemeBroadcastSync, installUIThemeStorageSync } from '@/lib/uiTheme'
 import { MOBBIN_OAUTH_CALLBACK_PATH } from '@/lib/mobbinAuth'
+import { isWorkspaceFrame } from '@/lib/workspace/frame'
+import { createWorkspacePanelApi } from '@/lib/workspace/frameBridges'
 
 import './index.css'
 import { AppRouter } from './AppRouter'
+
+// The browser shell (/workspace) hosts the agent chat as a frame of /agent and routes its canvas
+// link itself. Install the panel API before anything reads `window.penAgentPanel`
+// (isAgentPanelHost). A public top-level /agent has no such frame and keeps redirecting.
+if (isWorkspaceFrame() && isAgentRoutePath(window.location.pathname)) {
+  window.penAgentPanel = createWorkspacePanelApi()
+}
 
 // Both routes share the editor's persisted UI preference. Applying the tiny,
 // dependency-free theme bootstrap here keeps the showcase out of the editor

@@ -29,8 +29,11 @@ vi.mock("@/lib/workflows/workflowStore", () => ({
 import { toast } from "sonner";
 import { createDoc } from "@/lib/docs/docStore";
 import WorkspacePage, { UNSAVED_CLOSE_MESSAGE } from "../WorkspacePage";
+import { wire } from "@/lib/workspace/linkWire";
 import { TABS_SESSION_KEY, TABS_STORAGE_KEY } from "@/lib/workspace/tabsModel";
 
+type FakeWindow = { focus: () => void; postMessage: ReturnType<typeof vi.fn>; penCanvasFlush?: () => Promise<boolean | void>; location?: unknown };
+const windows = new WeakMap<HTMLIFrameElement, FakeWindow>();
 const flushes = new Map<string, () => Promise<boolean | void>>();
 const locations = new Map<string, { pathname: string; search: string }>();
 
@@ -44,11 +47,12 @@ beforeEach(() => {
   Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", {
     configurable: true,
     get(this: HTMLIFrameElement) {
-      return {
-        focus: vi.fn(),
-        penCanvasFlush: flushes.get(this.name),
-        location: locations.get(this.name),
-      } as unknown as Window;
+      // One stable window per frame: the shell identifies a sender by comparing `event.source` with it.
+      let win = windows.get(this);
+      if (!win) windows.set(this, (win = { focus: vi.fn(), postMessage: vi.fn() } as unknown as FakeWindow));
+      win.penCanvasFlush = flushes.get(this.name);
+      win.location = locations.get(this.name);
+      return win as unknown as Window;
     },
   });
 });
@@ -83,7 +87,11 @@ function renderPage() {
   );
 }
 
-const frames = () => Array.from(document.querySelectorAll("iframe"));
+// Tab frames only: the agent panel frame is always there.
+const frames = () => Array.from(document.querySelectorAll<HTMLIFrameElement>("iframe[name^=pen-tab-]"));
+// The fake window of a frame (created on first access).
+const winOf = (el: HTMLIFrameElement) => el.contentWindow as unknown as FakeWindow;
+const panelFrame = () => document.querySelector<HTMLIFrameElement>("iframe[title='Sideform Agent']");
 
 describe("WorkspacePage", () => {
   it("shows the start page with no tabs", async () => {
@@ -230,7 +238,7 @@ describe("WorkspacePage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     expect(screen.getAllByRole("tab")).toHaveLength(1);
-    expect(frames()[0].getAttribute("src")).toBe("/settings");
+    expect(frames()[0].getAttribute("src")).toBe("/settings?chat=off");
     await act(async () => {});
   });
 
@@ -245,5 +253,109 @@ describe("WorkspacePage", () => {
     (window as { penDesktop?: unknown }).penDesktop = {};
     renderPage();
     expect(screen.getByText("Editor route")).toBeTruthy();
+  });
+
+  describe("agent panel", () => {
+    it("always shows the chat frame, with or without tabs, and keeps the same element", async () => {
+      seedTabs("t2");
+      renderPage();
+      const panel = panelFrame();
+      expect(panel?.getAttribute("src")).toBe("/agent");
+      fireEvent.click(screen.getByRole("button", { name: "Start page" }));
+      expect(panelFrame()).toBe(panel);
+      await act(async () => {});
+    });
+
+    function fromFrame(source: unknown, data: unknown, origin = window.location.origin) {
+      act(() => {
+        window.dispatchEvent(new MessageEvent("message", { data, origin, source: source as MessageEventSource }));
+      });
+    }
+
+    it("routes the panel's list request and ignores foreign origins and unknown windows", async () => {
+      seedTabs("t1");
+      renderPage();
+      const panel = winOf(panelFrame()!);
+      fromFrame(panel, wire({ type: "list", rid: "r1" }), "https://evil.example");
+      fromFrame({}, wire({ type: "list", rid: "r2" }));
+      expect(panel.postMessage).not.toHaveBeenCalled();
+      fromFrame(panel, wire({ type: "list", rid: "r3" }));
+      expect(panel.postMessage).toHaveBeenCalledWith(
+        { ns: wire({ type: "x" }).ns, type: "list-reply", rid: "r3", tabs: [] },
+        window.location.origin,
+      );
+      await act(async () => {});
+    });
+
+    it("opens a canvas tab on the panel's request and answers once that frame registers", async () => {
+      renderPage();
+      const panel = winOf(panelFrame()!);
+      fromFrame(panel, wire({ type: "open", rid: "o1" }));
+      await waitFor(() => expect(frames()).toHaveLength(1));
+      expect(frames()[0].getAttribute("src")).toMatch(/^\/app\?canvas=cv_[a-z0-9]{16}&chat=off$/);
+      fromFrame(winOf(frames()[0]), wire({ type: "register" }));
+      expect(panel.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "open-reply", rid: "o1", ok: true, registrationId: 1 }),
+        window.location.origin,
+      );
+    });
+
+    it("mounts both frames when two opens land in one batch, without taking keyboard focus", async () => {
+      renderPage();
+      const panel = winOf(panelFrame()!);
+      act(() => {
+        for (const rid of ["o1", "o2"]) {
+          window.dispatchEvent(
+            new MessageEvent("message", {
+              data: wire({ type: "open", rid, activate: true }),
+              origin: window.location.origin,
+              source: panel as unknown as MessageEventSource,
+            }),
+          );
+        }
+      });
+      await waitFor(() => expect(frames()).toHaveLength(2));
+      expect(frames().map((f) => f.style.visibility).sort()).toEqual(["hidden", "visible"]);
+      for (const f of frames()) expect(winOf(f).focus).not.toHaveBeenCalled();
+    });
+
+    it("wakes a restored, unregistered canvas tab for an implicit open instead of creating one", async () => {
+      seedTabs("t2");
+      renderPage();
+      const panel = winOf(panelFrame()!);
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            data: wire({ type: "open", rid: "o1" }),
+            origin: window.location.origin,
+            source: panel as unknown as MessageEventSource,
+          }),
+        );
+      });
+      await waitFor(() => expect(frames().some((f) => f.name === "pen-tab-t1")).toBe(true));
+      expect(frames().find((f) => f.name === "pen-tab-t1")!.style.visibility).toBe("visible");
+      expect(document.querySelectorAll("[role=tab]")).toHaveLength(2);
+    });
+
+    it("two implicit opens in one batch share one tab and take no keyboard focus", async () => {
+      renderPage();
+      const panel = winOf(panelFrame()!);
+      act(() => {
+        for (const rid of ["o1", "o2"]) {
+          window.dispatchEvent(
+            new MessageEvent("message", {
+              data: wire({ type: "open", rid }),
+              origin: window.location.origin,
+              source: panel as unknown as MessageEventSource,
+            }),
+          );
+        }
+      });
+      await waitFor(() => expect(frames()).toHaveLength(1));
+      expect(winOf(frames()[0]).focus).not.toHaveBeenCalled();
+      fromFrame(winOf(frames()[0]), wire({ type: "register" }));
+      const replies = panel.postMessage.mock.calls.filter((c) => (c[0] as { type: string }).type === "open-reply");
+      expect(replies.map((c) => (c[0] as { rid: string }).rid)).toEqual(["o1", "o2"]);
+    });
   });
 });

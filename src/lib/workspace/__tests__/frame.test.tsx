@@ -65,7 +65,7 @@ describe("WorkspaceFrameGuard", () => {
     return replace;
   }
 
-  it.each(["/app", "/doc", "/workflow", "/settings", "/trace", "/trace/abc"])("keeps %s in the frame", (p) => {
+  it.each(["/app", "/doc", "/workflow", "/settings", "/trace", "/trace/abc", "/agent", "/agent/"])("keeps %s in the frame", (p) => {
     expect(mount(p)).not.toHaveBeenCalled();
   });
 
@@ -139,6 +139,12 @@ describe("WorkspaceFrameGuard", () => {
       expect(mountTop("/app")).not.toHaveBeenCalled();
     });
 
+    it("does not send the top window back to /workspace from /agent", () => {
+      window.sessionStorage.setItem(WORKSPACE_RETURN_KEY, String(Date.now()));
+      expect(mountTop("/agent")).not.toHaveBeenCalled();
+      expect(window.sessionStorage.getItem(WORKSPACE_RETURN_KEY)).not.toBeNull();
+    });
+
     it("does nothing in the desktop shell", () => {
       window.sessionStorage.setItem(WORKSPACE_RETURN_KEY, String(Date.now()));
       (window as { penDesktop?: unknown }).penDesktop = {};
@@ -162,5 +168,7 @@ describe("WorkspaceFrameGuard", () => {
     expect(isTabPath("/trace/x")).toBe(true);
     expect(isTabPath("/traces")).toBe(false);
     expect(isTabPath("/application")).toBe(false);
+    // The chat panel is allowed in a frame but is not a tab route (top-window return logic).
+    expect(isTabPath("/agent")).toBe(false);
   });
 });

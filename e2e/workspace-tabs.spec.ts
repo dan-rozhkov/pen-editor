@@ -1,4 +1,5 @@
 import { test, expect, type Frame, type Page } from "@playwright/test";
+import { stubChatTurns, stubModels } from "./support/api";
 import { EDITOR_MOUNT_TIMEOUT, expectEditorMountedInFrame } from "./support/editor";
 
 // The browser tab shell at /workspace: one same-origin iframe per tab.
@@ -70,4 +71,75 @@ test("a hidden canvas frame keeps its size and returns when the document tab clo
 
   await page.getByRole("button", { name: /^Close / }).last().click();
   await expect(canvasIframe).toHaveCSS("visibility", "visible");
+});
+
+test("the chat panel is always visible and drives a canvas tab it opens over the canvas link", async ({ page }) => {
+  test.setTimeout(120_000);
+  await stubModels(page);
+  const requests = await stubChatTurns(page, [
+    [
+      { type: "start" },
+      { type: "start-step" },
+      { type: "text-start", id: "t1" },
+      { type: "text-delta", id: "t1", delta: "Adding a frame." },
+      { type: "text-end", id: "t1" },
+      {
+        type: "tool-input-available",
+        toolCallId: "call-ws-1",
+        toolName: "batch_design",
+        input: { operations: 'f=I(document, {type: "frame", name: "LinkFrame", width: 400, height: 300, fill: "#ffccdd"})' },
+      },
+      { type: "finish-step" },
+      { type: "finish" },
+    ],
+    [
+      { type: "start" },
+      { type: "start-step" },
+      { type: "text-start", id: "t2" },
+      { type: "text-delta", id: "t2", delta: "Done." },
+      { type: "text-end", id: "t2" },
+      { type: "finish-step" },
+      { type: "finish" },
+    ],
+  ]);
+
+  await page.goto("/workspace");
+  const panel = page.frameLocator('iframe[title="Sideform Agent"]');
+  const input = panel.getByPlaceholder("Ask Sideform Agent…");
+  await expect(input).toBeVisible({ timeout: EDITOR_MOUNT_TIMEOUT });
+  // No canvas tab exists until the agent needs one.
+  await expect(page.locator('iframe[src*="/app?canvas="]')).toHaveCount(0);
+
+  await input.fill("Create a link frame");
+  await input.press("Enter");
+
+  // The canvas tab opened on demand and the tool ran in it, not in the chat frame.
+  const frame = await canvasFrame(page);
+  await frame.waitForFunction(
+    () => {
+      const store = (window as unknown as { __sceneStore?: { getState(): { nodesById: Record<string, { name?: string }> } } }).__sceneStore;
+      return Object.values(store?.getState().nodesById ?? {}).some((n) => n.name === "LinkFrame");
+    },
+    null,
+    { timeout: EDITOR_MOUNT_TIMEOUT },
+  );
+
+  // The auto-continuation carries the tool result the canvas tab produced.
+  await expect.poll(() => requests.length, { timeout: 15_000 }).toBe(2);
+  const toolPart = requests[1].messages?.find((m) => m.role === "assistant")?.parts.find((p) => p.type === "tool-batch_design");
+  expect(toolPart?.state).toBe("output-available");
+  const output = JSON.parse(String(toolPart?.output)) as { success: boolean; createdNodes: Array<{ name: string }> };
+  expect(output.success).toBe(true);
+  expect(output.createdNodes[0]).toMatchObject({ name: "LinkFrame" });
+
+  // The canvas tab runs chatless: no Agents section; the chat stays in the left panel.
+  await expect(page.frameLocator('iframe[src*="/app?canvas="]').getByTestId("rail-pages")).toBeVisible();
+  await expect(page.frameLocator('iframe[src*="/app?canvas="]').getByTestId("rail-agents")).toHaveCount(0);
+  // The panel has the canvas bridge (in dev `isAgentPanelHost()` is true anyway, so the bridge is what counts).
+  const hasBridge = await page.evaluate(() => {
+    const f = document.querySelector<HTMLIFrameElement>('iframe[title="Sideform Agent"]');
+    const api = (f?.contentWindow as unknown as { penAgentPanel?: { version: number; canvas?: unknown } } | null)?.penAgentPanel;
+    return api?.version === 2 && api.canvas !== undefined;
+  });
+  expect(hasBridge).toBe(true);
 });

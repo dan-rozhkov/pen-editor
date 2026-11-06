@@ -7,6 +7,7 @@ import { useChatBootstrap } from "@/hooks/useChatBootstrap";
 import { isAgentPanelHost } from "@/lib/agentPanel";
 import { startPanelRuntime } from "@/lib/canvasLink/panelRuntime";
 import { startDesktopChatPersistence } from "@/lib/chats/desktopChatPersistence";
+import { isWorkspaceFrame } from "@/lib/workspace/frame";
 import { startWorkflowScheduler } from "@/lib/workflows/workflowScheduler";
 
 /**
@@ -31,7 +32,8 @@ function AgentPanel() {
     void startDesktopChatPersistence();
   }, []);
   // Scheduled workflows start new chats from this panel (desktop only: AgentPage is gated by isAgentPanelHost).
-  useEffect(() => startWorkflowScheduler(), []);
+  // Not in a browser-shell frame: schedules are desktop only, and two windows would fire each one twice.
+  useEffect(() => (isWorkspaceFrame() ? undefined : startWorkflowScheduler()), []);
   // body defaults to --color-surface-base; paint the panel surface edge to
   // edge (overscroll, resize gaps) so the page matches the desktop island.
   useHtmlRouteClass("route-agent");

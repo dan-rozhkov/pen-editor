@@ -4,6 +4,8 @@ import {
   EMPTY_TABS,
   itemIdFromLocation,
   parseTabsState,
+  saveTabsState,
+  TABS_SESSION_KEY,
   tabUrl,
   tabsReducer,
   type TabsState,
@@ -84,7 +86,7 @@ describe("parseTabsState", () => {
 
   it("round-trips a valid state", () => {
     const s = open(open(EMPTY_TABS, "t1", "canvas", "cv_1", "A"), "t2", "settings", null, "Settings");
-    expect(parseTabsState(JSON.stringify(s))).toEqual(s);
+    expect(parseTabsState(JSON.stringify(s))).toEqual({ tabs: s.tabs, activeTabId: s.activeTabId });
   });
 
   it("drops invalid entries, duplicates and unknown kinds", () => {
@@ -118,10 +120,22 @@ describe("parseTabsState", () => {
 
 describe("tabUrl", () => {
   it("forms the frame URL of each kind", () => {
-    expect(tabUrl({ kind: "canvas", itemId: "cv_1" })).toBe("/app?canvas=cv_1");
+    expect(tabUrl({ kind: "canvas", itemId: "cv_1" })).toBe("/app?canvas=cv_1&chat=off");
     expect(tabUrl({ kind: "doc", itemId: "d1" })).toBe("/doc?id=d1&chat=off");
-    expect(tabUrl({ kind: "workflow", itemId: "w1" })).toBe("/workflow?id=w1");
-    expect(tabUrl({ kind: "settings", itemId: null })).toBe("/settings");
+    expect(tabUrl({ kind: "workflow", itemId: "w1" })).toBe("/workflow?id=w1&chat=off");
+    expect(tabUrl({ kind: "settings", itemId: null })).toBe("/settings?chat=off");
+  });
+
+  it("adds a known settings section and ignores an unknown one", () => {
+    expect(tabUrl({ kind: "settings", itemId: null, section: "memory" })).toBe("/settings?chat=off&section=memory");
+    expect(tabUrl({ kind: "settings", itemId: null, section: "nope" })).toBe("/settings?chat=off");
+  });
+
+  it("opening the settings tab again with a section stores it and activates the tab", () => {
+    const s0 = open(open(EMPTY_TABS, "t1", "settings", null), "t2", "doc", "d1");
+    const s1 = tabsReducer(s0, { type: "open", tabId: "tx", kind: "settings", itemId: null, title: "Settings", section: "agent" });
+    expect(s1.activeTabId).toBe("t1");
+    expect(s1.tabs.find((t) => t.id === "t1")?.section).toBe("agent");
   });
 });
 
@@ -164,5 +178,51 @@ describe("itemIdFromLocation", () => {
     expect(itemIdFromLocation("doc", "/doc", "")).toBeNull();
     expect(itemIdFromLocation("doc", "/doc", "?id=a%20b")).toBeNull();
     expect(itemIdFromLocation("settings", "/settings", "?id=x")).toBeNull();
+  });
+});
+
+describe("agent intent (focusFrame, mountIds)", () => {
+  const agentOpen = (state: TabsState, tabId: string, kind: "canvas" | "doc", itemId: string) =>
+    tabsReducer(state, { type: "open", tabId, kind, itemId, title: "T", agent: true });
+
+  it("an agent open or focus mounts the tab and leaves the frame unfocused; a user one focuses", () => {
+    let s = agentOpen(EMPTY_TABS, "t1", "canvas", "cv_1");
+    expect(s.focusFrame).toBe(false);
+    expect(s.mountIds).toEqual(["t1"]);
+    s = open(s, "t2", "doc", "d1");
+    expect(s.focusFrame).toBe(true);
+    s = tabsReducer(s, { type: "focus", tabId: "t1", agent: true });
+    expect(s).toMatchObject({ activeTabId: "t1", focusFrame: false });
+    expect(tabsReducer(s, { type: "focus", tabId: "t2" }).focusFrame).toBe(true);
+  });
+
+  it("two agent opens of the same item before a commit resolve to one tab id in mountIds", () => {
+    let s = agentOpen(EMPTY_TABS, "t1", "doc", "d1");
+    s = agentOpen(s, "t2", "doc", "d1");
+    expect(s.tabs.map((t) => t.id)).toEqual(["t1"]);
+    expect(s.mountIds).toEqual(["t1"]);
+  });
+
+  it("two agent opens of different canvases keep both mounted, the last one in front", () => {
+    let s = agentOpen(EMPTY_TABS, "t1", "canvas", "cv_1");
+    s = agentOpen(s, "t2", "canvas", "cv_2");
+    expect(s.mountIds).toEqual(["t1", "t2"]);
+    expect(s).toMatchObject({ activeTabId: "t2", focusFrame: false });
+  });
+
+  it("close and closeItem prune mountIds", () => {
+    let s = agentOpen(agentOpen(EMPTY_TABS, "t1", "canvas", "cv_1"), "t2", "doc", "d1");
+    s = tabsReducer(s, { type: "close", tabId: "t1" });
+    expect(s.mountIds).toEqual(["t2"]);
+    s = tabsReducer(s, { type: "closeItem", kind: "doc", itemId: "d1" });
+    expect(s.mountIds).toEqual([]);
+  });
+
+  it("saveTabsState writes only tabs and activeTabId", () => {
+    const s = agentOpen(EMPTY_TABS, "t1", "canvas", "cv_1");
+    saveTabsState(s);
+    const saved = JSON.parse(window.sessionStorage.getItem(TABS_SESSION_KEY)!);
+    expect(Object.keys(saved).sort()).toEqual(["activeTabId", "tabs"]);
+    expect(parseTabsState(JSON.stringify({ ...saved, focusFrame: false, mountIds: ["t1"] }))).toEqual({ tabs: saved.tabs, activeTabId: "t1" });
   });
 });

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "react";
+import type { CSSProperties } from "react";
 import { Navigate } from "react-router";
 import { toast } from "sonner";
 
@@ -7,16 +8,20 @@ import { ToasterBase } from "@/components/ui/ToasterBase";
 import { StartPage } from "@/components/workspace/StartPage";
 import { TabFrames } from "@/components/workspace/TabFrames";
 import { TabStrip, type NewTabChoice } from "@/components/workspace/TabStrip";
-import { stripBase } from "@/lib/auth/paths";
+import { appHref, stripBase } from "@/lib/auth/paths";
 import { subscribeWebCanvases, webCanvasStore } from "@/lib/canvases/webCanvasStore";
 import { DEFAULT_DOC_TITLE, createDoc, listDocs, subscribeDocs } from "@/lib/docs/docStore";
 import { DEFAULT_WORKFLOW_TITLE, createWorkflow, listWorkflows, newStepId, subscribeWorkflows } from "@/lib/workflows/workflowStore";
+import { SETTINGS_SECTIONS, SETTINGS_SECTION_EVENT, type SettingsSection } from "@/lib/openSettings";
+import { isWireMessage, wire } from "@/lib/workspace/linkWire";
+import { ShellRouter, type ItemResult } from "@/lib/workspace/shellRouter";
 import type { RecentItem, RecentKind } from "@/lib/workspace/recent";
 import {
   UNTITLED_CANVAS_TITLE,
   itemIdFromLocation,
   loadTabsState,
   makeTabId,
+  isValidItemId,
   newCanvasId,
   saveTabsState,
   tabTitle,
@@ -31,11 +36,16 @@ const REBIND_POLL_MS = 1000;
 export const UNSAVED_CLOSE_MESSAGE =
   "This canvas could not be saved. Export it, or close the tab again to discard it.";
 const TIMED_OUT = Symbol("flush timed out");
+// Same width as the desktop shell's agent panel (pen-editor-desktop `AGENT_PANEL_DEFAULT_WIDTH`).
+const AGENT_PANEL_WIDTH = 380;
 
 /**
- * "/workspace": the browser counterpart of the desktop tab bar. A tab strip, one same-origin
- * iframe per tab and a start page when no tab is active. Must not import App, Pixi, the scene
- * stores or the chat: the editor runs inside the frames, never in this chunk.
+ * "/workspace": the browser counterpart of the desktop shell. A left island with the agent chat
+ * (a same-origin `/agent` iframe, always visible), and right of it a tab strip, one same-origin
+ * iframe per tab and a start page when no tab is active. Canvas tabs run chatless; this page
+ * plays the part of the desktop main process and routes the canvas link between the chat frame
+ * and the canvas frames (ShellRouter). Must not import App, Pixi, the scene stores or the chat:
+ * the editor and the chat run inside the frames, never in this chunk.
  */
 export default function WorkspacePage() {
   // The desktop shell has its own tabs; there the web shell is never used.
@@ -49,6 +59,8 @@ function WorkspaceShell() {
   const closingRef = useRef<Set<string>>(new Set());
   /** Tabs whose last close attempt failed to save: a close that fails to save again discards them. */
   const discardRef = useRef<Set<string>>(new Set());
+  const panelRef = useRef<HTMLIFrameElement>(null);
+  const routerRef = useRef<ShellRouter | null>(null);
   const tabsRef = useRef<WorkspaceTab[]>(state.tabs);
   useEffect(() => {
     tabsRef.current = state.tabs;
@@ -136,6 +148,81 @@ function WorkspaceShell() {
     dispatch({ type: "open", tabId: makeTabId(), kind, itemId, title });
   }, []);
 
+  /**
+   * Opens (or brings forward) the tab of an item for the agent: mounted, in front, no keyboard focus.
+   * The reducer resolves an existing item's tab, so this id only matters for a new canvas (never deduped).
+   */
+  const openForAgent = useCallback((kind: TabKind, itemId: string | null, title: string, section?: SettingsSection): string => {
+    const tabId = makeTabId();
+    dispatch({ type: "open", tabId, kind, itemId, title, section, agent: true });
+    return tabId;
+  }, []);
+
+  // The router must listen before any frame loads: a layout effect runs inside the commit that
+  // inserts the iframes, before the browser starts them.
+  useLayoutEffect(() => {
+    const bringForward = (tabId: string) => dispatch({ type: "focus", tabId, agent: true });
+    const router = new ShellRouter({
+      postToPanel: (msg) => panelRef.current?.contentWindow?.postMessage(wire(msg), window.location.origin),
+      postToTab: (tabId, msg) => framesRef.current.get(tabId)?.contentWindow?.postMessage(wire(msg), window.location.origin),
+      // The agent's tab comes forward so the user sees it open, and takes no keyboard focus (the reducer's `agent` flag).
+      openCanvasTab: () => openForAgent("canvas", newCanvasId(), UNTITLED_CANVAS_TITLE),
+      wakeTab: bringForward,
+      activateTab: bringForward,
+      openDoc: (id): ItemResult => {
+        const meta = isValidItemId(id) ? listDocs().find((d) => d.id === id) : undefined;
+        if (!meta) return { ok: false, error: "The document does not exist." };
+        openForAgent("doc", id, meta.title);
+        return { ok: true };
+      },
+      openWorkflow: (id): ItemResult => {
+        const meta = isValidItemId(id) ? listWorkflows().find((w) => w.id === id) : undefined;
+        if (!meta) return { ok: false, error: "The workflow does not exist." };
+        openForAgent("workflow", id, meta.title);
+        return { ok: true };
+      },
+      openSettings: (section): ItemResult => {
+        const known = SETTINGS_SECTIONS.find((s) => s === section);
+        const settings = tabsRef.current.find((t) => t.kind === "settings");
+        const win = settings ? framesRef.current.get(settings.id)?.contentWindow : null;
+        // A loaded Settings frame follows an event; one that is not mounted yet reads the section from its URL.
+        if (win && known) win.dispatchEvent(new (win as Window & typeof globalThis).CustomEvent(SETTINGS_SECTION_EVENT, { detail: known }));
+        openForAgent("settings", null, "Settings", win ? undefined : known);
+        return { ok: true };
+      },
+      now: () => Date.now(),
+    });
+    routerRef.current = router;
+    const onMessage = (event: MessageEvent) => {
+      // Both checks matter: origin says which site, source says which of our frames.
+      if (event.origin !== window.location.origin || !isWireMessage(event.data) || !event.source) return;
+      // Cheapest checks first: this runs for every streamed tool frame.
+      if (event.source === panelRef.current?.contentWindow) {
+        router.handle({ from: "panel" }, event.data);
+        return;
+      }
+      for (const [id, el] of framesRef.current) {
+        if (el.contentWindow !== event.source) continue;
+        const kind = tabsRef.current.find((t) => t.id === id)?.kind;
+        if (kind) router.handle({ from: "tab", tabId: id, kind }, event.data);
+        return;
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener("message", onMessage);
+      router.dispose();
+      routerRef.current = null;
+    };
+  }, [openForAgent]);
+
+  useEffect(() => {
+    routerRef.current?.syncTabs(
+      state.tabs.map((t) => ({ id: t.id, kind: t.kind, title: tabTitle(t) })),
+      state.activeTabId,
+    );
+  }, [state.tabs, state.activeTabId]);
+
   const newItem = useCallback(
     (kind: RecentKind) => {
       try {
@@ -200,25 +287,38 @@ function WorkspaceShell() {
   };
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-surface-base text-[13px] text-text-muted">
-      <TabStrip
-        tabs={state.tabs}
-        activeTabId={state.activeTabId}
-        onSelect={(tabId) => dispatch({ type: "focus", tabId })}
-        onClose={(tabId) => void closeTab(tabId)}
-        onHome={() => dispatch({ type: "home" })}
-        onNew={onNew}
-        onSettings={() => openItem("settings", null, "Settings")}
-      />
-      <div className="relative mr-2 mb-2 ml-2 min-h-0 flex-1 overflow-hidden rounded-xl bg-surface-panel">
-        <TabFrames tabs={state.tabs} activeTabId={state.activeTabId} framesRef={framesRef} />
-        {state.activeTabId === null && (
-          <StartPage
-            onNew={newItem}
-            onOpen={(item: RecentItem) => openItem(item.kind, item.id, item.title)}
-            onBeforeDelete={(item: RecentItem) => dispatch({ type: "closeItem", kind: item.kind, itemId: item.id })}
-          />
-        )}
+    <div className="fixed inset-0 flex flex-col bg-surface-base text-[13px] text-text-muted sm:flex-row">
+      {/* One element for both layouts (CSS order, not a move): a resize must never reload the chat.
+          Below 640px the tab area is on top and the chat below, half the height each. */}
+      <div className="order-2 mr-2 mb-2 ml-2 min-h-0 flex-1 overflow-hidden rounded-xl bg-surface-panel sm:order-1 sm:mt-2 sm:mr-0 sm:max-w-[50%] sm:flex-none sm:basis-(--agent-panel-width)" style={{ "--agent-panel-width": `${AGENT_PANEL_WIDTH}px` } as CSSProperties}>
+        <iframe
+          ref={panelRef}
+          title="Sideform Agent"
+          src={appHref("/agent")}
+          data-agent-panel
+          className="size-full border-0 bg-surface-panel"
+        />
+      </div>
+      <div className="order-1 flex min-h-0 min-w-0 flex-1 flex-col sm:order-2">
+        <TabStrip
+          tabs={state.tabs}
+          activeTabId={state.activeTabId}
+          onSelect={(tabId) => dispatch({ type: "focus", tabId })}
+          onClose={(tabId) => void closeTab(tabId)}
+          onHome={() => dispatch({ type: "home" })}
+          onNew={onNew}
+          onSettings={() => openItem("settings", null, "Settings")}
+        />
+        <div className="relative mr-2 mb-2 ml-2 min-h-0 flex-1 overflow-hidden rounded-xl bg-surface-panel">
+          <TabFrames tabs={state.tabs} activeTabId={state.activeTabId} framesRef={framesRef} mountIds={state.mountIds} focusFrame={state.focusFrame} />
+          {state.activeTabId === null && (
+            <StartPage
+              onNew={newItem}
+              onOpen={(item: RecentItem) => openItem(item.kind, item.id, item.title)}
+              onBeforeDelete={(item: RecentItem) => dispatch({ type: "closeItem", kind: item.kind, itemId: item.id })}
+            />
+          )}
+        </div>
       </div>
       <ToasterBase theme={document.documentElement.classList.contains("dark") ? "dark" : "light"} />
     </div>

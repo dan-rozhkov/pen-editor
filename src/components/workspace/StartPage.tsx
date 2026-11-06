@@ -57,7 +57,7 @@ export function StartPage({ onNew, onOpen, onBeforeDelete }: StartPageProps) {
   };
 
   return (
-    <main className="ws-start absolute inset-0 overflow-x-hidden overflow-y-auto">
+    <main className={`ws-start${items.length > 0 ? " has-recent" : ""} absolute inset-0 overflow-x-hidden overflow-y-auto`}>
       <div className="ws-start-inner box-border flex min-h-full flex-col items-center justify-center gap-5 p-6 [justify-content:safe_center]">
         <header className="flex flex-col items-center gap-1.5 text-center">
           <h1 className="m-0 text-[26px] leading-[1.2] font-semibold tracking-[-0.02em] text-balance text-text-primary">
@@ -66,7 +66,7 @@ export function StartPage({ onNew, onOpen, onBeforeDelete }: StartPageProps) {
           <p className="m-0 text-text-muted">Canvas, document and workflow tabs open here.</p>
         </header>
 
-        <div className="grid w-full max-w-[840px] grid-cols-1 gap-3 min-[561px]:grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
+        <div className="ws-cards w-full max-w-[840px] gap-3">
           <Card
             id="ws-canvas"
             title="Canvas"
