@@ -154,11 +154,14 @@ describe.runIf(desktopExists)("desktop token contract", () => {
     expect(norm(blockValue(wsTokens, ".dark .ws-shell", wsName) ?? lightValue)).toBe(norm(pair.dark));
   });
 
-  it("--ws-glass equals GLASS_SOLID of windowTheme.ts in both themes", () => {
-    const match = /GLASS_SOLID[^=]*=\s*\{\s*light:\s*"([^"]+)",\s*dark:\s*"([^"]+)"/.exec(readFileSync(DESKTOP_WINDOW_THEME, "utf8"));
-    expect(match).not.toBeNull();
-    expect(norm(blockValue(wsTokens, ".ws-shell", "--ws-glass") ?? "missing")).toBe(norm(match![1]));
-    expect(norm(blockValue(wsTokens, ".dark .ws-shell", "--ws-glass") ?? "missing")).toBe(norm(match![2]));
+  it("--ws-glass equals GLASS_SOLID.light and the dark GLASS_BASE of windowTheme.ts", () => {
+    const theme = readFileSync(DESKTOP_WINDOW_THEME, "utf8");
+    const solid = /GLASS_SOLID[^=]*=\s*\{\s*light:\s*"([^"]+)"/.exec(theme);
+    const base = /GLASS_BASE[^=]*=\s*\{[^}]*dark:\s*\[(\d+),\s*(\d+),\s*(\d+)\]/.exec(theme);
+    expect(solid).not.toBeNull();
+    expect(base).not.toBeNull();
+    expect(norm(blockValue(wsTokens, ".ws-shell", "--ws-glass") ?? "missing")).toBe(norm(solid![1]));
+    expect(norm(blockValue(wsTokens, ".dark .ws-shell", "--ws-glass") ?? "missing")).toBe(norm(`rgb(${base![1]}, ${base![2]}, ${base![3]})`));
   });
 
   const PREVIEW_TOKENS = [

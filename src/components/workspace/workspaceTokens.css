@@ -12,7 +12,8 @@
   --ws-focus-ring: #0d99ff;
 }
 .dark .ws-shell {
-  --ws-glass: #2b2b2e;
+  /* The dark glass base, not GLASS_SOLID.dark: that one is almost the island colour, so the islands would vanish. */
+  --ws-glass: rgb(28, 28, 30);
   --ws-tab-active: rgba(255, 255, 255, 0.1);
   --ws-tab-hover: rgba(255, 255, 255, 0.06);
   --ws-glass-text: rgba(255, 255, 255, 0.62);
