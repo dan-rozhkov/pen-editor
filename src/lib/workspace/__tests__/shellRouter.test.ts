@@ -68,6 +68,18 @@ describe("register, list and MRU", () => {
     expect(s.router.listTabs()[0].active).toBe(true);
   });
 
+  it("a pure reorder of the tab list keeps registrations, numeric ids and the active tab", () => {
+    const s = setup();
+    s.router.syncTabs(s.tabs(["a", "Alpha"], ["b", "Beta"]), "a");
+    s.send(tab("a"), { type: "register" });
+    s.send(tab("b"), { type: "register" });
+    const before = s.router.listTabs();
+    s.router.syncTabs(s.tabs(["b", "Beta"], ["a", "Alpha"]), "a");
+    const after = s.router.listTabs();
+    expect(after).toEqual(before);
+    expect(s.opened).toEqual([]);
+  });
+
   it("a doc tab in front leaves the order and marks no canvas active", () => {
     const s = setup();
     const list: ShellTabInfo[] = [...s.tabs(["a"], ["b"]), { id: "d", kind: "doc", title: "Doc" }];

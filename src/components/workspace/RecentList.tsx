@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 import {
   FileTextIcon,
@@ -14,45 +14,54 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   ALL_KINDS,
   RECENT_KIND_LABELS,
+  RECENT_MODIFIED_LABELS,
   filterRecent,
   formatRelativeTime,
   type RecentItem,
   type RecentKind,
   type RecentKinds,
+  type RecentModified,
 } from "@/lib/workspace/recent";
 
 const KIND_ICONS = { canvas: PaintBrushIcon, doc: FileTextIcon, workflow: TreeStructureIcon } as const;
+const KIND_MENU_LABELS: Record<RecentKind, string> = { canvas: "Canvases", doc: "Documents", workflow: "Workflows" };
 const KIND_ORDER: RecentKind[] = ["canvas", "doc", "workflow"];
+const MODIFIED_ORDER: RecentModified[] = ["any", "today", "7d", "30d"];
 const VISIBLE_ROWS = 8;
 
-const TOOL_BTN =
-  "relative flex size-7 shrink-0 items-center justify-center rounded-control text-text-muted hover:bg-surface-hover aria-expanded:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const keyOf = (item: Pick<RecentItem, "kind" | "id">) => `${item.kind}:${item.id}`;
+const itemsLabel = (n: number) => (n === 1 ? "1 item" : `${n} items`);
 
 interface RecentListProps {
   items: RecentItem[];
   onOpen: (item: RecentItem) => void;
-  /** Called after the user confirmed. The caller closes the tab first, then removes the item. */
-  onDelete: (item: RecentItem) => void;
+  /** Called after the user confirmed. Resolves with the items that could not be deleted. */
+  onDelete: (items: RecentItem[]) => Promise<RecentItem[]>;
 }
 
 export function RecentList({ items, onOpen, onDelete }: RecentListProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [kinds, setKinds] = useState<RecentKinds>(ALL_KINDS);
+  const [modified, setModified] = useState<RecentModified>("any");
   const [expanded, setExpanded] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState<RecentItem | null>(null);
-
-  const kindsDefault = kinds.canvas && kinds.doc && kinds.workflow;
-  const filtering = query.trim() !== "" || !kindsDefault;
-  const matches = useMemo(() => filterRecent(items, query, kinds), [items, query, kinds]);
-  const shown = expanded ? matches : matches.slice(0, VISIBLE_ROWS);
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
+  const [note, setNote] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  // The count the dialog was opened for: the live selection may change or empty while it closes.
+  const [confirmCount, setConfirmCount] = useState(0);
   // The relative times age while the page stays open.
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
@@ -60,153 +69,366 @@ export function RecentList({ items, onOpen, onDelete }: RecentListProps) {
     return () => clearInterval(timer);
   }, []);
 
-  if (items.length === 0) return null;
+  const lastToggled = useRef<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const searchToggleRef = useRef<HTMLButtonElement>(null);
+  const filterRef = useRef<HTMLButtonElement>(null);
+  const deleteRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const baseHeight = useRef(0);
+  // Focus that must wait for the next commit (the control is hidden until then).
+  const focusNext = useRef<RefObject<HTMLElement | null> | null>(null);
+  useEffect(() => {
+    focusNext.current?.current?.focus();
+    focusNext.current = null;
+  });
 
+  const kindsDefault = kinds.canvas && kinds.doc && kinds.workflow;
+  const filterDefault = kindsDefault && modified === "any";
+  const filtering = query.trim() !== "" || !filterDefault;
+  const matches = useMemo(() => filterRecent(items, query, kinds, modified, now), [items, query, kinds, modified, now]);
+  // While a search or filter is on, every match is listed (no row cap).
+  const shown = expanded || filtering ? matches : matches.slice(0, VISIBLE_ROWS);
+  const shownKeys = shown.map(keyOf);
+  // Only rows that are listed count as selected: one that left the list (filtered out, aged out of
+  // the time filter, deleted elsewhere) must not be deleted unseen.
+  const selected = useMemo(() => {
+    const live = new Set(shownKeys);
+    return new Set([...picked].filter((key) => live.has(key)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picked, shown]);
+  const selecting = selected.size > 0;
+  const allSelected = matches.length > 0 && matches.every((item) => selected.has(keyOf(item)));
+
+  // While a search or filter is on, the list block keeps the height of the default view: the page is
+  // vertically centred, so a shrinking block would make the whole page jump.
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    if (filtering || searchOpen) {
+      el.style.minHeight = `${baseHeight.current}px`;
+    } else {
+      el.style.minHeight = "";
+      baseHeight.current = el.offsetHeight;
+    }
+  });
+
+  const resetSelection = useCallback(() => {
+    setNote("");
+    setPicked(new Set());
+    lastToggled.current = null;
+    // The selection bar hides with the selection, taking focus with it.
+    focusNext.current = filterRef;
+  }, []);
+
+  // A global Esc: with no search field focused it clears the selection (not while the dialog is open).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || confirmOpen || e.target === searchRef.current) return;
+      if (selecting) resetSelection();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [selecting, confirmOpen, resetSelection]);
+
+  // A changed search or filter starts a new result set: the selection does not carry over.
+  const refilter = (apply: () => void) => {
+    apply();
+    resetSelection();
+    focusNext.current = null; // typing in the search field or the filter menu keeps its own focus
+  };
+  const closeSearch = () => {
+    setSearchOpen(false);
+  };
   const clearFilters = () => {
-    setQuery("");
-    setKinds(ALL_KINDS);
+    refilter(() => {
+      setQuery("");
+      setKinds(ALL_KINDS);
+      setModified("any");
+    });
+  };
+
+  const toggleKey = (key: string, range: boolean) => {
+    setNote("");
+    const on = !selected.has(key);
+    const from = range && lastToggled.current !== null ? shownKeys.indexOf(lastToggled.current) : -1;
+    const to = shownKeys.indexOf(key);
+    const next = new Set(selected);
+    const set = (k: string) => (on ? next.add(k) : next.delete(k));
+    if (from !== -1 && to !== -1) {
+      for (let i = Math.min(from, to); i <= Math.max(from, to); i++) set(shownKeys[i]);
+    } else set(key);
+    lastToggled.current = key;
+    setPicked(next);
+  };
+
+  const runDelete = () => {
+    if (deleting || !selecting) return;
+    const chosen = items.filter((item) => selected.has(keyOf(item)));
+    setDeleting(true);
+    onDelete(chosen)
+      .then((failed) => {
+        // Only the deleted keys leave the selection; failed items stay selected.
+        const failedKeys = new Set(failed.map(keyOf));
+        const deletedKeys = chosen.map(keyOf).filter((key) => !failedKeys.has(key));
+        // Functional: the selection may have changed while the deletion ran.
+        setPicked((prev) => {
+          const next = new Set(prev);
+          for (const key of deletedKeys) next.delete(key);
+          return next;
+        });
+        if (lastToggled.current !== null && deletedKeys.includes(lastToggled.current)) lastToggled.current = null;
+        setNote(failedKeys.size > 0 ? `Couldn't delete ${itemsLabel(failedKeys.size)}.` : "");
+        // Focus the filter button only if the list (and its toolbar) survives the deletion.
+        if (failedKeys.size === 0 && items.length > deletedKeys.length) focusNext.current = filterRef;
+      })
+      .catch(() => setNote("Couldn't delete these items."))
+      .finally(() => setDeleting(false));
+  };
+
+  const confirmDialog = (
+    <ConfirmDeleteDialog
+      open={confirmOpen}
+      onOpenChange={setConfirmOpen}
+      name=""
+      title={`Delete ${itemsLabel(confirmCount)}?`}
+      description={
+        confirmCount === 1
+          ? "It will be removed from this browser. This can't be undone."
+          : "They will be removed from this browser. This can't be undone."
+      }
+      onConfirm={runDelete}
+    />
+  );
+
+  // Keep the dialog mounted when the last item is gone, so it can finish closing.
+  if (items.length === 0) return confirmDialog;
+
+  const onRowsKeyDown = (e: React.KeyboardEvent<HTMLUListElement>) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const rows = Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>(".ws-recent-row") ?? []);
+    const at = rows.indexOf(document.activeElement as HTMLButtonElement);
+    if (at === -1) return;
+    const next = rows[at + (e.key === "ArrowDown" ? 1 : -1)];
+    if (next) {
+      e.preventDefault();
+      next.focus();
+    }
   };
 
   return (
-    <section className="flex w-full max-w-[840px] flex-none flex-col gap-1.5" aria-labelledby="ws-recent-heading">
-      <div className="flex min-h-7 items-center gap-1">
-        <h2 id="ws-recent-heading" className="m-0 flex-1 px-2 text-xs font-medium text-text-muted">
-          Recent
-        </h2>
-        {searchOpen && (
-          <div className="relative flex w-[200px] items-center">
-            <MagnifyingGlassIcon className="pointer-events-none absolute left-2 size-4 text-text-muted" aria-hidden />
-            <input
-              type="search"
-              autoFocus
-              autoComplete="off"
-              spellCheck={false}
-              aria-label="Search"
-              placeholder="Search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  setQuery("");
-                  setSearchOpen(false);
-                }
-              }}
-              className="h-7 w-full rounded-control border border-border-default bg-transparent pr-7 pl-[30px] text-text-primary placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-            {query !== "" && (
+    <section className={`ws-recent${selecting ? " selecting" : ""}`} aria-labelledby="ws-recent-heading">
+      <div className="ws-recent-header">
+        <div className="ws-recent-bar" hidden={selecting}>
+          <h2 className="ws-recent-heading" id="ws-recent-heading">
+            Recent
+          </h2>
+          <div className="ws-recent-tools">
+            <div className="ws-search-wrap" hidden={!searchOpen}>
+              <MagnifyingGlassIcon className="ws-search-icon" aria-hidden />
+              <input
+                ref={searchRef}
+                className="ws-search"
+                type="search"
+                placeholder="Search"
+                aria-label="Search"
+                autoComplete="off"
+                spellCheck={false}
+                value={query}
+                onChange={(e) => refilter(() => setQuery(e.target.value))}
+                onBlur={() => {
+                  if (query === "") closeSearch();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== "Escape") return;
+                  if (query !== "") refilter(() => setQuery(""));
+                  else {
+                    closeSearch();
+                    focusNext.current = searchToggleRef;
+                  }
+                }}
+              />
               <button
                 type="button"
+                className="ws-search-clear"
                 aria-label="Clear search"
                 title="Clear search"
-                onClick={() => setQuery("")}
-                className="absolute right-[3px] flex size-[22px] items-center justify-center rounded-control-xs text-text-muted hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                hidden={query === ""}
+                onClick={() => {
+                  refilter(() => setQuery(""));
+                  searchRef.current?.focus();
+                }}
               >
-                <XIcon className="size-3.5" aria-hidden />
+                <XIcon className="ws-search-clear-icon" aria-hidden />
               </button>
-            )}
-          </div>
-        )}
-        <button
-          type="button"
-          aria-label="Search"
-          title="Search"
-          aria-expanded={searchOpen}
-          onClick={() => {
-            if (searchOpen) setQuery("");
-            setSearchOpen((v) => !v);
-          }}
-          className={TOOL_BTN}
-        >
-          <MagnifyingGlassIcon className="size-4" aria-hidden />
-        </button>
-        <DropdownMenu>
-          <DropdownMenuTrigger aria-label="Filter" title="Filter" className={TOOL_BTN}>
-            <FunnelSimpleIcon className="size-4" aria-hidden />
-            {!kindsDefault && <span aria-hidden className="absolute top-[5px] right-[5px] size-1.5 rounded-full bg-ring" />}
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            {KIND_ORDER.map((kind) => (
-              <DropdownMenuCheckboxItem
-                key={kind}
-                checked={kinds[kind]}
-                onCheckedChange={(checked) => setKinds((k) => ({ ...k, [kind]: checked }))}
+            </div>
+            <button
+              ref={searchToggleRef}
+              type="button"
+              className="ws-tool"
+              aria-label="Search"
+              title="Search"
+              aria-expanded={searchOpen}
+              hidden={searchOpen}
+              onClick={() => {
+                setSearchOpen(true);
+                focusNext.current = searchRef;
+              }}
+            >
+              <MagnifyingGlassIcon className="ws-tool-icon" aria-hidden />
+            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                ref={filterRef}
+                aria-label="Filter"
+                title="Filter"
+                className={`ws-tool${filterDefault ? "" : " is-active"}`}
               >
-                {RECENT_KIND_LABELS[kind]}
-              </DropdownMenuCheckboxItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem disabled={kindsDefault} onClick={() => setKinds(ALL_KINDS)}>
-              Reset filter
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+                <FunnelSimpleIcon className="ws-tool-icon" aria-hidden />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Type</DropdownMenuLabel>
+                  {KIND_ORDER.map((kind) => (
+                    <DropdownMenuCheckboxItem
+                      key={kind}
+                      checked={kinds[kind]}
+                      onCheckedChange={(checked) => refilter(() => setKinds((k) => ({ ...k, [kind]: checked })))}
+                    >
+                      {KIND_MENU_LABELS[kind]}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Modified</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={modified}
+                    onValueChange={(value) => refilter(() => setModified(value as RecentModified))}
+                  >
+                    {MODIFIED_ORDER.map((range) => (
+                      <DropdownMenuRadioItem key={range} value={range}>
+                        {RECENT_MODIFIED_LABELS[range]}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled={filterDefault} onClick={clearFilters}>
+                  Reset filters
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
 
-      {matches.length === 0 && filtering ? (
-        <div className="flex flex-col items-start">
-          <p className="m-0 px-2 pt-2 text-text-muted">No matching files</p>
+        <div className="ws-recent-selbar" hidden={!selecting}>
           <button
             type="button"
-            onClick={clearFilters}
-            className="mt-1 h-9 rounded-control-xl px-2 text-text-muted hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="ws-tool"
+            aria-label="Clear selection"
+            title="Clear selection"
+            onClick={resetSelection}
           >
-            Clear search and filters
+            <XIcon className="ws-tool-icon" aria-hidden />
+          </button>
+          <span className="ws-recent-count" role="status">
+            {selected.size} selected
+          </span>
+          <span className="ws-recent-note" role="status">
+            {note}
+          </span>
+          <button
+            type="button"
+            className="ws-text-btn"
+            hidden={allSelected}
+            onClick={() => {
+              setNote("");
+              // Every match, so list them all: nothing selected may hide behind "Show all".
+              setExpanded(true);
+              setPicked(new Set([...selected, ...matches.map(keyOf)]));
+              focusNext.current = deleteRef;
+            }}
+          >
+            Select all
+          </button>
+          <button
+            ref={deleteRef}
+            type="button"
+            className="ws-text-btn ws-delete"
+            disabled={deleting}
+            onClick={() => {
+              setConfirmCount(selected.size);
+              setConfirmOpen(true);
+            }}
+          >
+            <TrashIcon className="ws-tool-icon" aria-hidden />
+            <span>Delete</span>
           </button>
         </div>
-      ) : (
-        <ul className="m-0 flex list-none flex-col p-0">
+      </div>
+
+      <div className="ws-recent-body" ref={bodyRef}>
+        <ul className="ws-recent-list" ref={listRef} onKeyDown={onRowsKeyDown}>
           {shown.map((item) => {
+            const key = keyOf(item);
             const Icon = KIND_ICONS[item.kind];
             const title = item.title || "Untitled";
+            const on = selected.has(key);
             return (
-              <li key={`${item.kind}:${item.id}`} className="group/row relative flex items-center rounded-control-xl hover:bg-surface-hover focus-within:bg-surface-hover">
+              <li key={key} className={`ws-recent-item${on ? " selected" : ""}`}>
+                <input
+                  type="checkbox"
+                  className="ws-recent-check"
+                  aria-label={`Select ${title}`}
+                  checked={on}
+                  onChange={() => {}}
+                  onClick={(e) => toggleKey(key, e.shiftKey)}
+                />
                 <button
                   type="button"
-                  onClick={() => onOpen(item)}
-                  className="flex h-9 min-w-0 flex-1 items-center gap-2.5 rounded-control-xl px-2 text-left text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="ws-recent-row"
+                  onClick={(e) => {
+                    if (selecting || e.metaKey || e.ctrlKey) toggleKey(key, e.shiftKey && selecting);
+                    else onOpen(item);
+                  }}
                 >
-                  <Icon className="size-4 shrink-0 text-text-muted" aria-hidden />
-                  <span className="min-w-0 flex-1 truncate">{title}</span>
-                  <span className="sr-only">{RECENT_KIND_LABELS[item.kind]}</span>
-                  <span className="min-w-[72px] shrink-0 text-right text-text-muted tabular-nums group-hover/row:opacity-0 group-focus-within/row:opacity-0">
-                    {formatRelativeTime(item.updatedAt, now)}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Delete ${title}`}
-                  title="Delete"
-                  onClick={() => setPendingDelete(item)}
-                  className="absolute right-1 flex size-7 items-center justify-center rounded-control text-text-muted opacity-0 hover:bg-surface-active focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/row:opacity-100"
-                >
-                  <TrashIcon className="size-4" aria-hidden />
+                  <Icon className="ws-recent-icon" aria-hidden />
+                  <span className="ws-recent-title">{title}</span>
+                  <span className="ws-recent-kind">{RECENT_KIND_LABELS[item.kind]}</span>
+                  <span className="ws-recent-time">{formatRelativeTime(item.updatedAt, now)}</span>
                 </button>
               </li>
             );
           })}
         </ul>
-      )}
-
-      {!expanded && matches.length > VISIBLE_ROWS && (
+        <div className="ws-recent-empty" hidden={matches.length > 0}>
+          <p className="ws-recent-empty-text">No matching files</p>
+          <button type="button" className="ws-recent-more" onClick={clearFiltersAndSearch}>
+            Clear search and filters
+          </button>
+        </div>
         <button
           type="button"
-          onClick={() => setExpanded(true)}
-          className="h-9 self-start rounded-control-xl px-2 text-text-muted hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="ws-recent-more"
+          hidden={expanded || filtering || matches.length - VISIBLE_ROWS <= 0}
+          onClick={() => {
+            setExpanded(true);
+            focusNext.current = null;
+          }}
         >
           Show all ({matches.length})
         </button>
-      )}
+      </div>
 
-      <ConfirmDeleteDialog
-        open={pendingDelete !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDelete(null);
-        }}
-        name={pendingDelete ? pendingDelete.title || "Untitled" : ""}
-        onConfirm={() => {
-          if (pendingDelete) onDelete(pendingDelete);
-        }}
-      />
+      {confirmDialog}
     </section>
   );
+
+  function clearFiltersAndSearch() {
+    closeSearch();
+    clearFilters();
+    filterRef.current?.focus();
+  }
 }

@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { webCanvasStore, subscribeWebCanvases } from "@/lib/canvases/webCanvasStore";
 import { listDocs, subscribeDocs, deleteDoc } from "@/lib/docs/docStore";
 import { listWorkflows, subscribeWorkflows, deleteWorkflow } from "@/lib/workflows/workflowStore";
 import { sortRecent, type RecentItem } from "@/lib/workspace/recent";
+
+const RELOAD_COALESCE_MS = 50;
 
 async function loadAll(): Promise<RecentItem[]> {
   const items: RecentItem[] = [];
@@ -54,7 +56,22 @@ export async function removeRecentItem(item: Pick<RecentItem, "kind" | "id">): P
 export function useRecentItems(): { items: RecentItem[]; reload: () => void } {
   const [items, setItems] = useState<RecentItem[]>([]);
   const [tick, setTick] = useState(0);
-  const reload = useCallback(() => setTick((n) => n + 1), []);
+  // A bulk delete fires one store event per item: one reload covers the burst.
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reload = useCallback(() => {
+    if (timer.current !== null) return;
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      setTick((n) => n + 1);
+    }, RELOAD_COALESCE_MS);
+  }, []);
+  useEffect(
+    () => () => {
+      if (timer.current !== null) clearTimeout(timer.current);
+      timer.current = null;
+    },
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;

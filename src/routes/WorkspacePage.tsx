@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { ToasterBase } from "@/components/ui/ToasterBase";
 
+import "@/components/workspace/workspaceTokens.css";
 import { StartPage } from "@/components/workspace/StartPage";
 import { TabFrames } from "@/components/workspace/TabFrames";
 import { TabStrip, type NewTabChoice } from "@/components/workspace/TabStrip";
@@ -281,16 +282,17 @@ function WorkspaceShell() {
     [],
   );
 
+  const moveTab = useCallback((tabId: string, beforeId: string | null) => dispatch({ type: "move", tabId, beforeId }), []);
+
   const onNew = (choice: NewTabChoice) => {
-    if (choice === "start") dispatch({ type: "home" });
-    else newItem(choice);
+    newItem(choice);
   };
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-surface-base text-[13px] text-text-muted sm:flex-row">
+    <div className="ws-shell fixed inset-0 flex flex-col bg-(--ws-glass) text-[13px] text-text-muted sm:flex-row">
       {/* One element for both layouts (CSS order, not a move): a resize must never reload the chat.
           Below 640px the tab area is on top and the chat below, half the height each. */}
-      <div className="order-2 mr-2 mb-2 ml-2 min-h-0 flex-1 overflow-hidden rounded-xl bg-surface-panel sm:order-1 sm:mt-2 sm:mr-0 sm:max-w-[50%] sm:flex-none sm:basis-(--agent-panel-width)" style={{ "--agent-panel-width": `${AGENT_PANEL_WIDTH}px` } as CSSProperties}>
+      <div className="order-2 mr-2 mb-2 ml-2 min-h-0 flex-1 overflow-hidden rounded-xl bg-surface-panel sm:order-1 sm:mt-[38px] sm:mr-0 sm:max-w-[50%] sm:flex-none sm:basis-(--agent-panel-width)" style={{ "--agent-panel-width": `${AGENT_PANEL_WIDTH}px` } as CSSProperties}>
         <iframe
           ref={panelRef}
           title="Sideform Agent"
@@ -308,6 +310,7 @@ function WorkspaceShell() {
           onHome={() => dispatch({ type: "home" })}
           onNew={onNew}
           onSettings={() => openItem("settings", null, "Settings")}
+          onMove={moveTab}
         />
         <div className="relative mr-2 mb-2 ml-2 min-h-0 flex-1 overflow-hidden rounded-xl bg-surface-panel">
           <TabFrames tabs={state.tabs} activeTabId={state.activeTabId} framesRef={framesRef} mountIds={state.mountIds} focusFrame={state.focusFrame} />

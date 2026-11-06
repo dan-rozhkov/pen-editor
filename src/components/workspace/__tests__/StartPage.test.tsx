@@ -112,43 +112,95 @@ describe("StartPage", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(3);
   });
 
-  it("clears the query when the search toggle closes the search", async () => {
+  it("hides the toggle while the field is open; Esc clears the text, then closes and refocuses the toggle", async () => {
     setup();
     await screen.findByRole("list");
-    const toggle = screen.getByRole("button", { name: "Search" });
-    fireEvent.click(toggle);
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search" }), { target: { value: "land" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    const field = screen.getByRole("searchbox", { name: "Search" }) as HTMLInputElement;
+    expect(screen.queryByRole("button", { name: "Search" })).toBeNull();
+    fireEvent.change(field, { target: { value: "land" } });
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
-    fireEvent.click(toggle);
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(field.value).toBe("");
     expect(screen.getAllByRole("listitem")).toHaveLength(3);
-    fireEvent.click(toggle);
-    expect((screen.getByRole("searchbox", { name: "Search" }) as HTMLInputElement).value).toBe("");
+    fireEvent.keyDown(field, { key: "Escape" });
+    const toggle = screen.getByRole("button", { name: "Search" });
+    await waitFor(() => expect(document.activeElement).toBe(toggle));
   });
 
   it("filters by kind through the filter menu", async () => {
     setup();
     await screen.findByRole("list");
     fireEvent.click(screen.getByRole("button", { name: "Filter" }));
-    fireEvent.click(await screen.findByRole("menuitemcheckbox", { name: "Canvas" }));
+    fireEvent.click(await screen.findByRole("menuitemcheckbox", { name: "Canvases" }));
     await waitFor(() => expect(screen.getAllByRole("listitem")).toHaveLength(2));
     expect(screen.queryByRole("button", { name: /^Landing/ })).toBeNull();
   });
 
-  it("confirms, closes the tab first, then removes from the store", async () => {
+  it("selects with the checkbox, confirms, closes the tab first, then removes from the store", async () => {
     const order: string[] = [];
-    const props = {
-      onNew: vi.fn(),
-      onOpen: vi.fn(),
-      onBeforeDelete: vi.fn(() => order.push("close")),
-    };
+    const props = { onNew: vi.fn(), onOpen: vi.fn(), onBeforeDelete: vi.fn(() => order.push("close")) };
     mocks.canvasRemove.mockImplementation(async () => {
       order.push("remove");
       return { ok: true };
     });
     render(<StartPage {...props} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Delete Landing" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Select Landing" }));
+    expect(screen.getByText("1 selected")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(await screen.findByText("Delete 1 item?")).toBeTruthy();
+    expect(screen.getByText("It will be removed from this browser. This can't be undone.")).toBeTruthy();
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(mocks.canvasRemove).toHaveBeenCalledWith("cv_1"));
     expect(order).toEqual(["close", "remove"]);
+  });
+
+  it("keeps the selection on cancel and keeps failed items selected with a note", async () => {
+    mocks.canvasRemove.mockResolvedValue({ error: "nope" });
+    setup();
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Select Landing" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Brief" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(screen.getByText("2 selected")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Delete" }));
+    expect(await screen.findByText("Couldn't delete 1 item.")).toBeTruthy();
+    expect(screen.getByText("1 selected")).toBeTruthy();
+  });
+
+  it("toggles instead of opening while selecting, selects a range with Shift and all with Select all", async () => {
+    const p = setup();
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Select Brief" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Untitled/ }), { shiftKey: true });
+    expect(p.onOpen).not.toHaveBeenCalled();
+    expect(screen.getByText("3 selected")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Select all" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Brief/ }));
+    expect(screen.getByText("2 selected")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+    expect(screen.getByText("3 selected")).toBeTruthy();
+  });
+
+  it("clears the selection on Esc and when the search changes", async () => {
+    setup();
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Select Brief" }));
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(screen.queryByText("1 selected")).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Brief" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
+    expect(screen.queryByText("1 selected")).toBeNull();
+  });
+
+  it("filters by modified range and resets the filters", async () => {
+    setup();
+    await screen.findByRole("list");
+    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+    fireEvent.click(await screen.findByRole("menuitemradio", { name: "Past 7 days" }));
+    await waitFor(() => expect(screen.getAllByRole("listitem")).toHaveLength(2));
+    // Radio items keep the menu open.
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Reset filters" }));
+    await waitFor(() => expect(screen.getAllByRole("listitem")).toHaveLength(3));
   });
 });

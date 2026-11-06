@@ -143,3 +143,40 @@ test("the chat panel is always visible and drives a canvas tab it opens over the
   });
   expect(hasBridge).toBe(true);
 });
+
+test("dragging a tab reorders it without reloading its frame, and the order survives a reload", async ({ page }) => {
+  await page.goto("/workspace");
+  await page.getByRole("button", { name: "New canvas tab" }).click();
+  const canvasIframe = page.locator('iframe[src*="/app?canvas="]');
+  await expect(canvasIframe).toBeAttached();
+  for (const name of ["New Document", "New Workflow"]) {
+    await page.getByRole("button", { name: "New tab" }).click();
+    await page.getByRole("menuitem", { name }).click();
+  }
+  const tabs = page.getByRole("tab");
+  await expect(tabs).toHaveCount(3);
+  const titles = async () => tabs.evaluateAll((els) => els.map((el) => el.getAttribute("data-tab-id")));
+  const [first, second, third] = (await titles()) as string[];
+
+  // A marker on the canvas frame's window: a reload of the frame would drop it.
+  const handle = await canvasIframe.elementHandle();
+  const win = await handle?.contentFrame();
+  await win?.evaluate(() => {
+    (window as unknown as { __keep: boolean }).__keep = true;
+  });
+
+  const a = (await page.locator(`[data-tab-id="${first}"]`).boundingBox()) as { x: number; y: number; width: number; height: number };
+  const c = (await page.locator(`[data-tab-id="${third}"]`).boundingBox()) as { x: number; y: number; width: number; height: number };
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(a.x + a.width / 2 + 20, a.y + a.height / 2, { steps: 4 });
+  await page.mouse.move(c.x + c.width - 4, c.y + c.height / 2, { steps: 12 });
+  await page.mouse.up();
+
+  await expect.poll(titles).toEqual([second, third, first]);
+  expect(await win?.evaluate(() => (window as unknown as { __keep?: boolean }).__keep)).toBe(true);
+
+  await page.reload();
+  await expect(page.getByRole("tab")).toHaveCount(3);
+  expect(await titles()).toEqual([second, third, first]);
+});

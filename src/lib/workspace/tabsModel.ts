@@ -57,7 +57,9 @@ export type TabsAction =
   | { type: "closeItem"; kind: TabKind; itemId: string }
   | { type: "rename"; kind: TabKind; itemId: string; title: string }
   /** The frame of a tab moved to another item on its own (history call, no load event). */
-  | { type: "rebind"; tabId: string; itemId: string };
+  | { type: "rebind"; tabId: string; itemId: string }
+  /** Drag to reorder: puts the tab before `beforeId` (null = at the end). The active tab does not change. */
+  | { type: "move"; tabId: string; beforeId: string | null };
 
 export function makeTabId(): string {
   const bytes = new Uint8Array(6);
@@ -123,6 +125,15 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
         .map((t) => (t.id === tab.id ? { ...t, itemId: action.itemId } : t));
       const activeTabId = tabs.some((t) => t.id === state.activeTabId) ? state.activeTabId : tab.id;
       return pruneMounts({ ...state, tabs, activeTabId });
+    }
+    case "move": {
+      const tab = state.tabs.find((t) => t.id === action.tabId);
+      if (!tab || action.beforeId === action.tabId) return state;
+      const rest = state.tabs.filter((t) => t !== tab);
+      const at = action.beforeId === null ? rest.length : rest.findIndex((t) => t.id === action.beforeId);
+      if (at === -1 || at === state.tabs.indexOf(tab)) return state;
+      rest.splice(at, 0, tab);
+      return { ...state, tabs: rest };
     }
     case "rename": {
       const title = action.title;

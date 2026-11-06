@@ -1,0 +1,100 @@
+/* Tab strip of /workspace, a port of pen-editor-desktop/src/tabbar/tabbar.css with its exact numbers.
+   Unlayered on purpose: it must beat the base-layer [data-pen-icon] colour remap in index.css. */
+.ws-row {
+  height: 38px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 8px;
+  font: 12px -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--ws-glass-text);
+  user-select: none;
+}
+
+/* Home and Settings: inline below 640px, over the empty title area above the chat from 640px up
+   (where the desktop sidebar toggle sits). The shell root is the positioned ancestor. */
+.ws-nav { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+@media (min-width: 640px) {
+  .ws-nav { position: absolute; left: 8px; top: 5px; z-index: 1; }
+}
+
+.ws-btn {
+  flex: 0 0 28px; width: 28px; height: 28px; padding: 0; border: 0; background: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-control); cursor: pointer;
+  color: var(--ws-icon-subtle);
+}
+.ws-btn svg { width: 16px; height: 16px; color: var(--ws-icon-subtle); }
+.ws-btn:hover { background: var(--ws-tab-hover); color: var(--ws-icon); }
+.ws-btn:hover svg { color: var(--ws-icon); }
+.ws-btn[aria-pressed="true"], .ws-btn[aria-pressed="true"] svg { color: var(--ws-icon); }
+
+.ws-tab-list {
+  display: flex; align-items: center; gap: 2px; flex: 1; min-width: 0;
+  overflow-x: auto; scrollbar-width: none;
+  /* Room for the 2px focus ring, which the scroll box would clip; margins cancel the padding. */
+  padding: 2px; margin: -2px;
+}
+.ws-tab-list::-webkit-scrollbar { display: none; }
+
+:is(.ws-tab, .ws-tab-ghost) {
+  position: relative; isolation: isolate;
+  display: flex; align-items: center;
+  box-sizing: border-box;
+  --close-size: 20px; --close-inset: 4px; --tab-pad-end: 8px;
+  height: 28px; max-width: 200px; min-width: 60px;
+  border-radius: 8px; color: var(--ws-glass-text);
+  cursor: default; white-space: nowrap;
+}
+.ws-tab-btn {
+  display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; height: 100%;
+  box-sizing: border-box; padding: 0 var(--tab-pad-end) 0 6px;
+  border: 0; background: none; border-radius: 8px;
+  color: inherit; font: inherit; text-align: left; cursor: inherit;
+}
+:is(.ws-tab, .ws-tab-ghost) .ws-tab-title { overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+.ws-tab:not(.is-active):hover { background: var(--ws-tab-hover); color: var(--color-text-primary); }
+:is(.ws-tab, .ws-tab-ghost).is-active { background: var(--ws-tab-active); color: var(--color-text-primary); }
+
+.ws-tab.dragging { z-index: 2; will-change: transform; }
+.ws-tab.dragging:not(.is-active) { background: var(--ws-tab-hover); color: var(--color-text-primary); }
+.ws-tab-list.reordering .ws-tab { will-change: transform; }
+.ws-tab-ghost { pointer-events: none; overflow: hidden; }
+.ws-tab.entering { overflow: hidden; }
+
+.ws-tab-icon {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 18px; width: 18px; height: 18px;
+  color: var(--ws-icon-subtle);
+}
+.ws-tab-icon svg { width: 16px; height: 16px; color: var(--ws-icon-subtle); }
+:is(.ws-tab, .ws-tab-ghost).is-active .ws-tab-icon,
+:is(.ws-tab, .ws-tab-ghost).is-active .ws-tab-icon svg { color: var(--ws-icon); }
+
+/* The close "x" takes no room: it sits over the end of the title, which fades out under it. */
+:is(.ws-tab, .ws-tab-ghost) .ws-tab-close {
+  position: absolute; right: var(--close-inset); top: calc(50% - var(--close-size) / 2);
+  width: var(--close-size); height: var(--close-size);
+  border: 0; background: none; color: var(--ws-icon-subtle);
+  cursor: pointer; padding: 0; border-radius: 4px; visibility: hidden;
+}
+.ws-tab:hover .ws-tab-close, :is(.ws-tab, .ws-tab-ghost).is-active .ws-tab-close { visibility: visible; color: var(--ws-icon); }
+.ws-tab:hover .ws-tab-title, :is(.ws-tab, .ws-tab-ghost).is-active .ws-tab-title {
+  --close-cover: calc(var(--close-inset) + var(--close-size) - var(--tab-pad-end));
+  mask-image: linear-gradient(to left, transparent var(--close-cover), #000 calc(var(--close-cover) + 8px));
+}
+:is(.ws-tab, .ws-tab-ghost) .ws-tab-close:hover { background: color-mix(in srgb, var(--color-text-primary) 12%, transparent); }
+:is(.ws-tab, .ws-tab-ghost) .ws-tab-close::before, :is(.ws-tab, .ws-tab-ghost) .ws-tab-close::after {
+  content: ""; position: absolute; left: 5px; top: 9.5px;
+  width: 10px; height: 1px; border-radius: 1px; background: currentColor;
+}
+:is(.ws-tab, .ws-tab-ghost) .ws-tab-close::before { transform: rotate(45deg); }
+:is(.ws-tab, .ws-tab-ghost) .ws-tab-close::after { transform: rotate(-45deg); }
+
+/* One focus ring everywhere. The tab shows it when its inner button has keyboard focus. */
+.ws-tab:has(.ws-tab-btn:focus-visible), .ws-tab-close:focus-visible, .ws-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ws-focus-ring);
+}
+.ws-tab-btn:focus-visible { outline: none; }

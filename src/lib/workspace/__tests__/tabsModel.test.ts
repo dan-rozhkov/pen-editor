@@ -226,3 +226,33 @@ describe("agent intent (focusFrame, mountIds)", () => {
     expect(parseTabsState(JSON.stringify({ ...saved, focusFrame: false, mountIds: ["t1"] }))).toEqual({ tabs: saved.tabs, activeTabId: "t1" });
   });
 });
+
+describe("move (drag to reorder)", () => {
+  const base = () => {
+    let s = open(EMPTY_TABS, "a", "canvas", "cv_1");
+    s = open(s, "b", "doc", "d1");
+    s = open(s, "c", "doc", "d2");
+    return tabsReducer(s, { type: "focus", tabId: "b", agent: true });
+  };
+  const ids = (s: TabsState) => s.tabs.map((t) => t.id);
+
+  it("moves a tab before another and to the end, leaving the rest of the state alone", () => {
+    const s = base();
+    const m = tabsReducer(s, { type: "move", tabId: "c", beforeId: "a" });
+    expect(ids(m)).toEqual(["c", "a", "b"]);
+    expect(m.activeTabId).toBe("b");
+    expect(m.focusFrame).toBe(false);
+    expect(m.mountIds).toEqual(s.mountIds);
+    expect(ids(tabsReducer(s, { type: "move", tabId: "a", beforeId: null }))).toEqual(["b", "c", "a"]);
+    expect(ids(tabsReducer(s, { type: "move", tabId: "a", beforeId: "c" }))).toEqual(["b", "a", "c"]);
+  });
+
+  it("returns the same state for a no-op or an unknown id", () => {
+    const s = base();
+    expect(tabsReducer(s, { type: "move", tabId: "a", beforeId: "a" })).toBe(s);
+    expect(tabsReducer(s, { type: "move", tabId: "a", beforeId: "b" })).toBe(s);
+    expect(tabsReducer(s, { type: "move", tabId: "c", beforeId: null })).toBe(s);
+    expect(tabsReducer(s, { type: "move", tabId: "zz", beforeId: null })).toBe(s);
+    expect(tabsReducer(s, { type: "move", tabId: "a", beforeId: "zz" })).toBe(s);
+  });
+});

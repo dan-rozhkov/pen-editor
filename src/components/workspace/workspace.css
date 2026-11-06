@@ -20,12 +20,67 @@
   --ws-dot: #353535;
 }
 
+.ws-start {
+  position: absolute;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--color-text-muted);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.ws-start-inner {
+  box-sizing: border-box;
+  min-height: 100%;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* safe: a short pane scrolls instead of clipping the top. */
+  justify-content: safe center;
+  gap: 20px;
+}
+.ws-intro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+.ws-headline {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--color-text-primary);
+  text-wrap: balance;
+}
+.ws-hint {
+  margin: 0;
+}
+
 .ws-cards {
+  width: 100%;
+  max-width: 840px;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
 }
 
 .ws-card {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  background: var(--color-surface-panel);
+  border: 1px solid var(--color-border-default);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
   transition:
     border-color 150ms ease-out,
     box-shadow 150ms ease-out;
@@ -36,12 +91,14 @@
 }
 .ws-card:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--color-ring);
+  box-shadow: 0 0 0 2px var(--ws-focus-ring);
 }
 
 .ws-preview {
   position: relative;
   display: block;
+  /* content-box like the desktop page: Tailwind's reset would take the border out of the height. */
+  box-sizing: content-box;
   height: 132px;
   background: var(--ws-preview-bg);
   border-bottom: 1px solid var(--color-border-default);
@@ -205,6 +262,36 @@
 }
 .ws-step .ws-line { flex: 1; }
 
+.ws-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px 16px;
+}
+.ws-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+.ws-desc {
+  line-height: 18px;
+  margin-bottom: 10px;
+}
+.ws-cta {
+  box-sizing: content-box;
+  align-self: flex-start;
+  /* Pinned to the card bottom: descriptions that wrap differently keep the buttons in line. */
+  display: inline-flex;
+  align-items: center;
+  margin-top: auto;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-control);
+  color: var(--color-text-primary);
+}
+
 .ws-card:hover .ws-cta,
 .ws-card:focus-visible .ws-cta {
   background: var(--ws-accent);
@@ -216,6 +303,355 @@
     background-color 150ms ease-out,
     border-color 150ms ease-out,
     color 150ms ease-out;
+}
+
+/* ---- Recent list: a port of the desktop empty.css rules, same numbers ---- */
+.ws-recent {
+  flex: none;
+  width: 100%;
+  max-width: 840px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ws-recent-header {
+  position: relative;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+}
+.ws-recent-bar,
+.ws-recent-selbar {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ws-recent-bar[hidden],
+.ws-recent-selbar[hidden],
+.ws-search-wrap[hidden],
+.ws-search-clear[hidden],
+.ws-tool[hidden],
+.ws-text-btn[hidden],
+.ws-recent-empty[hidden],
+.ws-recent-more[hidden] {
+  display: none;
+}
+.ws-recent-heading {
+  flex: 1;
+  margin: 0;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--color-text-muted);
+}
+.ws-recent-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 28px ghost icon button. */
+.ws-tool {
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ws-icon);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+.ws-tool:hover,
+.ws-tool[aria-expanded="true"],
+.ws-tool[data-popup-open] {
+  background: var(--ws-btn-hover);
+}
+/* Unlayered, on the svg itself: wins over the light-theme icon remap in index.css. */
+.ws-start svg.ws-tool-icon,
+.ws-start svg.ws-search-icon,
+.ws-start svg.ws-search-clear-icon {
+  color: var(--ws-icon);
+}
+.ws-start svg.ws-recent-icon {
+  color: var(--color-text-muted);
+}
+.ws-start .ws-delete svg.ws-tool-icon {
+  color: var(--color-text-primary);
+}
+.ws-tool-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+/* A filter other than the default: a small accent dot at the button's top right. */
+.ws-tool.is-active::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ws-focus-ring);
+}
+
+.ws-search-wrap {
+  position: relative;
+  flex: none;
+  width: 200px;
+  display: flex;
+  align-items: center;
+}
+.ws-search-icon {
+  position: absolute;
+  left: 8px;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+.ws-search {
+  font: inherit;
+  color: var(--color-text-primary);
+  box-sizing: border-box;
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  padding: 0 28px 0 30px;
+  background: transparent;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-control);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.ws-search::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;
+}
+.ws-search::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.ws-search:focus,
+.ws-search:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ws-focus-ring);
+}
+.ws-search-clear {
+  position: absolute;
+  right: 3px;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ws-icon);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control-xs);
+  cursor: pointer;
+}
+.ws-search-clear:hover {
+  background: var(--ws-btn-hover);
+}
+.ws-search-clear-icon {
+  width: 14px;
+  height: 14px;
+}
+.ws-search-clear:focus-visible,
+.ws-tool:focus-visible,
+.ws-text-btn:focus-visible,
+.ws-recent-check:focus-visible,
+.ws-recent-row:focus-visible,
+.ws-recent-more:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ws-focus-ring);
+}
+
+.ws-recent-count {
+  flex: none;
+  padding: 0 4px;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+/* Muted inline note of the selection bar (a partial delete). */
+.ws-recent-note {
+  min-width: 0;
+  padding: 0 4px;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-recent-note:empty {
+  display: none;
+}
+.ws-text-btn {
+  font: inherit;
+  color: var(--color-text-muted);
+  box-sizing: border-box;
+  height: 28px;
+  margin: 0;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+.ws-text-btn:hover:not(:disabled) {
+  background: var(--ws-btn-hover);
+}
+.ws-text-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* Delete stays quiet: the active text colour, no red fill; the confirm dialog carries the warning. */
+.ws-delete {
+  margin-left: auto;
+  color: var(--color-text-primary);
+}
+
+.ws-recent-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ws-recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ws-recent-row {
+  font: inherit;
+  color: var(--color-text-primary);
+  text-align: left;
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control-xl);
+  cursor: pointer;
+}
+/* The item (checkbox + row button) carries the hover and selected fills. */
+.ws-recent-item {
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+  border-radius: var(--radius-control-xl);
+}
+.ws-recent-item:hover {
+  background: var(--ws-btn-hover);
+}
+.ws-recent-item.selected,
+.ws-recent-item.selected:hover {
+  background: var(--ws-tab-active);
+}
+/* Custom checkbox: 14px box in a 16px slot (no layout shift), seen on hover, focus or while selecting. */
+.ws-recent-check {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  margin: 1px;
+  background: transparent;
+  border: 1px solid var(--ws-control-border-strong);
+  border-radius: 4px;
+  opacity: 0;
+  cursor: pointer;
+}
+.ws-recent-check:checked {
+  background: var(--ws-focus-ring);
+  border-color: var(--ws-focus-ring);
+}
+.ws-recent-check:checked::after {
+  content: "";
+  position: absolute;
+  left: 3.5px;
+  top: 1px;
+  width: 3px;
+  height: 6px;
+  border: solid #fff;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+.ws-recent-item:hover .ws-recent-check,
+.ws-recent-check:focus-visible,
+.ws-recent.selecting .ws-recent-check {
+  opacity: 1;
+}
+.ws-recent-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.ws-recent-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ws-recent-kind {
+  flex: none;
+  color: var(--color-text-muted);
+}
+.ws-recent-time {
+  flex: none;
+  min-width: 72px;
+  text-align: right;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.ws-recent-more {
+  font: inherit;
+  color: var(--color-text-muted);
+  align-self: flex-start;
+  box-sizing: border-box;
+  height: 36px;
+  margin: 0;
+  padding: 0 8px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control-xl);
+  cursor: pointer;
+}
+.ws-recent-more:hover {
+  background: var(--ws-btn-hover);
+}
+.ws-recent-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.ws-recent-empty-text {
+  margin: 0;
+  padding: 8px 8px 0;
+  color: var(--color-text-muted);
 }
 
 /* Narrow or short start page (the pane, not the viewport: a chat panel may sit beside it).
@@ -235,6 +671,9 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  .ws-recent-check {
+    transition: opacity 120ms ease-out;
+  }
   .ws-start-inner {
     animation: ws-start-in 200ms ease-out;
   }

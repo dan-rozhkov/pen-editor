@@ -12,6 +12,10 @@ import { describe, expect, it } from "vitest";
  */
 const DESKTOP_TOKENS = resolve(process.cwd(), "../pen-editor-desktop/src/tabbar/tokens.css");
 const FRONTEND_CSS = resolve(process.cwd(), "src/index.css");
+const DESKTOP_EMPTY = resolve(process.cwd(), "../pen-editor-desktop/src/tabbar/empty.css");
+const DESKTOP_WINDOW_THEME = resolve(process.cwd(), "../pen-editor-desktop/src/main/windowTheme.ts");
+const WS_TOKENS = resolve(process.cwd(), "src/components/workspace/workspaceTokens.css");
+const WS_START = resolve(process.cwd(), "src/components/workspace/workspace.css");
 
 /** desktop variable -> frontend variable it mirrors. */
 const MIRRORED: Record<string, string> = {
@@ -123,5 +127,52 @@ describe.runIf(desktopExists)("desktop token contract", () => {
     const pair = desktopPair(desktop, "--focus-ring");
     expect(norm(pair.light)).toBe(norm(blockValue(frontend, ":root", "--ring") ?? "missing"));
     expect(norm(pair.dark)).toBe(norm(blockValue(frontend, ".dark", "--ring") ?? "missing"));
+  });
+
+  // Web workspace copies: workspaceTokens.css (shell) and workspace.css (start page preview colours).
+  const wsTokens = readFileSync(WS_TOKENS, "utf8");
+  const wsStart = readFileSync(WS_START, "utf8");
+  const emptyCss = desktopExists ? readFileSync(DESKTOP_EMPTY, "utf8") : "";
+
+  /** [ws token, desktop token] */
+  const SHELL_TOKENS = [
+    ["--ws-tab-active", "--glass-tab-active"],
+    ["--ws-tab-hover", "--glass-tab-hover"],
+    ["--ws-glass-text", "--glass-text"],
+    ["--ws-icon", "--icon"],
+    ["--ws-icon-subtle", "--icon-subtle"],
+    ["--ws-btn-hover", "--btn-hover"],
+    ["--ws-control-border-strong", "--control-border-strong"],
+    ["--ws-focus-ring", "--focus-ring"],
+  ];
+
+  it.each(SHELL_TOKENS)("%s equals desktop %s in both themes", (wsName, desktopName) => {
+    const pair = desktopPair(desktop, desktopName);
+    expect(norm(blockValue(wsTokens, ".ws-shell", wsName) ?? "missing in .ws-shell")).toBe(norm(pair.light));
+    // A token with no dark override (the focus ring) resolves to its light `.ws-shell` value in dark too.
+    const lightValue = blockValue(wsTokens, ".ws-shell", wsName) ?? "missing in .ws-shell";
+    expect(norm(blockValue(wsTokens, ".dark .ws-shell", wsName) ?? lightValue)).toBe(norm(pair.dark));
+  });
+
+  it("--ws-glass equals GLASS_SOLID of windowTheme.ts in both themes", () => {
+    const match = /GLASS_SOLID[^=]*=\s*\{\s*light:\s*"([^"]+)",\s*dark:\s*"([^"]+)"/.exec(readFileSync(DESKTOP_WINDOW_THEME, "utf8"));
+    expect(match).not.toBeNull();
+    expect(norm(blockValue(wsTokens, ".ws-shell", "--ws-glass") ?? "missing")).toBe(norm(match![1]));
+    expect(norm(blockValue(wsTokens, ".dark .ws-shell", "--ws-glass") ?? "missing")).toBe(norm(match![2]));
+  });
+
+  const PREVIEW_TOKENS = [
+    ["--ws-accent-ring", "--accent-ring"],
+    ["--ws-preview-bg", "--preview-bg"],
+    ["--ws-ghost", "--ghost"],
+    ["--ws-ghost-surface", "--ghost-surface"],
+    ["--ws-ghost-border", "--ghost-border"],
+    ["--ws-dot", "--dot"],
+  ];
+
+  it.each(PREVIEW_TOKENS)("start page %s equals empty.css %s in both themes", (wsName, desktopName) => {
+    const pair = desktopPair(emptyCss, desktopName);
+    expect(norm(blockValue(wsStart, ".ws-start", wsName) ?? "missing in .ws-start")).toBe(norm(pair.light));
+    expect(norm(blockValue(wsStart, ".dark .ws-start", wsName) ?? "missing in .dark .ws-start")).toBe(norm(pair.dark));
   });
 });

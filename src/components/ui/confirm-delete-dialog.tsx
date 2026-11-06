@@ -15,16 +15,20 @@ interface ConfirmDeleteDialogProps {
   /** Shown in the title: Delete “name”? */
   name: string;
   onConfirm: () => void;
+  /** Replaces the whole title (then `name` is unused). */
+  title?: string;
+  /** Replaces "This cannot be undone." */
+  description?: string;
 }
 
 /** The "Delete “name”? This cannot be undone." confirmation shared by the document and workflow pages. */
-export function ConfirmDeleteDialog({ open, onOpenChange, name, onConfirm }: ConfirmDeleteDialogProps) {
+export function ConfirmDeleteDialog({ open, onOpenChange, name, onConfirm, title, description }: ConfirmDeleteDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent size="sm">
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete “{name}”?</AlertDialogTitle>
-          <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+          <AlertDialogTitle>{title ?? `Delete “${name}”?`}</AlertDialogTitle>
+          <AlertDialogDescription>{description ?? "This cannot be undone."}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>

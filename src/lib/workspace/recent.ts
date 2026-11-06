@@ -39,10 +39,37 @@ export function formatRelativeTime(then: number, now: number): string {
 export type RecentKinds = Record<RecentKind, boolean>;
 export const ALL_KINDS: RecentKinds = { canvas: true, doc: true, workflow: true };
 
-/** Case-insensitive title match; an empty title matches as "Untitled". All kinds off = nothing. */
-export function filterRecent(items: RecentItem[], query: string, kinds: RecentKinds): RecentItem[] {
+/** Same ids as the desktop's RecentModifiedRange. */
+export type RecentModified = "any" | "today" | "7d" | "30d";
+export const RECENT_MODIFIED_LABELS: Record<RecentModified, string> = {
+  any: "Any time",
+  today: "Today",
+  "7d": "Past 7 days",
+  "30d": "Past 30 days",
+};
+
+/**
+ * Case-insensitive title match; an empty title matches as "Untitled". All kinds off = nothing.
+ * `now` is epoch ms: "today" = since the local midnight, "7d" / "30d" = the last 7 / 30 x 24 h.
+ */
+export function filterRecent(
+  items: RecentItem[],
+  query: string,
+  kinds: RecentKinds,
+  modified: RecentModified = "any",
+  now: number = Date.now(),
+): RecentItem[] {
   const q = query.trim().toLowerCase();
-  return items.filter((item) => kinds[item.kind] && (q === "" || (item.title || "Untitled").toLowerCase().includes(q)));
+  let since = -Infinity;
+  if (modified === "today") {
+    const d = new Date(now);
+    since = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  } else if (modified === "7d") since = now - 7 * 86_400_000;
+  else if (modified === "30d") since = now - 30 * 86_400_000;
+  return items.filter(
+    (item) =>
+      kinds[item.kind] && item.updatedAt >= since && (q === "" || (item.title || "Untitled").toLowerCase().includes(q)),
+  );
 }
 
 /** Newest first; ties keep the input order. */

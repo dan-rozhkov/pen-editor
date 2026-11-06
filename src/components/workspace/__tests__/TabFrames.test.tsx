@@ -66,3 +66,20 @@ describe("TabFrames", () => {
     expect(frameOf(container, "t1")!.style.visibility).toBe("hidden");
   });
 });
+
+describe("TabFrames order", () => {
+  it("does not move or reload an iframe node when the tabs are reordered", () => {
+    const framesRef: MutableRefObject<Map<string, HTMLIFrameElement>> = { current: new Map() };
+    const all = ["t1", "t2", "t3"];
+    const { rerender, container } = render(<TabFrames tabs={tabs} activeTabId="t1" framesRef={framesRef} mountIds={all} />);
+    const before = all.map((id) => frameOf(container, id));
+    const records: MutationRecord[] = [];
+    const observer = new MutationObserver((r) => records.push(...r));
+    observer.observe(container, { childList: true, subtree: true });
+    rerender(<TabFrames tabs={[tabs[2], tabs[0], tabs[1]]} activeTabId="t1" framesRef={framesRef} mountIds={all} />);
+    records.push(...observer.takeRecords());
+    observer.disconnect();
+    expect(records).toHaveLength(0);
+    expect(all.map((id) => frameOf(container, id))).toEqual(before);
+  });
+});

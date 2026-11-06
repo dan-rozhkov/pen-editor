@@ -1,0 +1,23 @@
+/* Shell tokens of /workspace: fixed copies of the desktop tokens.css and windowTheme.ts GLASS_SOLID values,
+   pinned to the desktop files by desktopTokensContract.test.ts. Set on the shell root (.ws-shell). */
+.ws-shell {
+  --ws-glass: #e4e6ea;
+  --ws-tab-active: rgba(0, 0, 0, 0.07);
+  --ws-tab-hover: rgba(0, 0, 0, 0.04);
+  --ws-glass-text: rgba(0, 0, 0, 0.62);
+  --ws-icon: oklch(0.52 0 0);
+  --ws-icon-subtle: oklch(0.52 0 0 / 0.8);
+  --ws-btn-hover: oklch(0.97 0 0);
+  --ws-control-border-strong: oklch(0 0 0 / 0.25);
+  --ws-focus-ring: #0d99ff;
+}
+.dark .ws-shell {
+  --ws-glass: #2b2b2e;
+  --ws-tab-active: rgba(255, 255, 255, 0.1);
+  --ws-tab-hover: rgba(255, 255, 255, 0.06);
+  --ws-glass-text: rgba(255, 255, 255, 0.62);
+  --ws-icon: rgba(255, 255, 255, 0.87);
+  --ws-icon-subtle: rgba(255, 255, 255, 0.62);
+  --ws-btn-hover: #4a4a4a;
+  --ws-control-border-strong: oklch(1 0 0 / 0.3);
+}

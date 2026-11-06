@@ -11,11 +11,6 @@ interface StartPageProps {
   onBeforeDelete: (item: RecentItem) => void;
 }
 
-const CARD =
-  "ws-card flex flex-col overflow-hidden rounded-xl border border-border-default bg-surface-panel p-0 text-left text-text-muted cursor-pointer";
-const CTA =
-  "ws-cta mt-auto inline-flex h-7 items-center self-start rounded-control border border-border-default px-2.5 text-text-primary";
-
 function Card({
   id,
   title,
@@ -32,14 +27,14 @@ function Card({
   preview: React.ReactNode;
 }) {
   return (
-    <button type="button" className={CARD} onClick={onClick} aria-labelledby={`${id}-cta`} aria-describedby={`${id}-desc`}>
+    <button type="button" className="ws-card" onClick={onClick} aria-labelledby={`${id}-cta`} aria-describedby={`${id}-desc`}>
       {preview}
-      <span className="flex flex-1 flex-col gap-1 px-4 pt-3.5 pb-4">
-        <span className="text-sm font-medium text-text-primary">{title}</span>
-        <span id={`${id}-desc`} className="mb-2.5 leading-[18px]">
+      <span className="ws-body">
+        <span className="ws-title">{title}</span>
+        <span id={`${id}-desc`} className="ws-desc">
           {desc}
         </span>
-        <span className={CTA}>
+        <span className="ws-cta">
           <span id={`${id}-cta`}>{cta}</span>
         </span>
       </span>
@@ -51,22 +46,27 @@ function Card({
 export function StartPage({ onNew, onOpen, onBeforeDelete }: StartPageProps) {
   const { items, reload } = useRecentItems();
 
-  const handleDelete = (item: RecentItem) => {
-    onBeforeDelete(item);
-    void removeRecentItem(item).then(reload);
+  // Resolves with the items the store refused to remove.
+  const handleDelete = async (chosen: RecentItem[]): Promise<RecentItem[]> => {
+    const removed = await Promise.all(
+      chosen.map((item) => {
+        onBeforeDelete(item);
+        return removeRecentItem(item);
+      }),
+    );
+    reload();
+    return chosen.filter((_, i) => !removed[i]);
   };
 
   return (
-    <main className={`ws-start${items.length > 0 ? " has-recent" : ""} absolute inset-0 overflow-x-hidden overflow-y-auto`}>
-      <div className="ws-start-inner box-border flex min-h-full flex-col items-center justify-center gap-5 p-6 [justify-content:safe_center]">
-        <header className="flex flex-col items-center gap-1.5 text-center">
-          <h1 className="m-0 text-[26px] leading-[1.2] font-semibold tracking-[-0.02em] text-balance text-text-primary">
-            Where shall we start?
-          </h1>
-          <p className="m-0 text-text-muted">Canvas, document and workflow tabs open here.</p>
+    <main className={`ws-start${items.length > 0 ? " has-recent" : ""}`}>
+      <div className="ws-start-inner">
+        <header className="ws-intro">
+          <h1 className="ws-headline">Where shall we start?</h1>
+          <p className="ws-hint">Canvas, document and workflow tabs open here.</p>
         </header>
 
-        <div className="ws-cards w-full max-w-[840px] gap-3">
+        <div className="ws-cards">
           <Card
             id="ws-canvas"
             title="Canvas"

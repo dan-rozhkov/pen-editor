@@ -54,8 +54,10 @@ export function TabFrames({ tabs, activeTabId, framesRef, mountIds, focusFrame =
 
   return (
     <>
+      {/* Sorted by id, never by tab order: a reorder must not make React move an iframe node (a moved iframe reloads). */}
       {tabs
         .filter((t) => mounted.has(t.id))
+        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
         .map((tab) => {
           const active = tab.id === activeTabId;
           return (
