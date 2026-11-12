@@ -6,6 +6,7 @@ import { canUseModel, getDefaultModel } from "@/lib/chatModels";
 import { releaseCloudBrowser } from "@/lib/cloudBrowser";
 import { releaseDesktopChatApp } from "@/lib/tools/browser/bridge";
 import { useBrowseCheckpointStore } from "./browseCheckpointStore";
+import { subscribeByok } from "@/lib/byokProvider";
 import { subscribeOpenCodeKey } from "@/lib/opencodeKey";
 import { mergeChangesByEvent, type ChangeDetail } from "@/lib/memoryActivity";
 import type { AttachedImage, ChatLaunchPayload } from "@/types/chat";
@@ -260,6 +261,9 @@ export function reconcileModels() {
 // reconcileModels() directly, means the guarantee holds for every future
 // caller of clearOpenCodeKey too, not just today's one button.
 subscribeOpenCodeKey(reconcileModels);
+// Same for the custom provider: removing it (or one of its models) must move
+// a selection off a `byok/` id that can no longer run.
+subscribeByok(reconcileModels);
 
 function normalizeParallelCount(count: string | null): ParallelCount {
   if (count === "2") return 2;

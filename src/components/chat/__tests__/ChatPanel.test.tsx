@@ -48,6 +48,7 @@ import { ChatPanelContent } from "../ChatPanel";
 import { useChatStore } from "@/store/chatStore";
 import { useOpenCodeKeyDialogStore } from "@/store/openCodeKeyDialogStore";
 import type { ChatSummary } from "@/store/chatStore";
+import { addByokModel, clearByokConfig } from "@/lib/byokProvider";
 import { clearOpenCodeKey, setOpenCodeKey } from "@/lib/opencodeKey";
 import { createWorkflow, deleteWorkflow, stepsFromTexts } from "@/lib/workflows/workflowStore";
 import { workflowToPrompt } from "@/lib/workflows/workflowMarkdown";
@@ -473,6 +474,26 @@ describe("<ChatPanelContent /> OpenCode BYOK picker", () => {
 
     fireEvent.click(unlocked);
     expect(useChatStore.getState().model).toBe("opencode-go/glm-5.3-flash");
+  });
+
+  it("renders an own-key model as locked while the connection is incomplete", async () => {
+    clearOpenCodeKey();
+    addByokModel({ id: "my-model" });
+    try {
+      useChatStore.setState({
+        chats: [makeChat({ id: "tab-1", model: "deepseek/deepseek-v4.1-flash" })],
+        activeChatId: "tab-1",
+        model: "deepseek/deepseek-v4.1-flash",
+      });
+      render(<ChatPanelContent />);
+      fireEvent.click(screen.getByLabelText("Model: DeepSeek V4.1 Flash"));
+      const row = await screen.findByRole("menuitemradio", { name: /my-model · Own key/ });
+      expect(row.getAttribute("aria-disabled")).toBe("true");
+      fireEvent.click(row);
+      expect(useChatStore.getState().model).toBe("deepseek/deepseek-v4.1-flash");
+    } finally {
+      clearByokConfig();
+    }
   });
 
   it("opens the OpenCode key dialog from the picker", async () => {

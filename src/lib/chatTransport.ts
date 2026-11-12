@@ -1,6 +1,7 @@
 import { createHarnessTransport } from "@sideform/agent-harness/transport";
 import type { RetryState } from "@sideform/agent-harness/retry-fetch";
 import { credentialsMode, isOffline, OFFLINE_MESSAGE, resolveApiUrl } from "@/lib/apiBase";
+import { getByokConfig, isByokModel, isHeaderSafe } from "@/lib/byokProvider";
 import { getOpenCodeKey } from "@/lib/opencodeKey";
 import { withMobbinAuthHeader } from "@/lib/mobbinAuth";
 import { getAgentPanelDocsBridge, getAgentPanelTraceTabsBridge, getAgentPanelWorkflowsBridge } from "@/lib/agentPanel";
@@ -114,7 +115,20 @@ export function createChatTransport({ body, onRetryStateChange, fetchImpl }: Cha
     // (pen-editor-backend/src/ai/vision-messages.ts).
     extraHeaders: (requestBody) => {
       const model = requestBody?.model;
-      if (typeof model !== "string" || !isOpenCodeModel(model)) return undefined;
+      if (typeof model !== "string") return undefined;
+      // Custom provider (own OpenAI-compatible endpoint): base URL + key as
+      // headers, only on a `byok/` turn, never in the body. A missing half is
+      // simply omitted so the backend answers 400 byok_key_required.
+      if (isByokModel(model)) {
+        const { baseUrl, apiKey } = getByokConfig();
+        const headers: Record<string, string> = {};
+        // A value fetch() would reject (non-ASCII, control chars) is skipped
+        // too, so a bad stored key yields the backend's 400, not a TypeError.
+        if (isHeaderSafe(baseUrl)) headers["X-BYOK-Base-URL"] = baseUrl;
+        if (isHeaderSafe(apiKey)) headers["X-BYOK-Key"] = apiKey;
+        return Object.keys(headers).length > 0 ? headers : undefined;
+      }
+      if (!isOpenCodeModel(model)) return undefined;
       const key = getOpenCodeKey();
       return key ? { "X-OpenCode-Key": key } : undefined;
     },

@@ -8,12 +8,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { useChatBootstrap } from "@/hooks/useChatBootstrap";
 import { useModelOptions } from "@/hooks/useModelOptions";
+import { isModelOptionLocked } from "@/lib/chatModels";
 import { hasOpenCodeKey, subscribeOpenCodeKey } from "@/lib/opencodeKey";
 import { promptSuggestionsFlag } from "@/lib/promptSuggestion";
 import { useChatStore } from "@/store/chatStore";
 import { useOpenCodeKeyDialogStore } from "@/store/openCodeKeyDialogStore";
 
 import { SettingsGroup, SettingsSection } from "../SettingsSection";
+import { CustomProviderGroup } from "./CustomProviderGroup";
 
 const PARALLEL_OPTIONS = [
   { value: "1", label: "x1" },
@@ -33,14 +35,14 @@ export function AgentSection() {
   const dialogOpen = useOpenCodeKeyDialogStore((s) => s.open);
   const setDialogOpen = useOpenCodeKeyDialogStore((s) => s.setOpen);
 
-  const anyLocked = !hasKey && options.some((o) => o.requiresUserKey);
+  const anyLocked = options.some((o) => isModelOptionLocked(o, hasKey));
 
   return (
     <SettingsSection title="AI agent">
       <SettingsGroup
         inline
         title="Default model"
-        description={anyLocked ? "Models with a lock need an OpenCode API key." : "The model new chat messages use."}
+        description={anyLocked ? "Models with a lock need an API key." : "The model new chat messages use."}
       >
         <Select value={model} onValueChange={(next) => next && setModel(next)}>
           <SelectTrigger aria-label="Default model" className="w-52">
@@ -48,7 +50,7 @@ export function AgentSection() {
           </SelectTrigger>
           <SelectContent alignItemWithTrigger={false} align="end" className="w-64">
             {options.map((option) => {
-              const locked = Boolean(option.requiresUserKey) && !hasKey;
+              const locked = isModelOptionLocked(option, hasKey);
               return (
                 <SelectItem key={option.value} value={option.value} disabled={locked}>
                   <span className="flex min-w-0 flex-1 items-center gap-2">
@@ -70,6 +72,7 @@ export function AgentSection() {
           {hasKey ? "Change key" : "Add key"}
         </Button>
       </SettingsGroup>
+      <CustomProviderGroup />
       <SettingsGroup inline title="Parallel agents" description="Run one message in several chats at once.">
         <SegmentedControl
           aria-label="Parallel agents"

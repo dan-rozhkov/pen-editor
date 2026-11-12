@@ -116,6 +116,10 @@ export default function PrivacyPage() {
             <strong>Bring-your-own-key models:</strong> OpenCode. If you supply your own key, your prompts pass
             through our backend to OpenCode.
           </li>
+          <li>
+            <strong>Custom provider:</strong> a custom-provider key and base URL are stored in this browser and sent
+            to our server only to forward a request to that provider. They are never stored on the server.
+          </li>
         </List>
       </Section>
 

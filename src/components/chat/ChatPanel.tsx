@@ -21,6 +21,7 @@ import type { ChatSummary, ParallelCount } from "@/store/chatStore";
 import { useDesignChat } from "@/hooks/useDesignChat";
 import { usePromptSuggestion } from "@/hooks/usePromptSuggestion";
 import { useModelOptions } from "@/hooks/useModelOptions";
+import { isModelOptionLocked } from "@/lib/chatModels";
 import { useAgentActivityNotes } from "@/hooks/useAgentActivityNotes";
 import { useReleaseCloudBrowserWhenDone } from "@/hooks/useReleaseCloudBrowserWhenDone";
 import { getActorId, useAuthStore } from "@/lib/auth/authState";
@@ -580,7 +581,7 @@ export function ChatPanelContent({
           <DropdownMenuContent side="top" align="end" className="w-56">
             <DropdownMenuRadioGroup value={model} onValueChange={setModel}>
               {modelOptions.map((option) => {
-                const locked = Boolean(option.requiresUserKey) && !hasKey;
+                const locked = isModelOptionLocked(option, hasKey);
                 return (
                   <DropdownMenuRadioItem
                     key={option.value}

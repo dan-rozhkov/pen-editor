@@ -10,6 +10,7 @@
 // auxiliary vision model describes the image as text server-side).
 
 import { apiFetch } from "@/lib/apiBase";
+import { byokModelValue, getByokConfig, isByokConfigured, isByokModel, subscribeByok } from "@/lib/byokProvider";
 import { hasOpenCodeKey } from "@/lib/opencodeKey";
 
 export interface ChatModelOption {
@@ -34,6 +35,8 @@ export interface ChatModelOption {
    * shows a meter rather than guessing at a default.
    */
   contextWindow?: number;
+  /** True for a model the user added under their own custom provider (src/lib/byokProvider.ts). */
+  byok?: true;
 }
 
 // First-paint/offline safety net, mirroring the backend's DEFAULT_MODELS
@@ -233,9 +236,30 @@ function notify() {
   for (const listener of listeners) listener();
 }
 
-/** Every model the user may pick, as reported by the backend. */
+// Backend list + the user's own-key models. Rebuilt only when either input
+// changes (by reference), so the array stays stable for useSyncExternalStore.
+let mergedFor: { models: ChatModelOption[]; byok: ReturnType<typeof getByokConfig> } | null = null;
+let mergedOptions: ChatModelOption[] = currentModels;
+
+/** Every model the user may pick: the backend's list plus their own-key models. */
 export function getModelOptions(): ChatModelOption[] {
-  return currentModels;
+  const byok = getByokConfig();
+  if (mergedFor && mergedFor.models === currentModels && mergedFor.byok === byok) return mergedOptions;
+  mergedFor = { models: currentModels, byok };
+  mergedOptions =
+    byok.models.length === 0
+      ? currentModels
+      : [
+          ...currentModels,
+          ...byok.models.map((m): ChatModelOption => ({
+            value: byokModelValue(m.id),
+            label: `${m.id} · Own key`,
+            supportsVision: false,
+            byok: true,
+            ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
+          })),
+        ];
+  return mergedOptions;
 }
 
 /** The model a turn runs on when nothing is selected (the backend's own). */
@@ -248,7 +272,10 @@ export function modelSupportsVision(model: string): boolean {
   // An id we don't know (a stale selection, or a model the backend added
   // after this bundle was built) is assumed vision-capable, matching the
   // backend's own convention for an unlisted id.
-  return currentModels.find((option) => option.value === model)?.supportsVision ?? true;
+  // An own-key model is never vision-capable as far as we know (its endpoint
+  // is arbitrary); images still go through canSendImages' visionFallback.
+  if (isByokModel(model)) return false;
+  return getModelOptions().find((option) => option.value === model)?.supportsVision ?? true;
 }
 
 // Whether the app may let the user attach an image for this model at all.
@@ -268,7 +295,7 @@ export function canSendImages(model: string): boolean {
  * `undefined` as "don't show a meter" rather than picking a number.
  */
 export function getModelContextWindow(model: string): number | undefined {
-  return currentModels.find((option) => option.value === model)?.contextWindow;
+  return getModelOptions().find((option) => option.value === model)?.contextWindow;
 }
 
 // Whether `model` is currently selectable at all: known to the backend list
@@ -280,9 +307,20 @@ export function getModelContextWindow(model: string): number | undefined {
 // saved selection must fall back to the default — the same rule, so a
 // selection that's disabled in the UI can never linger as the active model.
 export function canUseModel(value: string): boolean {
-  const option = currentModels.find((o) => o.value === value);
+  const option = getModelOptions().find((o) => o.value === value);
   if (!option) return false;
+  if (option.byok) return isByokConfigured();
   return !option.requiresUserKey || hasOpenCodeKey();
+}
+
+/**
+ * Whether a picker row must render disabled (with a lock). One rule for the
+ * chat picker and the settings select: an own-key row follows canUseModel
+ * (the same predicate reconcileModels uses), an OpenCode row follows the key.
+ */
+export function isModelOptionLocked(option: ChatModelOption, hasOpenCodeKeyStored: boolean): boolean {
+  if (option.byok) return !canUseModel(option.value);
+  return Boolean(option.requiresUserKey) && !hasOpenCodeKeyStored;
 }
 
 /** Whether the backend can serve `remove_background`/the "Remove background" button. */
@@ -299,7 +337,11 @@ export function canVectorize(): boolean {
 // capability-driven controls re-render when the backend metadata lands.
 export function subscribeModels(listener: () => void): () => void {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  const offByok = subscribeByok(listener);
+  return () => {
+    listeners.delete(listener);
+    offByok();
+  };
 }
 
 /** True once loadModels() has settled (the backend list, or the fallback after a failure, is final). */
